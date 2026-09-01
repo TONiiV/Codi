@@ -1,0 +1,146 @@
+@import "tailwindcss";
+
+/*
+  "Editorial" design tokens.
+
+  The prototype is deliberately near-monochrome: paper, ink, hairline rules.
+  Colour is a signal, never decoration — it only ever marks liveness, a chosen
+  decision branch, a rejected one, or a destructive diff line.
+*/
+@theme {
+  --color-paper: #f5f3f0;
+  --color-paper-sunk: #efece7;
+  --color-card: #ffffff;
+
+  --color-ink: #16130f;
+  --color-ink-2: #4b453d;
+  --color-muted: #8e877d;
+  --color-faint: #b3aca2;
+
+  --color-rule: #e6e2db;
+  --color-rule-strong: #d3cec4;
+
+  --color-shell: #100f0d;
+  --color-shell-2: #1a1815;
+  --color-shell-ink: #edeae4;
+  --color-shell-muted: #837d74;
+  --color-shell-rule: #272420;
+
+  --color-live: #2f6b4f;
+  --color-warn: #9a6a1e;
+  --color-stop: #a33c2e;
+  --color-cool: #2f4d86;
+
+  --font-sans:
+    ui-sans-serif, -apple-system, "SF Pro Text", "Segoe UI", "PingFang SC", "Hiragino Sans GB",
+    "Source Han Sans SC", "Noto Sans CJK SC", "Microsoft YaHei", sans-serif;
+  --font-serif:
+    ui-serif, "Iowan Old Style", Georgia, "Songti SC", "Source Han Serif SC", "Noto Serif CJK SC",
+    serif;
+  --font-mono:
+    ui-monospace, "SF Mono", "JetBrains Mono", Menlo, "Cascadia Mono", "PingFang SC", monospace;
+
+  --radius-card: 14px;
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    margin: 0;
+    background: var(--color-shell);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    font-synthesis-weight: none;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  button {
+    cursor: pointer;
+  }
+
+  /* Chinese text needs a touch of tracking at small sizes and a lot of
+     leading at body sizes; latin does not. These are the global defaults. */
+  :lang(zh-CN) {
+    letter-spacing: 0.01em;
+  }
+
+  ::selection {
+    background: #16130f;
+    color: #f5f3f0;
+  }
+
+  /* Hairline scrollbars so scroll containers do not break the paper feel. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-rule-strong) transparent;
+  }
+}
+
+@utility eyebrow {
+  font-size: 10px;
+  line-height: 1;
+  font-weight: 600;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The magazine headline: tight leading, negative tracking, heavy weight.
+   CJK glyphs are already visually dense, so the negative tracking matters. */
+@utility headline {
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  line-height: 1.16;
+}
+
+@utility body-cjk {
+  line-height: 1.9;
+  letter-spacing: 0.015em;
+}
+
+@utility num {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.03em;
+}
+
+@utility hairline {
+  border: 1px solid var(--color-rule);
+}
+
+/* Streaming caret. Steps-based opacity on a 2px element: no continuous
+   repaint of anything expensive, and it is the one animation that carries
+   real meaning (the agent is still typing). */
+@keyframes caret {
+  0%,
+  49% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0;
+  }
+}
+
+.caret {
+  display: inline-block;
+  width: 0.5em;
+  height: 1.02em;
+  translate: 0 0.16em;
+  background: var(--color-ink);
+  animation: caret 1.05s steps(1, end) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .caret {
+    animation: none;
+  }
+  * {
+    transition-duration: 1ms !important;
+  }
+}
