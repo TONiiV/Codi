@@ -318,6 +318,9 @@ interface ClaudeSessionContext {
 }
 
 interface ClaudeQueryRuntime extends AsyncIterable<SDKMessage> {
+  readonly interrupt: () => Promise<void>;
+  /** SDK Query.stopTask — present on real queries; optional for test doubles. */
+  readonly stopTask?: (taskId: string) => Promise<void>;
   readonly setModel: (model?: string) => Promise<void>;
   readonly setPermissionMode: (mode: PermissionMode) => Promise<void>;
   readonly setMaxThinkingTokens: (maxThinkingTokens: number | null) => Promise<void>;
@@ -4608,10 +4611,70 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
   const interruptTurn: ClaudeAdapterShape["interruptTurn"] = Effect.fn("interruptTurn")(
     function* (threadId, _turnId) {
       const context = yield* requireSession(threadId);
-      // interrupt() can acknowledge while resumed background tasks keep the
-      // CLI alive. Stop is a hard session boundary for Claude, so close the
-      // query and let the SDK escalate to SIGKILL when graceful exit fails.
-      yield* stopSessionInternal(context);
+      // Esc should cancel the in-flight turn without tearing down the CLI.
+      // Closing forces the next prompt through --resume; Claude Code puts
+      // `git status` in the cached prefix, so a dirty tree re-bills the
+      // whole conversation as cache writes (anthropics/claude-code#78720,
+      // pingdotgg/t3code#7338). interrupt() alone can leave subagents
+      // running, so stop live tasks first. If any remain, fall back to
+      // close — that is the hard stop from #5891 for runaway fleets.
+      if (context.query.stopTask && context.liveTaskIds.size > 0) {
+        const liveIds = Array.from(context.liveTaskIds);
+        yield* Effect.forEach(
+          liveIds,
+          (taskId) =>
+            Effect.gen(function* () {
+              const stopAcknowledged = yield* Effect.tryPromise({
+                // Invoke through the query object: SDK methods rely on `this`.
+                try: () => context.query.stopTask!(taskId),
+                catch: () => undefined,
+              }).pipe(
+                Effect.timeout("3 seconds"),
+                Effect.as(true),
+                Effect.catch(() => Effect.succeed(false)),
+              );
+              if (!stopAcknowledged || !context.liveTaskIds.delete(taskId)) {
+                return;
+              }
+
+              // stopTask only acknowledges the control request. Its separate
+              // task_notification can lose the race with interrupt(), so make
+              // the acknowledged stop authoritative for the durable UI state.
+              const stamp = yield* makeEventStamp();
+              yield* offerRuntimeEvent({
+                type: "task.completed",
+                eventId: stamp.eventId,
+                provider: PROVIDER,
+                createdAt: stamp.createdAt,
+                threadId: context.session.threadId,
+                ...(context.turnState
+                  ? { turnId: asCanonicalTurnId(context.turnState.turnId) }
+                  : {}),
+                payload: {
+                  taskId: RuntimeTaskId.make(taskId),
+                  status: "stopped",
+                  ...taskLinkageFor(context.taskAgents, taskId),
+                },
+                providerRefs: nativeProviderRefs(context),
+              });
+            }).pipe(Effect.ignore),
+          { concurrency: 8, discard: true },
+        ).pipe(Effect.timeout("10 seconds"), Effect.ignore);
+      }
+
+      if (context.liveTaskIds.size > 0) {
+        yield* stopSessionInternal(context);
+        return;
+      }
+
+      yield* Effect.tryPromise({
+        try: () => context.query.interrupt(),
+        catch: (cause) => toRequestError(threadId, "turn/interrupt", cause),
+      });
+
+      if (context.turnState) {
+        yield* completeTurn(context, "interrupted");
+      }
     },
   );
 

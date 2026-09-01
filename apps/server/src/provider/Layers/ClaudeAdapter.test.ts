@@ -54,11 +54,16 @@ class FakeClaudeQuery implements AsyncIterable<SDKMessage> {
   private done = false;
   private failure: unknown | undefined;
 
+  public readonly interruptCalls: Array<void> = [];
+  public readonly stopTaskCalls: Array<string> = [];
   public readonly setModelCalls: Array<string | undefined> = [];
   public readonly setPermissionModeCalls: Array<string> = [];
   public readonly setMaxThinkingTokensCalls: Array<number | null> = [];
   public closeCalls = 0;
   public closeError: unknown | undefined;
+  public stopTask: ((taskId: string) => Promise<void>) | undefined = async (taskId: string) => {
+    this.stopTaskCalls.push(taskId);
+  };
 
   emit(message: SDKMessage): void {
     if (this.done) {
@@ -93,6 +98,10 @@ class FakeClaudeQuery implements AsyncIterable<SDKMessage> {
       waiter.resolve({ done: true, value: undefined });
     }
   }
+
+  readonly interrupt = async (): Promise<void> => {
+    this.interruptCalls.push(undefined);
+  };
 
   readonly setModel = async (model?: string): Promise<void> => {
     this.setModelCalls.push(model);
@@ -157,6 +166,7 @@ function makeHarness(config?: {
   readonly instanceId?: ProviderInstanceId;
 }) {
   const query = new FakeClaudeQuery();
+  let createQueryCalls = 0;
   let createInput:
     | {
         readonly prompt: AsyncIterable<SDKUserMessage>;
@@ -167,6 +177,7 @@ function makeHarness(config?: {
   const adapterOptions: ClaudeAdapterLiveOptions = {
     ...(config?.instanceId ? { instanceId: config.instanceId } : {}),
     createQuery: (input) => {
+      createQueryCalls += 1;
       createInput = input;
       return query;
     },
@@ -201,6 +212,7 @@ function makeHarness(config?: {
     ),
     query,
     getLastCreateQueryInput: () => createInput,
+    getCreateQueryCalls: () => createQueryCalls,
   };
 }
 
@@ -1626,7 +1638,7 @@ describe("ClaudeAdapterLive", () => {
     );
   });
 
-  it.effect("interruptTurn settles live tasks and closes the provider session", () => {
+  it.effect("interruptTurn settles live tasks and keeps the provider session", () => {
     const harness = makeHarness();
     return Effect.gen(function* () {
       const adapter = yield* ClaudeAdapter;
@@ -1691,12 +1703,12 @@ describe("ClaudeAdapterLive", () => {
       );
       yield* adapter.interruptTurn(session.threadId);
 
-      // Closing the session is the hard stop because SDK interrupt can leave
-      // resumed background work alive.
-      assert.equal(harness.query.closeCalls, 1);
-
-      const sessions = yield* adapter.listSessions();
-      assert.equal(sessions.length, 0);
+      // Cooperative stop: kill live tasks, interrupt the parent turn, keep
+      // the CLI so the next prompt does not --resume and rewrite the cache.
+      assert.deepEqual(harness.query.stopTaskCalls, ["task-live"]);
+      assert.equal(harness.query.interruptCalls.length, 1);
+      assert.equal(harness.query.closeCalls, 0);
+      assert.equal(yield* adapter.hasSession(session.threadId), true);
 
       const stoppedTaskEvents = Array.from(yield* Fiber.join(stoppedTaskEventFiber));
       assert.equal(stoppedTaskEvents.length, 1);
@@ -1714,6 +1726,98 @@ describe("ClaudeAdapterLive", () => {
     );
   });
 
+  it.effect("interruptTurn reuses the live query for the next sendTurn", () => {
+    const harness = makeHarness();
+    return Effect.gen(function* () {
+      const adapter = yield* ClaudeAdapter;
+      const turnEventsFiber = yield* adapter.streamEvents.pipe(
+        Stream.filter((event) => event.type === "turn.started" || event.type === "turn.completed"),
+        Stream.take(3),
+        Stream.runCollect,
+        Effect.forkChild,
+      );
+      const session = yield* adapter.startSession({
+        threadId: THREAD_ID,
+        provider: ProviderDriverKind.make("claudeAgent"),
+        runtimeMode: "full-access",
+      });
+      const firstTurn = yield* adapter.sendTurn({
+        threadId: session.threadId,
+        input: "first",
+        attachments: [],
+      });
+      assert.equal(harness.getCreateQueryCalls(), 1);
+
+      yield* adapter.interruptTurn(session.threadId);
+
+      const followUp = yield* adapter.sendTurn({
+        threadId: session.threadId,
+        input: "second",
+        attachments: [],
+      });
+
+      const turnEvents = Array.from(yield* Fiber.join(turnEventsFiber));
+      assert.deepEqual(
+        turnEvents.map((event) => event.type),
+        ["turn.started", "turn.completed", "turn.started"],
+      );
+      assert.equal(harness.query.interruptCalls.length, 1);
+      assert.equal(harness.query.closeCalls, 0);
+      assert.equal(harness.getCreateQueryCalls(), 1);
+      assert.equal(yield* adapter.hasSession(session.threadId), true);
+      assert.equal(String(followUp.threadId), String(session.threadId));
+      assert.notEqual(String(followUp.turnId), String(firstTurn.turnId));
+    }).pipe(
+      Effect.provideService(Random.Random, makeDeterministicRandomService()),
+      Effect.provide(harness.layer),
+    );
+  });
+
+  it.effect("interruptTurn closes when live tasks remain without stopTask", () => {
+    const harness = makeHarness();
+    return Effect.gen(function* () {
+      const adapter = yield* ClaudeAdapter;
+      harness.query.stopTask = undefined;
+
+      const taskStartedFiber = yield* adapter.streamEvents.pipe(
+        Stream.filter((event) => event.type === "task.started"),
+        Stream.take(1),
+        Stream.runCollect,
+        Effect.forkChild,
+      );
+
+      const session = yield* adapter.startSession({
+        threadId: THREAD_ID,
+        provider: ProviderDriverKind.make("claudeAgent"),
+        runtimeMode: "full-access",
+      });
+      yield* adapter.sendTurn({
+        threadId: session.threadId,
+        input: "spawn agents",
+        attachments: [],
+      });
+      harness.query.emit({
+        type: "system",
+        subtype: "task_started",
+        task_id: "task-runaway",
+        description: "Agent A",
+        task_type: "local_agent",
+        uuid: "task-runaway-uuid",
+        session_id: "sdk-session",
+      } as unknown as SDKMessage);
+      yield* Fiber.join(taskStartedFiber);
+
+      yield* adapter.interruptTurn(session.threadId);
+
+      assert.equal(harness.query.interruptCalls.length, 0);
+      assert.equal(harness.query.closeCalls, 1);
+      assert.equal(yield* adapter.hasSession(session.threadId), false);
+    }).pipe(
+      Effect.provideService(Random.Random, makeDeterministicRandomService()),
+      Effect.provide(harness.layer),
+    );
+  });
+
   it.effect("keeps the session available when process close fails", () => {
     const harness = makeHarness();
     return Effect.gen(function* () {
@@ -1725,7 +1829,7 @@ describe("ClaudeAdapterLive", () => {
       });
       harness.query.closeError = new Error("close failed");
 
-      const result = yield* adapter.interruptTurn(session.threadId).pipe(Effect.result);
+      const result = yield* adapter.stopSession(session.threadId).pipe(Effect.result);
 
       assert.equal(result._tag, "Failure");
       if (result._tag === "Failure") {
