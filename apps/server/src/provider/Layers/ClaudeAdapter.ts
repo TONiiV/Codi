@@ -101,6 +101,8 @@ const encodeUnknownJsonStringExit = Schema.encodeUnknownExit(Schema.fromJsonStri
 const decodeUnknownJsonStringExit = Schema.decodeUnknownExit(Schema.fromJsonString(Schema.Unknown));
 
 const PROVIDER = ProviderDriverKind.make("claudeAgent");
+/** Deadline for the cooperative interrupt before Stop escalates to a close. */
+const INTERRUPT_TIMEOUT = "5 seconds";
 type ClaudeTextStreamKind = Extract<RuntimeContentStreamKind, "assistant_text" | "reasoning_text">;
 type ClaudeToolResultStreamKind = Extract<
   RuntimeContentStreamKind,
@@ -316,17 +318,17 @@ interface ClaudeSessionContext {
   lastThreadStartedId: string | undefined;
   stopped: boolean;
   /**
-   * After a cooperative interrupt the CLI can still emit leftover assistant
-   * frames. Those must not open a synthetic turn on a session we kept alive.
-   * Cleared by the next sendTurn.
+   * After a cooperative interrupt the CLI can still emit leftover frames for
+   * the stopped turn. Those must not open a synthetic turn or attach to the
+   * next turn on a session we kept alive. Cleared by that turn's result frame
+   * so background-agent output is not swallowed, and by the next sendTurn if
+   * the result never arrives.
    */
   suppressPostInterruptOutput: boolean;
 }
 
 interface ClaudeQueryRuntime extends AsyncIterable<SDKMessage> {
   readonly interrupt: () => Promise<void>;
-  /** SDK Query.stopTask — present on real queries; optional for test doubles. */
-  readonly stopTask?: (taskId: string) => Promise<void>;
   readonly setModel: (model?: string) => Promise<void>;
   readonly setPermissionMode: (mode: PermissionMode) => Promise<void>;
   readonly setMaxThinkingTokens: (maxThinkingTokens: number | null) => Promise<void>;
@@ -2914,11 +2916,6 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
 
     // Auto-start a synthetic turn for assistant messages that arrive without
     // an active turn (e.g., background agent/subagent responses between user prompts).
-    if (!context.turnState && context.suppressPostInterruptOutput) {
-      context.lastAssistantUuid = message.uuid;
-      yield* updateResumeCursor(context);
-      return;
-    }
     if (!context.turnState) {
       const turnId = TurnId.make(yield* randomUUIDv4);
       const startedAt = yield* nowIso;
@@ -3583,6 +3580,26 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
       return;
     }
 
+    // Leftover frames from a turn stopped by cooperative interrupt. They must
+    // not open a synthetic turn (assistant), register an in-flight tool
+    // (stream_event), or stamp a late tool_result with the next turn's id
+    // (user). The stopped turn's own result closes the window: its status is
+    // already recorded, so replaying it would only emit a spurious error.
+    if (context.suppressPostInterruptOutput && !context.turnState) {
+      switch (message.type) {
+        case "result":
+          context.suppressPostInterruptOutput = false;
+          return;
+        case "assistant":
+          context.lastAssistantUuid = message.uuid;
+          yield* updateResumeCursor(context);
+          return;
+        case "stream_event":
+        case "user":
+          return;
+      }
+    }
+
     switch (message.type) {
       case "stream_event":
         yield* handleStreamEvent(context, message);
@@ -3710,7 +3727,7 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
 
     // Same reason as the approvals above: a request nobody can answer any more
     // must not stay open, or the thread can never be settled.
-    for (const pending of [...context.pendingUserInputs.values()]) {
+    for (const pending of context.pendingUserInputs.values()) {
       yield* pending.cancel;
     }
   });
@@ -4632,9 +4649,9 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
       const context = yield* requireSession(threadId);
       // Esc should cancel the in-flight turn without tearing down the CLI.
       // Closing forces the next prompt through --resume and rewrites prompt
-      // cache (pingdotgg/t3code#7338). stopTask can acknowledge while children
-      // keep running, so live subagents are still a hard session boundary
-      // (#5891). Cooperative interrupt is only for a turn with no live tasks.
+      // cache (pingdotgg/t3code#7338). A cooperative interrupt does not stop
+      // subagents, so live tasks are still a hard session boundary (#5891):
+      // only a turn with no live tasks takes the keep-alive path.
       if (context.liveTaskIds.size > 0) {
         yield* stopSessionInternal(context);
         return;
@@ -4645,7 +4662,19 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
       yield* Effect.tryPromise({
         try: () => context.query.interrupt(),
         catch: (cause) => toRequestError(threadId, "turn/interrupt", cause),
-      });
+      }).pipe(
+        // A wedged CLI is exactly when Esc gets pressed, and interrupt() may
+        // never settle there. Failing on a deadline hands off to
+        // ProviderCommandReactor.recoverInterruptFailure, which falls back to
+        // stopSession — so Stop still always terminates.
+        Effect.timeoutOrElse({
+          duration: INTERRUPT_TIMEOUT,
+          orElse: () =>
+            Effect.fail(
+              toRequestError(threadId, "turn/interrupt", new Error("Claude interrupt timed out")),
+            ),
+        }),
+      );
 
       if (context.turnState) {
         yield* completeTurn(context, "interrupted");

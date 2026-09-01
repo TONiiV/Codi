@@ -55,15 +55,14 @@ class FakeClaudeQuery implements AsyncIterable<SDKMessage> {
   private failure: unknown | undefined;
 
   public readonly interruptCalls: Array<void> = [];
-  public readonly stopTaskCalls: Array<string> = [];
   public readonly setModelCalls: Array<string | undefined> = [];
   public readonly setPermissionModeCalls: Array<string> = [];
   public readonly setMaxThinkingTokensCalls: Array<number | null> = [];
   public closeCalls = 0;
   public closeError: unknown | undefined;
-  public stopTask: ((taskId: string) => Promise<void>) | undefined = async (taskId: string) => {
-    this.stopTaskCalls.push(taskId);
-  };
+  public interruptError: unknown | undefined;
+  /** Set to keep interrupt() pending, standing in for a wedged CLI. */
+  public interruptHangs = false;
 
   emit(message: SDKMessage): void {
     if (this.done) {
@@ -101,6 +100,12 @@ class FakeClaudeQuery implements AsyncIterable<SDKMessage> {
 
   readonly interrupt = async (): Promise<void> => {
     this.interruptCalls.push(undefined);
+    if (this.interruptError !== undefined) {
+      throw this.interruptError;
+    }
+    if (this.interruptHangs) {
+      await new Promise<never>(() => {});
+    }
   };
 
   readonly setModel = async (model?: string): Promise<void> => {
@@ -1700,7 +1705,7 @@ describe("ClaudeAdapterLive", () => {
       );
       yield* adapter.interruptTurn(session.threadId);
 
-      // stopTask can ack while the child keeps running. Live work is a hard
+      // A cooperative interrupt does not reach subagents. Live work is a hard
       // session boundary so Stop cannot leave a runaway fleet on a kept CLI.
       assert.equal(harness.query.interruptCalls.length, 0);
       assert.equal(harness.query.closeCalls, 1);
@@ -1901,19 +1906,21 @@ describe("ClaudeAdapterLive", () => {
     },
   );
 
-  it.effect("interruptTurn closes when live tasks remain without stopTask", () => {
+  it.effect("interruptTurn ignores the stopped turn's result and reopens the window", () => {
     const harness = makeHarness();
     return Effect.gen(function* () {
       const adapter = yield* ClaudeAdapter;
-      harness.query.stopTask = undefined;
-
-      const taskStartedFiber = yield* adapter.streamEvents.pipe(
-        Stream.filter((event) => event.type === "task.started"),
-        Stream.take(1),
+      const eventsFiber = yield* adapter.streamEvents.pipe(
+        Stream.filter(
+          (event) =>
+            event.type === "turn.started" ||
+            event.type === "turn.completed" ||
+            event.type === "runtime.error",
+        ),
+        Stream.take(3),
         Stream.runCollect,
         Effect.forkChild,
       );
-
       const session = yield* adapter.startSession({
         threadId: THREAD_ID,
         provider: ProviderDriverKind.make("claudeAgent"),
@@ -1921,25 +1928,104 @@ describe("ClaudeAdapterLive", () => {
       });
       yield* adapter.sendTurn({
         threadId: session.threadId,
-        input: "spawn agents",
+        input: "first",
         attachments: [],
       });
-      harness.query.emit({
-        type: "system",
-        subtype: "task_started",
-        task_id: "task-runaway",
-        description: "Agent A",
-        task_type: "local_agent",
-        uuid: "task-runaway-uuid",
-        session_id: "sdk-session",
-      } as unknown as SDKMessage);
-      yield* Fiber.join(taskStartedFiber);
-
       yield* adapter.interruptTurn(session.threadId);
 
-      assert.equal(harness.query.interruptCalls.length, 0);
-      assert.equal(harness.query.closeCalls, 1);
-      assert.equal(yield* adapter.hasSession(session.threadId), false);
+      // The CLI still emits the aborted turn's result. It must not surface an
+      // error toast or complete a turn that is already interrupted.
+      harness.query.emit({
+        type: "result",
+        subtype: "error_during_execution",
+        is_error: true,
+        session_id: "sdk-session",
+        uuid: "result-after-interrupt",
+        errors: ["[ede_diagnostic] tool loop halted"],
+      } as unknown as SDKMessage);
+
+      // ...and the result ends the suppression window, so a background agent
+      // answering afterwards still reaches the thread.
+      harness.query.emit({
+        type: "assistant",
+        uuid: "background-after-result",
+        session_id: "sdk-session",
+        parent_tool_use_id: null,
+        message: {
+          role: "assistant",
+          content: [{ type: "text", text: "background answer" }],
+        },
+      } as unknown as SDKMessage);
+
+      const events = Array.from(yield* Fiber.join(eventsFiber));
+      assert.deepEqual(
+        events.map((event) => event.type),
+        ["turn.started", "turn.completed", "turn.started"],
+      );
+      assert.equal(harness.query.closeCalls, 0);
+      assert.equal(yield* adapter.hasSession(session.threadId), true);
+    }).pipe(
+      Effect.provideService(Random.Random, makeDeterministicRandomService()),
+      Effect.provide(harness.layer),
+    );
+  });
+
+  it.effect("interruptTurn fails without closing when interrupt rejects", () => {
+    const harness = makeHarness();
+    return Effect.gen(function* () {
+      const adapter = yield* ClaudeAdapter;
+      const session = yield* adapter.startSession({
+        threadId: THREAD_ID,
+        provider: ProviderDriverKind.make("claudeAgent"),
+        runtimeMode: "full-access",
+      });
+      yield* adapter.sendTurn({
+        threadId: session.threadId,
+        input: "first",
+        attachments: [],
+      });
+      harness.query.interruptError = new Error("interrupt failed");
+
+      const result = yield* adapter.interruptTurn(session.threadId).pipe(Effect.result);
+
+      // The reactor's recoverInterruptFailure fallback depends on this failing
+      // rather than silently leaving the turn Working.
+      assert.equal(result._tag, "Failure");
+      assert.equal(harness.query.closeCalls, 0);
+      assert.equal(yield* adapter.hasSession(session.threadId), true);
+    }).pipe(
+      Effect.provideService(Random.Random, makeDeterministicRandomService()),
+      Effect.provide(harness.layer),
+    );
+  });
+
+  it.effect("interruptTurn fails when a wedged CLI never settles interrupt", () => {
+    const harness = makeHarness();
+    return Effect.gen(function* () {
+      const adapter = yield* ClaudeAdapter;
+      const session = yield* adapter.startSession({
+        threadId: THREAD_ID,
+        provider: ProviderDriverKind.make("claudeAgent"),
+        runtimeMode: "full-access",
+      });
+      yield* adapter.sendTurn({
+        threadId: session.threadId,
+        input: "first",
+        attachments: [],
+      });
+      harness.query.interruptHangs = true;
+
+      const interruptFiber = yield* adapter
+        .interruptTurn(session.threadId)
+        .pipe(Effect.result, Effect.forkChild);
+      yield* TestClock.adjust("6 seconds");
+
+      const result = yield* Fiber.join(interruptFiber);
+      assert.equal(result._tag, "Failure");
+      assert.equal(harness.query.interruptCalls.length, 1);
+      if (result._tag === "Failure") {
+        assert.match(String((result.failure as { cause?: unknown }).cause), /timed out/);
+      }
     }).pipe(
       Effect.provideService(Random.Random, makeDeterministicRandomService()),
       Effect.provide(harness.layer),
