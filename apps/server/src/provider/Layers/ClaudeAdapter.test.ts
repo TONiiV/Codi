@@ -1638,14 +1638,11 @@ describe("ClaudeAdapterLive", () => {
     );
   });
 
-  it.effect("interruptTurn settles live tasks and keeps the provider session", () => {
+  it.effect("interruptTurn closes when live tasks are still running", () => {
     const harness = makeHarness();
     return Effect.gen(function* () {
       const adapter = yield* ClaudeAdapter;
 
-      // Wait for the three task.* runtime events to prove the lifecycle
-      // handlers processed the emissions (no wall-clock sleeps under the
-      // test clock).
       const taskEventsFiber = yield* adapter.streamEvents.pipe(
         Stream.filter((event) => event.type.startsWith("task.")),
         Stream.take(3),
@@ -1703,12 +1700,11 @@ describe("ClaudeAdapterLive", () => {
       );
       yield* adapter.interruptTurn(session.threadId);
 
-      // Cooperative stop: kill live tasks, interrupt the parent turn, keep
-      // the CLI so the next prompt does not --resume and rewrite the cache.
-      assert.deepEqual(harness.query.stopTaskCalls, ["task-live"]);
-      assert.equal(harness.query.interruptCalls.length, 1);
-      assert.equal(harness.query.closeCalls, 0);
-      assert.equal(yield* adapter.hasSession(session.threadId), true);
+      // stopTask can ack while the child keeps running. Live work is a hard
+      // session boundary so Stop cannot leave a runaway fleet on a kept CLI.
+      assert.equal(harness.query.interruptCalls.length, 0);
+      assert.equal(harness.query.closeCalls, 1);
+      assert.equal(yield* adapter.hasSession(session.threadId), false);
 
       const stoppedTaskEvents = Array.from(yield* Fiber.join(stoppedTaskEventFiber));
       assert.equal(stoppedTaskEvents.length, 1);
@@ -1772,6 +1768,138 @@ describe("ClaudeAdapterLive", () => {
       Effect.provide(harness.layer),
     );
   });
+
+  it.effect("interruptTurn cancels pending user input without closing the session", () => {
+    const harness = makeHarness();
+    return Effect.gen(function* () {
+      const adapter = yield* ClaudeAdapter;
+      const session = yield* adapter.startSession({
+        threadId: THREAD_ID,
+        provider: ProviderDriverKind.make("claudeAgent"),
+        runtimeMode: "approval-required",
+      });
+      yield* adapter.sendTurn({
+        threadId: session.threadId,
+        input: "ask",
+        attachments: [],
+      });
+      yield* Stream.take(adapter.streamEvents, 3).pipe(Stream.runDrain);
+
+      const canUseTool = harness.getLastCreateQueryInput()?.options.canUseTool;
+      assert.equal(typeof canUseTool, "function");
+      if (!canUseTool) {
+        return;
+      }
+
+      const permissionPromise = canUseTool(
+        "AskUserQuestion",
+        {
+          questions: [
+            {
+              question: "Continue?",
+              header: "Continue",
+              options: [{ label: "Yes", description: "Proceed" }],
+              multiSelect: false,
+            },
+          ],
+        },
+        {
+          signal: new AbortController().signal,
+          toolUseID: "tool-ask-interrupt",
+        },
+      );
+
+      const requestedEvent = yield* Stream.runHead(adapter.streamEvents);
+      assert.equal(requestedEvent._tag, "Some");
+      if (requestedEvent._tag !== "Some" || requestedEvent.value.type !== "user-input.requested") {
+        assert.fail("Expected user-input.requested event");
+        return;
+      }
+
+      const resolvedEventFiber = yield* adapter.streamEvents.pipe(
+        Stream.filter((event) => event.type === "user-input.resolved"),
+        Stream.take(1),
+        Stream.runHead,
+        Effect.forkChild,
+      );
+      yield* adapter.interruptTurn(session.threadId);
+
+      const resolvedEvent = yield* Fiber.join(resolvedEventFiber);
+      assert.equal(resolvedEvent._tag, "Some");
+      if (resolvedEvent._tag === "Some" && resolvedEvent.value.type === "user-input.resolved") {
+        assert.deepEqual(resolvedEvent.value.payload.answers, {});
+      }
+
+      const permissionResult = yield* Effect.promise(() => permissionPromise);
+      assert.deepEqual(permissionResult, {
+        behavior: "deny",
+        message: "User cancelled tool execution.",
+      } satisfies PermissionResult);
+      assert.equal(harness.query.closeCalls, 0);
+      assert.equal(yield* adapter.hasSession(session.threadId), true);
+    }).pipe(
+      Effect.provideService(Random.Random, makeDeterministicRandomService()),
+      Effect.provide(harness.layer),
+    );
+  });
+
+  it.effect(
+    "interruptTurn ignores late assistant output instead of opening a synthetic turn",
+    () => {
+      const harness = makeHarness();
+      return Effect.gen(function* () {
+        const adapter = yield* ClaudeAdapter;
+        const turnEventsFiber = yield* adapter.streamEvents.pipe(
+          Stream.filter(
+            (event) => event.type === "turn.started" || event.type === "turn.completed",
+          ),
+          Stream.take(3),
+          Stream.runCollect,
+          Effect.forkChild,
+        );
+        const session = yield* adapter.startSession({
+          threadId: THREAD_ID,
+          provider: ProviderDriverKind.make("claudeAgent"),
+          runtimeMode: "full-access",
+        });
+        yield* adapter.sendTurn({
+          threadId: session.threadId,
+          input: "first",
+          attachments: [],
+        });
+        yield* adapter.interruptTurn(session.threadId);
+
+        harness.query.emit({
+          type: "assistant",
+          uuid: "late-assistant-after-interrupt",
+          session_id: "sdk-session",
+          parent_tool_use_id: null,
+          message: {
+            role: "assistant",
+            content: [{ type: "text", text: "stale continuation" }],
+          },
+        } as unknown as SDKMessage);
+
+        const followUp = yield* adapter.sendTurn({
+          threadId: session.threadId,
+          input: "second",
+          attachments: [],
+        });
+
+        const turnEvents = Array.from(yield* Fiber.join(turnEventsFiber));
+        assert.deepEqual(
+          turnEvents.map((event) => event.type),
+          ["turn.started", "turn.completed", "turn.started"],
+        );
+        assert.equal(String(followUp.threadId), String(session.threadId));
+        assert.equal(harness.query.closeCalls, 0);
+        assert.equal(harness.getCreateQueryCalls(), 1);
+      }).pipe(
+        Effect.provideService(Random.Random, makeDeterministicRandomService()),
+        Effect.provide(harness.layer),
+      );
+    },
+  );
 
   it.effect("interruptTurn closes when live tasks remain without stopTask", () => {
     const harness = makeHarness();

@@ -315,6 +315,12 @@ interface ClaudeSessionContext {
   lastAssistantUuid: string | undefined;
   lastThreadStartedId: string | undefined;
   stopped: boolean;
+  /**
+   * After a cooperative interrupt the CLI can still emit leftover assistant
+   * frames. Those must not open a synthetic turn on a session we kept alive.
+   * Cleared by the next sendTurn.
+   */
+  suppressPostInterruptOutput: boolean;
 }
 
 interface ClaudeQueryRuntime extends AsyncIterable<SDKMessage> {
@@ -2908,6 +2914,11 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
 
     // Auto-start a synthetic turn for assistant messages that arrive without
     // an active turn (e.g., background agent/subagent responses between user prompts).
+    if (!context.turnState && context.suppressPostInterruptOutput) {
+      context.lastAssistantUuid = message.uuid;
+      yield* updateResumeCursor(context);
+      return;
+    }
     if (!context.turnState) {
       const turnId = TurnId.make(yield* randomUUIDv4);
       const startedAt = yield* nowIso;
@@ -3674,6 +3685,36 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
     });
   });
 
+  const settlePendingInteractiveRequests = Effect.fn("settlePendingInteractiveRequests")(function* (
+    context: ClaudeSessionContext,
+  ) {
+    for (const [requestId, pending] of context.pendingApprovals) {
+      yield* Deferred.succeed(pending.decision, "cancel");
+      const stamp = yield* makeEventStamp();
+      yield* offerRuntimeEvent({
+        type: "request.resolved",
+        eventId: stamp.eventId,
+        provider: PROVIDER,
+        createdAt: stamp.createdAt,
+        threadId: context.session.threadId,
+        ...(context.turnState ? { turnId: asCanonicalTurnId(context.turnState.turnId) } : {}),
+        requestId: asRuntimeRequestId(requestId),
+        payload: {
+          requestType: pending.requestType,
+          decision: "cancel",
+        },
+        providerRefs: nativeProviderRefs(context),
+      });
+    }
+    context.pendingApprovals.clear();
+
+    // Same reason as the approvals above: a request nobody can answer any more
+    // must not stay open, or the thread can never be settled.
+    for (const pending of [...context.pendingUserInputs.values()]) {
+      yield* pending.cancel;
+    }
+  });
+
   const stopSessionInternal = Effect.fn("stopSessionInternal")(function* (
     context: ClaudeSessionContext,
     options?: { readonly emitExitEvent?: boolean },
@@ -3716,31 +3757,7 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
       });
     }
 
-    for (const [requestId, pending] of context.pendingApprovals) {
-      yield* Deferred.succeed(pending.decision, "cancel");
-      const stamp = yield* makeEventStamp();
-      yield* offerRuntimeEvent({
-        type: "request.resolved",
-        eventId: stamp.eventId,
-        provider: PROVIDER,
-        createdAt: stamp.createdAt,
-        threadId: context.session.threadId,
-        ...(context.turnState ? { turnId: asCanonicalTurnId(context.turnState.turnId) } : {}),
-        requestId: asRuntimeRequestId(requestId),
-        payload: {
-          requestType: pending.requestType,
-          decision: "cancel",
-        },
-        providerRefs: nativeProviderRefs(context),
-      });
-    }
-    context.pendingApprovals.clear();
-
-    // Same reason as the approvals above: a request nobody can answer any more
-    // must not stay open, or the thread can never be settled.
-    for (const pending of [...context.pendingUserInputs.values()]) {
-      yield* pending.cancel;
-    }
+    yield* settlePendingInteractiveRequests(context);
 
     if (context.turnState) {
       yield* completeTurn(context, "interrupted", "Session stopped.");
@@ -4415,6 +4432,7 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
         lastKnownContextWindow: initialContextWindow,
         lastKnownTokenUsage: undefined,
         lastKnownTotalProcessedTokens: undefined,
+        suppressPostInterruptOutput: false,
         lastAssistantUuid: resumeState?.resumeSessionAt,
         lastThreadStartedId: undefined,
         stopped: false,
@@ -4508,6 +4526,7 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
     // turn — no synthetic turn boundary. Stale synthetic turns (from
     // background agent responses between user prompts) are auto-closed
     // instead, so they don't block the user's next turn.
+    context.suppressPostInterruptOutput = false;
     const steeringTurnState =
       context.turnState && context.turnState.synthetic !== true ? context.turnState : null;
     if (context.turnState && steeringTurnState === null) {
@@ -4612,60 +4631,16 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
     function* (threadId, _turnId) {
       const context = yield* requireSession(threadId);
       // Esc should cancel the in-flight turn without tearing down the CLI.
-      // Closing forces the next prompt through --resume; Claude Code puts
-      // `git status` in the cached prefix, so a dirty tree re-bills the
-      // whole conversation as cache writes (anthropics/claude-code#78720,
-      // pingdotgg/t3code#7338). interrupt() alone can leave subagents
-      // running, so stop live tasks first. If any remain, fall back to
-      // close — that is the hard stop from #5891 for runaway fleets.
-      if (context.query.stopTask && context.liveTaskIds.size > 0) {
-        const liveIds = Array.from(context.liveTaskIds);
-        yield* Effect.forEach(
-          liveIds,
-          (taskId) =>
-            Effect.gen(function* () {
-              const stopAcknowledged = yield* Effect.tryPromise({
-                // Invoke through the query object: SDK methods rely on `this`.
-                try: () => context.query.stopTask!(taskId),
-                catch: () => undefined,
-              }).pipe(
-                Effect.timeout("3 seconds"),
-                Effect.as(true),
-                Effect.catch(() => Effect.succeed(false)),
-              );
-              if (!stopAcknowledged || !context.liveTaskIds.delete(taskId)) {
-                return;
-              }
-
-              // stopTask only acknowledges the control request. Its separate
-              // task_notification can lose the race with interrupt(), so make
-              // the acknowledged stop authoritative for the durable UI state.
-              const stamp = yield* makeEventStamp();
-              yield* offerRuntimeEvent({
-                type: "task.completed",
-                eventId: stamp.eventId,
-                provider: PROVIDER,
-                createdAt: stamp.createdAt,
-                threadId: context.session.threadId,
-                ...(context.turnState
-                  ? { turnId: asCanonicalTurnId(context.turnState.turnId) }
-                  : {}),
-                payload: {
-                  taskId: RuntimeTaskId.make(taskId),
-                  status: "stopped",
-                  ...taskLinkageFor(context.taskAgents, taskId),
-                },
-                providerRefs: nativeProviderRefs(context),
-              });
-            }).pipe(Effect.ignore),
-          { concurrency: 8, discard: true },
-        ).pipe(Effect.timeout("10 seconds"), Effect.ignore);
-      }
-
+      // Closing forces the next prompt through --resume and rewrites prompt
+      // cache (pingdotgg/t3code#7338). stopTask can acknowledge while children
+      // keep running, so live subagents are still a hard session boundary
+      // (#5891). Cooperative interrupt is only for a turn with no live tasks.
       if (context.liveTaskIds.size > 0) {
         yield* stopSessionInternal(context);
         return;
       }
+
+      yield* settlePendingInteractiveRequests(context);
 
       yield* Effect.tryPromise({
         try: () => context.query.interrupt(),
@@ -4675,6 +4650,7 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
       if (context.turnState) {
         yield* completeTurn(context, "interrupted");
       }
+      context.suppressPostInterruptOutput = true;
     },
   );
 
