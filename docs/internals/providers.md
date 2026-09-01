@@ -132,6 +132,14 @@ Clients never call a provider directly. They dispatch orchestration commands ove
 `thread.user-input.respond`, `thread.checkpoint.revert`, and `thread.session.stop`, plus the mode
 setters `thread.runtime-mode.set` and `thread.interaction-mode.set`.
 
+Claude Stop is `thread.turn.interrupt`, not `thread.session.stop`. For a Claude turn with no live
+subagents, the adapter interrupts the query and keeps the CLI so the next prompt is not a
+`--resume`. Pending approvals and user-input prompts are cancelled, and the stopped turn's leftover
+frames are dropped until its `result` arrives, so they cannot open a synthetic turn or attach to the
+next one. The interrupt is bounded: if the CLI never acknowledges it, the command fails and the
+reactor falls back to closing the session. Live subagents still close the process (#5891).
+`thread.session.stop` and the idle reaper still close it too.
+
 The engine persists an event for the command, and a server-side reactor performs the provider call.
 Provider output comes back as internal commands such as `thread.message.assistant.delta` and
 `thread.session.set`, which clients observe through `orchestration.subscribeThread`. See
