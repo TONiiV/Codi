@@ -4645,8 +4645,15 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
   });
 
   const interruptTurn: ClaudeAdapterShape["interruptTurn"] = Effect.fn("interruptTurn")(
-    function* (threadId, _turnId) {
+    function* (threadId, turnId) {
       const context = yield* requireSession(threadId);
+      // A Stop that arrives after the session moved on (a retry queued behind
+      // the first one, or a fast follow-up prompt) must not cancel the turn
+      // the user started since. The caller names the turn it meant to stop.
+      const targetTurnId = context.turnState?.turnId;
+      if (turnId !== undefined && targetTurnId !== undefined && targetTurnId !== turnId) {
+        return;
+      }
       // Esc should cancel the in-flight turn without tearing down the CLI.
       // Closing forces the next prompt through --resume and rewrites prompt
       // cache (pingdotgg/t3code#7338). A cooperative interrupt does not stop
@@ -4675,6 +4682,20 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
             ),
         }),
       );
+
+      // A subagent can start while interrupt() is in flight. It would keep
+      // running on a CLI we just decided to keep, so the #5891 boundary has to
+      // be rechecked once the interrupt lands, not only before it.
+      if (context.liveTaskIds.size > 0) {
+        yield* stopSessionInternal(context);
+        return;
+      }
+      // Same race for turns: a follow-up prompt that started during the
+      // interrupt owns the stream now, and must not be completed as
+      // interrupted or have its output dropped.
+      if (targetTurnId !== undefined && context.turnState?.turnId !== targetTurnId) {
+        return;
+      }
 
       if (context.turnState) {
         yield* completeTurn(context, "interrupted");

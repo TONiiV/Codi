@@ -63,6 +63,7 @@ class FakeClaudeQuery implements AsyncIterable<SDKMessage> {
   public interruptError: unknown | undefined;
   /** Set to keep interrupt() pending, standing in for a wedged CLI. */
   public interruptHangs = false;
+  private interruptGate: Promise<void> | undefined;
 
   emit(message: SDKMessage): void {
     if (this.done) {
@@ -98,6 +99,15 @@ class FakeClaudeQuery implements AsyncIterable<SDKMessage> {
     }
   }
 
+  /** Holds interrupt() open until the returned release is called. */
+  blockInterrupt(): () => void {
+    let release = (): void => {};
+    this.interruptGate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    return release;
+  }
+
   readonly interrupt = async (): Promise<void> => {
     this.interruptCalls.push(undefined);
     if (this.interruptError !== undefined) {
@@ -105,6 +115,9 @@ class FakeClaudeQuery implements AsyncIterable<SDKMessage> {
     }
     if (this.interruptHangs) {
       await new Promise<never>(() => {});
+    }
+    if (this.interruptGate) {
+      await this.interruptGate;
     }
   };
 
@@ -1964,6 +1977,90 @@ describe("ClaudeAdapterLive", () => {
       );
       assert.equal(harness.query.closeCalls, 0);
       assert.equal(yield* adapter.hasSession(session.threadId), true);
+    }).pipe(
+      Effect.provideService(Random.Random, makeDeterministicRandomService()),
+      Effect.provide(harness.layer),
+    );
+  });
+
+  it.effect("interruptTurn ignores a Stop aimed at an already-finished turn", () => {
+    const harness = makeHarness();
+    return Effect.gen(function* () {
+      const adapter = yield* ClaudeAdapter;
+      const session = yield* adapter.startSession({
+        threadId: THREAD_ID,
+        provider: ProviderDriverKind.make("claudeAgent"),
+        runtimeMode: "full-access",
+      });
+      const firstTurn = yield* adapter.sendTurn({
+        threadId: session.threadId,
+        input: "first",
+        attachments: [],
+      });
+      yield* adapter.interruptTurn(session.threadId, firstTurn.turnId);
+      yield* adapter.sendTurn({
+        threadId: session.threadId,
+        input: "second",
+        attachments: [],
+      });
+
+      // A retry of the first Stop lands after the follow-up started. It names
+      // the old turn, so it must not cancel the new one.
+      yield* adapter.interruptTurn(session.threadId, firstTurn.turnId);
+
+      assert.equal(harness.query.interruptCalls.length, 1);
+      assert.equal(harness.query.closeCalls, 0);
+      assert.equal((yield* adapter.listSessions())[0]?.status, "running");
+    }).pipe(
+      Effect.provideService(Random.Random, makeDeterministicRandomService()),
+      Effect.provide(harness.layer),
+    );
+  });
+
+  it.effect("interruptTurn closes when a subagent starts during the interrupt", () => {
+    const harness = makeHarness();
+    return Effect.gen(function* () {
+      const adapter = yield* ClaudeAdapter;
+      const taskStartedFiber = yield* adapter.streamEvents.pipe(
+        Stream.filter((event) => event.type === "task.started"),
+        Stream.take(1),
+        Stream.runCollect,
+        Effect.forkChild,
+      );
+      const session = yield* adapter.startSession({
+        threadId: THREAD_ID,
+        provider: ProviderDriverKind.make("claudeAgent"),
+        runtimeMode: "full-access",
+      });
+      yield* adapter.sendTurn({
+        threadId: session.threadId,
+        input: "first",
+        attachments: [],
+      });
+
+      const releaseInterrupt = harness.query.blockInterrupt();
+      const interruptFiber = yield* adapter.interruptTurn(session.threadId).pipe(Effect.forkChild);
+      yield* Effect.yieldNow;
+      yield* Effect.yieldNow;
+      yield* Effect.yieldNow;
+      assert.equal(harness.query.interruptCalls.length, 1);
+
+      harness.query.emit({
+        type: "system",
+        subtype: "task_started",
+        task_id: "task-late",
+        description: "Agent A",
+        task_type: "local_agent",
+        uuid: "task-late-uuid",
+        session_id: "sdk-session",
+      } as unknown as SDKMessage);
+      yield* Fiber.join(taskStartedFiber);
+      releaseInterrupt();
+      yield* Fiber.join(interruptFiber);
+
+      // The subagent would otherwise keep running on a CLI we kept alive.
+      assert.equal(harness.query.closeCalls, 1);
+      assert.equal(yield* adapter.hasSession(session.threadId), false);
     }).pipe(
       Effect.provideService(Random.Random, makeDeterministicRandomService()),
       Effect.provide(harness.layer),
