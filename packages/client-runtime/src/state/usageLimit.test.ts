@@ -23,6 +23,15 @@ describe("describeUsageLimitPause", () => {
     ).toBe("5h");
   });
 
+  it("does not round a wait up into an hour it does not need", () => {
+    expect(
+      describeUsageLimitPause(pauseAt("2026-09-04T15:04:00.000Z"), { now: NOW })?.countdown,
+    ).toBe("3h");
+    expect(
+      describeUsageLimitPause(pauseAt("2026-09-04T15:40:00.000Z"), { now: NOW })?.countdown,
+    ).toBe("4h");
+  });
+
   it("is due once the reset has passed", () => {
     const view = describeUsageLimitPause(pauseAt("2026-09-04T11:00:00.000Z"), { now: NOW });
     expect(view?.countdown).toBe("now");

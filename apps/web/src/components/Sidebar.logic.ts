@@ -464,6 +464,7 @@ export type SidebarThreadStatus =
   | "input"
   | "working"
   | "monitoring"
+  | "paused"
   | "failed"
   | "ready";
 
@@ -481,6 +482,12 @@ export function resolveSidebarThreadStatus(thread: SidebarThreadStatusInput): Si
   }
   if (thread.session?.status === "running" || thread.session?.status === "starting") {
     return "working";
+  }
+  // A usage-limit pause reads ahead of the failure it arrived as: the thread
+  // is waiting on a clock, not broken, and the row is the only place that
+  // difference shows without opening the thread.
+  if (thread.session?.usageLimit != null) {
+    return "paused";
   }
   // A failed session outranks lingering background liveness: the user must
   // see the failure, not a stale Working (review finding).

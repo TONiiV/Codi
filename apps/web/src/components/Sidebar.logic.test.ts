@@ -721,6 +721,24 @@ describe("resolveSidebarThreadStatus", () => {
     ).toBe("ready");
   });
 
+  it("reads a usage-limit pause as paused rather than failed", () => {
+    const usageLimit = {
+      resetsAt: "2026-03-09T15:00:00.000Z",
+      messageId: "message-1" as never,
+      recordedAt: "2026-03-09T10:00:00.000Z",
+    };
+    expect(
+      resolveSidebarThreadStatus({
+        ...idle,
+        session: { ...session, status: "error" as const, lastError: "usage limit", usageLimit },
+      }),
+    ).toBe("paused");
+    // A pause cannot outrank work the user can see happening.
+    expect(resolveSidebarThreadStatus({ ...idle, session: { ...session, usageLimit } })).toBe(
+      "working",
+    );
+  });
+
   it("defaults to ready with no session", () => {
     expect(resolveSidebarThreadStatus({ ...idle, session: null })).toBe("ready");
   });

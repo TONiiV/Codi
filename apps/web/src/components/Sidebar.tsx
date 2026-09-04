@@ -25,6 +25,7 @@ import {
   threadWokeAt,
 } from "@t3tools/client-runtime/state/thread-settled";
 import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/models";
+import { describeUsageLimitPause } from "@t3tools/client-runtime/state/usage-limit";
 import {
   scopeProjectRef,
   scopeThreadRef,
@@ -728,6 +729,10 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: {
   sortable?: SortablePinnedRowBag | undefined;
   // Compact wake countdown ("2h") for rows in the snoozed shelf.
   snoozeWakeLabelText: string | null;
+  // Compact countdown ("3h") for a thread parked on a provider usage limit.
+  // Derived from the list's existing minute tick, so a parked row costs no
+  // timer of its own.
+  usageLimitCountdown: string | null;
   // When a snooze ended (timer or early wake); drives the Woke pill until
   // the user visits the thread.
   wokeAt: string | null;
@@ -890,25 +895,36 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: {
                 icon: null,
                 className: "text-indigo-600 dark:text-indigo-300",
               }
-            : status === "failed"
+            : status === "paused"
               ? {
-                  label: "Failed",
+                  // Amber, like approval: the thread is waiting on something
+                  // outside itself rather than broken.
+                  label:
+                    props.usageLimitCountdown === null
+                      ? "Paused"
+                      : `Paused · ${props.usageLimitCountdown}`,
                   icon: null,
-                  className: "text-red-700 dark:text-red-300",
+                  className: "text-amber-700 dark:text-amber-300",
                 }
-              : isWoke
+              : status === "failed"
                 ? {
-                    label: "Woke",
-                    icon: "woke" as const,
-                    className: "text-amber-700 dark:text-amber-300",
+                    label: "Failed",
+                    icon: null,
+                    className: "text-red-700 dark:text-red-300",
                   }
-                : isUnread
+                : isWoke
                   ? {
-                      label: "Done",
-                      icon: "done" as const,
-                      className: "text-emerald-700 dark:text-emerald-300",
+                      label: "Woke",
+                      icon: "woke" as const,
+                      className: "text-amber-700 dark:text-amber-300",
                     }
-                  : null;
+                  : isUnread
+                    ? {
+                        label: "Done",
+                        icon: "done" as const,
+                        className: "text-emerald-700 dark:text-emerald-300",
+                      }
+                    : null;
   const isWokeStatus = topStatus?.icon === "woke";
 
   const branchMismatch = resolveLocalCheckoutBranchMismatch({
@@ -3808,6 +3824,11 @@ export default function Sidebar() {
                                 now: new Date().toISOString(),
                               })
                             : null
+                        }
+                        usageLimitCountdown={
+                          describeUsageLimitPause(thread.session?.usageLimit ?? null, {
+                            now: snoozeNow,
+                          })?.countdown ?? null
                         }
                         // All sections: a woken thread can classify straight
                         // into the settled tail (PR merged while snoozed), and

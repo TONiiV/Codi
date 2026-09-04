@@ -47,12 +47,15 @@ export function describeUsageLimitPause(
   if (remainingMs <= 0) {
     return { countdown: "now", clockLabel, isDue: true };
   }
+  // Minutes round up so a wait never reads "0m"; hours and days round to
+  // nearest, because ceiling them puts an hour of slack on the label — a
+  // three-hour-and-change wait reading "4h" is a worse lie than "3h".
   const countdown =
     remainingMs < HOUR_MS
       ? `${Math.max(1, Math.ceil(remainingMs / MINUTE_MS))}m`
       : remainingMs < DAY_MS
-        ? `${Math.ceil(remainingMs / HOUR_MS)}h`
-        : `${Math.ceil(remainingMs / DAY_MS)}d`;
+        ? `${Math.round(remainingMs / HOUR_MS)}h`
+        : `${Math.round(remainingMs / DAY_MS)}d`;
   return { countdown, clockLabel, isDue: false };
 }
 

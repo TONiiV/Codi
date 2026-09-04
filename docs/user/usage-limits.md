@@ -12,9 +12,9 @@ The thread shows a banner instead of a bare error:
 
 > Usage limit reached. Resuming in 3h, at 5:00 PM.
 
-The countdown is the provider's own reset time, not a guess. In the sidebar and on mobile, the
-thread row reads **Usage limit · resumes in 3h** so you can tell a parked thread from a broken one
-at a glance.
+The countdown is the provider's own reset time, not a guess. The thread row also carries it — the
+sidebar reads **Paused · 3h**, mobile reads **Usage limit · resumes in 3h** — so you can tell a
+parked thread from a broken one without opening it.
 
 Two ways out, both in the banner:
 

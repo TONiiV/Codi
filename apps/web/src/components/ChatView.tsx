@@ -1661,13 +1661,18 @@ function ChatViewContent(props: ChatViewProps) {
   // both exits (resume early, or drop the pending resume).
   const threadUsageLimit = activeServerThread?.session?.usageLimit ?? null;
   const threadErrorBannerKey = getThreadErrorBannerKey(routeThreadKey, threadError);
-  const visibleThreadError = shouldShowThreadErrorBanner(
-    routeThreadKey,
-    threadError,
-    isThreadErrorBannerDismissedForSession(threadErrorBannerKey),
-  )
-    ? threadError
-    : null;
+  // The pause banner already says the limit was hit, and says what happens
+  // next; stacking the raw provider error above it says the same thing twice
+  // and offers a dismiss that fixes nothing.
+  const visibleThreadError =
+    threadUsageLimit === null &&
+    shouldShowThreadErrorBanner(
+      routeThreadKey,
+      threadError,
+      isThreadErrorBannerDismissedForSession(threadErrorBannerKey),
+    )
+      ? threadError
+      : null;
   // Dismissing only mutates the session-scoped mask set, which does not
   // trigger a render on its own; setThreadError(null) can also bail when the
   // local shadow is already empty and the banner is driven purely by
