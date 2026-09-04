@@ -518,6 +518,9 @@ export function useSettingsRestore(onRestored?: () => void) {
       DEFAULT_UNIFIED_SETTINGS.enableProviderUpdateChecks
         ? ["Provider update checks"]
         : []),
+      ...(settings.autoResumeAfterUsageLimit !== DEFAULT_UNIFIED_SETTINGS.autoResumeAfterUsageLimit
+        ? ["Auto-resume after usage limits"]
+        : []),
       ...(isBackgroundActivityDirty ? ["Background activity"] : []),
       ...(settings.defaultThreadEnvMode !== DEFAULT_UNIFIED_SETTINGS.defaultThreadEnvMode
         ? ["New thread mode"]
@@ -577,6 +580,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       settings.glassOpacity,
       settings.enableLegacyTokenStreaming,
       settings.enableProviderUpdateChecks,
+      settings.autoResumeAfterUsageLimit,
       settings.sidebarAutoSettleAfterDays,
       settings.sidebarAutoSettleOnMerge,
       settings.sidebarProjectGroupingMode,
@@ -666,6 +670,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       sidebarAutoSettleOnMerge: DEFAULT_UNIFIED_SETTINGS.sidebarAutoSettleOnMerge,
       enableLegacyTokenStreaming: DEFAULT_UNIFIED_SETTINGS.enableLegacyTokenStreaming,
       enableProviderUpdateChecks: DEFAULT_UNIFIED_SETTINGS.enableProviderUpdateChecks,
+      autoResumeAfterUsageLimit: DEFAULT_UNIFIED_SETTINGS.autoResumeAfterUsageLimit,
       backgroundActivity: DEFAULT_UNIFIED_SETTINGS.backgroundActivity,
       backgroundActivityProfile: DEFAULT_UNIFIED_SETTINGS.backgroundActivityProfile,
       automaticGitFetchInterval: DEFAULT_UNIFIED_SETTINGS.automaticGitFetchInterval,
@@ -2110,6 +2115,33 @@ export function GeneralSettingsPanel() {
                 updateSettings({ showSkillsInSlashMenu: Boolean(checked) })
               }
               aria-label="Show skills in slash menu"
+            />
+          }
+        />
+
+        <SettingsRow
+          {...searchableSetting("auto-resume-usage-limit")}
+          description="When a provider stops a turn because you hit its usage limit, restart that turn on its own once the limit resets. Turning this off keeps the pause and its reset time visible so you can resume by hand."
+          resetAction={
+            settings.autoResumeAfterUsageLimit !==
+            DEFAULT_UNIFIED_SETTINGS.autoResumeAfterUsageLimit ? (
+              <SettingResetButton
+                label="auto-resume after usage limits"
+                onClick={() =>
+                  updateSettings({
+                    autoResumeAfterUsageLimit: DEFAULT_UNIFIED_SETTINGS.autoResumeAfterUsageLimit,
+                  })
+                }
+              />
+            ) : null
+          }
+          control={
+            <Switch
+              checked={settings.autoResumeAfterUsageLimit}
+              onCheckedChange={(checked) =>
+                updateSettings({ autoResumeAfterUsageLimit: Boolean(checked) })
+              }
+              aria-label="Auto-resume after usage limits"
             />
           }
         />

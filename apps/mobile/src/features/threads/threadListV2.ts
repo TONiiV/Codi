@@ -30,7 +30,7 @@ export { snoozeWakeLabel };
  * (approval), "in motion" (working), and "broken" (failed). Ready is the
  * unlabeled resting state.
  */
-export type ThreadListV2Status = "approval" | "input" | "working" | "failed" | "ready";
+export type ThreadListV2Status = "approval" | "input" | "working" | "paused" | "failed" | "ready";
 export type ThreadListV2SwipeAction = "archive" | "settle" | "unsettle" | "snooze" | "unsnooze";
 
 export interface ThreadListV2ChangeRequestState extends ChangeRequestSettleSource {
@@ -168,6 +168,11 @@ export function resolveThreadListV2Status(
   }
   if (thread.session?.status === "running" || thread.session?.status === "starting") {
     return "working";
+  }
+  // A usage-limit pause is a wait, not a break, and the pill is what the user
+  // reads first. Matches the web sidebar.
+  if (thread.session?.usageLimit != null) {
+    return "paused";
   }
   if (thread.session?.status === "error") {
     return "failed";

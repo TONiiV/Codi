@@ -188,6 +188,29 @@ describe("resolveThreadListV2Status", () => {
     expect(resolveThreadListV2Status(thread)).toBe("approval");
   });
 
+  it("reads a usage-limit pause as paused rather than failed", () => {
+    const thread = makeThread({
+      id: ThreadId.make("t"),
+      title: "t",
+      session: {
+        threadId: ThreadId.make("t"),
+        status: "error",
+        providerName: "Claude",
+        providerInstanceId: ProviderInstanceId.make("claudeAgent"),
+        runtimeMode: "full-access",
+        activeTurnId: null,
+        lastError: "Claude AI usage limit reached",
+        usageLimit: {
+          resetsAt: "2026-03-09T15:00:00.000Z",
+          messageId: MessageId.make("message-1"),
+          recordedAt: NOW,
+        },
+        updatedAt: NOW,
+      },
+    });
+    expect(resolveThreadListV2Status(thread)).toBe("paused");
+  });
+
   it("resolves ready for quiescent threads", () => {
     expect(resolveThreadListV2Status(makeThread({ id: ThreadId.make("t"), title: "t" }))).toBe(
       "ready",

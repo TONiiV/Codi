@@ -4,6 +4,7 @@ import type {
 } from "@t3tools/client-runtime/state/shell";
 import type { EnvironmentThreadSearchMatch } from "@t3tools/client-runtime/state/thread-search";
 import { canSnooze, resolveSnoozePresets } from "@t3tools/client-runtime/state/thread-settled";
+import { describeUsageLimitPause } from "@t3tools/client-runtime/state/usage-limit";
 import type { MenuAction } from "@react-native-menu/menu";
 import { memo, useCallback, useEffect, useMemo, useState, type ComponentProps } from "react";
 import { Alert, Platform, Pressable, useWindowDimensions, View } from "react-native";
@@ -55,6 +56,7 @@ const STATUS_LABEL_BY_STATUS: Partial<
   approval: { label: "Approval", className: "text-adaptive-amber-700-300" },
   input: { label: "Input", className: "text-adaptive-indigo-600-300" },
   working: { label: "Working", className: "text-adaptive-sky-600-400" },
+  paused: { label: "Paused", className: "text-adaptive-amber-700-300" },
   failed: { label: "Failed", className: "text-adaptive-red-700-300" },
 };
 
@@ -427,6 +429,11 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
 
   const status = resolveThreadListV2Status(thread);
   const statusLabel = STATUS_LABEL_BY_STATUS[status];
+  // The parent's minute tick is already a prop, so the countdown moves without
+  // this memoized row owning a timer of its own.
+  const usageLimitPause = describeUsageLimitPause(thread.session?.usageLimit ?? null, {
+    now: `${props.snoozePresetMinute}:00.000Z`,
+  });
   const timeLabel = threadTimeLabel(thread);
 
   const handleDelete = useCallback(() => onDeleteThread(thread), [onDeleteThread, thread]);
@@ -735,7 +742,21 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
         </View>
       ) : null}
       <View className="mt-1 flex-row items-center gap-2">
-        {status === "failed" && thread.session?.lastError ? (
+        {usageLimitPause !== null ? (
+          /* A usage limit outranks the raw error text it also produced: the
+             provider's wording is noise next to "when does this come back". */
+          <Text
+            className={cn(
+              "flex-1 text-xs",
+              selected ? "text-user-bubble-foreground-muted" : "text-adaptive-amber-700-300",
+            )}
+            numberOfLines={1}
+          >
+            {usageLimitPause.isDue
+              ? `Usage limit · resuming`
+              : `Usage limit · resumes in ${usageLimitPause.countdown}`}
+          </Text>
+        ) : status === "failed" && thread.session?.lastError ? (
           <Text
             className={cn(
               "flex-1 text-xs",

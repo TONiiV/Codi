@@ -64,6 +64,7 @@ import {
   type OrchestrationEngineShape,
 } from "../src/orchestration/Services/OrchestrationEngine.ts";
 import { ThreadDeletionReactor } from "../src/orchestration/Services/ThreadDeletionReactor.ts";
+import { UsageLimitResumeReactor } from "../src/orchestration/Services/UsageLimitResumeReactor.ts";
 import { OrchestrationReactor } from "../src/orchestration/Services/OrchestrationReactor.ts";
 import { ProjectionSnapshotQuery } from "../src/orchestration/Services/ProjectionSnapshotQuery.ts";
 import {
@@ -374,6 +375,11 @@ export const makeOrchestrationIntegrationHarness = (
         Layer.succeed(ThreadDeletionReactor, {
           start: () => Effect.void,
           drainThrough: () => Effect.void,
+        }),
+      ),
+      Layer.provideMerge(
+        Layer.succeed(UsageLimitResumeReactor, {
+          start: () => Effect.void,
         }),
       ),
       Layer.provideMerge(
