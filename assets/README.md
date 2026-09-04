@@ -6,7 +6,15 @@ The three Icon Composer projects are the source of truth for full application ic
 - `nightly/app-icon.icon`
 - `prod/app-icon.icon`
 
-Each project uses `text.svg` for the T3 mark and `background.svg` when the background is a vector layer. Additional layers use semantic names that describe their role and placement.
+Each project draws the Codi mark from `mark.svg` over a solid fill: a serif C followed by a block
+cursor, in the editorial paper/ink palette. Layer names describe their role and placement, so a
+project with more than one layer stays readable.
+
+| Project                 | Fill            | Mark            |
+| ----------------------- | --------------- | --------------- |
+| `prod/app-icon.icon`    | paper `#F5F3F0` | ink `#16130F`   |
+| `nightly/app-icon.icon` | shell `#100F0D` | paper `#F5F3F0` |
+| `dev/app-icon.icon`     | cool `#2F4D86`  | paper `#F5F3F0` |
 
 Run `vp run icons:export` from the repository root to regenerate the tracked iOS, Linux, Windows, and web assets. The development web exports are also copied to `apps/web/public` for the browser favicon and splash screen. Run `vp run icons:check` to verify that the generated assets and public copies match their sources without changing files.
 
@@ -51,8 +59,13 @@ Do not edit the generated PNG or ICO files directly.
 
 ## Android adaptive foreground
 
-`apps/mobile/assets/android-icon-foreground.svg` is the source of truth for the foreground used by
-the normal Android adaptive launcher icon. Export its paired PNG after changing it:
+Android draws the launcher foreground over a flat background colour, and the production background is
+paper while dev and preview are dark, so there are two foregrounds:
+
+- `apps/mobile/assets/android-icon-foreground.svg` — paper mark, used by dev and preview.
+- `apps/mobile/assets/android-icon-foreground-ink.svg` — ink mark, used by production.
+
+Export the paired PNG after changing either one:
 
 ```sh
 rsvg-convert -w 432 -h 432 \
@@ -60,5 +73,11 @@ rsvg-convert -w 432 -h 432 \
   apps/mobile/assets/android-icon-foreground.svg
 ```
 
-The foreground must remain transparent and keep the T3 mark inside Android's adaptive-icon safe
+The foreground must remain transparent and keep the Codi mark inside Android's adaptive-icon safe
 zone. `android-icon-mark.png` remains a flat silhouette for Android's monochrome themed icon.
+
+## In-app lockup
+
+The sidebar and mobile header draw the same mark inline rather than loading a PNG:
+`apps/web/src/components/sidebar/SidebarChrome.tsx` and
+`apps/mobile/src/components/CodiMark.tsx`. Keep their path data in sync with `mark.svg`.
