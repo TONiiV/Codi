@@ -214,6 +214,11 @@ function ThreadRouteContent(
   const gitActions = useSelectedThreadGitActions();
   const requests = useSelectedThreadRequests();
   const interruptThreadTurn = useAtomCommand(threadEnvironment.interruptTurn, "thread interrupt");
+  const retryThreadTurn = useAtomCommand(threadEnvironment.retryTurn, "thread retry turn");
+  const dismissThreadUsageLimit = useAtomCommand(
+    threadEnvironment.dismissUsageLimit,
+    "thread dismiss usage limit",
+  );
   const navigation = useNavigation();
   const params = props.route.params;
   const environmentIdRaw = firstRouteParam(params.environmentId);
@@ -478,6 +483,27 @@ function ThreadRouteContent(
   const handleOpenConnectionEditor = useCallback(() => {
     void navigation.navigate("Connections");
   }, [navigation]);
+  const handleResumeUsageLimit = useCallback(() => {
+    const usageLimit = selectedThread?.session?.usageLimit;
+    if (!selectedThread || usageLimit == null) {
+      return;
+    }
+    void retryThreadTurn({
+      environmentId: selectedThread.environmentId,
+      input: { threadId: selectedThread.id, messageId: usageLimit.messageId },
+    });
+  }, [retryThreadTurn, selectedThread]);
+
+  const handleDismissUsageLimit = useCallback(() => {
+    if (!selectedThread) {
+      return;
+    }
+    void dismissThreadUsageLimit({
+      environmentId: selectedThread.environmentId,
+      input: { threadId: selectedThread.id },
+    });
+  }, [dismissThreadUsageLimit, selectedThread]);
+
   const handleStopThread = useCallback(() => {
     if (
       !selectedThread ||
@@ -808,6 +834,8 @@ function ThreadRouteContent(
           onSelectUserInputOption={requests.onSelectUserInputOption}
           onChangeUserInputCustomAnswer={requests.onChangeUserInputCustomAnswer}
           onSubmitUserInput={requests.onSubmitUserInput}
+          onResumeUsageLimit={handleResumeUsageLimit}
+          onDismissUsageLimit={handleDismissUsageLimit}
         />
       </View>
     </>

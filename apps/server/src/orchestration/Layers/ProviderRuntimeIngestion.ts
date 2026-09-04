@@ -15,6 +15,8 @@ import {
   TurnId,
   type OrchestrationCheckpointSummary,
   type OrchestrationProposedPlan,
+  type OrchestrationSessionStatus,
+  type OrchestrationSessionUsageLimit,
   type OrchestrationThread,
   type OrchestrationThreadActivity,
   type ProviderRuntimeEvent,
@@ -22,6 +24,7 @@ import {
 import * as Cache from "effect/Cache";
 import * as Cause from "effect/Cause";
 import * as Crypto from "effect/Crypto";
+import * as DateTime from "effect/DateTime";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -45,6 +48,11 @@ import { projectActivityPayload } from "../ActivityPayloadProjection.ts";
 import { forkParked } from "../../serverActivation.ts";
 import { ServerSettingsService } from "../../serverSettings.ts";
 import { canReplaceThreadTitle } from "../threadTitles.ts";
+import {
+  detectUsageLimitResetAt,
+  type RateLimitSnapshot,
+  readRateLimitSnapshot,
+} from "../../provider/usageLimitSignal.ts";
 
 const providerTurnKey = (threadId: ThreadId, turnId: TurnId) => `${threadId}:${turnId}`;
 const providerTaskKey = (threadId: ThreadId, taskId: string) => `${threadId}:${taskId}`;
@@ -98,6 +106,10 @@ const BUFFERED_PROPOSED_PLAN_BY_ID_CACHE_CAPACITY = 10_000;
 const BUFFERED_PROPOSED_PLAN_BY_ID_TTL = Duration.minutes(120);
 const TASK_DESCRIPTION_BY_TASK_CACHE_CAPACITY = 10_000;
 const TASK_DESCRIPTION_BY_TASK_TTL = Duration.minutes(120);
+const RATE_LIMIT_SNAPSHOT_CACHE_CAPACITY = 1_000;
+// Only ever read to explain a failure that just happened; the detector applies
+// its own, much tighter freshness rule (USAGE_LIMIT_SNAPSHOT_TTL_MS).
+const RATE_LIMIT_SNAPSHOT_TTL = Duration.minutes(30);
 const MAX_BUFFERED_ASSISTANT_CHARS = 24_000;
 const STRICT_PROVIDER_LIFECYCLE_GUARD = process.env.T3CODE_STRICT_PROVIDER_LIFECYCLE_GUARD !== "0";
 
@@ -936,6 +948,18 @@ const make = Effect.gen(function* () {
     lookup: () => Effect.succeed(""),
   });
 
+  // Providers push rate-limit telemetry as utilisation moves, separately from
+  // the turn that gets rejected. Keeping the latest per thread is what lets a
+  // bare "you've hit your usage limit" failure still name a reset time.
+  const rateLimitSnapshotByThread = yield* Cache.make<
+    ThreadId,
+    { readonly snapshot: RateLimitSnapshot; readonly receivedAtMs: number } | null
+  >({
+    capacity: RATE_LIMIT_SNAPSHOT_CACHE_CAPACITY,
+    timeToLive: RATE_LIMIT_SNAPSHOT_TTL,
+    lookup: () => Effect.succeed(null),
+  });
+
   const rememberTaskDescription = (threadId: ThreadId, taskId: string, description: string) =>
     Cache.set(taskDescriptionByTaskKey, providerTaskKey(threadId, taskId), description);
 
@@ -1493,6 +1517,83 @@ const make = Effect.gen(function* () {
     },
   );
 
+  /**
+   * The user message whose turn the provider just refused. Prefer the turn's
+   * own record; a turn that died before it started is still described by the
+   * thread's pending turn start.
+   */
+  const resolveUsageLimitMessageId = Effect.fn("resolveUsageLimitMessageId")(function* (input: {
+    readonly threadId: ThreadId;
+    readonly turnId: TurnId | undefined;
+  }) {
+    if (input.turnId !== undefined) {
+      const turn = yield* projectionTurnRepository.getByTurnId({
+        threadId: input.threadId,
+        turnId: input.turnId,
+      });
+      if (Option.isSome(turn) && turn.value.pendingMessageId !== null) {
+        return turn.value.pendingMessageId;
+      }
+    }
+    const pendingTurnStart = yield* projectionTurnRepository.getPendingTurnStartByThreadId({
+      threadId: input.threadId,
+    });
+    return Option.isSome(pendingTurnStart) ? pendingTurnStart.value.messageId : null;
+  });
+
+  /**
+   * The usage-limit pause the session should carry after this event.
+   *
+   * Only a session going to "error" can open a pause, and only a session
+   * getting back to work closes one — everything in between carries the
+   * existing pause forward, because a session-set that merely forgets it would
+   * silently cancel the resume the user is waiting on.
+   */
+  const resolveSessionUsageLimit = Effect.fn("resolveSessionUsageLimit")(function* (input: {
+    readonly threadId: ThreadId;
+    readonly turnId: TurnId | undefined;
+    readonly existing: OrchestrationSessionUsageLimit | null;
+    readonly status: OrchestrationSessionStatus;
+    readonly errorMessage: string | undefined;
+    readonly now: string;
+  }) {
+    if (input.status !== "error") {
+      // Anything that is not a failure is the thread working again (or being
+      // stopped by hand), and either way the pause has served its purpose.
+      return input.status === "ready" || input.status === "running" || input.status === "starting"
+        ? null
+        : input.existing;
+    }
+
+    const cached = yield* Cache.get(rateLimitSnapshotByThread, input.threadId);
+    const parsedNow = Date.parse(input.now);
+    const resetsAtMs = detectUsageLimitResetAt({
+      errorMessage: input.errorMessage,
+      snapshot: cached?.snapshot ?? null,
+      snapshotReceivedAtMs: cached?.receivedAtMs ?? null,
+      nowMs: Number.isFinite(parsedNow) ? parsedNow : DateTime.toEpochMillis(yield* DateTime.now),
+    });
+    if (resetsAtMs === null) {
+      return input.existing;
+    }
+
+    const messageId = yield* resolveUsageLimitMessageId({
+      threadId: input.threadId,
+      turnId: input.turnId,
+    });
+    if (messageId === null) {
+      // Nothing to pick back up — record no pause rather than one that would
+      // resume the wrong prompt.
+      return input.existing;
+    }
+
+    return {
+      resetsAt: DateTime.formatIso(DateTime.makeUnsafe(resetsAtMs)),
+      messageId,
+      recordedAt: input.now,
+    };
+  });
+
   const processRuntimeEvent = (event: ProviderRuntimeEvent) =>
     Effect.gen(function* () {
       const thread = yield* resolveThreadShell(event.threadId);
@@ -1619,8 +1720,15 @@ const make = Effect.gen(function* () {
               : status === "ready"
                 ? null
                 : (thread.session?.lastError ?? null);
-
         if (shouldApplyThreadLifecycle) {
+          const usageLimit = yield* resolveSessionUsageLimit({
+            threadId: thread.id,
+            turnId: eventTurnId,
+            existing: thread.session?.usageLimit ?? null,
+            status,
+            errorMessage: lastError ?? undefined,
+            now,
+          });
           if (event.type === "turn.started" && acceptedTurnStartedSourcePlan !== null) {
             yield* markSourceProposedPlanImplemented(
               acceptedTurnStartedSourcePlan.sourceThreadId,
@@ -1655,6 +1763,7 @@ const make = Effect.gen(function* () {
               runtimeMode: thread.session?.runtimeMode ?? "full-access",
               activeTurnId: nextActiveTurnId,
               lastError,
+              ...(usageLimit === null ? {} : { usageLimit }),
               updatedAt: now,
             },
             createdAt: now,
@@ -1891,6 +2000,14 @@ const make = Effect.gen(function* () {
           : activeTurnId === null || eventTurnId === undefined || sameId(activeTurnId, eventTurnId);
 
         if (shouldApplyRuntimeError) {
+          const usageLimit = yield* resolveSessionUsageLimit({
+            threadId: thread.id,
+            turnId: eventTurnId,
+            existing: thread.session?.usageLimit ?? null,
+            status: "error",
+            errorMessage: runtimeErrorMessage,
+            now,
+          });
           yield* orchestrationEngine.dispatch({
             type: "thread.session.set",
             commandId: yield* providerCommandId(event, "runtime-error-session-set"),
@@ -1905,6 +2022,7 @@ const make = Effect.gen(function* () {
               runtimeMode: thread.session?.runtimeMode ?? "full-access",
               activeTurnId: eventTurnId ?? null,
               lastError: runtimeErrorMessage,
+              ...(usageLimit === null ? {} : { usageLimit }),
               updatedAt: now,
             },
             createdAt: now,
@@ -1957,6 +2075,19 @@ const make = Effect.gen(function* () {
               createdAt: now,
             });
           }
+        }
+      }
+
+      if (event.type === "account.rate-limits.updated") {
+        const snapshot = readRateLimitSnapshot(event.payload.rateLimits);
+        if (snapshot !== null) {
+          const receivedAtMs = Date.parse(now);
+          yield* Cache.set(rateLimitSnapshotByThread, thread.id, {
+            snapshot,
+            receivedAtMs: Number.isFinite(receivedAtMs)
+              ? receivedAtMs
+              : DateTime.toEpochMillis(yield* DateTime.now),
+          });
         }
       }
 

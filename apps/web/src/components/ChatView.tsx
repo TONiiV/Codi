@@ -319,6 +319,7 @@ import {
   shouldShowThreadErrorBanner,
   ThreadErrorBanner,
 } from "./chat/ThreadErrorBanner";
+import { UsageLimitBanner } from "./chat/UsageLimitBanner";
 import {
   resolveDisplayedThreadPr,
   threadChangeRequestSnapshotsAtom,
@@ -1345,6 +1346,10 @@ function ChatViewContent(props: ChatViewProps) {
   const revertThreadCheckpoint = useAtomCommand(threadEnvironment.revertCheckpoint, {
     reportFailure: false,
   });
+  const retryThreadTurn = useAtomCommand(threadEnvironment.retryTurn, { reportFailure: false });
+  const dismissThreadUsageLimit = useAtomCommand(threadEnvironment.dismissUsageLimit, {
+    reportFailure: false,
+  });
   const openPreview = useAtomCommand(previewEnvironment.open, { reportFailure: false });
   const closePreview = useAtomCommand(previewEnvironment.close, "preview close");
   const { environments } = useEnvironments();
@@ -1651,6 +1656,10 @@ function ChatViewContent(props: ChatViewProps) {
   // keeps its error in session.lastError, so clearing the local shadow would
   // just fall through to the persisted one. Mask the current error until a
   // different error arrives, mirroring the provider status banner.
+  // A usage-limit pause is not an error the user can dismiss into silence: it
+  // has a reset time and a turn waiting on it, so it gets its own banner with
+  // both exits (resume early, or drop the pending resume).
+  const threadUsageLimit = activeServerThread?.session?.usageLimit ?? null;
   const threadErrorBannerKey = getThreadErrorBannerKey(routeThreadKey, threadError);
   const visibleThreadError = shouldShowThreadErrorBanner(
     routeThreadKey,
@@ -7187,6 +7196,27 @@ function ChatViewContent(props: ChatViewProps) {
             setThreadErrorBannerDismissTick((tick) => tick + 1);
           }}
         />
+        {threadUsageLimit !== null && isServerThread ? (
+          <UsageLimitBanner
+            usageLimit={threadUsageLimit}
+            autoResumeEnabled={settings.autoResumeAfterUsageLimit}
+            onResumeNow={() => {
+              retryThreadTurn({
+                environmentId,
+                input: {
+                  threadId: activeThread.id,
+                  messageId: threadUsageLimit.messageId,
+                },
+              });
+            }}
+            onDismiss={() => {
+              dismissThreadUsageLimit({
+                environmentId,
+                input: { threadId: activeThread.id },
+              });
+            }}
+          />
+        ) : null}
         {/* Main content area with optional plan sidebar */}
         <div className="flex min-h-0 min-w-0 flex-1">
           {/* Chat column */}

@@ -3624,4 +3624,108 @@ describe("ProviderRuntimeIngestion", () => {
     expect(thread.session?.status).toBe("error");
     expect(thread.session?.lastError).toBe("runtime still processed");
   });
+  it("records a usage-limit pause when the provider refuses a turn", async () => {
+    const harness = await createHarness();
+    const now = "2026-01-01T00:00:00.000Z";
+    // Claude's own phrasing: the reset rides along as epoch seconds.
+    const resetsAtEpochSeconds = 1_767_236_400;
+
+    await harness.dispatch({
+      type: "thread.turn.start",
+      commandId: CommandId.make("cmd-usage-limit-turn"),
+      threadId: asThreadId("thread-1"),
+      message: {
+        messageId: asMessageId("message-usage-limit"),
+        role: "user",
+        text: "ship it",
+        attachments: [],
+      },
+      runtimeMode: "approval-required",
+      interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+      createdAt: now,
+    });
+
+    harness.emit({
+      type: "turn.started",
+      eventId: asEventId("evt-usage-limit-turn-started"),
+      provider: ProviderDriverKind.make("codex"),
+      threadId: asThreadId("thread-1"),
+      createdAt: now,
+      turnId: asTurnId("turn-usage-limit"),
+    });
+    await waitForThread(harness.readModel, (thread) => thread.session?.status === "running");
+
+    harness.emit({
+      type: "turn.completed",
+      eventId: asEventId("evt-usage-limit-turn-completed"),
+      provider: ProviderDriverKind.make("codex"),
+      threadId: asThreadId("thread-1"),
+      createdAt: now,
+      turnId: asTurnId("turn-usage-limit"),
+      payload: {
+        state: "failed",
+        errorMessage: `Claude AI usage limit reached|${resetsAtEpochSeconds}`,
+      },
+    });
+
+    const parked = await waitForThread(
+      harness.readModel,
+      (entry) => entry.session?.status === "error" && entry.session?.usageLimit != null,
+    );
+    expect(parked.session?.usageLimit).toEqual({
+      resetsAt: "2026-01-01T03:00:00.000Z",
+      messageId: "message-usage-limit",
+      recordedAt: now,
+    });
+
+    // Any turn getting under way is the pause being over.
+    harness.emit({
+      type: "turn.started",
+      eventId: asEventId("evt-usage-limit-turn-restarted"),
+      provider: ProviderDriverKind.make("codex"),
+      threadId: asThreadId("thread-1"),
+      createdAt: now,
+      turnId: asTurnId("turn-usage-limit-retry"),
+    });
+
+    const resumed = await waitForThread(
+      harness.readModel,
+      (entry) => entry.session?.status === "running",
+    );
+    expect(resumed.session?.usageLimit ?? null).toBeNull();
+  });
+
+  it("leaves an ordinary turn failure unparked", async () => {
+    const harness = await createHarness();
+    const now = "2026-01-01T00:00:00.000Z";
+
+    harness.emit({
+      type: "turn.started",
+      eventId: asEventId("evt-plain-failure-started"),
+      provider: ProviderDriverKind.make("codex"),
+      threadId: asThreadId("thread-1"),
+      createdAt: now,
+      turnId: asTurnId("turn-plain-failure"),
+    });
+    await waitForThread(harness.readModel, (thread) => thread.session?.status === "running");
+
+    harness.emit({
+      type: "turn.completed",
+      eventId: asEventId("evt-plain-failure-completed"),
+      provider: ProviderDriverKind.make("codex"),
+      threadId: asThreadId("thread-1"),
+      createdAt: now,
+      turnId: asTurnId("turn-plain-failure"),
+      payload: {
+        state: "failed",
+        errorMessage: "ENOENT: no such file or directory",
+      },
+    });
+
+    const thread = await waitForThread(
+      harness.readModel,
+      (entry) => entry.session?.status === "error",
+    );
+    expect(thread.session?.usageLimit ?? null).toBeNull();
+  });
 });

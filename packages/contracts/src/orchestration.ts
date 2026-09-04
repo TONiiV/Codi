@@ -347,6 +347,23 @@ export const OrchestrationSessionStatus = Schema.Literals([
 ]);
 export type OrchestrationSessionStatus = typeof OrchestrationSessionStatus.Type;
 
+/**
+ * A provider usage/rate limit that stopped a turn, plus everything needed to
+ * pick that turn back up: when the provider says the window reopens, and the
+ * user message whose turn was cut short.
+ *
+ * Lives on the session because that is exactly what it describes — this
+ * session is parked until `resetsAt`. It rides `thread.session-set` to every
+ * client, and any later session-set (a turn starting, the user cancelling)
+ * drops it, so the pause can never outlive the thing it paused.
+ */
+export const OrchestrationSessionUsageLimit = Schema.Struct({
+  resetsAt: IsoDateTime,
+  messageId: MessageId,
+  recordedAt: IsoDateTime,
+});
+export type OrchestrationSessionUsageLimit = typeof OrchestrationSessionUsageLimit.Type;
+
 export const OrchestrationSession = Schema.Struct({
   threadId: ThreadId,
   status: OrchestrationSessionStatus,
@@ -355,6 +372,8 @@ export const OrchestrationSession = Schema.Struct({
   runtimeMode: RuntimeMode.pipe(Schema.withDecodingDefault(Effect.succeed(DEFAULT_RUNTIME_MODE))),
   activeTurnId: Schema.NullOr(TurnId),
   lastError: Schema.NullOr(TrimmedNonEmptyString),
+  // Optional so payloads from pre-usage-limit servers still decode.
+  usageLimit: Schema.optional(Schema.NullOr(OrchestrationSessionUsageLimit)),
   updatedAt: IsoDateTime,
 });
 export type OrchestrationSession = typeof OrchestrationSession.Type;
@@ -978,6 +997,31 @@ const ThreadSessionStopCommand = Schema.Struct({
   onlyIfSettled: Schema.optional(Schema.Boolean),
 });
 
+/**
+ * Re-run the turn an existing user message asked for, without appending the
+ * message again. Both the usage-limit auto-resume reactor and the client's
+ * "Resume now" button go through this one path, so a resumed turn is
+ * indistinguishable from a hand-retried one.
+ */
+const ThreadTurnRetryCommand = Schema.Struct({
+  type: Schema.Literal("thread.turn.retry"),
+  commandId: CommandId,
+  threadId: ThreadId,
+  messageId: MessageId,
+  createdAt: IsoDateTime,
+});
+
+/**
+ * Drop a pending usage-limit auto-resume without retrying. The way out of the
+ * one-way door the limit put the thread behind.
+ */
+const ThreadUsageLimitDismissCommand = Schema.Struct({
+  type: Schema.Literal("thread.usage-limit.dismiss"),
+  commandId: CommandId,
+  threadId: ThreadId,
+  createdAt: IsoDateTime,
+});
+
 const DispatchableClientOrchestrationCommand = Schema.Union([
   ProjectCreateCommand,
   ProjectMetaUpdateCommand,
@@ -998,6 +1042,8 @@ const DispatchableClientOrchestrationCommand = Schema.Union([
   ThreadInteractionModeSetCommand,
   ThreadTurnStartCommand,
   ThreadTurnInterruptCommand,
+  ThreadTurnRetryCommand,
+  ThreadUsageLimitDismissCommand,
   ThreadApprovalRespondCommand,
   ThreadUserInputRespondCommand,
   ThreadCheckpointRevertCommand,
@@ -1026,6 +1072,8 @@ export const ClientOrchestrationCommand = Schema.Union([
   ThreadInteractionModeSetCommand,
   ClientThreadTurnStartCommand,
   ThreadTurnInterruptCommand,
+  ThreadTurnRetryCommand,
+  ThreadUsageLimitDismissCommand,
   ThreadApprovalRespondCommand,
   ThreadUserInputRespondCommand,
   ThreadCheckpointRevertCommand,

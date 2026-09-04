@@ -658,6 +658,17 @@ export const ServerSettings = Schema.Struct({
    * between a desktop window and a phone attached to the same server.
    */
   enableAgentBrowserAccess: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
+  /**
+   * Whether a turn stopped by a provider usage limit restarts on its own once
+   * that limit's reset time passes. Turning it off keeps the pause visible —
+   * the thread still shows when the limit resets and offers a manual resume —
+   * it just never restarts the turn for you.
+   *
+   * Server-authoritative rather than client-local: the reactor that performs
+   * the restart runs on the server, so the answer must not differ between a
+   * desktop window and a phone attached to the same server.
+   */
+  autoResumeAfterUsageLimit: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
   backgroundActivity: BackgroundActivitySettings,
   // Legacy flat fields retained for old settings files and old clients. New
   // consumers should resolve `backgroundActivity` instead.
@@ -883,6 +894,7 @@ export const ServerSettingsPatch = Schema.Struct({
   enableLegacyTokenStreaming: Schema.optionalKey(Schema.Boolean),
   enableProviderUpdateChecks: Schema.optionalKey(Schema.Boolean),
   enableAgentBrowserAccess: Schema.optionalKey(Schema.Boolean),
+  autoResumeAfterUsageLimit: Schema.optionalKey(Schema.Boolean),
   backgroundActivity: Schema.optionalKey(
     Schema.Struct({
       schemaVersion: Schema.optionalKey(Schema.Literal(1)),

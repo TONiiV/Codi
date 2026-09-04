@@ -297,9 +297,28 @@ function mapTitleRegeneration(row: Schema.Schema.Type<typeof ProjectionThreadDbR
     : null;
 }
 
+/**
+ * A usage-limit pause is only meaningful when the reset time and the message
+ * to resume are both there — a half-written row resumes nothing.
+ */
+export function mapSessionUsageLimit(row: {
+  readonly usageLimitResetsAt: string | null;
+  readonly usageLimitMessageId: MessageId | null;
+  readonly usageLimitRecordedAt: string | null;
+}): OrchestrationSession["usageLimit"] {
+  return row.usageLimitResetsAt !== null && row.usageLimitMessageId !== null
+    ? {
+        resetsAt: row.usageLimitResetsAt,
+        messageId: row.usageLimitMessageId,
+        recordedAt: row.usageLimitRecordedAt ?? row.usageLimitResetsAt,
+      }
+    : null;
+}
+
 function mapSessionRow(
   row: Schema.Schema.Type<typeof ProjectionThreadSessionDbRowSchema>,
 ): OrchestrationSession {
+  const usageLimit = mapSessionUsageLimit(row);
   return {
     threadId: row.threadId,
     status: row.status,
@@ -308,6 +327,9 @@ function mapSessionRow(
     runtimeMode: row.runtimeMode,
     activeTurnId: row.activeTurnId,
     lastError: row.lastError,
+    // Omitted rather than nulled: every thread in a snapshot carries a session,
+    // and a pause is rare, so the absent key is the cheaper default on the wire.
+    ...(usageLimit === null ? {} : { usageLimit }),
     updatedAt: row.updatedAt,
   };
 }
@@ -606,6 +628,9 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
           runtime_mode AS "runtimeMode",
           active_turn_id AS "activeTurnId",
           last_error AS "lastError",
+          usage_limit_resets_at AS "usageLimitResetsAt",
+          usage_limit_message_id AS "usageLimitMessageId",
+          usage_limit_recorded_at AS "usageLimitRecordedAt",
           updated_at AS "updatedAt"
         FROM projection_thread_sessions
         ORDER BY thread_id ASC
@@ -627,6 +652,9 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
           sessions.runtime_mode AS "runtimeMode",
           sessions.active_turn_id AS "activeTurnId",
           sessions.last_error AS "lastError",
+          sessions.usage_limit_resets_at AS "usageLimitResetsAt",
+          sessions.usage_limit_message_id AS "usageLimitMessageId",
+          sessions.usage_limit_recorded_at AS "usageLimitRecordedAt",
           sessions.updated_at AS "updatedAt"
         FROM projection_thread_sessions sessions
         INNER JOIN projection_threads threads
@@ -652,6 +680,9 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
           sessions.runtime_mode AS "runtimeMode",
           sessions.active_turn_id AS "activeTurnId",
           sessions.last_error AS "lastError",
+          sessions.usage_limit_resets_at AS "usageLimitResetsAt",
+          sessions.usage_limit_message_id AS "usageLimitMessageId",
+          sessions.usage_limit_recorded_at AS "usageLimitRecordedAt",
           sessions.updated_at AS "updatedAt"
         FROM projection_thread_sessions sessions
         INNER JOIN projection_threads threads
@@ -1068,6 +1099,9 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
           runtime_mode AS "runtimeMode",
           active_turn_id AS "activeTurnId",
           last_error AS "lastError",
+          usage_limit_resets_at AS "usageLimitResetsAt",
+          usage_limit_message_id AS "usageLimitMessageId",
+          usage_limit_recorded_at AS "usageLimitRecordedAt",
           updated_at AS "updatedAt"
         FROM projection_thread_sessions
         WHERE thread_id = ${threadId}
@@ -1662,6 +1696,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
 
               for (const row of sessionRows) {
                 updatedAt = maxIso(updatedAt, row.updatedAt);
+                const usageLimit = mapSessionUsageLimit(row);
                 sessionsByThread.set(row.threadId, {
                   threadId: row.threadId,
                   status: row.status,
@@ -1672,6 +1707,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
                   runtimeMode: row.runtimeMode,
                   activeTurnId: row.activeTurnId,
                   lastError: row.lastError,
+                  ...(usageLimit === null ? {} : { usageLimit }),
                   updatedAt: row.updatedAt,
                 });
               }

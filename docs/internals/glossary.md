@@ -113,6 +113,10 @@ The agent interaction style for a thread. In [the contracts][1], the values are 
 
 Controls how assistant text reaches the thread timeline. In [the contracts][1], `streaming` updates incrementally and `buffered` accumulates text. Buffered delivery is not held until the turn completes: it spills once accumulated text would exceed 24,000 characters, and flushes at approval and user-input boundaries. See [ProviderRuntimeIngestion.ts][5].
 
+#### Usage-limit pause
+
+State on a [session](#session) recording that a provider stopped a turn because an account usage limit was reached: when that limit's window reopens, and the user message whose turn to run again. Detection lives in `apps/server/src/provider/usageLimitSignal.ts`; the pause itself rides `thread.session-set` in [the contracts][1] like the rest of the session, so every client sees it. `UsageLimitResumeReactor.ts` restarts the turn when the reset arrives, unless the `autoResumeAfterUsageLimit` server setting is off.
+
 #### Snapshot
 
 A point-in-time view of state. The word is used in multiple layers, including orchestration, provider, and checkpointing. See [ProjectionSnapshotQuery.ts][10], [ProviderAdapter.ts][15], and [CheckpointStore.ts][19].

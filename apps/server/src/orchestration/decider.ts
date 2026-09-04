@@ -24,6 +24,99 @@ import { projectEvent } from "./projector.ts";
 
 const nowIso = Effect.map(DateTime.now, DateTime.formatIso);
 
+type DecidedEvent = Omit<OrchestrationEvent, "sequence">;
+type ReadModelThread = OrchestrationReadModel["threads"][number];
+
+/**
+ * Drop a thread's pending usage-limit pause, if it has one.
+ *
+ * Emitted as a plain session-set because that is where the pause lives: the
+ * session that was parked is the session that stops being parked, so there is
+ * no second piece of state that can disagree with it.
+ */
+const clearUsageLimitEvents = Effect.fn("clearUsageLimitEvents")(function* (input: {
+  readonly command: {
+    readonly commandId: OrchestrationCommand["commandId"];
+    readonly threadId: ReadModelThread["id"];
+    readonly createdAt: string;
+  };
+  readonly thread: ReadModelThread;
+}) {
+  const session = input.thread.session;
+  if (session == null || session.usageLimit == null) {
+    return [] as ReadonlyArray<DecidedEvent>;
+  }
+  return [
+    {
+      ...(yield* withEventBase({
+        aggregateKind: "thread",
+        aggregateId: input.command.threadId,
+        occurredAt: input.command.createdAt,
+        commandId: input.command.commandId,
+      })),
+      type: "thread.session-set",
+      payload: {
+        threadId: input.command.threadId,
+        session: {
+          ...session,
+          usageLimit: null,
+          updatedAt: input.command.createdAt,
+        },
+      },
+    },
+  ] satisfies ReadonlyArray<DecidedEvent>;
+});
+
+/**
+ * Real activity resets ANY override: it wakes an explicitly settled thread, and
+ * it clears a keep-active pin back to neutral so the thread can auto-settle
+ * again after this burst of work goes stale. A snooze clears the same way —
+ * work starting on a snoozed thread means the return ticket is spent.
+ */
+const lifecycleResetEvents = Effect.fn("lifecycleResetEvents")(function* (input: {
+  readonly command: {
+    readonly commandId: OrchestrationCommand["commandId"];
+    readonly threadId: ReadModelThread["id"];
+    readonly createdAt: string;
+  };
+  readonly thread: ReadModelThread;
+}) {
+  const events: Array<DecidedEvent> = [];
+  if (input.thread.settledOverride !== null) {
+    events.push({
+      ...(yield* withEventBase({
+        aggregateKind: "thread",
+        aggregateId: input.command.threadId,
+        occurredAt: input.command.createdAt,
+        commandId: input.command.commandId,
+      })),
+      type: "thread.unsettled",
+      payload: {
+        threadId: input.command.threadId,
+        reason: "activity",
+        updatedAt: input.command.createdAt,
+      },
+    });
+  }
+  if (input.thread.snoozedUntil != null) {
+    events.push({
+      ...(yield* withEventBase({
+        aggregateKind: "thread",
+        aggregateId: input.command.threadId,
+        occurredAt: input.command.createdAt,
+        commandId: input.command.commandId,
+      })),
+      type: "thread.unsnoozed",
+      payload: {
+        threadId: input.command.threadId,
+        reason: "activity",
+        updatedAt: input.command.createdAt,
+      },
+    });
+  }
+  return events as ReadonlyArray<DecidedEvent>;
+});
+
 // Session adoption takes seconds; a user message still unadopted after this
 // window is a failed/stale start, not pending work. Mirrors the client's
 // QUEUED_TURN_START_GRACE_MS in client-runtime threadSettled.ts.
@@ -998,45 +1091,11 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
           createdAt: command.createdAt,
         },
       };
-      // Real activity resets ANY override: it wakes an explicitly settled
-      // thread, and it clears a keep-active pin back to neutral so the
-      // thread can auto-settle again after this burst of work goes stale.
-      // A snooze clears the same way — sending a message to a snoozed
-      // thread is the user re-engaging, so the return ticket is spent.
-      const lifecycleResetEvents: Array<Omit<OrchestrationEvent, "sequence">> = [];
-      if (targetThread.settledOverride !== null) {
-        lifecycleResetEvents.push({
-          ...(yield* withEventBase({
-            aggregateKind: "thread",
-            aggregateId: command.threadId,
-            occurredAt: command.createdAt,
-            commandId: command.commandId,
-          })),
-          type: "thread.unsettled",
-          payload: {
-            threadId: command.threadId,
-            reason: "activity",
-            updatedAt: command.createdAt,
-          },
-        });
-      }
-      if (targetThread.snoozedUntil != null) {
-        lifecycleResetEvents.push({
-          ...(yield* withEventBase({
-            aggregateKind: "thread",
-            aggregateId: command.threadId,
-            occurredAt: command.createdAt,
-            commandId: command.commandId,
-          })),
-          type: "thread.unsnoozed",
-          payload: {
-            threadId: command.threadId,
-            reason: "activity",
-            updatedAt: command.createdAt,
-          },
-        });
-      }
-      return [...lifecycleResetEvents, userMessageEvent, turnStartRequestedEvent];
+      return [
+        ...(yield* lifecycleResetEvents({ command, thread: targetThread })),
+        userMessageEvent,
+        turnStartRequestedEvent,
+      ];
     }
 
     case "thread.turn.interrupt": {
@@ -1059,6 +1118,76 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
           createdAt: command.createdAt,
         },
       };
+    }
+
+    case "thread.turn.retry": {
+      const thread = yield* requireThreadNotArchived({
+        readModel,
+        command,
+        threadId: command.threadId,
+      });
+      const message = thread.messages.find((entry) => entry.id === command.messageId);
+      if (!message || message.role !== "user") {
+        return yield* Effect.fail(
+          new OrchestrationCommandInvariantError({
+            commandType: command.type,
+            detail: `thread ${command.threadId} has no user message '${command.messageId}' to retry`,
+          }),
+        );
+      }
+      // A live turn already owns the session; retrying under it would run the
+      // same prompt twice. This is also what stops a late auto-resume from
+      // stomping work the user restarted by hand in the meantime.
+      const sessionStatus = thread.session?.status ?? null;
+      if (sessionStatus === "running" || sessionStatus === "starting") {
+        return yield* Effect.fail(
+          new OrchestrationCommandInvariantError({
+            commandType: command.type,
+            detail: `thread ${command.threadId} is already ${sessionStatus} and cannot retry a turn`,
+          }),
+        );
+      }
+      // Only the newest prompt is retryable. Anything older has been overtaken
+      // by the user saying something else, and replaying it would run the
+      // thread's history out of order.
+      const latestUserMessage = thread.messages.findLast((entry) => entry.role === "user");
+      if (latestUserMessage !== undefined && latestUserMessage.id !== command.messageId) {
+        return yield* Effect.fail(
+          new OrchestrationCommandInvariantError({
+            commandType: command.type,
+            detail: `thread ${command.threadId} has a newer user message than '${command.messageId}'`,
+          }),
+        );
+      }
+      return [
+        ...(yield* lifecycleResetEvents({ command, thread })),
+        ...(yield* clearUsageLimitEvents({ command, thread })),
+        {
+          ...(yield* withEventBase({
+            aggregateKind: "thread",
+            aggregateId: command.threadId,
+            occurredAt: command.createdAt,
+            commandId: command.commandId,
+          })),
+          type: "thread.turn-start-requested",
+          payload: {
+            threadId: command.threadId,
+            messageId: command.messageId,
+            runtimeMode: thread.runtimeMode,
+            interactionMode: thread.interactionMode,
+            createdAt: command.createdAt,
+          },
+        },
+      ];
+    }
+
+    case "thread.usage-limit.dismiss": {
+      const thread = yield* requireThread({
+        readModel,
+        command,
+        threadId: command.threadId,
+      });
+      return yield* clearUsageLimitEvents({ command, thread });
     }
 
     case "thread.approval.respond": {

@@ -9,6 +9,7 @@
 import {
   RuntimeMode,
   IsoDateTime,
+  MessageId,
   OrchestrationSessionStatus,
   ProviderInstanceId,
   ThreadId,
@@ -29,6 +30,11 @@ export const ProjectionThreadSession = Schema.Struct({
   runtimeMode: RuntimeMode,
   activeTurnId: Schema.NullOr(TurnId),
   lastError: Schema.NullOr(Schema.String),
+  // Pending usage-limit pause. All three move together: a row either carries a
+  // whole pause or none of it.
+  usageLimitResetsAt: Schema.NullOr(IsoDateTime),
+  usageLimitMessageId: Schema.NullOr(MessageId),
+  usageLimitRecordedAt: Schema.NullOr(IsoDateTime),
   updatedAt: IsoDateTime,
 });
 export type ProjectionThreadSession = typeof ProjectionThreadSession.Type;
@@ -67,6 +73,17 @@ export interface ProjectionThreadSessionRepositoryShape {
   readonly deleteByThreadId: (
     input: DeleteProjectionThreadSessionInput,
   ) => Effect.Effect<void, ProjectionRepositoryError>;
+
+  /**
+   * Every session parked behind a usage limit, on threads that still exist.
+   *
+   * The auto-resume reactor rebuilds its whole schedule from this on boot, so
+   * a pause survives a server restart the way the limit it is waiting on does.
+   */
+  readonly listPendingUsageLimits: () => Effect.Effect<
+    ReadonlyArray<ProjectionThreadSession>,
+    ProjectionRepositoryError
+  >;
 }
 
 /**

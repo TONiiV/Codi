@@ -87,6 +87,7 @@ import {
   ThreadComposer,
 } from "./ThreadComposer";
 import { ThreadFeed } from "./ThreadFeed";
+import { UsageLimitNotice } from "./UsageLimitNotice";
 import type { ThreadContentPresentation } from "./threadContentPresentation";
 import { resolveThreadFeedSubmissionAnchor } from "./thread-feed-live-follow";
 
@@ -146,6 +147,8 @@ export interface ThreadDetailScreenProps {
     customAnswer: string,
   ) => void;
   readonly onSubmitUserInput: () => Promise<unknown>;
+  readonly onResumeUsageLimit: () => void;
+  readonly onDismissUsageLimit: () => void;
   readonly showContent?: boolean;
 }
 
@@ -505,6 +508,7 @@ export const ThreadDetailScreen = memo(function ThreadDetailScreen(props: Thread
     userInputInsetProgress.value = 1;
   }, [activeUserInputRequestId, userInputCardProgress, userInputInsetProgress]);
   const showContent = props.showContent ?? true;
+  const usageLimit = props.selectedThread.session?.usageLimit ?? null;
   const layoutVariant = props.layoutVariant ?? "compact";
   const isSplitLayout = layoutVariant === "split";
   const contentMaxWidth = isSplitLayout ? CHAT_CONTENT_MAX_WIDTH : undefined;
@@ -750,6 +754,19 @@ export const ThreadDetailScreen = memo(function ThreadDetailScreen(props: Thread
                 onScrollToEnd={handleScrollToEnd}
               />
               <View className="w-full self-center" style={{ maxWidth: contentMaxWidth }}>
+                {/* A pause has no deadline of its own, so it yields the slot to
+                    anything the agent is actually blocked on. */}
+                {usageLimit != null &&
+                !props.activePendingApproval &&
+                !props.activePendingUserInput ? (
+                  <View className="shrink-0 px-4 pb-3">
+                    <UsageLimitNotice
+                      usageLimit={usageLimit}
+                      onResumeNow={props.onResumeUsageLimit}
+                      onDismiss={props.onDismissUsageLimit}
+                    />
+                  </View>
+                ) : null}
                 {props.activePendingApproval || props.activePendingUserInput ? (
                   <Animated.View
                     className="shrink-0 gap-3 px-4 pb-3"

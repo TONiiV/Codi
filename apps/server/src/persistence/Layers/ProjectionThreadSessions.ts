@@ -2,6 +2,7 @@ import * as SqlClient from "effect/unstable/sql/SqlClient";
 import * as SqlSchema from "effect/unstable/sql/SqlSchema";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Schema from "effect/Schema";
 
 import { toPersistenceSqlError } from "../Errors.ts";
 
@@ -28,6 +29,9 @@ const makeProjectionThreadSessionRepository = Effect.gen(function* () {
           runtime_mode,
           active_turn_id,
           last_error,
+          usage_limit_resets_at,
+          usage_limit_message_id,
+          usage_limit_recorded_at,
           updated_at
         )
         VALUES (
@@ -38,6 +42,9 @@ const makeProjectionThreadSessionRepository = Effect.gen(function* () {
           ${row.runtimeMode},
           ${row.activeTurnId},
           ${row.lastError},
+          ${row.usageLimitResetsAt},
+          ${row.usageLimitMessageId},
+          ${row.usageLimitRecordedAt},
           ${row.updatedAt}
         )
         ON CONFLICT (thread_id)
@@ -48,6 +55,9 @@ const makeProjectionThreadSessionRepository = Effect.gen(function* () {
           runtime_mode = excluded.runtime_mode,
           active_turn_id = excluded.active_turn_id,
           last_error = excluded.last_error,
+          usage_limit_resets_at = excluded.usage_limit_resets_at,
+          usage_limit_message_id = excluded.usage_limit_message_id,
+          usage_limit_recorded_at = excluded.usage_limit_recorded_at,
           updated_at = excluded.updated_at
       `,
   });
@@ -65,9 +75,39 @@ const makeProjectionThreadSessionRepository = Effect.gen(function* () {
           runtime_mode AS "runtimeMode",
           active_turn_id AS "activeTurnId",
           last_error AS "lastError",
+          usage_limit_resets_at AS "usageLimitResetsAt",
+          usage_limit_message_id AS "usageLimitMessageId",
+          usage_limit_recorded_at AS "usageLimitRecordedAt",
           updated_at AS "updatedAt"
         FROM projection_thread_sessions
         WHERE thread_id = ${threadId}
+      `,
+  });
+
+  const listPendingUsageLimitRows = SqlSchema.findAll({
+    Request: Schema.Void,
+    Result: ProjectionThreadSession,
+    execute: () =>
+      sql`
+        SELECT
+          sessions.thread_id AS "threadId",
+          sessions.status,
+          sessions.provider_name AS "providerName",
+          sessions.provider_instance_id AS "providerInstanceId",
+          sessions.runtime_mode AS "runtimeMode",
+          sessions.active_turn_id AS "activeTurnId",
+          sessions.last_error AS "lastError",
+          sessions.usage_limit_resets_at AS "usageLimitResetsAt",
+          sessions.usage_limit_message_id AS "usageLimitMessageId",
+          sessions.usage_limit_recorded_at AS "usageLimitRecordedAt",
+          sessions.updated_at AS "updatedAt"
+        FROM projection_thread_sessions sessions
+        INNER JOIN projection_threads threads
+          ON threads.thread_id = sessions.thread_id
+        WHERE sessions.usage_limit_resets_at IS NOT NULL
+          AND sessions.usage_limit_message_id IS NOT NULL
+          AND threads.deleted_at IS NULL
+        ORDER BY sessions.usage_limit_resets_at ASC
       `,
   });
 
@@ -99,10 +139,19 @@ const makeProjectionThreadSessionRepository = Effect.gen(function* () {
       ),
     );
 
+  const listPendingUsageLimits: ProjectionThreadSessionRepositoryShape["listPendingUsageLimits"] =
+    () =>
+      listPendingUsageLimitRows(undefined).pipe(
+        Effect.mapError(
+          toPersistenceSqlError("ProjectionThreadSessionRepository.listPendingUsageLimits:query"),
+        ),
+      );
+
   return {
     upsert,
     getByThreadId,
     deleteByThreadId,
+    listPendingUsageLimits,
   } satisfies ProjectionThreadSessionRepositoryShape;
 });
 
