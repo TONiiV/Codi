@@ -1,6 +1,6 @@
 # Message composer
 
-Messages can contain up to 120,000 characters. If a draft is longer, T3 Code keeps it in the
+Messages can contain up to 120,000 characters. If a draft is longer, Codi keeps it in the
 composer and shows how many characters need to be removed. Shorten the draft or split it into
 multiple messages, then send again in the same thread.
 
@@ -18,7 +18,7 @@ after every upload finishes. Failed uploads can be retried or removed. On mobile
 the photo library from either the compact or expanded composer. When the connected server supports
 file uploads, **+** opens a menu beside the button with **Photo Library** and **Choose Files**.
 Videos use the server's file upload limit. You can also share photos, videos, and files into
-T3 Code from other apps through the system share sheet. Mobile uploads happen when the message
+Codi from other apps through the system share sheet. Mobile uploads happen when the message
 sends, so queued messages keep their files until they deliver. Select a received file on mobile
 to preview it or open the system share options.
 
@@ -83,7 +83,7 @@ you send it.
 The first use can download Apple's speech model and needs a network connection. Later transcription
 works offline for that language. A recording can be up to five minutes long. Canceling voice input,
 leaving the screen, or an audio interruption discards the new recording and keeps the existing draft
-and attachments. T3 Code deletes the local audio file after transcription or cancellation. It sends
+and attachments. Codi deletes the local audio file after transcription or cancellation. It sends
 only the normal message text when you submit the draft.
 
 ## Commands and skills
@@ -97,10 +97,10 @@ use the skills and commands from the selected environment and provider.
 By default, the `/` menu includes skills. To keep this menu command-only, turn off **Show skills in
 slash menu** in **Settings → General**. Skill results use the `/skill:Skill Name` label and add the
 same `$name` skill token to your message. The original skill name remains searchable. If the provider
-also reports that skill as a native slash command, T3 Code hides the duplicate native entry and keeps
+also reports that skill as a native slash command, Codi hides the duplicate native entry and keeps
 the `/skill:Skill Name` label.
 
 On desktop, press `Cmd+Enter` on macOS or `Ctrl+Enter` on Windows and Linux from a new thread to
-start it in the background. T3 Code opens another new thread and shows an **Open** action for the
+start it in the background. Codi opens another new thread and shows an **Open** action for the
 thread that started. The new thread keeps the selected workspace mode and base branch. If **New
 worktree** is selected, each background thread creates its own worktree.
