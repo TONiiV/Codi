@@ -1789,7 +1789,12 @@ body {
 /* !important: syncBrowserChromeTheme paints body's background inline. */
 html[data-theme-backdrop] body,
 html[data-theme-backdrop]
-  :is([data-workspace-canvas], [data-chat-header], [data-workspace-area="conversation"]) {
+  :is(
+    [data-workspace-canvas],
+    [data-chat-header],
+    [data-workspace-area="conversation"],
+    [data-timeline-loading]
+  ) {
   background-color: transparent !important;
 }
 html[data-theme-backdrop] [data-slot="sidebar-inset"] {
