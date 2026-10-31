@@ -1,5 +1,7 @@
 {
-  "assistant": { "command": ["claude", "-p", "--output-format", "json", "--model", "sonnet"] },
+  "assistant": {
+    "command": ["claude", "-p", "--output-format", "json", "--model", "sonnet"]
+  },
   "environments": [
     {
       "id": "office",
@@ -14,34 +16,24 @@
       "token": "OR_PASTE_AN_EXISTING_BEARER"
     }
   ],
-  "users": {
-    "tonic": {
-      "name": "Tonic",
-      "allowedEnvironments": ["office", "home"],
-      "work": {
-        "environmentId": "office",
-        "modelSelection": {
-          "instanceId": "claudeAgent",
-          "model": "claude-opus-4-6",
-          "options": [{ "id": "effort", "value": "high" }]
+  "admins": [],
+  "bootstrapCode": "CHANGE-ME-BOOT",
+  "defaultWork": {
+    "environmentId": "office",
+    "lockModel": false,
+    "modelSelection": {
+      "instanceId": "claudeAgent",
+      "model": "claude-opus-4-6",
+      "options": [
+        {
+          "id": "effort",
+          "value": "high"
         }
-      }
-    },
-    "colleague": {
-      "name": "同事",
-      "allowedEnvironments": ["office"],
-      "allowedProjects": { "office": ["Codi"] },
-      "work": {
-        "environmentId": "office",
-        "lockModel": true,
-        "modelSelection": {
-          "instanceId": "claudeAgent",
-          "model": "claude-sonnet-4-6",
-          "options": [{ "id": "effort", "value": "medium" }]
-        }
-      }
+      ]
     }
   },
-  "invites": { "TEST1": "tonic", "TEST2": "colleague" },
-  "wecom": { "botId": "YOUR_BOT_ID", "secret": "YOUR_BOT_SECRET" }
+  "wecom": {
+    "botId": "YOUR_BOT_ID",
+    "secret": "YOUR_BOT_SECRET"
+  }
 }
