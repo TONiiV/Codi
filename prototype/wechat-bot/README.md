@@ -1,12 +1,22 @@
 # Codi x WeChat ClawBot (PROTOTYPE, wipe me)
 
-Run: `bun prototype/wechat-bot/bot.ts [--transport=cli|weixin] [--login] [--config=path]`
+Run: `bun prototype/wechat-bot/bot.ts [--transport=cli|weixin|wecom] [--login] [--config=path]`
 
 - `cli` (default): terminal REPL. `@alice 绑定 TEST1`, then `@alice <text>`; user is sticky. Replies print as `[bot → alice] ...`.
 - `weixin --login`: QR login (URL printed; QR drawn if `qrcode-terminal` happens to be installed), saves token to `.state/ilink.json`, then long-polls. Run `--login` again to add another account. Without `--login`: just polls saved accounts.
 - Config: `.state/config.json` (copy `config.example.json`; falls back to the example). State (`state.json` bindings + Codi bearers, `ilink.json`, `buf-*.txt` cursors) lives in `.state/` (gitignored, delete freely).
 - Environments: `{id,label,url, pairingUrl | token}`. Profile `work.modelSelection` is the real `ModelSelection` shape (`instanceId`, `model`, `options:[{id:"effort",value}]`).
 - Fixed commands (no model): `确认 [id]` `取消 [id]` `进度 [id]` `停止 id` `绑定 <邀请码>` `帮助`. Anything else goes to `assistant.command` (default `claude -p --output-format json --model sonnet`, prompt on stdin).
+
+## WeCom (企业微信智能机器人, `--transport=wecom`)
+
+Run: `bun prototype/wechat-bot/bot.ts --transport=wecom` (config `wecom: { botId, secret }` in `.state/config.json`; optional `url` override for testing, default `wss://openws.work.weixin.qq.com`).
+
+- Create the bot: WeCom admin console -> create a 智能机器人 in API mode with the 长连接 (long connection) receive method, then copy its **Bot ID** and **Secret** (plugin README only says "enter the bot's Bot ID and Secret"; the exact console menu names are from the WeCom docs and UNVERIFIED here).
+- Multi-user: unlike ClawBot (one QR login = one account = one user), ONE bot serves many members. Sender key is `wecom:<from.userid>`; each member sends `绑定 <邀请码>` once, same profile mechanism.
+- Groups: add the bot to a group and @ it. Replies go to that chat; proposals made in a group remember the chat, so the completion notice returns there. `确认/取消/进度/停止` stay bound to the sender + id. Leading `@name` is stripped. Invite codes typed in a group are visible to the group.
+- Replies to an inbound message use `aibot_respond_msg` with the callback's `req_id` (one finished stream frame, first reply only); everything else (10s poll task-complete notices, 2nd reply, failed respond) uses `aibot_send_msg` markdown to `chatid` = userid (single) or group chatid.
+- Gaps: text/voice-to-text/mixed-text only (no media, welcome msg, template cards); no streaming progress, so the user sees nothing until the router finishes (up to 180s); proactive push only works to chats the bot recently talked to (plugin README), window length UNVERIFIED; "only @-mentions are delivered in groups" is assumed from the plugin (it applies no mention filter itself), unverified; a second connection with the same bot kicks the first (`disconnected_event`, bot then stops instead of reconnecting). Verified only against a local mock server, never real WeCom.
 
 ## Finding: multi-user in ClawBot
 

@@ -42,5 +42,6 @@
       }
     }
   },
-  "invites": { "TEST1": "tonic", "TEST2": "colleague" }
+  "invites": { "TEST1": "tonic", "TEST2": "colleague" },
+  "wecom": { "botId": "YOUR_BOT_ID", "secret": "YOUR_BOT_SECRET" }
 }

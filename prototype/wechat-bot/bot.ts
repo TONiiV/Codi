@@ -1,5 +1,6 @@
 // PROTOTYPE, throwaway ("wipe me"). WeChat ClawBot <-> Codi bridge.
-// Run: bun prototype/wechat-bot/bot.ts [--transport=cli|weixin] [--login] [--config=path]
+// Run: bun prototype/wechat-bot/bot.ts [--transport=cli|weixin|wecom] [--login] [--config=path]
+import { AsyncLocalStorage } from "node:async_hooks";
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -7,6 +8,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
 import * as ilink from "./ilink.ts";
+import * as wecom from "./wecom.ts";
 
 const DIR = import.meta.dir;
 const STATE_DIR = join(DIR, ".state");
@@ -15,7 +17,7 @@ const args = process.argv.slice(2);
 const flag = (n: string) => args.find((a) => a.startsWith(`--${n}=`))?.split("=")[1];
 if (args.includes("--help") || args.includes("-h")) {
   console.log(
-    "bun prototype/wechat-bot/bot.ts [--transport=cli|weixin] [--login] [--config=path]\nconfig: .state/config.json (falls back to config.example.json)",
+    "bun prototype/wechat-bot/bot.ts [--transport=cli|weixin|wecom] [--login] [--config=path]\nconfig: .state/config.json (falls back to config.example.json)",
   );
   process.exit(0);
 }
@@ -40,6 +42,7 @@ type Config = {
   environments: Env[];
   users: Record<string, Profile>;
   invites: Record<string, string>;
+  wecom?: { botId: string; secret: string; url?: string };
 };
 
 const cfgPath =
@@ -201,6 +204,8 @@ type Proposal = {
   title: string;
   plan: string[];
   prompt: string;
+  /** wecom group chatid the proposal came from; results go back there */
+  chat?: string;
 };
 type Scope = "investigate" | "fix" | "full";
 type Task = {
@@ -210,6 +215,7 @@ type Task = {
   threadId: string;
   title: string;
   status: "running" | "done" | "error" | "stopped";
+  chat?: string;
 };
 const proposals = new Map<number, Proposal>();
 const tasks = new Map<number, Task>();
@@ -286,6 +292,7 @@ function validate(r: any, sender: string, prof: Profile, views: EnvView[]): Prop
     title: String(r.title ?? "任务").slice(0, 60),
     plan: Array.isArray(r.plan) ? r.plan.map(String) : [],
     prompt: String(r.prompt ?? ""),
+    chat: chatCtx.getStore()?.chat,
   };
 }
 
@@ -384,6 +391,7 @@ async function start(p: Proposal): Promise<string> {
     threadId,
     title: p.title,
     status: "running",
+    chat: p.chat,
   });
   return `已开始 #${p.id} → ${p.title}`;
 }
@@ -430,6 +438,7 @@ async function pollTasks() {
       await out(
         t.sender,
         `#${t.id} ${th.title} — ${turn.state}\n${body.length > 1500 ? body.slice(0, 1500) + "…" : body}`,
+        t.chat,
       );
       dump();
     } catch (e: any) {
@@ -439,7 +448,9 @@ async function pollTasks() {
 }
 
 // ---------- message handling ----------
-let out: (sender: string, text: string) => Promise<void> = async () => {};
+/** Per-inbound-message context (wecom): req_id to reply on + group chatid. Read by validate() and out(). */
+const chatCtx = new AsyncLocalStorage<{ reqId?: string; chat?: string; used?: boolean }>();
+let out: (sender: string, text: string, chat?: string) => Promise<void> = async () => {};
 
 const HELP =
   "命令：确认 [编号] / 取消 [编号] / 进度 [编号] / 停止 编号 / 绑定 邀请码 / 帮助\n其它消息：简单问题我直接答；工作类消息我先给方案，确认后才会开工。";
@@ -536,6 +547,40 @@ if (transport === "cli") {
   while ([...tasks.values()].some((t) => t.status === "running"))
     await new Promise((r) => setTimeout(r, 1000)); // let running tasks report
   process.exit(0);
+} else if (transport === "wecom") {
+  // ---- WeCom 智能机器人 long connection. One bot, many members; sender key = `wecom:<userid>`. ----
+  const wc = cfg.wecom;
+  if (!wc?.botId || !wc.secret) {
+    console.log("config.wecom.{botId,secret} missing");
+    process.exit(1);
+  }
+  const client = wecom.connect(wc, (m) => {
+    // Group callbacks only arrive when the bot is @-mentioned; strip leading "@name".
+    const text = (m.chatid ? m.text.replace(/^(\s*@\S+)+\s*/, "") : m.text).trim();
+    if (!text) return;
+    const sender = `wecom:${m.userid}`;
+    console.log(`[${sender}${m.chatid ? ` @${m.chatid}` : ""} → bot] ${text}`);
+    void chatCtx.run({ reqId: m.reqId, chat: m.chatid }, () => handleAndDump(sender, text));
+  });
+  out = async (sender, text, chat) => {
+    const ctx = chatCtx.getStore();
+    const to = chat ?? ctx?.chat ?? sender.slice("wecom:".length);
+    console.log(`[bot → ${sender}${chat || ctx?.chat ? ` @${to}` : ""}] ${text}`);
+    if (ctx?.reqId && !ctx.used) {
+      ctx.used = true; // req_id replies are one-shot here; later messages go proactive
+      try {
+        return await client.respond(ctx.reqId, text);
+      } catch (e: any) {
+        console.log(`[wecom] respond failed (${e.message}); falling back to proactive send`);
+      }
+    }
+    try {
+      await client.send(to, text);
+    } catch (e: any) {
+      console.log(`[send] failed: ${e.message}`);
+    }
+  };
+  await new Promise(() => {}); // run forever
 } else {
   // ---- real WeChat (iLink). One QR login = one bot account bound to the scanning user; N users = N logins. ----
   const accPath = join(STATE_DIR, "ilink.json");
