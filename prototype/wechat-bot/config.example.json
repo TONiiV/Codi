@@ -4,13 +4,13 @@
     {
       "id": "office",
       "label": "办公室 Mac",
-      "url": "http://127.0.0.1:3773",
-      "pairingUrl": "http://127.0.0.1:3773/pair#token=PASTE_ONE_TIME_TOKEN"
+      "url": "http://office-mac.example.ts.net:3773",
+      "pairingUrl": "http://office-mac.example.ts.net:3773/pair#token=PASTE_ONE_TIME_TOKEN"
     },
     {
       "id": "home",
       "label": "家里电脑",
-      "url": "http://127.0.0.1:3774",
+      "url": "http://home-mac.example.ts.net:3773",
       "token": "OR_PASTE_AN_EXISTING_BEARER"
     }
   ],
