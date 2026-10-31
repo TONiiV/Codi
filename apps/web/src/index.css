@@ -1783,6 +1783,18 @@ body {
   background-size: var(--surface-grain-size);
 }
 
+/* Theme backdrop (ThemeBackdrop.tsx) paints behind the shell. The main area keeps one 80%
+   veil of its canvas so body and muted text stay legible where the fluid reaches the accent;
+   fully transparent drops light-theme body text to about 2:1. */
+html[data-theme-backdrop] body,
+html[data-theme-backdrop]
+  :is([data-workspace-canvas], [data-chat-header], [data-workspace-area="conversation"]) {
+  background-color: transparent;
+}
+html[data-theme-backdrop] [data-slot="sidebar-inset"] {
+  background-color: color-mix(in srgb, var(--background) 80%, transparent);
+}
+
 pre,
 code {
   font-family: var(--font-mono);

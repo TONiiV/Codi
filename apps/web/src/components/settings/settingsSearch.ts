@@ -351,6 +351,12 @@ export const SETTINGS_SEARCH_ITEMS = [
     to: "/settings/appearance",
   },
   {
+    id: "theme-backdrop",
+    title: "Animated background",
+    to: "/settings/appearance",
+    searchTerms: ["fluid shader wallpaper motion webgl dynamic backdrop"],
+  },
+  {
     id: "environment-identification",
     title: "Environment identification",
     to: "/settings/appearance",
