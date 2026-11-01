@@ -183,7 +183,8 @@ function startThemeBackdrop(canvas: HTMLCanvasElement, onLost: () => void): (() 
     document.removeEventListener("visibilitychange", schedule);
     reducedMotion.removeEventListener("change", schedule);
     canvas.removeEventListener("webglcontextlost", onContextLost);
-    gl.getExtension("WEBGL_lose_context")?.loseContext();
+    // A lost context stays on the canvas, so a StrictMode replay on the same element would get a dead one.
+    if (!canvas.isConnected) gl.getExtension("WEBGL_lose_context")?.loseContext();
   };
 }
 
