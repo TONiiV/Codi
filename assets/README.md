@@ -6,15 +6,28 @@ The three Icon Composer projects are the source of truth for full application ic
 - `nightly/app-icon.icon`
 - `prod/app-icon.icon`
 
-Each project draws the Codi mark from `mark.svg` over a solid fill: a serif C followed by a block
-cursor, in the editorial paper/ink palette. Layer names describe their role and placement, so a
-project with more than one layer stays readable.
+The Codi Fold identity uses a satin silver ribbon with a subtle ice-blue inner face and rounded
+lettering. `brand/fold-master.png` is the approved raster master (generated with the built-in
+imagegen tool from the selected Fold concept); `brand/wordmark.svg` is the clean vector wordmark.
+`brand/mark-mono.svg` is the simplified silhouette for notification and widget template rendering.
+`brand/banner.png` is the marketing banner. All are static assets; clients add no animated lighting.
 
-| Project                 | Fill            | Mark            |
-| ----------------------- | --------------- | --------------- |
-| `prod/app-icon.icon`    | paper `#F5F3F0` | ink `#16130F`   |
-| `nightly/app-icon.icon` | shell `#100F0D` | paper `#F5F3F0` |
-| `dev/app-icon.icon`     | cool `#2F4D86`  | paper `#F5F3F0` |
+Run `node scripts/export-codi-assets.mjs` before exporting icons. It synchronizes the master into
+Icon Composer, generates small in-app renditions and Android assets, and publishes the wordmark
+and banner. Each Icon Composer project uses `Assets/mark.png` as its foreground.
+
+| Project                 | Background          |
+| ----------------------- | ------------------- |
+| `prod/app-icon.icon`    | graphite `#141B20`  |
+| `nightly/app-icon.icon` | slate `#232B32`     |
+| `dev/app-icon.icon`     | blue-gray `#283C4E` |
+
+**Export status:** the Fold source projects are updated, but the tracked full application PNG/ICO
+renditions and browser favicons still contain the previous identity. This workstation has Icon
+Composer 1.5; the maintainer requested retaining the 2.x / generation 26 requirement. Regenerate
+these on a machine with Icon Composer 2.x before releasing this rebrand. Native macOS exports
+remain required as described below. After exporting, run
+`node scripts/export-codi-assets.mjs --public` to update marketing PNG/WebP icons and favicons.
 
 Run `vp run icons:export` from the repository root to regenerate the tracked iOS, Linux, Windows, and web assets. The development web exports are also copied to `apps/web/public` for the browser favicon and splash screen. Run `vp run icons:check` to verify that the generated assets and public copies match their sources without changing files.
 
@@ -59,25 +72,18 @@ Do not edit the generated PNG or ICO files directly.
 
 ## Android adaptive foreground
 
-Android draws the launcher foreground over a flat background colour, and the production background is
-paper while dev and preview are dark, so there are two foregrounds:
-
-- `apps/mobile/assets/android-icon-foreground.svg` — paper mark, used by dev and preview.
-- `apps/mobile/assets/android-icon-foreground-ink.svg` — ink mark, used by production.
-
-Export the paired PNG after changing either one:
-
-```sh
-rsvg-convert -w 432 -h 432 \
-  -o apps/mobile/assets/android-icon-foreground.png \
-  apps/mobile/assets/android-icon-foreground.svg
-```
-
-The foreground must remain transparent and keep the Codi mark inside Android's adaptive-icon safe
-zone. `android-icon-mark.png` remains a flat silhouette for Android's monochrome themed icon.
+All variants use the same transparent Fold foreground, centered in the adaptive icon safe zone.
+The background colors match the table above. The `-ink` filename remains as a compatibility copy
+for existing asset consumers, but contains the same silver mark. Generate both PNG/SVG copies,
+monochrome launcher and notification assets with `node scripts/export-codi-assets.mjs`.
 
 ## In-app lockup
 
-The sidebar and mobile header draw the same mark inline rather than loading a PNG:
-`apps/web/src/components/sidebar/SidebarChrome.tsx` and
-`apps/mobile/src/components/CodiMark.tsx`. Keep their path data in sync with `mark.svg`.
+Web and desktop use `/brand/mark.png` and a CSS mask of `/brand/wordmark.svg`, so lettering follows
+the current foreground color in light/dark themes and custom backdrops. Mobile uses the same
+small raster mark and a theme-tinted rendering of the vector lettering through `CodiMark` and
+`CodiWordmark`. Both the compact navigation title and home header use these components.
+The widget retains the `T3Mark` resource identifier for compatibility, with the new Fold silhouette.
+
+The artwork has no font dependency. Do not replace the rounded wordmark with system text or apply
+extra shadows/glow to the small in-app mark.

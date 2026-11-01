@@ -21,9 +21,6 @@ const fromRepoRoot = (relativePath: string) => `../../${relativePath}`;
 // Universal exports already contain their own rounded-square silhouette. Using one as an adaptive
 // foreground makes Android draw an icon shape inside the launcher's mask.
 const androidAdaptiveForegroundPaper = "./assets/android-icon-foreground.png";
-// The production launcher background is paper, so its foreground is the ink
-// mark; the dev and preview backgrounds are dark and take the paper mark.
-const androidAdaptiveForegroundInk = "./assets/android-icon-foreground-ink.png";
 
 if (
   isIosPersonalTeamBuild &&
@@ -40,10 +37,10 @@ const DEVELOPMENT_ASSETS = {
   iosIcon: fromRepoRoot(BRAND_ASSET_PATHS.developmentIconComposerProject),
   splashIcon: fromRepoRoot(BRAND_ASSET_PATHS.developmentIosIconPng),
   androidAdaptiveForeground: androidAdaptiveForegroundPaper,
-  androidAdaptiveBackgroundColor: "#2F4D86",
+  androidAdaptiveBackgroundColor: "#283C4E",
   androidMonochromeIcon: "./assets/android-icon-mark.png",
   androidNotificationIcon: "./assets/android-notification-icon.png",
-  androidNotificationColor: "#2F4D86",
+  androidNotificationColor: "#283C4E",
 } as const;
 
 const PREVIEW_ASSETS = {
@@ -51,18 +48,18 @@ const PREVIEW_ASSETS = {
   iosIcon: fromRepoRoot(BRAND_ASSET_PATHS.nightlyIconComposerProject),
   splashIcon: fromRepoRoot(BRAND_ASSET_PATHS.nightlyIosIconPng),
   androidAdaptiveForeground: androidAdaptiveForegroundPaper,
-  androidAdaptiveBackgroundColor: "#100F0D",
+  androidAdaptiveBackgroundColor: "#232B32",
   androidMonochromeIcon: "./assets/android-icon-mark.png",
   androidNotificationIcon: "./assets/android-notification-icon.png",
-  androidNotificationColor: "#F5F3F0",
+  androidNotificationColor: "#A9C1D2",
 } as const;
 
 const RELEASE_ASSETS = {
   appIcon: fromRepoRoot(BRAND_ASSET_PATHS.productionIosIconPng),
   iosIcon: fromRepoRoot(BRAND_ASSET_PATHS.productionIconComposerProject),
   splashIcon: fromRepoRoot(BRAND_ASSET_PATHS.productionIosIconPng),
-  androidAdaptiveForeground: androidAdaptiveForegroundInk,
-  androidAdaptiveBackgroundColor: "#F5F3F0",
+  androidAdaptiveForeground: androidAdaptiveForegroundPaper,
+  androidAdaptiveBackgroundColor: "#141B20",
   androidMonochromeIcon: "./assets/android-icon-mark.png",
   androidNotificationIcon: "./assets/android-notification-icon.png",
   androidNotificationColor: "#FFFFFF",

@@ -93,13 +93,10 @@ export function RemoteHandoffCard(props: { machine: string; latencyMs: number })
 `;
 
 const PROJECT_FAVICONS = {
-  t3code: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
-  <rect width="128" height="128" rx="10" fill="#f5f3f0"/>
-  <g transform="translate(64 64) scale(0.9) translate(-64 -64)">
-    <path d="M 64.47 40.36 A 30 30 0 1 0 67.58 84.84 L 60.77 79.11 A 18.5 25.1 0 1 1 58.85 45.94 Z" fill="#16130f"/>
-    <rect x="84" y="48" width="27" height="46" fill="#16130f"/>
-  </g>
-</svg>`,
+  t3code: `<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <path fill="#a9c1d2" d="M106 18C87 2 62 4 43 16C16 32 6 51 8 76C10 103 28 120 56 122C79 124 105 113 116 96C122 86 120 78 113 75C105 71 98 77 87 85C74 95 59 102 48 104C38 95 36 80 41 66C47 49 61 36 75 35C88 35 99 48 110 48C123 48 122 31 106 18Z"/>
+</svg>
+`,
   react: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
   <rect width="64" height="64" rx="15" fill="#20232a"/>
   <g fill="none" stroke="#61dafb" stroke-width="2.8"><ellipse cx="32" cy="32" rx="25" ry="9"/><ellipse cx="32" cy="32" rx="25" ry="9" transform="rotate(60 32 32)"/><ellipse cx="32" cy="32" rx="25" ry="9" transform="rotate(120 32 32)"/></g>

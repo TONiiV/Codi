@@ -24,6 +24,8 @@ const {
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content={description} />
+    <meta property="og:image" content={new URL("/brand/banner.png", Astro.site ?? Astro.url).href} />
+    <meta name="twitter:card" content="summary_large_image" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -41,7 +43,8 @@ const {
       <nav class="nav">
         <div class="nav-inner">
           <a href="/" class="nav-brand" aria-label="Codi home">
-            <span class="nav-brand-name">Codi</span>
+            <img src="/brand/mark.png" width="32" height="32" alt="" />
+            <img src="/brand/wordmark.svg" width="81" height="28" alt="Codi" />
           </a>
           <div class="nav-right">
             <a
@@ -67,7 +70,7 @@ const {
       <footer class="footer">
         <div class="footer-inner">
           <div class="footer-brand">
-            <img src="/icon.webp" alt="" />
+            <img src="/brand/mark.png" alt="" />
             <span>&copy; {new Date().getFullYear()} T3 Tools Inc · MIT licensed</span>
           </div>
           <div class="footer-links">
@@ -320,6 +323,7 @@ const {
   }
 
   .nav-brand {
+    gap: 8px;
     display: inline-flex;
     align-items: center;
     color: var(--fg);
@@ -328,13 +332,6 @@ const {
 
   .nav-brand:hover {
     color: #fff;
-  }
-
-  .nav-brand-name {
-    font-size: 16px;
-    font-weight: 650;
-    letter-spacing: -0.025em;
-    line-height: 1;
   }
 
   .nav-right {

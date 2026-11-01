@@ -84,39 +84,19 @@ function SidebarBrand({ onBackdrop }: { onBackdrop: boolean }) {
     <Link
       aria-label="Go to threads"
       className={cn(
-        "relative z-10 ml-[var(--workspace-titlebar-content-left)] hidden h-7 w-fit min-w-0 shrink-0 items-center gap-1 overflow-hidden rounded-md outline-hidden ring-ring focus-visible:ring-2 md:flex",
+        "relative z-10 ml-[var(--workspace-titlebar-content-left)] hidden h-7 w-fit min-w-0 shrink-0 items-center gap-2 overflow-hidden rounded-md outline-hidden ring-ring focus-visible:ring-2 md:flex",
         onBackdrop ? "text-white" : "text-foreground",
       )}
       to="/"
     >
-      <CodiMark />
+      <img src="/brand/mark.png" alt="" className="size-7 shrink-0" />
       <span
-        className={cn(
-          "-translate-y-px truncate text-sm font-medium tracking-tight",
-          onBackdrop ? "text-white/70" : "text-muted-foreground",
-        )}
-      >
-        Codi
-      </span>
-    </Link>
-  );
-}
-
-/** Serif C followed by a block cursor; the same mark the app icons carry. */
-function CodiMark() {
-  return (
-    <svg
-      aria-label="Codi"
-      className="h-2.5 w-auto shrink-0"
-      viewBox="16 34 95 60"
-      xmlns="http://www.w3.org/2000/svg"
-    >
-      <path
-        d="M 64.47 40.36 A 30 30 0 1 0 67.58 84.84 L 60.77 79.11 A 18.5 25.1 0 1 1 58.85 45.94 Z"
-        fill="currentColor"
+        role="img"
+        aria-label="Codi"
+        className="block h-6 w-[69px] shrink-0 bg-current"
+        style={{ mask: 'url("/brand/wordmark.svg") center / contain no-repeat' }}
       />
-      <rect fill="currentColor" height="46" width="27" x="84" y="48" />
-    </svg>
+    </Link>
   );
 }
 
