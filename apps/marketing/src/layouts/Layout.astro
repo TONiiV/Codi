@@ -1,4 +1,5 @@
 ---
+import "@fontsource-variable/inter";
 import {
   ANDROID_PLAY_STORE_URL,
   GITHUB_REPOSITORY_URL,
@@ -14,9 +15,14 @@ interface Props {
 
 const {
   title = "Codi",
-  description = "Codi — The open-source control plane for coding agents.",
+  description = "Codi. The open-source control plane for coding agents.",
   pageClass,
 } = Astro.props;
+
+const socialImageUrl = new URL("/brand/banner.png", Astro.site ?? Astro.url);
+const socialImageAlt =
+  "Codi: the open-source control plane for coding agents, with Claude Code, Codex, Cursor, OpenCode, Grok and Antigravity.";
+const canonicalUrl = new URL(Astro.url.pathname, Astro.site);
 ---
 
 <html lang="en">
@@ -24,14 +30,22 @@ const {
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content={description} />
-    <meta property="og:image" content={new URL("/brand/banner.png", Astro.site ?? Astro.url).href} />
+    <link rel="canonical" href={canonicalUrl} />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Codi" />
+    <meta property="og:url" content={canonicalUrl} />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:image" content={socialImageUrl} />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content={socialImageAlt} />
     <meta name="twitter:card" content="summary_large_image" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&family=JetBrains+Mono:wght@400;500&display=swap"
-      rel="stylesheet"
-    />
+    <meta name="twitter:site" content="@t3dotgg" />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content={socialImageUrl} />
+    <meta name="twitter:image:alt" content={socialImageAlt} />
     <link rel="icon" href="/favicon.ico" sizes="48x48" />
     <link rel="icon" type="image/png" href="/favicon-32x32.png" sizes="32x32" />
     <link rel="icon" type="image/png" href="/favicon-16x16.png" sizes="16x16" />
@@ -47,12 +61,13 @@ const {
             <img src="/brand/wordmark.svg" width="81" height="28" alt="Codi" />
           </a>
           <div class="nav-right">
+            <a class="nav-link" href="/download">Download</a>
             <a
               class="nav-stars"
               href={GITHUB_REPOSITORY_URL}
               target="_blank"
               rel="noopener noreferrer"
-              aria-label={`Star Codi on GitHub — ${MARKETING_STATS.githubStars} stars`}
+              aria-label={`Star Codi on GitHub, ${MARKETING_STATS.githubStars} stars`}
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
                 <path d="M12 2.3l2.9 5.88 6.49.94-4.7 4.58 1.11 6.47L12 17.12l-5.8 3.05 1.11-6.47-4.7-4.58 6.49-.94L12 2.3z"/>
@@ -102,22 +117,21 @@ const {
 
 <style is:global>
   :root {
-    --bg: #09090b;
-    --bg-elev: #0c0c0e;
-    --bg-card: #111113;
-    --fg: #fafafa;
-    --fg-muted: #a1a1aa;
-    --fg-dim: #71717a;
-    --fg-faint: #52525b;
+    --bg: #000;
+    --bg-elev: #0a0a0a;
+    --bg-card: #0d0d0d;
+    --fg: #f5f5f5;
+    --fg-muted: #a3a3a3;
+    --fg-dim: #737373;
+    --fg-faint: #525252;
     --border: rgba(255, 255, 255, 0.08);
     --border-strong: rgba(255, 255, 255, 0.14);
-    --accent-h: 250;
+    --accent-h: 264;
     --accent: oklch(0.68 0.17 var(--accent-h));
-    --accent-dim: oklch(0.68 0.17 var(--accent-h) / 0.15);
     --ok: oklch(0.72 0.16 150);
     --warn: oklch(0.76 0.15 75);
-    --font-sans: "DM Sans", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
-    --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
+    --font-sans: -apple-system, BlinkMacSystemFont, "Inter Variable", "Segoe UI", system-ui, sans-serif;
+    --font-mono: ui-monospace, "SF Mono", "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace;
     --radius: 12px;
     --radius-sm: 8px;
     --radius-lg: 16px;
@@ -138,7 +152,6 @@ const {
     background: var(--bg);
     color: var(--fg);
     font-family: var(--font-sans);
-    font-feature-settings: "ss01", "ss02";
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     min-height: 100vh;
@@ -146,17 +159,6 @@ const {
     line-height: 1.5;
   }
 
-  body::after {
-    content: "";
-    position: fixed;
-    inset: 0;
-    pointer-events: none;
-    opacity: 0.035;
-    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-    background-repeat: repeat;
-    background-size: 256px 256px;
-    z-index: 9999;
-  }
 
   a {
     color: inherit;
@@ -187,8 +189,8 @@ const {
   }
 
   .display {
-    font-weight: 500;
-    letter-spacing: -0.035em;
+    font-weight: 600;
+    letter-spacing: -0.03em;
     line-height: 1.05;
   }
 
@@ -214,14 +216,14 @@ const {
   }
 
   .btn-primary {
-    background: var(--fg);
-    color: #09090b;
+    background: oklch(0.571 0.21 264);
+    color: #fff;
     font-weight: 600;
   }
 
   .btn-primary:hover {
     transform: translateY(-1px);
-    background: #fff;
+    background: oklch(0.62 0.2 264);
   }
 
   .btn-primary:active {
@@ -250,7 +252,7 @@ const {
     position: relative;
     border: 1px solid var(--border);
     border-radius: var(--radius);
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.015), rgba(255, 255, 255, 0));
+    background: var(--bg-card);
     overflow: hidden;
   }
 
@@ -271,21 +273,17 @@ const {
     }
   }
 
-  @keyframes pulse {
-    50% { opacity: 0.4; }
+  /* Page-load sequence: [data-rise] plays once with delay --d. */
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(16px); }
+    to { opacity: 1; transform: none; }
   }
-
-  @keyframes spin {
-    to { transform: rotate(360deg); }
+  [data-rise] {
+    animation: rise 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+    animation-delay: var(--d, 0ms);
   }
-
-  @keyframes floatDrift {
-    0%, 100% { translate: 0 0; }
-    50%      { translate: 0 -10px; }
-  }
-
-  @keyframes blink {
-    50% { opacity: 0; }
+  @media (prefers-reduced-motion: reduce) {
+    [data-rise] { animation: none; }
   }
 </style>
 
@@ -325,7 +323,8 @@ const {
   .nav-brand {
     gap: 8px;
     display: inline-flex;
-    align-items: center;
+    align-items: baseline;
+    gap: 4px;
     color: var(--fg);
     transition: color 0.2s ease;
   }
@@ -340,26 +339,34 @@ const {
     gap: 8px;
   }
 
+  .nav-link {
+    padding: 0 10px;
+    color: var(--fg-muted);
+    font-size: 13px;
+    letter-spacing: -0.01em;
+    white-space: nowrap;
+    transition: color 0.18s ease;
+  }
+
+  .nav-link:hover {
+    color: var(--fg);
+  }
+
   .nav-stars {
     display: inline-flex;
     align-items: center;
     gap: 7px;
     height: 36px;
-    padding: 0 14px;
-    border: 1px solid var(--border);
-    border-radius: 999px;
-    background: rgba(255, 255, 255, 0.02);
+    padding: 0 10px;
     color: var(--fg-muted);
     font-size: 13px;
     letter-spacing: -0.01em;
     white-space: nowrap;
-    transition: color 0.18s ease, border-color 0.18s ease, background 0.18s ease;
+    transition: color 0.18s ease;
   }
 
   .nav-stars:hover {
     color: var(--fg);
-    border-color: var(--border-strong);
-    background: rgba(255, 255, 255, 0.04);
   }
 
   .nav-stars strong {
@@ -418,7 +425,7 @@ const {
 
   .footer-links a {
     font-size: 13px;
-    color: var(--fg-dim);
+    color: var(--fg-muted);
     transition: color 0.2s ease;
   }
 

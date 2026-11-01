@@ -70,12 +70,15 @@ Verify every result is 1024×1024 and has the classic macOS safe area: an 824×8
 
 Do not edit the generated PNG or ICO files directly.
 
-## Android adaptive foreground
+## Android launcher and splash artwork
 
 All variants use the same transparent Fold foreground, centered in the adaptive icon safe zone.
 The background colors match the table above. The `-ink` filename remains as a compatibility copy
 for existing asset consumers, but contains the same silver mark. Generate both PNG/SVG copies,
 monochrome launcher and notification assets with `node scripts/export-codi-assets.mjs`.
+
+`vp run icons:export:android` still renders the previous wordmark artwork and overwrites
+`android-icon-foreground.png`. Do not run it until it is ported to the Fold mark.
 
 ## In-app lockup
 
