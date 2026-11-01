@@ -66,14 +66,14 @@ export const RelayObservability = Effect.gen(function* () {
   const mobileLogs = yield* Axiom.Dataset("MobileLogsDataset", {
     name: relayResourceNameForStage("t3-code-mobile-logs", stage),
     kind: "otel:logs:v1",
-    description: "T3 Code mobile app errors, crashes, and log events from expo-observe.",
+    description: "Codi mobile app errors, crashes, and log events from expo-observe.",
     retentionDays: 30,
     useRetentionPeriod: true,
   });
   const mobileMetrics = yield* Axiom.Dataset("MobileMetricsDataset", {
     name: relayResourceNameForStage("t3-code-mobile-metrics", stage),
     kind: "otel:metrics:v1",
-    description: "T3 Code mobile app startup and update metrics from expo-observe.",
+    description: "Codi mobile app startup and update metrics from expo-observe.",
     retentionDays: 30,
     useRetentionPeriod: true,
   });
