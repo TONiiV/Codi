@@ -27,7 +27,6 @@ const fromRepoRoot = (relativePath: string) => `../../${relativePath}`;
 // Universal exports already contain their own rounded-square silhouette. Using one as an adaptive
 // foreground makes Android draw an icon shape inside the launcher's mask.
 const androidAdaptiveForegroundPaper = "./assets/android-icon-foreground.png";
-const androidAdaptiveForegroundInk = "./assets/android-icon-foreground-ink.png";
 
 if (
   isIosPersonalTeamBuild &&
@@ -45,7 +44,6 @@ const DEVELOPMENT_ASSETS = {
   splashIcon: fromRepoRoot(BRAND_ASSET_PATHS.developmentIosIconPng),
   androidAdaptiveForeground: androidAdaptiveForegroundPaper,
   androidAdaptiveBackgroundColor: "#283C4E",
-  androidAdaptiveBackgroundImage: undefined,
   androidMonochromeIcon: "./assets/android-icon-mark.png",
   androidNotificationIcon: "./assets/android-notification-icon.png",
   androidNotificationColor: "#283C4E",
@@ -57,7 +55,6 @@ const PREVIEW_ASSETS = {
   splashIcon: fromRepoRoot(BRAND_ASSET_PATHS.nightlyIosIconPng),
   androidAdaptiveForeground: androidAdaptiveForegroundPaper,
   androidAdaptiveBackgroundColor: "#232B32",
-  androidAdaptiveBackgroundImage: undefined,
   androidMonochromeIcon: "./assets/android-icon-mark.png",
   androidNotificationIcon: "./assets/android-notification-icon.png",
   androidNotificationColor: "#A9C1D2",
@@ -69,7 +66,6 @@ const RELEASE_ASSETS = {
   splashIcon: fromRepoRoot(BRAND_ASSET_PATHS.productionIosIconPng),
   androidAdaptiveForeground: androidAdaptiveForegroundPaper,
   androidAdaptiveBackgroundColor: "#141B20",
-  androidAdaptiveBackgroundImage: undefined,
   androidMonochromeIcon: "./assets/android-icon-mark.png",
   androidNotificationIcon: "./assets/android-notification-icon.png",
   androidNotificationColor: "#FFFFFF",
@@ -292,9 +288,6 @@ const config: ExpoConfig = {
       : {}),
     adaptiveIcon: {
       backgroundColor: variant.assets.androidAdaptiveBackgroundColor,
-      ...(variant.assets.androidAdaptiveBackgroundImage
-        ? { backgroundImage: variant.assets.androidAdaptiveBackgroundImage }
-        : {}),
       foregroundImage: variant.assets.androidAdaptiveForeground,
       monochromeImage: variant.assets.androidMonochromeIcon,
     },
@@ -356,9 +349,6 @@ const config: ExpoConfig = {
           shortcut_icon: {
             foregroundImage: variant.assets.androidAdaptiveForeground,
             backgroundColor: variant.assets.androidAdaptiveBackgroundColor,
-            ...(variant.assets.androidAdaptiveBackgroundImage
-              ? { backgroundImage: variant.assets.androidAdaptiveBackgroundImage }
-              : {}),
           },
         },
       },
@@ -394,10 +384,11 @@ const config: ExpoConfig = {
           backgroundColor: "#0a0a0a",
         },
         android: {
-          // Android 12+ masks the central two thirds of the 288dp canvas; the transparent Fold layers fit it.
-          image: androidAdaptiveForegroundInk,
+          // Android 12+ masks the central two thirds of the 288dp canvas; the transparent Fold layer fits it.
+          image: variant.assets.androidAdaptiveForeground,
           imageWidth: 288,
-          dark: { image: androidAdaptiveForegroundPaper },
+          backgroundColor: variant.assets.androidAdaptiveBackgroundColor,
+          dark: { image: variant.assets.androidAdaptiveForeground },
         },
       },
     ],

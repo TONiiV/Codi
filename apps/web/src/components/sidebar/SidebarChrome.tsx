@@ -13,6 +13,7 @@ import {
 } from "../../navigationHistory";
 import { primaryServerKeybindingsAtom } from "../../state/server";
 import { cn } from "../../lib/utils";
+import { CodiLockup } from "../CodiLockup";
 import { usePullRequestsSupported } from "../../state/environments";
 import {
   resolveEnvironmentIdentificationPillLabel,
@@ -71,7 +72,7 @@ export const SidebarChromeHeader = memo(function SidebarChromeHeader({
         />
       </div>
       <div className="relative z-10 flex h-8 min-w-0 flex-1 flex-wrap content-start items-center gap-x-2 overflow-hidden py-0.5">
-        <div className="flex shrink-0 items-center gap-1">
+        <div className="flex shrink-0 items-center gap-2">
           <SidebarBrand onBackdrop={backdropVariant !== null} />
           {isElectron ? (
             <div className="hidden items-center md:flex">
@@ -112,7 +113,7 @@ export function SidebarBrandWidthProbe({
       ref={observeWidth}
     >
       <div className="ml-[var(--workspace-titlebar-content-left)] flex gap-1">
-        <SidebarBrandMark />
+        <CodiLockup />
         {isElectron ? <div className="w-[calc(2*var(--workspace-titlebar-control-size))]" /> : null}
       </div>
     </div>
@@ -171,22 +172,8 @@ function SidebarBrand({ onBackdrop }: { onBackdrop: boolean }) {
       )}
       to="/"
     >
-      <SidebarBrandMark />
+      <CodiLockup />
     </Link>
-  );
-}
-
-function SidebarBrandMark() {
-  return (
-    <span className="inline-flex min-w-0 items-center gap-2">
-      <img src="/brand/mark.png" alt="" className="size-7 shrink-0" />
-      <span
-        role="img"
-        aria-label="Codi"
-        className="block h-6 w-[69px] shrink-0 bg-current"
-        style={{ mask: 'url("/brand/wordmark.svg") center / contain no-repeat' }}
-      />
-    </span>
   );
 }
 

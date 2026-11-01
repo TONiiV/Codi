@@ -22,12 +22,12 @@ and banner. Each Icon Composer project uses `Assets/mark.png` as its foreground.
 | `nightly/app-icon.icon` | slate `#232B32`     |
 | `dev/app-icon.icon`     | blue-gray `#283C4E` |
 
-**Export status:** the Fold source projects are updated, but the tracked full application PNG/ICO
-renditions and browser favicons still contain the previous identity. This workstation has Icon
-Composer 1.5; the maintainer requested retaining the 2.x / generation 26 requirement. Regenerate
-these on a machine with Icon Composer 2.x before releasing this rebrand. Native macOS exports
-remain required as described below. After exporting, run
-`node scripts/export-codi-assets.mjs --public` to update marketing PNG/WebP icons and favicons.
+**Application icons:** `node scripts/export-codi-assets.mjs --app-icons` renders every tracked
+application icon (iOS, Linux, macOS, Windows ICO, favicons, Apple touch icon) from each project's
+fill and mark scale, then copies the development icons to `apps/web/public` and the production
+icons to `apps/marketing/public`. Use it where Icon Composer 2.x is unavailable. Re-export through
+Icon Composer on a machine that has it (`vp run icons:export`, then the macOS steps below) for the
+native rendering.
 
 Run `vp run icons:export` from the repository root to regenerate the tracked iOS, Linux, Windows, and web assets. The development web exports are also copied to `apps/web/public` for the browser favicon and splash screen. Run `vp run icons:check` to verify that the generated assets and public copies match their sources without changing files.
 
@@ -76,9 +76,6 @@ All variants use the same transparent Fold foreground, centered in the adaptive 
 The background colors match the table above. The `-ink` filename remains as a compatibility copy
 for existing asset consumers, but contains the same silver mark. Generate both PNG/SVG copies,
 monochrome launcher and notification assets with `node scripts/export-codi-assets.mjs`.
-
-`vp run icons:export:android` still renders the previous wordmark artwork and overwrites
-`android-icon-foreground.png`. Do not run it until it is ported to the Fold mark.
 
 ## In-app lockup
 

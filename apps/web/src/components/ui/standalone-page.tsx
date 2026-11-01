@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-import { T3Wordmark } from "../T3Wordmark";
+import { CodiLockup } from "../CodiLockup";
 
 export function StandalonePage({ children }: { readonly children: ReactNode }) {
   return (
@@ -22,11 +22,8 @@ export function StandalonePageHeader({
 }) {
   return (
     <>
-      <div className="flex items-baseline justify-between gap-3 text-muted-foreground">
-        <span className="flex items-baseline gap-1.5" role="img" aria-label="T3 Code">
-          <T3Wordmark className="h-3 w-auto shrink-0 text-foreground" aria-hidden />
-          <span className="text-lg font-medium tracking-tight">Code</span>
-        </span>
+      <div className="flex items-center justify-between gap-3 text-muted-foreground">
+        <CodiLockup className="text-foreground" />
         {context ? <span className="text-sm">{context}</span> : null}
       </div>
       <h1 className="mt-6 text-xl leading-tight font-semibold">{title}</h1>

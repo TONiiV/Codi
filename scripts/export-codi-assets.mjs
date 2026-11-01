@@ -3,6 +3,8 @@ import * as NodeURL from "node:url";
 import * as NodePath from "node:path";
 import sharp from "sharp";
 
+import { BRAND_ASSET_PATHS } from "./lib/brand-assets.ts";
+
 const root = NodeURL.fileURLToPath(new URL("../", import.meta.url));
 const at = (name) => NodePath.join(root, name);
 const write = async (name, data) => {
@@ -10,21 +12,145 @@ const write = async (name, data) => {
   await NodeFSP.writeFile(at(name), data);
 };
 
-// Run after icons:export to publish the production renditions to the marketing site.
-if (process.argv.includes("--public")) {
-  const pairs = [
-    ["black-universal-1024.png", "icon.png"],
-    ["t3-black-web-favicon.ico", "favicon.ico"],
-    ["t3-black-web-favicon-16x16.png", "favicon-16x16.png"],
-    ["t3-black-web-favicon-32x32.png", "favicon-32x32.png"],
-    ["t3-black-web-apple-touch-180.png", "apple-touch-icon.png"],
+// Renders the application icons from each Icon Composer project's fill and mark scale. Icon
+// Composer 2.x is the source of truth; use this where it is unavailable (`icons:export` needs macOS).
+if (process.argv.includes("--app-icons")) {
+  const ICO_SIZES = [16, 24, 32, 48, 64, 128, 256];
+  const ico = (frames) => {
+    const header = Buffer.alloc(6 + 16 * frames.length);
+    header.writeUInt16LE(1, 2);
+    header.writeUInt16LE(frames.length, 4);
+    let offset = header.length;
+    frames.forEach(({ size, png }, index) => {
+      const entry = 6 + 16 * index;
+      header.writeUInt8(size % 256, entry);
+      header.writeUInt8(size % 256, entry + 1);
+      header.writeUInt16LE(1, entry + 4);
+      header.writeUInt16LE(32, entry + 6);
+      header.writeUInt32LE(png.length, entry + 8);
+      header.writeUInt32LE(offset, entry + 12);
+      offset += png.length;
+    });
+    return Buffer.concat([header, ...frames.map(({ png }) => png)]);
+  };
+  const silhouette = (png, opacity) =>
+    sharp({
+      create: {
+        width: png.info.width,
+        height: png.info.height,
+        channels: 4,
+        background: { r: 0, g: 0, b: 0, alpha: opacity },
+      },
+    }).composite([{ input: png.data, blend: "dest-in" }]);
+  const squircle = async (project, size) => {
+    const config = JSON.parse(await NodeFSP.readFile(at(`${project}/icon.json`), "utf8"));
+    const [r, g, b] = config.fill.solid.split(":")[1].split(",").map((v) => Math.round(v * 255));
+    const markSize = Math.round(size * config.groups[0].layers[0].position.scale);
+    const markPng = await sharp(at("assets/brand/fold-master.png"))
+      .resize(markSize, markSize)
+      .png()
+      .toBuffer({ resolveWithObject: true });
+    const shadow = await silhouette(markPng, config.groups[0].shadow.opacity)
+      .blur(size * 0.012)
+      .png()
+      .toBuffer();
+    const offset = Math.round((size - markSize) / 2);
+    return sharp(
+      Buffer.from(
+        `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}"><rect width="${size}" height="${size}" rx="${size * 0.2237}" fill="rgb(${r},${g},${b})"/></svg>`,
+      ),
+    )
+      .composite([
+        { input: shadow, left: offset, top: offset + Math.round(size * 0.012) },
+        { input: markPng.data, left: offset, top: offset },
+      ])
+      .png()
+      .toBuffer();
+  };
+  const P = BRAND_ASSET_PATHS;
+  const VARIANTS = [
+    {
+      project: "assets/dev/app-icon.icon",
+      publicDirectory: "apps/web/public",
+      files: {
+        ios: P.developmentIosIconPng,
+        universal: P.developmentUniversalIconPng,
+        mac: P.developmentDesktopIconPng,
+        windows: P.developmentWindowsIconIco,
+        faviconIco: P.developmentWebFaviconIco,
+        favicon16: P.developmentWebFavicon16Png,
+        favicon32: P.developmentWebFavicon32Png,
+        touch: P.developmentWebAppleTouchIconPng,
+      },
+    },
+    {
+      project: "assets/nightly/app-icon.icon",
+      files: {
+        ios: P.nightlyIosIconPng,
+        universal: P.nightlyLinuxIconPng,
+        mac: P.nightlyMacIconPng,
+        windows: P.nightlyWindowsIconIco,
+        faviconIco: P.nightlyWebFaviconIco,
+        favicon16: P.nightlyWebFavicon16Png,
+        favicon32: P.nightlyWebFavicon32Png,
+        touch: P.nightlyWebAppleTouchIconPng,
+      },
+    },
+    {
+      project: "assets/prod/app-icon.icon",
+      publicDirectory: "apps/marketing/public",
+      files: {
+        ios: P.productionIosIconPng,
+        universal: P.productionLinuxIconPng,
+        mac: P.productionMacIconPng,
+        windows: P.productionWindowsIconIco,
+        faviconIco: P.productionWebFaviconIco,
+        favicon16: P.productionWebFavicon16Png,
+        favicon32: P.productionWebFavicon32Png,
+        touch: P.productionWebAppleTouchIconPng,
+      },
+    },
   ];
-  for (const [source, target] of pairs) {
-    await NodeFSP.copyFile(at(`assets/prod/${source}`), at(`apps/marketing/public/${target}`));
-    if (target.endsWith(".png")) {
-      await sharp(at(`assets/prod/${source}`))
-        .webp({ lossless: true })
-        .toFile(at(`apps/marketing/public/${target.replace(".png", ".webp")}`));
+  for (const { project, publicDirectory, files } of VARIANTS) {
+    const full = await squircle(project, 1024);
+    const small = (size) => sharp(full).resize(size, size).png().toBuffer();
+    // The classic macOS icon is an 824px body inset 100px with its shadow in the margin.
+    const body = await sharp(await squircle(project, 824)).toBuffer({ resolveWithObject: true });
+    const shadow = await sharp(await silhouette(body, 0.35).png().toBuffer())
+      .extend({ top: 40, bottom: 40, left: 40, right: 40, background: { r: 0, g: 0, b: 0, alpha: 0 } })
+      .blur(14)
+      .png()
+      .toBuffer();
+    const mac = await sharp({
+      create: { width: 1024, height: 1024, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } },
+    })
+      .composite([
+        { input: shadow, left: 60, top: 72 },
+        { input: body.data, left: 100, top: 100 },
+      ])
+      .png()
+      .toBuffer();
+    const windows = ico(await Promise.all(ICO_SIZES.map(async (size) => ({ size, png: await small(size) }))));
+    const outputs = {
+      [files.ios]: full,
+      [files.universal]: full,
+      [files.mac]: mac,
+      [files.windows]: windows,
+      [files.faviconIco]: windows,
+      [files.favicon16]: await small(16),
+      [files.favicon32]: await small(32),
+      [files.touch]: await small(180),
+    };
+    for (const [name, data] of Object.entries(outputs)) await write(name, data);
+    if (publicDirectory) {
+      for (const [source, target] of [
+        [files.faviconIco, "favicon.ico"],
+        [files.favicon16, "favicon-16x16.png"],
+        [files.favicon32, "favicon-32x32.png"],
+        [files.touch, "apple-touch-icon.png"],
+      ]) {
+        await write(`${publicDirectory}/${target}`, outputs[source]);
+      }
     }
   }
 } else {
