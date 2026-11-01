@@ -1,6 +1,7 @@
 import "culori/css";
 import { converter, parse, type Color } from "culori/fn";
 import * as Schema from "effect/Schema";
+import { useSyncExternalStore } from "react";
 
 import { useLocalStorage } from "./hooks/useLocalStorage";
 
@@ -9,6 +10,26 @@ const THEME_BACKDROP_STORAGE_KEY = "t3code.themeBackdrop";
 /** Per-device, like the theme itself: each browser and desktop install opts in separately. */
 export function useThemeBackdropEnabled() {
   return useLocalStorage(THEME_BACKDROP_STORAGE_KEY, false, Schema.Boolean);
+}
+
+let unavailable = false;
+const unavailableListeners = new Set<() => void>();
+const subscribeUnavailable = (listener: () => void) => {
+  unavailableListeners.add(listener);
+  return () => {
+    unavailableListeners.delete(listener);
+  };
+};
+
+/** Set when this device cannot start WebGL2, so the setting can say so instead of showing On. */
+export function setThemeBackdropUnavailable(next: boolean) {
+  if (next === unavailable) return;
+  unavailable = next;
+  for (const listener of unavailableListeners) listener();
+}
+
+export function useThemeBackdropUnavailable() {
+  return useSyncExternalStore(subscribeUnavailable, () => unavailable);
 }
 
 // Measured: cost is linear in pixels, so a quarter per axis (1/16 the pixels) keeps the shader

@@ -1,12 +1,14 @@
-import { useEffect, useRef, useState } from "react";
+import { type Dispatch, type SetStateAction, useEffect, useRef, useState } from "react";
 
 import {
   backdropRenderSize,
   isSoftwareRenderer,
   resolveBackdropColors,
+  setThemeBackdropUnavailable,
   shouldRenderFrame,
   THEME_BACKDROP_FRAME_INTERVAL_MS,
   useThemeBackdropEnabled,
+  useThemeBackdropUnavailable,
 } from "../themeBackdrop";
 import { getStandardPaintedThemeColors, getThemeColorVariable } from "../themePalette";
 
@@ -88,7 +90,10 @@ function readThemeColors(root: HTMLElement) {
 }
 
 /** Starts rendering into `canvas`; returns its teardown, or null when WebGL2 is unavailable. */
-function startThemeBackdrop(canvas: HTMLCanvasElement, onLost: () => void): (() => void) | null {
+function startThemeBackdrop(
+  canvas: HTMLCanvasElement,
+  onRestored: () => void,
+): (() => void) | null {
   const gl = canvas.getContext("webgl2", {
     alpha: false,
     antialias: false,
@@ -135,7 +140,7 @@ function startThemeBackdrop(canvas: HTMLCanvasElement, onLost: () => void): (() 
   const schedule = () => {
     cancelAnimationFrame(frame);
     frame = 0;
-    if (document.hidden) return;
+    if (document.hidden || gl.isContextLost()) return;
     draw();
     if (animated() && document.hasFocus()) frame = requestAnimationFrame(tick);
   };
@@ -170,10 +175,12 @@ function startThemeBackdrop(canvas: HTMLCanvasElement, onLost: () => void): (() 
     drawIfStill();
   };
   const themeObserver = new MutationObserver(syncColors);
-  const onContextLost = () => {
+  const onContextLost = (event: Event) => {
+    // Without preventDefault the browser never restores the context after a GPU reset.
+    event.preventDefault();
     cancelAnimationFrame(frame);
+    frame = 0;
     root.removeAttribute(ACTIVE_ATTRIBUTE);
-    onLost();
   };
 
   resize();
@@ -187,6 +194,7 @@ function startThemeBackdrop(canvas: HTMLCanvasElement, onLost: () => void): (() 
   window.addEventListener("blur", schedule);
   reducedMotion.addEventListener("change", schedule);
   canvas.addEventListener("webglcontextlost", onContextLost);
+  canvas.addEventListener("webglcontextrestored", onRestored);
 
   return () => {
     cancelAnimationFrame(frame);
@@ -198,6 +206,7 @@ function startThemeBackdrop(canvas: HTMLCanvasElement, onLost: () => void): (() 
     window.removeEventListener("blur", schedule);
     reducedMotion.removeEventListener("change", schedule);
     canvas.removeEventListener("webglcontextlost", onContextLost);
+    canvas.removeEventListener("webglcontextrestored", onRestored);
     // A lost context stays on the canvas, so a StrictMode replay on the same element would get a dead one.
     if (!canvas.isConnected) gl.getExtension("WEBGL_lose_context")?.loseContext();
   };
@@ -206,23 +215,23 @@ function startThemeBackdrop(canvas: HTMLCanvasElement, onLost: () => void): (() 
 /** Animated fluid canvas behind the app shell, tinted by the active theme. Off by default. */
 export function ThemeBackdrop() {
   const [enabled] = useThemeBackdropEnabled();
-  const [unavailable, setUnavailable] = useState(false);
-  // Turning the setting off and on again retries after a lost or missing WebGL context.
-  if (!enabled && unavailable) setUnavailable(false);
+  const unavailable = useThemeBackdropUnavailable();
+  // A restored context remounts the canvas, so the program is rebuilt from scratch.
+  const [restoreCount, setRestoreCount] = useState(0);
   if (!enabled || unavailable) return null;
-  return <ThemeBackdropCanvas onUnavailable={setUnavailable} />;
+  return <ThemeBackdropCanvas key={restoreCount} onRestored={setRestoreCount} />;
 }
 
-function ThemeBackdropCanvas({ onUnavailable }: { onUnavailable: (unavailable: true) => void }) {
+function ThemeBackdropCanvas({ onRestored }: { onRestored: Dispatch<SetStateAction<number>> }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Owns the WebGL context, its rAF loop, and the window/theme listeners; torn down on unmount.
   useEffect(() => {
     const canvas = canvasRef.current;
-    const stop = canvas ? startThemeBackdrop(canvas, () => onUnavailable(true)) : null;
-    if (!stop) onUnavailable(true);
+    const stop = canvas ? startThemeBackdrop(canvas, () => onRestored((count) => count + 1)) : null;
+    if (!stop) setThemeBackdropUnavailable(true);
     return stop ?? undefined;
-  }, [onUnavailable]);
+  }, [onRestored]);
 
   return (
     <canvas
