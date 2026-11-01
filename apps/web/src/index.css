@@ -1801,6 +1801,18 @@ html[data-theme-backdrop]
 html[data-theme-backdrop] [data-slot="sidebar-inset"] {
   background-color: color-mix(in srgb, var(--background) 80%, transparent);
 }
+/* Unveiled edges would show the raw backdrop as bright seams: the sidebar's translucent
+   border-r, and the Windows desktop resize strip reserved by #root's padding-right. */
+html[data-theme-backdrop] [data-slot="sidebar-container"] {
+  background-color: var(--sidebar);
+}
+html[data-theme-backdrop] #root {
+  background-image: linear-gradient(
+    to left,
+    color-mix(in srgb, var(--background) 80%, transparent) var(--desktop-window-right-resize-inset),
+    transparent 0
+  );
+}
 
 pre,
 code {
