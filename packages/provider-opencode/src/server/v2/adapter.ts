@@ -2578,8 +2578,7 @@ export const make = Effect.fn("OpenCode2Adapter.make")(function* (instanceId: Pr
               ? {
                   status: "failed",
                   failure: makeProviderFailure({
-                    message:
-                      "OpenCode ended the turn with an error while Codi was reconnecting.",
+                    message: "OpenCode ended the turn with an error while Codi was reconnecting.",
                     class: "provider_error",
                   }),
                 }

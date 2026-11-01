@@ -131,11 +131,11 @@ This app needs a newer Codi on the host. Update Codi on the host. See
 
 | Error                                                     | Fix                                                                                                                                         |
 | --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| `environment_link_limit_exceeded` or managed tunnel limit | Remove an unused environment or link a paid T3 Chat account, then restart Codi on the host.                                              |
+| `environment_link_limit_exceeded` or managed tunnel limit | Remove an unused environment or link a paid T3 Chat account, then restart Codi on the host.                                                 |
 | `auth_invalid` or `invalid_bearer`                        | Run `t3 connect login`. If credentials were revoked, run `t3 connect logout`, then `t3 connect` again. Restart the server after signing in. |
-| Expired or invalid link proof                             | Check the host's date and time, update Codi, then restart it.                                                                            |
+| Expired or invalid link proof                             | Check the host's date and time, update Codi, then restart it.                                                                               |
 | HTTP 403 without a recognized error                       | Check relay access, proxies, and firewall rules. Keep any Cloudflare Ray ID for a bug report.                                               |
-| HTTP 408, 429, or 5xx                                     | Wait a few minutes. Codi retries temporary failures on its own.                                                                          |
+| HTTP 408, 429, or 5xx                                     | Wait a few minutes. Codi retries temporary failures on its own.                                                                             |
 
 After you fix a permanent rejection, restart the host's server with
 `t3 service restart`. For a foreground server, stop it and run `t3 serve` again.

@@ -44,7 +44,10 @@ if (process.argv.includes("--app-icons")) {
     }).composite([{ input: png.data, blend: "dest-in" }]);
   const squircle = async (project, size) => {
     const config = JSON.parse(await NodeFSP.readFile(at(`${project}/icon.json`), "utf8"));
-    const [r, g, b] = config.fill.solid.split(":")[1].split(",").map((v) => Math.round(v * 255));
+    const [r, g, b] = config.fill.solid
+      .split(":")[1]
+      .split(",")
+      .map((v) => Math.round(v * 255));
     const markSize = Math.round(size * config.groups[0].layers[0].position.scale);
     const markPng = await sharp(at("assets/brand/fold-master.png"))
       .resize(markSize, markSize)
@@ -117,12 +120,23 @@ if (process.argv.includes("--app-icons")) {
     // The classic macOS icon is an 824px body inset 100px with its shadow in the margin.
     const body = await sharp(await squircle(project, 824)).toBuffer({ resolveWithObject: true });
     const shadow = await sharp(await silhouette(body, 0.35).png().toBuffer())
-      .extend({ top: 40, bottom: 40, left: 40, right: 40, background: { r: 0, g: 0, b: 0, alpha: 0 } })
+      .extend({
+        top: 40,
+        bottom: 40,
+        left: 40,
+        right: 40,
+        background: { r: 0, g: 0, b: 0, alpha: 0 },
+      })
       .blur(14)
       .png()
       .toBuffer();
     const mac = await sharp({
-      create: { width: 1024, height: 1024, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } },
+      create: {
+        width: 1024,
+        height: 1024,
+        channels: 4,
+        background: { r: 0, g: 0, b: 0, alpha: 0 },
+      },
     })
       .composite([
         { input: shadow, left: 60, top: 72 },
@@ -130,7 +144,9 @@ if (process.argv.includes("--app-icons")) {
       ])
       .png()
       .toBuffer();
-    const windows = ico(await Promise.all(ICO_SIZES.map(async (size) => ({ size, png: await small(size) }))));
+    const windows = ico(
+      await Promise.all(ICO_SIZES.map(async (size) => ({ size, png: await small(size) }))),
+    );
     const outputs = {
       [files.ios]: full,
       [files.universal]: full,

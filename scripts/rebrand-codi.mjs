@@ -7,12 +7,14 @@ import * as NodeFS from "node:fs";
 const TEXT_FILE =
   /\.(?:[cm]?[jt]sx?|md|mdx|astro|html|ya?ml|json|txt|webmanifest|xml|kt|podspec|sh)$/;
 // Vendored code, recorded provider transcripts, model evals, native helpers, third-party patches,
-// the installer banners drawn next to the old logo, files that name existing installs, and tests
-// whose fixtures are matched by a "t3" query or a legacy path pattern.
+// the installer banners drawn next to the old logo, files that name existing installs, tests whose
+// fixtures are matched by a "t3" query, a legacy path pattern or both brand names, and this file.
 const SKIP_PATH =
-  /^(?:\.repos|evals|native|patches)\/|\.ndjson$|(?:^|\/)(?:pnpm-lock\.yaml|tweets\.ts|install\.(?:sh|ps1)|installer\.nsh|paletteSearch\.test\.ts|DesktopAppIdentity\.test\.ts|DesktopUserData(?:\.test)?\.ts|DesktopLegacyLocalStorage(?:\.test)?\.ts)$/;
-// Previous app and profile names that exist on disk, and the client name sent to providers.
-const SKIP_LINE = /T3 Code \((?:Alpha|Dev|Beta|Nightly)\)|CODEX_CLIENT_NAME|clientInfo/;
+  /^(?:\.repos|evals|native|patches)\/|\.ndjson$|(?:^|\/)(?:pnpm-lock\.yaml|tweets\.ts|install\.(?:sh|ps1)|installer\.nsh|rebrand-codi\.mjs|paletteSearch\.test\.ts|t3McpToolPresentation\.test\.ts|DesktopAppIdentity\.test\.ts|DesktopUserData(?:\.test)?\.ts|DesktopLegacyLocalStorage(?:\.test)?\.ts)$/;
+// Previous app and profile names that exist on disk, a launcher path whose space is the fixture,
+// and the client name sent to providers.
+const SKIP_LINE =
+  /T3 Code \((?:Alpha|Dev|Beta|Nightly)\)|\/opt\/T3 Code\/|CODEX_CLIENT_NAME|clientInfo/;
 
 const files = NodeChildProcess.execFileSync("git", ["ls-files", "-z"], {
   encoding: "utf8",

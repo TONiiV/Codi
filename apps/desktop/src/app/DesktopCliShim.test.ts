@@ -114,9 +114,7 @@ describe("renderCliShim", () => {
     const lines = script.split("\r\n");
     expect(lines).toContain("setlocal EnableExtensions DisableDelayedExpansion");
     expect(lines).toContain("chcp 65001 >nul");
-    expect(lines).toContain(
-      'if exist "C:\\Apps\\R&whoami&X 100%%\\!CHANNEL!\\Codi.exe" goto run',
-    );
+    expect(lines).toContain('if exist "C:\\Apps\\R&whoami&X 100%%\\!CHANNEL!\\Codi.exe" goto run');
     const bare = lines.filter(
       (line) => line.includes("whoami") && !/"[^"]*whoami[^"]*"/.test(line),
     );
