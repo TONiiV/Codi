@@ -3,6 +3,7 @@ import { describe, expect, it } from "vite-plus/test";
 import {
   backdropRenderSize,
   isSoftwareRenderer,
+  resolveBackdropColors,
   shouldRenderFrame,
   THEME_BACKDROP_FRAME_INTERVAL_MS,
 } from "./themeBackdrop";
@@ -57,5 +58,21 @@ describe("shouldRenderFrame", () => {
   it("keeps 30fps when 60Hz timestamps arrive slightly early", () => {
     expect(shouldRenderFrame(1000 + 32.9, 1000, THEME_BACKDROP_FRAME_INTERVAL_MS)).toBe(true);
     expect(shouldRenderFrame(1000 + 16.7, 1000, THEME_BACKDROP_FRAME_INTERVAL_MS)).toBe(false);
+  });
+});
+
+describe("resolveBackdropColors", () => {
+  it("passes the canvas and accent through as rgb", () => {
+    const colors = resolveBackdropColors("#000000", "rgb(0 0 255)");
+    expect(colors?.night).toEqual([0, 0, 0]);
+    expect(colors?.blue).toEqual([0, 0, 1]);
+    expect(colors?.glow).not.toEqual(colors?.blue);
+  });
+
+  it.each([
+    ["not-a-color", "#0000ff"],
+    ["#000000", ""],
+  ])("returns null for canvas %j and accent %j", (canvas, accent) => {
+    expect(resolveBackdropColors(canvas, accent)).toBeNull();
   });
 });

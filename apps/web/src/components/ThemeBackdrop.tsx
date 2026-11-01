@@ -108,31 +108,36 @@ function startThemeBackdrop(canvas: HTMLCanvasElement, onLost: () => void): (() 
   const root = document.documentElement;
   const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
   const softwareRendered = isSoftwareRenderer(readRenderer(gl));
-  const startedAt = performance.now();
+  let elapsedMs = 0;
   let frame = 0;
   let lastFrameAt = Number.NEGATIVE_INFINITY;
   let colorsKey = "";
 
   const animated = () => !softwareRendered && !reducedMotion.matches;
-  const draw = (now: number) => {
-    gl.uniform1f(uTime, animated() ? ((now - startedAt) / 1000) * TIME_SCALE : 0);
+  const draw = () => {
+    gl.uniform1f(uTime, animated() ? (elapsedMs / 1000) * TIME_SCALE : 0);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
   };
-  const drawIfStatic = () => {
-    if (!animated() && !document.hidden) draw(performance.now());
+  const drawIfStill = () => {
+    if (!frame && !document.hidden) draw();
   };
   const tick = (now: number) => {
     frame = requestAnimationFrame(tick);
     if (!shouldRenderFrame(now, lastFrameAt, THEME_BACKDROP_FRAME_INTERVAL_MS)) return;
+    // Capped so a resume continues the motion instead of jumping ahead by the paused time.
+    elapsedMs += Math.min(now - lastFrameAt, 100);
     lastFrameAt = now;
-    draw(now);
+    draw();
   };
+  // Unfocused windows hold a still frame: an all-day window on another monitor would otherwise
+  // repaint forever, and desktop preview capture disables throttling, which keeps
+  // `document.hidden` false even while minimized.
   const schedule = () => {
     cancelAnimationFrame(frame);
     frame = 0;
     if (document.hidden) return;
-    draw(performance.now());
-    if (animated()) frame = requestAnimationFrame(tick);
+    draw();
+    if (animated() && document.hasFocus()) frame = requestAnimationFrame(tick);
   };
   // Tracked here, not read from the canvas: a StrictMode replay reuses the canvas but builds a
   // new program, whose uRes would otherwise stay 0.
@@ -152,7 +157,7 @@ function startThemeBackdrop(canvas: HTMLCanvasElement, onLost: () => void): (() 
     canvas.height = height;
     gl.viewport(0, 0, width, height);
     gl.uniform2f(uRes, width, height);
-    if (colorsKey && !document.hidden) draw(performance.now());
+    if (colorsKey && !document.hidden) draw();
   };
   const syncColors = () => {
     const colors = readThemeColors(root);
@@ -162,7 +167,7 @@ function startThemeBackdrop(canvas: HTMLCanvasElement, onLost: () => void): (() 
     gl.uniform3fv(uNight, colors.night);
     gl.uniform3fv(uBlue, colors.blue);
     gl.uniform3fv(uGlow, colors.glow);
-    drawIfStatic();
+    drawIfStill();
   };
   const themeObserver = new MutationObserver(syncColors);
   const onContextLost = () => {
@@ -178,6 +183,8 @@ function startThemeBackdrop(canvas: HTMLCanvasElement, onLost: () => void): (() 
   themeObserver.observe(root, { attributes: true, attributeFilter: ["class", "style"] });
   window.addEventListener("resize", resize);
   document.addEventListener("visibilitychange", schedule);
+  window.addEventListener("focus", schedule);
+  window.addEventListener("blur", schedule);
   reducedMotion.addEventListener("change", schedule);
   canvas.addEventListener("webglcontextlost", onContextLost);
 
@@ -187,6 +194,8 @@ function startThemeBackdrop(canvas: HTMLCanvasElement, onLost: () => void): (() 
     themeObserver.disconnect();
     window.removeEventListener("resize", resize);
     document.removeEventListener("visibilitychange", schedule);
+    window.removeEventListener("focus", schedule);
+    window.removeEventListener("blur", schedule);
     reducedMotion.removeEventListener("change", schedule);
     canvas.removeEventListener("webglcontextlost", onContextLost);
     // A lost context stays on the canvas, so a StrictMode replay on the same element would get a dead one.

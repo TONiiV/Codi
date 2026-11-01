@@ -54,6 +54,8 @@ Turn on **Settings → Appearance → Animated background** to show a slow fluid
 main area. Its colors come from your current theme's canvas and accent, so switching themes or
 editing those colors in the theme editor changes it right away. When reduced motion is enabled in
 your operating system, or the device has no graphics acceleration, it shows a still image instead.
+It also holds still while the window is not focused, so a window left open in the background costs
+nothing.
 
 The setting is saved separately in each browser and desktop app, so turning it on in the desktop
 app does not turn it on in app.t3.codes. The mobile app does not show it.

@@ -11,8 +11,8 @@ export function useThemeBackdropEnabled() {
   return useLocalStorage(THEME_BACKDROP_STORAGE_KEY, false, Schema.Boolean);
 }
 
-// Measured: cost is linear in pixels, so a quarter per axis (1/16 the pixels) holds 30fps
-// even on software rendering, and the soft noise field hides the upscale.
+// Measured: cost is linear in pixels, so a quarter per axis (1/16 the pixels) keeps the shader
+// under 1ms a frame on integrated GPUs, and the soft noise field hides the upscale.
 const RESOLUTION_SCALE = 0.25;
 export const THEME_BACKDROP_FRAME_INTERVAL_MS = 1000 / 30;
 
