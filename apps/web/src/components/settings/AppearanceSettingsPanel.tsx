@@ -21,6 +21,7 @@ import {
 import { useCustomThemes } from "../../hooks/useCustomThemes";
 import { useEnvironmentIdentificationMode } from "../../hooks/useSettings";
 import { useTheme } from "../../hooks/useTheme";
+import { useThemeBackdropEnabled } from "../../themeBackdrop";
 import { useScopedSettings, useUpdateScopedSettings } from "./useScopedSettings";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { Switch } from "../ui/switch";
@@ -99,6 +100,7 @@ export function AppearanceSettingsPanel() {
   const [isImportThemeOpen, setIsImportThemeOpen] = useState(false);
   const settings = useScopedSettings();
   const updateSettings = useUpdateScopedSettings();
+  const [themeBackdropEnabled, setThemeBackdropEnabled] = useThemeBackdropEnabled();
   const environmentStageLabel = useEnvironmentStageLabel();
   const environmentStageVariant = resolveSidebarStageBackdropVariant(environmentStageLabel);
   const environmentIdentificationOptionList =
@@ -163,6 +165,17 @@ export function AppearanceSettingsPanel() {
       </SettingsSection>
 
       <SettingsSection id="appearance-interface" title="Interface">
+        <SettingsRow
+          {...searchableSetting("theme-backdrop")}
+          description="Show a slow fluid backdrop in your theme's canvas and accent colors. Saved on this device only; stays still when reduced motion is on."
+          control={
+            <Switch
+              checked={themeBackdropEnabled}
+              onCheckedChange={(checked) => setThemeBackdropEnabled(Boolean(checked))}
+              aria-label="Animated background"
+            />
+          }
+        />
         <SettingsRow
           {...searchableSetting("setting-appearance-contrast")}
           description="Adjust the contrast of colors and borders across the interface."
