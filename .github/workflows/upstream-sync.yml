@@ -1,0 +1,79 @@
+# Nightly merge of pingdotgg/t3code main into this fork's main.
+# Clean merge → pushed. Conflict → nothing pushed, run fails (GitHub emails you)
+# and the run summary lists each conflicted file with the commits on both sides.
+#
+# Pushing upstream changes under .github/workflows needs a token with the
+# `workflow` permission: set secret UPSTREAM_SYNC_TOKEN to a fine-grained PAT
+# (this repo, Contents + Workflows: read/write). Without it, GITHUB_TOKEN is
+# used and pushes that touch workflow files are rejected.
+name: Upstream sync
+
+on:
+  schedule:
+    - cron: "0 2 * * *" # 03:00 CET / 04:00 CEST
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency: upstream-sync
+
+jobs:
+  sync:
+    if: github.repository == 'TONiiV/Codi'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          token: ${{ secrets.UPSTREAM_SYNC_TOKEN || github.token }}
+
+      - name: Merge upstream/main
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git remote add upstream https://github.com/pingdotgg/t3code.git
+          git fetch --quiet upstream main
+
+          behind=$(git rev-list --count HEAD..upstream/main)
+          if [ "$behind" = 0 ]; then
+            echo "Already up to date with upstream." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          before=$(git rev-parse HEAD)
+          if git merge --no-edit upstream/main; then
+            git push origin HEAD:main
+            {
+              echo "## Merged $behind upstream commits"
+              echo "\`$before\` → \`$(git rev-parse HEAD)\`"
+              echo '```'
+              git log --oneline --no-merges "$before..upstream/main" | head -100
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          base=$(git merge-base HEAD upstream/main)
+          files=$(git diff --name-only --diff-filter=U)
+          git merge --abort
+          {
+            echo "## ❌ Upstream sync blocked by conflicts"
+            echo "main stays at \`$before\`. Upstream is $behind commits ahead (\`$(git rev-parse --short upstream/main)\`)."
+            echo
+            echo "Resolve locally: \`git fetch upstream && git merge upstream/main\` on main."
+            for f in $files; do
+              echo
+              echo "### \`$f\`"
+              echo "**Upstream:**"
+              echo '```'
+              git log --oneline "$base..upstream/main" -- "$f"
+              echo '```'
+              echo "**Fork:**"
+              echo '```'
+              git log --oneline "$base..$before" -- "$f"
+              echo '```'
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit 1
