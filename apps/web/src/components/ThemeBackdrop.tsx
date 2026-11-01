@@ -134,13 +134,19 @@ function startThemeBackdrop(canvas: HTMLCanvasElement, onLost: () => void): (() 
     draw(performance.now());
     if (animated()) frame = requestAnimationFrame(tick);
   };
+  // Tracked here, not read from the canvas: a StrictMode replay reuses the canvas but builds a
+  // new program, whose uRes would otherwise stay 0.
+  let renderWidth = 0;
+  let renderHeight = 0;
   const resize = () => {
     const { width, height } = backdropRenderSize(
       window.innerWidth,
       window.innerHeight,
       window.devicePixelRatio,
     );
-    if (canvas.width === width && canvas.height === height) return;
+    if (renderWidth === width && renderHeight === height) return;
+    renderWidth = width;
+    renderHeight = height;
     // Resizing clears the drawing buffer, so repaint now rather than flash the clear color.
     canvas.width = width;
     canvas.height = height;
