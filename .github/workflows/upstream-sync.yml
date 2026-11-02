@@ -1,11 +1,14 @@
 # Nightly merge of pingdotgg/t3code main into this fork's main.
-# Clean merge → pushed. Conflict → nothing pushed, run fails (GitHub emails you)
-# and the run summary lists each conflicted file with the commits on both sides.
+# Clean merge → pushed. Conflicts → Claude Code resolves the mechanical ones
+# (upstream change + fork's Codi rename on the same lines); a gate then checks
+# that only conflicted files changed, no markers remain, and fmt/lint/typecheck
+# pass before pushing. Anything left unresolved → nothing pushed, run fails
+# (GitHub emails you) and the run summary carries Claude's per-file report.
 #
-# Pushing upstream changes under .github/workflows needs a token with the
-# `workflow` permission: set secret UPSTREAM_SYNC_TOKEN to a fine-grained PAT
-# (this repo, Contents + Workflows: read/write). Without it, GITHUB_TOKEN is
-# used and pushes that touch workflow files are rejected.
+# Secrets:
+# - UPSTREAM_SYNC_TOKEN: fine-grained PAT (this repo, Contents + Workflows
+#   read/write). GITHUB_TOKEN cannot push commits that touch workflow files.
+# - CLAUDE_CODE_OAUTH_TOKEN: from `claude setup-token`, valid one year.
 name: Upstream sync
 
 on:
@@ -22,14 +25,16 @@ jobs:
   sync:
     if: github.repository == 'TONiiV/Codi'
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           ref: main
           fetch-depth: 0
           token: ${{ secrets.UPSTREAM_SYNC_TOKEN || github.token }}
 
       - name: Merge upstream/main
+        id: merge
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -37,43 +42,123 @@ jobs:
           git fetch --quiet upstream main
 
           behind=$(git rev-list --count HEAD..upstream/main)
+          echo "before=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "behind=$behind" >> "$GITHUB_OUTPUT"
           if [ "$behind" = 0 ]; then
             echo "Already up to date with upstream." >> "$GITHUB_STEP_SUMMARY"
-            exit 0
+            echo "status=uptodate" >> "$GITHUB_OUTPUT"
+          elif git merge --no-edit upstream/main; then
+            echo "status=merged" >> "$GITHUB_OUTPUT"
+          else
+            git diff --name-only --diff-filter=U > "$RUNNER_TEMP/conflicts"
+            # Index entries outside the conflicts; the gate checks Claude left them alone.
+            git ls-files -s | awk '$3 == 0' > "$RUNNER_TEMP/index-before"
+            echo "status=conflict" >> "$GITHUB_OUTPUT"
           fi
 
-          before=$(git rev-parse HEAD)
-          if git merge --no-edit upstream/main; then
-            git push origin HEAD:main
-            {
-              echo "## Merged $behind upstream commits"
-              echo "\`$before\` → \`$(git rev-parse HEAD)\`"
-              echo '```'
-              git log --oneline --no-merges "$before..upstream/main" | head -100
-              echo '```'
-            } >> "$GITHUB_STEP_SUMMARY"
-            exit 0
-          fi
+      - name: Setup Vite+
+        if: steps.merge.outputs.status == 'conflict'
+        uses: ./.github/actions/setup-ci-deps
+        with:
+          install: "false"
 
-          base=$(git merge-base HEAD upstream/main)
-          files=$(git diff --name-only --diff-filter=U)
-          git merge --abort
+      - name: Resolve conflicts with Claude
+        id: claude
+        if: steps.merge.outputs.status == 'conflict'
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          curl -fsSL https://claude.ai/install.sh | bash
+          export PATH="$HOME/.local/bin:$PATH"
+          report="$RUNNER_TEMP/claude-report.md"
+          prompt=$(cat <<EOF
+          A git merge of pingdotgg/t3code main (upstream, product name "T3 Code") into its
+          fork TONiiV/Codi (product name "Codi") is in progress in the current directory.
+          The conflicted files are listed in $RUNNER_TEMP/conflicts.
+
+          Fork policy: the fork renames user-visible product copy from "T3 Code" to "Codi"
+          (UI strings, docs/user, agent-facing prompt text, test fixtures that mirror them)
+          and has a few features of its own (brand assets, theme backdrop). Code identifiers,
+          package names, t3code, t3:// URLs, "T3 Connect" and "npx t3" stay unchanged.
+
+          For each conflicted file:
+          - Mechanical overlap (typically: upstream changed content, fork renamed T3 Code to
+            Codi on the same lines): take the upstream side, then reapply the Codi rename to
+            user-visible copy in that hunk. Keep fork-only additions, e.g. a "codi"
+            alternative in a regex. Keep fork changes elsewhere in the file as they are.
+          - pnpm-lock.yaml: resolve package.json files first, then
+            git checkout --theirs pnpm-lock.yaml and run vp install --no-frozen-lockfile.
+          - Both sides changed behavior in ways that need a product decision, or you are not
+            confident: leave the file untouched and do not git add it.
+          Only edit conflicted files. git add each file you resolve. Do not commit, push, or
+          switch branches.
+
+          Finally write $report in Chinese: one section per conflicted file saying
+          whether you resolved it and how. For each unresolved file: what upstream changed,
+          what the fork changed, why it conflicts, and options A/B for the maintainer.
+          EOF
+          )
+          set +e
+          claude -p "$prompt" \
+            --add-dir "$RUNNER_TEMP" \
+            --permission-mode acceptEdits \
+            --allowedTools "Read" "Edit" "Write" "Glob" "Grep" \
+              "Bash(git diff:*)" "Bash(git log:*)" "Bash(git show:*)" "Bash(git status:*)" \
+              "Bash(git add:*)" "Bash(git checkout --theirs:*)" "Bash(git checkout --ours:*)" \
+              "Bash(vp install:*)" \
+            > "$RUNNER_TEMP/claude.log" 2>&1
+          echo "exit=$?" >> "$GITHUB_OUTPUT"
+          tail -50 "$RUNNER_TEMP/claude.log"
+
+      - name: Verify and push
+        id: gate
+        if: steps.merge.outputs.status == 'merged' || steps.merge.outputs.status == 'conflict'
+        run: |
+          fail() { echo "reason=$1" >> "$GITHUB_OUTPUT"; echo "::error::$1"; exit 1; }
+          if [ "${{ steps.merge.outputs.status }}" = conflict ]; then
+            [ "${{ steps.claude.outputs.exit }}" = 0 ] || fail "Claude Code exited with ${{ steps.claude.outputs.exit }}"
+            [ -z "$(git ls-files -u)" ] || fail "Claude left files unresolved: $(git ls-files -u | cut -f2 | sort -u | tr '\n' ' ')"
+            ! xargs grep -nE '^(<<<<<<<|>>>>>>>) ' < "$RUNNER_TEMP/conflicts" || fail "conflict markers remain"
+            keep_outside() { awk 'NR == FNR { c[$0] = 1; next } { split($0, a, "\t") } !(a[2] in c) && a[2] != "pnpm-lock.yaml"' "$RUNNER_TEMP/conflicts" -; }
+            git ls-files -s | awk '$3 == 0' | keep_outside > "$RUNNER_TEMP/index-after"
+            keep_outside < "$RUNNER_TEMP/index-before" | diff -q - "$RUNNER_TEMP/index-after" >/dev/null \
+              || fail "Claude changed files outside the conflicts"
+            vp install
+            xargs vp fmt --no-error-on-unmatched-pattern < "$RUNNER_TEMP/conflicts" || fail "format failed on resolved files"
+            xargs git add < "$RUNNER_TEMP/conflicts"
+            xargs vp lint --no-error-on-unmatched-pattern < "$RUNNER_TEMP/conflicts" || fail "lint failed on resolved files"
+            vp run typecheck || fail "typecheck failed"
+            git commit --no-edit
+          fi
+          git push origin HEAD:main
           {
-            echo "## ❌ Upstream sync blocked by conflicts"
-            echo "main stays at \`$before\`. Upstream is $behind commits ahead (\`$(git rev-parse --short upstream/main)\`)."
-            echo
-            echo "Resolve locally: \`git fetch upstream && git merge upstream/main\` on main."
-            for f in $files; do
-              echo
-              echo "### \`$f\`"
-              echo "**Upstream:**"
-              echo '```'
-              git log --oneline "$base..upstream/main" -- "$f"
-              echo '```'
-              echo "**Fork:**"
-              echo '```'
-              git log --oneline "$base..$before" -- "$f"
-              echo '```'
-            done
+            echo "## Merged ${{ steps.merge.outputs.behind }} upstream commits"
+            echo "\`${{ steps.merge.outputs.before }}\` → \`$(git rev-parse HEAD)\`"
+            [ -f "$RUNNER_TEMP/claude-report.md" ] && { echo; echo "### Conflicts resolved by Claude"; cat "$RUNNER_TEMP/claude-report.md"; }
+            echo '```'
+            git log --oneline --no-merges -100 "${{ steps.merge.outputs.before }}..upstream/main"
+            echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
-          exit 1
+
+      - name: Report blocked sync
+        if: failure() && steps.merge.outputs.status == 'conflict'
+        run: |
+          git merge --abort || true
+          {
+            echo "## ❌ Upstream sync blocked"
+            echo "main stays at \`${{ steps.merge.outputs.before }}\`. Upstream is ${{ steps.merge.outputs.behind }} commits ahead."
+            echo
+            echo "**Reason:** ${{ steps.gate.outputs.reason || 'a step before the gate failed' }}"
+            if grep -qiE 'oauth|unauthori[sz]ed|401|invalid api key|expired' "$RUNNER_TEMP/claude.log" 2>/dev/null; then
+              echo
+              echo "> Claude authentication failed. The token may have expired: run \`claude setup-token\` and update \`CLAUDE_CODE_OAUTH_TOKEN\`."
+            fi
+            echo
+            echo "Conflicted files:"
+            sed 's/^/- `/; s/$/`/' "$RUNNER_TEMP/conflicts"
+            if [ -f "$RUNNER_TEMP/claude-report.md" ]; then
+              echo
+              echo "### Claude's report"
+              cat "$RUNNER_TEMP/claude-report.md"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
