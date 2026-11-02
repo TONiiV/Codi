@@ -80,7 +80,8 @@ import {
   type MouseEvent as ReactMouseEvent,
   type ReactNode,
 } from "react";
-import { type AnyRouter, useRouter } from "@tanstack/react-router";
+import { type AnyRouter, useLocation, useRouter } from "@tanstack/react-router";
+import { LighthouseChatList } from "./prototype/LighthouseChatList";
 
 import {
   isAtomCommandInterrupted,
@@ -912,6 +913,9 @@ function readRouteThreadKey(router: AnyRouter): string | null {
 }
 
 export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReveal }) {
+  const onLighthousePrototype = useLocation({
+    select: (location) => location.pathname.startsWith("/prototype/lighthouse"),
+  });
   const {
     projects,
     serverConfigs,
@@ -2979,6 +2983,18 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
       ? shortcutLabelForCommand(keybindings, "chat.newLocal")
       : undefined);
   const newThreadInProjectShortcutLabel = shortcutLabelForCommand(keybindings, "chat.newLocal");
+  if (onLighthousePrototype) {
+    // PROTOTYPE, wipe me: the Work tab turns the thread list into a Chief of Staff chat list.
+    return (
+      <>
+        <SidebarChromeHeader isElectron={isElectron} />
+        <SidebarContent className="min-h-full">
+          <LighthouseChatList />
+        </SidebarContent>
+        <SidebarChromeFooter />
+      </>
+    );
+  }
   return (
     <>
       <ThreadContextDragGhost />

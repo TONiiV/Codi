@@ -14,12 +14,18 @@ import {
   MessageSquareIcon,
   ScaleIcon,
   SendIcon,
-  SparklesIcon,
   UsersIcon,
 } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 
 import { cn } from "../../lib/utils";
+import { BotAvatar } from "./LighthouseChatList";
+import {
+  PROJECT_COS,
+  VIEWERS,
+  type LighthouseChatId,
+  type LighthouseViewer,
+} from "./lighthouseData";
 import { PullRequestGlyph } from "../pullRequest/pullRequestIcons";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
@@ -33,44 +39,11 @@ import {
 } from "../WorkspaceBreadcrumb";
 
 export type LighthouseVariant = "A" | "B" | "C";
-export type LighthouseViewer = "admin" | "lead" | "member";
 export interface LighthouseSearch {
   readonly variant: LighthouseVariant;
   readonly as: LighthouseViewer;
+  readonly chat: LighthouseChatId;
 }
-
-const VIEWERS: Record<
-  LighthouseViewer,
-  {
-    name: string;
-    title: string;
-    projects: ReadonlyArray<string>;
-    docs: ReadonlyArray<string>;
-    cos: { name: string; motto: string; tone: string };
-  }
-> = {
-  admin: {
-    name: "林砚",
-    title: "管理员",
-    projects: ["codi", "site", "app"],
-    docs: ["public", "team", "confidential"],
-    cos: { name: "砚书", motto: "把复杂留在边界，把简单留给你。", tone: "克制，先给结论" },
-  },
-  lead: {
-    name: "沈叙白",
-    title: "官网负责人",
-    projects: ["site"],
-    docs: ["public", "team"],
-    cos: { name: "小满", motto: "今天只做最重要的三件。", tone: "活泼，爱列清单" },
-  },
-  member: {
-    name: "周清野",
-    title: "移动端成员",
-    projects: ["app"],
-    docs: ["public"],
-    cos: { name: "助理", motto: "先量出来，再谈感觉。", tone: "默认人设，未自定义" },
-  },
-};
 
 const PROJECTS: Record<
   string,
@@ -307,19 +280,6 @@ function Asks({ viewer }: { viewer: LighthouseViewer }) {
   );
 }
 
-function CosAvatar({ name, size = "md" }: { name: string; size?: "md" | "lg" }) {
-  return (
-    <span
-      className={cn(
-        "inline-flex shrink-0 items-center justify-center rounded-md bg-primary font-medium text-primary-foreground",
-        size === "lg" ? "size-10 text-base" : "size-7 text-xs",
-      )}
-    >
-      {name[0]}
-    </span>
-  );
-}
-
 function Composer({ cos }: { cos: string }) {
   return (
     <div className="rounded-lg border bg-card p-2 shadow-composer">
@@ -343,7 +303,7 @@ function Conversation({ viewer, dense }: { viewer: LighthouseViewer; dense?: boo
   return (
     <div className={cn("flex flex-col gap-5", dense && "gap-4")}>
       <div className="flex gap-3">
-        <CosAvatar name={v.cos.name} />
+        <BotAvatar tone="bg-foreground" />
         <div className="min-w-0 flex-1">
           <div className="flex items-baseline gap-2 text-sm">
             <span className="font-medium">{v.cos.name}</span>
@@ -372,7 +332,7 @@ function Conversation({ viewer, dense }: { viewer: LighthouseViewer; dense?: boo
         </div>
       </div>
       <div className="flex gap-3">
-        <CosAvatar name={v.cos.name} />
+        <BotAvatar tone="bg-foreground" />
         <div className="min-w-0 flex-1">
           <div className="flex items-baseline gap-2 text-sm">
             <span className="font-medium">{v.cos.name}</span>
@@ -607,7 +567,7 @@ function VariantA({ viewer }: { viewer: LighthouseViewer }) {
             variant={page === null ? "secondary" : "ghost-muted"}
             onClick={() => setPage(null)}
           >
-            <SparklesIcon /> {v.cos.name}
+            <BotAvatar tone="bg-foreground" size="sm" /> {v.cos.name}
           </Button>
           <Separator orientation="vertical" className="mx-1 h-4" />
           <CompanyTabs page={page ?? "desk"} onChange={setPage} />
@@ -675,7 +635,7 @@ function VariantC({ viewer }: { viewer: LighthouseViewer }) {
                   件事等你。
                 </p>
               </div>
-              <CosAvatar name={v.cos.name} size="lg" />
+              <BotAvatar tone="bg-foreground" size="lg" />
             </div>
             <div className="mt-3 rounded-lg border bg-card px-3">
               <Asks viewer={viewer} />
@@ -709,7 +669,10 @@ export function LighthousePrototypePage() {
   const navigate = useNavigate();
   const variant = search.variant;
   const viewer = search.as;
+  const chat = search.chat;
   const v = VIEWERS[viewer];
+  const chatName =
+    chat === "mine" ? v.cos.name : chat === "desk" ? "总台" : (PROJECT_COS[chat]?.name ?? chat);
   const set = (patch: Partial<LighthouseSearch>) =>
     void navigate({ to: "/prototype/lighthouse", search: { ...search, ...patch }, replace: true });
   const cycle = (dir: 1 | -1) => {
@@ -741,11 +704,13 @@ export function LighthousePrototypePage() {
         </div>
         <WorkspaceBreadcrumb ariaLabel="Lighthouse breadcrumb" className="min-w-0">
           <WorkspaceBreadcrumbItem>
-            <h1>{v.cos.name}</h1>
+            <h1>{chatName}</h1>
           </WorkspaceBreadcrumbItem>
           <WorkspaceBreadcrumbSeparator />
           <WorkspaceBreadcrumbItem current>
-            <span>{v.name} · 今天</span>
+            <span>
+              {chat === "desk" ? "只读" : chat === "mine" ? `${v.name} · 今天` : "只回答本项目的事"}
+            </span>
           </WorkspaceBreadcrumbItem>
         </WorkspaceBreadcrumb>
         <div className="ms-auto flex items-center gap-1">
@@ -763,9 +728,22 @@ export function LighthousePrototypePage() {
         </div>
       </header>
       <div className="relative flex min-h-0 flex-1 flex-col">
-        {variant === "A" ? <VariantA key={viewer} viewer={viewer} /> : null}
-        {variant === "B" ? <VariantB key={viewer} viewer={viewer} /> : null}
-        {variant === "C" ? <VariantC key={viewer} viewer={viewer} /> : null}
+        {chat === "desk" ? (
+          <div className="min-h-0 flex-1 overflow-y-auto scrollbar-gutter-both">
+            <div className="mx-auto w-full max-w-(--chat-content-max-width) px-5 py-6">
+              <CompanyPage page="desk" viewer={viewer} />
+            </div>
+          </div>
+        ) : null}
+        {chat !== "desk" && variant === "A" ? (
+          <VariantA key={viewer + chat} viewer={viewer} />
+        ) : null}
+        {chat !== "desk" && variant === "B" ? (
+          <VariantB key={viewer + chat} viewer={viewer} />
+        ) : null}
+        {chat !== "desk" && variant === "C" ? (
+          <VariantC key={viewer + chat} viewer={viewer} />
+        ) : null}
         <div className="pointer-events-none absolute inset-x-0 bottom-3 flex justify-center lg:justify-start lg:ps-6">
           <div className="pointer-events-auto flex items-center gap-2 rounded-full bg-black px-2 py-1.5 text-xs text-white shadow-lg">
             <button
