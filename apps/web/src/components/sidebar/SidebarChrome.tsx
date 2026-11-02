@@ -1,10 +1,4 @@
-import {
-  ArrowLeftIcon,
-  ArrowRightIcon,
-  BriefcaseIcon,
-  ChartNoAxesColumnIcon,
-  SettingsIcon,
-} from "lucide-react";
+import { ArrowLeftIcon, ArrowRightIcon, ChartNoAxesColumnIcon, SettingsIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { memo } from "react";
 import { Link, useLocation, useNavigate } from "@tanstack/react-router";
@@ -20,6 +14,7 @@ import {
 import { primaryServerKeybindingsAtom } from "../../state/server";
 import { cn } from "../../lib/utils";
 import { CodiLockup } from "../CodiLockup";
+import { LighthouseModeToggle } from "../prototype/LighthouseModeToggle";
 import { usePullRequestsSupported } from "../../state/environments";
 import {
   resolveEnvironmentIdentificationPillLabel,
@@ -80,6 +75,7 @@ export const SidebarChromeHeader = memo(function SidebarChromeHeader({
       <div className="relative z-10 flex h-8 min-w-0 flex-1 flex-wrap content-start items-center gap-x-2 overflow-hidden py-0.5">
         <div className="flex shrink-0 items-center gap-2">
           <SidebarBrand onBackdrop={backdropVariant !== null} />
+          {import.meta.env.DEV ? <LighthouseModeToggle /> : null}
           {isElectron ? (
             <div className="hidden items-center md:flex">
               <HistoryNavigationButton direction="back" onBackdrop={backdropVariant !== null} />
@@ -273,19 +269,6 @@ const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
             label="Usage"
             onClick={handleUsageClick}
           />
-          {import.meta.env.DEV ? (
-            <SidebarUtilityItem
-              icon={<BriefcaseIcon />}
-              label="Work (prototype)"
-              onClick={() => {
-                closeMobileSidebar();
-                void navigate({
-                  to: "/prototype/lighthouse",
-                  search: { variant: "A", as: "admin", chat: "mine", view: "chats" },
-                });
-              }}
-            />
-          ) : null}
         </>
       )}
       <SidebarThreadUndoNotice />

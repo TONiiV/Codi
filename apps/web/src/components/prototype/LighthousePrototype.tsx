@@ -28,7 +28,8 @@ import {
   type LighthouseViewer,
 } from "./lighthouseData";
 import { RAIL_ITEMS } from "./LighthouseRail";
-import { BotsPage, CopilotPanel, DashboardPage, TasksPage } from "./LighthouseWork";
+import { TasksPage } from "./LighthouseTasks";
+import { BotsPage, CopilotPanel, DashboardPage } from "./LighthouseWork";
 import { PullRequestGlyph } from "../pullRequest/pullRequestIcons";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
@@ -701,14 +702,6 @@ export function LighthousePrototypePage() {
   return (
     <SidebarInset className="h-dvh min-h-0 overflow-hidden overscroll-y-none">
       <header className="flex min-h-12 shrink-0 items-center gap-3 border-b ps-5 pe-3">
-        <div className="flex items-center rounded-md border p-0.5">
-          <Button size="xs" variant="ghost-muted" onClick={() => void navigate({ to: "/" })}>
-            代码
-          </Button>
-          <Button size="xs" variant="secondary">
-            工作
-          </Button>
-        </div>
         <WorkspaceBreadcrumb ariaLabel="Lighthouse breadcrumb" className="min-w-0">
           <WorkspaceBreadcrumbItem>
             <h1>{view === "chats" ? chatName : viewLabel}</h1>
@@ -744,7 +737,12 @@ export function LighthousePrototypePage() {
         {view !== "chats" ? (
           <div className="flex min-h-0 flex-1">
             <div className="min-h-0 flex-1 overflow-y-auto scrollbar-gutter-both">
-              <div className="mx-auto w-full max-w-5xl px-5 py-6">
+              <div
+                className={cn(
+                  "w-full py-6",
+                  view === "tasks" ? "px-8 pt-10" : "mx-auto max-w-5xl px-5",
+                )}
+              >
                 {view === "bots" ? <BotsPage viewer={viewer} /> : null}
                 {view === "dashboard" ? <DashboardPage viewer={viewer} /> : null}
                 {view === "tasks" ? <TasksPage key={viewer} viewer={viewer} /> : null}

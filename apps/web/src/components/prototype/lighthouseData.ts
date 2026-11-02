@@ -109,21 +109,57 @@ export function chatsFor(viewer: LighthouseViewer): ReadonlyArray<LighthouseChat
 export type LighthouseView = "chats" | "bots" | "dashboard" | "tasks";
 
 export type TaskStatus = "todo" | "doing" | "review" | "done";
+export type TaskPriority = "high" | "medium" | "low";
+export type TaskType = "feature" | "bug" | "polish" | "research";
 
-export const TASK_STATUS: Record<TaskStatus, { label: string; tone: string }> = {
-  todo: { label: "待排", tone: "bg-muted-foreground" },
-  doing: { label: "进行中", tone: "bg-primary" },
-  review: { label: "等确认", tone: "bg-warning" },
-  done: { label: "完成", tone: "bg-success" },
+export const TASK_STATUS: Record<
+  TaskStatus,
+  { label: string; badge: "outline" | "info" | "warning" | "success" }
+> = {
+  todo: { label: "未开始", badge: "outline" },
+  doing: { label: "进行中", badge: "info" },
+  review: { label: "等确认", badge: "warning" },
+  done: { label: "完成", badge: "success" },
 };
+
+export const TASK_PRIORITY: Record<
+  TaskPriority,
+  { label: string; badge: "error" | "warning" | "outline" }
+> = {
+  high: { label: "高", badge: "error" },
+  medium: { label: "中", badge: "warning" },
+  low: { label: "低", badge: "outline" },
+};
+
+export const TASK_TYPE: Record<
+  TaskType,
+  { label: string; badge: "success" | "error" | "info" | "outline" }
+> = {
+  feature: { label: "需求", badge: "success" },
+  bug: { label: "缺陷", badge: "error" },
+  polish: { label: "打磨", badge: "info" },
+  research: { label: "调研", badge: "outline" },
+};
+
+export interface TaskAssignee {
+  kind: "person" | "bot";
+  name: string;
+  tone: string;
+}
+
+const P = (name: string): TaskAssignee => ({ kind: "person", name, tone: "bg-secondary" });
+const B = (name: string, tone: string): TaskAssignee => ({ kind: "bot", name, tone });
 
 export interface LighthouseTask {
   id: string;
   title: string;
   project: string;
   status: TaskStatus;
-  owner: string;
-  due: string;
+  assignees: ReadonlyArray<TaskAssignee>;
+  due?: string;
+  priority?: TaskPriority;
+  type?: TaskType;
+  description?: string;
   tickets: ReadonlyArray<{
     id: string;
     title: string;
@@ -138,8 +174,11 @@ export const TASKS: ReadonlyArray<LighthouseTask> = [
     title: "官网 RSS 与封面图",
     project: "site",
     status: "review",
-    owner: "官网 幕僚长",
-    due: "11-03",
+    assignees: [P("沈叙白"), B("官网 幕僚长", "bg-success")],
+    due: "2026-11-03",
+    priority: "high",
+    type: "feature",
+    description: "博客输出全文 RSS，每篇自动生成 og:image。",
     tickets: [
       { id: "site#12", title: "RSS feed 输出全文", worker: "W3", state: "pr" },
       { id: "site#14", title: "og:image 自动生成", worker: "W4", state: "open" },
@@ -150,8 +189,11 @@ export const TASKS: ReadonlyArray<LighthouseTask> = [
     title: "Webhook 入口签名校验",
     project: "codi",
     status: "doing",
-    owner: "Codi 幕僚长",
-    due: "11-05",
+    assignees: [P("林砚"), B("Codi 幕僚长", "bg-primary")],
+    due: "2026-11-05",
+    priority: "high",
+    type: "feature",
+    description: "GitHub HMAC 与 GitLab Standard Webhooks 两种签名，加重放窗口。",
     tickets: [
       { id: "codi#23", title: "GitHub 签名校验", worker: "W7", state: "pr" },
       { id: "codi#31", title: "GitLab Standard Webhooks", worker: "W9", state: "open" },
@@ -163,8 +205,11 @@ export const TASKS: ReadonlyArray<LighthouseTask> = [
     title: "移动端离线缓存",
     project: "app",
     status: "doing",
-    owner: "移动端 幕僚长",
-    due: "11-08",
+    assignees: [P("周清野"), B("移动端 幕僚长", "bg-warning")],
+    due: "2026-11-08",
+    priority: "medium",
+    type: "feature",
+    description: "SQLite 缓存线程列表，断网时只读。",
     tickets: [{ id: "app#41", title: "SQLite 缓存层", worker: "W11", state: "open" }],
   },
   {
@@ -172,24 +217,73 @@ export const TASKS: ReadonlyArray<LighthouseTask> = [
     title: "企微 Bot 接入总台",
     project: "codi",
     status: "todo",
-    owner: "Codi 幕僚长",
-    due: "11-12",
+    assignees: [B("Codi 幕僚长", "bg-primary")],
+    due: "2026-11-12",
+    priority: "medium",
+    type: "feature",
+    description: "企微消息先查重，归入已有话题，再决定开不开工单。",
     tickets: [
       { id: "codi#5", title: "WeCom 回调接入", state: "open" },
       { id: "codi#36", title: "消息去重并归入已有话题", state: "open" },
     ],
   },
   {
+    id: "T-21",
+    title: "价格页 Safari 错位",
+    project: "site",
+    status: "done",
+    assignees: [B("官网 幕僚长", "bg-success")],
+    due: "2026-10-30",
+    priority: "high",
+    type: "bug",
+    tickets: [{ id: "site#88", title: "Safari flex gap 回退", worker: "W3", state: "merged" }],
+  },
+  {
     id: "T-07",
     title: "Fold 品牌落地",
     project: "site",
     status: "done",
-    owner: "官网 幕僚长",
-    due: "10-28",
+    assignees: [P("林砚"), P("沈叙白")],
+    due: "2026-10-28",
+    priority: "medium",
+    type: "polish",
+    description: "Logo、色板、首页改版。",
     tickets: [
       { id: "site#3", title: "Logo 与色板", state: "merged" },
       { id: "site#4", title: "首页改版", state: "merged" },
     ],
+  },
+  {
+    id: "T-22",
+    title: "幕僚长上下文轮换",
+    project: "codi",
+    status: "todo",
+    assignees: [P("林砚")],
+    priority: "high",
+    type: "research",
+    description: "常驻线程到阈值时交接，测一次交接要多少 token。",
+    tickets: [{ id: "codi#7", title: "Spike：常驻线程不亲自干活", state: "open" }],
+  },
+  {
+    id: "T-24",
+    title: "Android 模拟器配额",
+    project: "app",
+    status: "review",
+    assignees: [P("周清野")],
+    due: "2026-11-04",
+    type: "research",
+    description: "家里电脑离线时，app#41 改派到云容器。",
+    tickets: [],
+  },
+  {
+    id: "T-25",
+    title: "周报模板",
+    project: "codi",
+    status: "doing",
+    assignees: [B("总台", "bg-muted-foreground")],
+    priority: "low",
+    type: "polish",
+    tickets: [],
   },
 ];
 

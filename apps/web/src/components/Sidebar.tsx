@@ -82,6 +82,7 @@ import {
 } from "react";
 import { type AnyRouter, useLocation, useRouter } from "@tanstack/react-router";
 import { LighthouseChatList } from "./prototype/LighthouseChatList";
+import { LighthouseModeToggle } from "./prototype/LighthouseModeToggle";
 import { LighthouseRail } from "./prototype/LighthouseRail";
 import { WorkSubList } from "./prototype/LighthouseWork";
 
@@ -3002,6 +3003,9 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
     return (
       <div className="flex min-h-0 flex-1 flex-col">
         <div className="h-(--workspace-topbar-height) shrink-0" />
+        <div className="flex justify-center pb-1">
+          <LighthouseModeToggle vertical />
+        </div>
         <LighthouseRail collapsed />
       </div>
     );
@@ -3021,7 +3025,6 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
             )}
           </SidebarContent>
         </div>
-        <SidebarChromeFooter />
       </>
     );
   }

@@ -2,17 +2,12 @@
 // panel that sits on their right, where the user can switch which Chief of Staff they talk to.
 import { useNavigate } from "@tanstack/react-router";
 import {
-  ChevronDownIcon,
-  ChevronRightIcon,
-  ClockIcon,
   CpuIcon,
   ExpandIcon,
-  KanbanIcon,
   MessageSquareIcon,
   PlusIcon,
   SendIcon,
   ServerIcon,
-  Table2Icon,
 } from "lucide-react";
 import { useState } from "react";
 
@@ -21,25 +16,20 @@ import { BotAvatar } from "./LighthouseChatList";
 import {
   BOTS,
   TASKS,
-  TASK_STATUS,
   VIEWERS,
   chatsFor,
   type LighthouseChatId,
-  type LighthouseTask,
   type LighthouseView,
   type LighthouseViewer,
-  type TaskStatus,
 } from "./lighthouseData";
-import { PullRequestGlyph } from "../pullRequest/pullRequestIcons";
-import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
 import { Textarea } from "../ui/textarea";
 
-const PROJECT_NAME: Record<string, string> = { codi: "Codi", site: "官网", app: "移动端" };
+export const PROJECT_NAME: Record<string, string> = { codi: "Codi", site: "官网", app: "移动端" };
 
-function ThreadAnchor({ id, muted }: { id: string; muted?: boolean }) {
+export function ThreadAnchor({ id, muted }: { id: string; muted?: boolean }) {
   return (
     <a
       href="#"
@@ -52,35 +42,6 @@ function ThreadAnchor({ id, muted }: { id: string; muted?: boolean }) {
       <MessageSquareIcon className="size-3.5" />
       {id}
     </a>
-  );
-}
-
-function TicketChip({ ticket }: { ticket: LighthouseTask["tickets"][number] }) {
-  return (
-    <span className="inline-flex items-center gap-1 rounded-sm border bg-card px-1.5 py-0.5 text-xs">
-      {ticket.state === "open" ? (
-        <span className="size-2 rounded-full bg-success" />
-      ) : (
-        <PullRequestGlyph.pullRequest
-          className={cn(
-            "size-3",
-            ticket.state === "merged" ? "text-muted-foreground" : "text-success",
-          )}
-        />
-      )}
-      <span className="font-mono">{ticket.id}</span>
-      <span className="text-muted-foreground">{ticket.title}</span>
-      {ticket.worker ? <ThreadAnchor id={ticket.worker} /> : null}
-    </span>
-  );
-}
-
-function StatusBadge({ status }: { status: TaskStatus }) {
-  const s = TASK_STATUS[status];
-  return (
-    <Badge variant="outline">
-      <span className={cn("size-1.5 rounded-full", s.tone)} /> {s.label}
-    </Badge>
   );
 }
 
@@ -321,155 +282,6 @@ export function DashboardPage({ viewer }: { viewer: LighthouseViewer }) {
           ))}
         </ul>
       </div>
-    </div>
-  );
-}
-
-const COLUMNS: ReadonlyArray<TaskStatus> = ["todo", "doing", "review", "done"];
-
-function TaskRow({ task }: { task: LighthouseTask }) {
-  const [open, setOpen] = useState(task.status !== "done");
-  return (
-    <>
-      <TableRow className="cursor-pointer" onClick={() => setOpen(!open)}>
-        <TableCell>
-          <span className="flex items-center gap-2">
-            {open ? (
-              <ChevronDownIcon className="size-3.5 text-muted-foreground" />
-            ) : (
-              <ChevronRightIcon className="size-3.5 text-muted-foreground" />
-            )}
-            <span className="font-mono text-xs text-muted-foreground">{task.id}</span>
-            <span className="font-medium">{task.title}</span>
-          </span>
-        </TableCell>
-        <TableCell>
-          <StatusBadge status={task.status} />
-        </TableCell>
-        <TableCell>
-          <span className="text-muted-foreground">{PROJECT_NAME[task.project]}</span>
-        </TableCell>
-        <TableCell>
-          <span className="text-muted-foreground">{task.owner}</span>
-        </TableCell>
-        <TableCell>
-          <span className="text-muted-foreground tabular-nums">
-            {task.tickets.filter((t) => t.state === "merged").length}/{task.tickets.length}
-          </span>
-        </TableCell>
-        <TableCell>
-          <span className="inline-flex items-center gap-1 text-muted-foreground">
-            <ClockIcon className="size-3.5" /> {task.due}
-          </span>
-        </TableCell>
-      </TableRow>
-      {open ? (
-        <TableRow>
-          <TableCell colSpan={6}>
-            <div className="flex flex-wrap gap-2 ps-6">
-              {task.tickets.map((t) => (
-                <TicketChip key={t.id} ticket={t} />
-              ))}
-              <Button size="xs" variant="ghost-muted">
-                <PlusIcon /> 加工单
-              </Button>
-            </div>
-          </TableCell>
-        </TableRow>
-      ) : null}
-    </>
-  );
-}
-
-export function TasksPage({ viewer }: { viewer: LighthouseViewer }) {
-  const v = VIEWERS[viewer];
-  const [mode, setMode] = useState<"table" | "board">("table");
-  const tasks = TASKS.filter((t) => v.projects.includes(t.project));
-  return (
-    <div className="flex flex-col gap-4">
-      <div className="flex items-end justify-between gap-3">
-        <div>
-          <h2 className="text-lg font-semibold">任务</h2>
-          <p className="text-sm text-muted-foreground">
-            一个任务对应若干工单（GitHub / GitLab issue）。你改任务，幕僚长去动工单和 Worker。
-          </p>
-        </div>
-        <div className="flex items-center gap-1">
-          <div className="flex items-center rounded-md border p-0.5">
-            <Button
-              size="xs"
-              variant={mode === "table" ? "secondary" : "ghost-muted"}
-              onClick={() => setMode("table")}
-            >
-              <Table2Icon /> 表格
-            </Button>
-            <Button
-              size="xs"
-              variant={mode === "board" ? "secondary" : "ghost-muted"}
-              onClick={() => setMode("board")}
-            >
-              <KanbanIcon /> 看板
-            </Button>
-          </div>
-          <Button size="xs">
-            <PlusIcon /> 新任务
-          </Button>
-        </div>
-      </div>
-      {mode === "table" ? (
-        <div className="rounded-lg border bg-card">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>任务</TableHead>
-                <TableHead>状态</TableHead>
-                <TableHead>项目</TableHead>
-                <TableHead>负责</TableHead>
-                <TableHead>工单</TableHead>
-                <TableHead>截止</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {tasks.map((t) => (
-                <TaskRow key={t.id} task={t} />
-              ))}
-            </TableBody>
-          </Table>
-        </div>
-      ) : (
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          {COLUMNS.map((col) => (
-            <div key={col} className="flex flex-col gap-2 rounded-lg bg-muted/40 p-2">
-              <div className="flex items-center justify-between px-1 text-xs font-medium">
-                <span className="inline-flex items-center gap-1.5">
-                  <span className={cn("size-2 rounded-full", TASK_STATUS[col].tone)} />
-                  {TASK_STATUS[col].label}
-                </span>
-                <span className="text-muted-foreground tabular-nums">
-                  {tasks.filter((t) => t.status === col).length}
-                </span>
-              </div>
-              {tasks
-                .filter((t) => t.status === col)
-                .map((t) => (
-                  <div key={t.id} className="rounded-md border bg-card p-2.5 text-sm shadow-xs">
-                    <div className="font-medium">{t.title}</div>
-                    <div className="mt-1 text-xs text-muted-foreground">
-                      {PROJECT_NAME[t.project]} · {t.owner}
-                    </div>
-                    <div className="mt-2 flex flex-wrap gap-1">
-                      {t.tickets.map((tk) => (
-                        <span key={tk.id} className="rounded-sm border px-1 font-mono text-2xs">
-                          {tk.id}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-            </div>
-          ))}
-        </div>
-      )}
     </div>
   );
 }
