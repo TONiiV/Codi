@@ -14,7 +14,6 @@ import {
 import { primaryServerKeybindingsAtom } from "../../state/server";
 import { cn } from "../../lib/utils";
 import { CodiLockup } from "../CodiLockup";
-import { LighthouseModeToggle } from "../prototype/LighthouseModeToggle";
 import { usePullRequestsSupported } from "../../state/environments";
 import {
   resolveEnvironmentIdentificationPillLabel,
@@ -90,11 +89,6 @@ export const SidebarChromeHeader = memo(function SidebarChromeHeader({
           </div>
         ) : null}
       </div>
-      {import.meta.env.DEV ? (
-        <div className="relative z-10 ms-auto flex shrink-0 items-center">
-          <LighthouseModeToggle />
-        </div>
-      ) : null}
     </div>
   );
 });

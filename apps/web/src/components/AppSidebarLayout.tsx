@@ -8,6 +8,7 @@ import {
   type ReactNode,
 } from "react";
 import { useLocation, useRouter, type AnyRouter } from "@tanstack/react-router";
+import { LighthouseIsland } from "./prototype/LighthouseIsland";
 
 import { moveWorkspaceFocus, workspaceAreaProps } from "../lib/workspaceFocus";
 import { isCommandPaletteOpen } from "../commandPaletteBus";
@@ -477,6 +478,7 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
         {children}
         <BackgroundThreadAnnouncer />
         <SidebarControl />
+        {import.meta.env.DEV ? <LighthouseIsland /> : null}
         {isElectron ? <HistorySwipeNavigation /> : null}
       </SidebarProvider>
     </PanelAnimationSuppressionProvider>
