@@ -9,62 +9,39 @@ import { useLighthouseSearch } from "./lighthouseLocation";
 
 // Hover animations are scoped to each segment's own group, so they run only while that segment is
 // under the pointer (or keyboard focus) and stop the moment it leaves.
-const LH_HOT = "group-hover/lh:opacity-100 group-focus-visible/lh:opacity-100";
 
+// Monochrome silhouette after the reference: twin beams, lantern, tapered tower with a light slit,
+// stepped base on a rock.
 function LighthouseGlyph({ live, ...props }: SVGProps<SVGSVGElement> & { live?: boolean }) {
-  const pivot = { transformBox: "view-box", transformOrigin: "12px 8px" } as const;
+  const pivot = { transformBox: "view-box", transformOrigin: "12px 6.2px" } as const;
   return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={1.75}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-      {...props}
-    >
-      <path d="M9.5 9.5h5L16 21H8z" />
-      <path d="M10 9.5V6.5h4v3" />
-      <path d="M9 6.5 12 3.5l3 3" />
-      <path d="M8.8 15.2h6.4" />
-      <path d="M4 21h16" />
+    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" {...props}>
       <g
+        style={pivot}
         className={cn(
-          "transition-opacity duration-200",
-          live && "group-hover/lh:opacity-0 group-focus-visible/lh:opacity-0",
+          "opacity-55",
+          live &&
+            "motion-safe:group-hover/lh:animate-lighthouse-beam motion-safe:group-focus-visible/lh:animate-lighthouse-beam",
         )}
       >
-        <path d="M2.5 5.5 7.5 7" />
-        <path d="M21.5 5.5 16.5 7" />
+        <path d="M9.7 5.3v1.9L2.2 8.9V3.6z" />
+        <path d="M14.3 5.3v1.9l7.5 1.7V3.6z" />
       </g>
+      <path d="M11.75 2h.5v.9h-.5z" />
+      <path d="M10.3 4.5a1.7 1.7 0 0 1 3.4 0z" />
+      <path fillRule="evenodd" d="M10.2 4.5h3.6v3.3h-3.6zm.7.7v1.9h2.2V5.2z" />
+      <path d="M9.5 7.8h5v.9h-5z" />
+      <path fillRule="evenodd" d="M10.3 8.7h3.4l1.1 8.9H9.2zm2.2.8.5 7.3h.6l-.6-7.3z" />
+      <path d="M8.4 17.6h7.2v1H8.4zM7.6 18.6h8.8v.9H7.6z" />
+      <path d="M6.6 19.5h10.8l3.4 2.2h-6.3l-.9.8H3.6z" />
       {live ? (
-        <>
-          <path
-            d="M12 8 1.5 4.5v7z"
-            fill="currentColor"
-            stroke="none"
-            style={pivot}
-            className={cn(
-              "opacity-0",
-              LH_HOT,
-              "motion-safe:group-hover/lh:animate-lighthouse-beam motion-safe:group-focus-visible/lh:animate-lighthouse-beam",
-            )}
-          />
-          <circle
-            cx="12"
-            cy="8"
-            r="1"
-            fill="currentColor"
-            stroke="none"
-            style={pivot}
-            className={cn(
-              "opacity-0",
-              LH_HOT,
-              "motion-safe:group-hover/lh:animate-lighthouse-lamp motion-safe:group-focus-visible/lh:animate-lighthouse-lamp",
-            )}
-          />
-        </>
+        <circle
+          cx="12"
+          cy="6.2"
+          r="1.1"
+          style={pivot}
+          className="opacity-0 motion-safe:group-hover/lh:animate-lighthouse-lamp motion-safe:group-focus-visible/lh:animate-lighthouse-lamp"
+        />
       ) : null}
     </svg>
   );
@@ -83,11 +60,11 @@ function LighthouseFlare() {
         "motion-safe:group-has-[[data-lh]:focus-visible]/island:opacity-100",
       )}
     >
-      <span className="absolute size-24 -translate-1/2 rounded-full bg-radial from-warning/90 from-0% via-warning/30 via-25% to-transparent to-65% opacity-0 motion-safe:group-has-[[data-lh]:hover]/island:animate-lighthouse-bloom motion-safe:group-has-[[data-lh]:focus-visible]/island:animate-lighthouse-bloom" />
-      <span className="absolute h-0.5 w-28 -translate-1/2 rounded-full bg-linear-to-r from-transparent via-warning/80 to-transparent opacity-0 motion-safe:group-has-[[data-lh]:hover]/island:animate-lighthouse-streak motion-safe:group-has-[[data-lh]:focus-visible]/island:animate-lighthouse-streak" />
-      <span className="absolute left-26 size-5 -translate-1/2 rounded-full border border-warning/50 bg-warning/10 opacity-0 motion-safe:group-has-[[data-lh]:hover]/island:animate-lighthouse-ghost motion-safe:group-has-[[data-lh]:focus-visible]/island:animate-lighthouse-ghost" />
-      <span className="absolute left-36 size-2.5 -translate-1/2 rounded-full bg-warning/40 opacity-0 motion-safe:group-has-[[data-lh]:hover]/island:animate-lighthouse-ghost motion-safe:group-has-[[data-lh]:focus-visible]/island:animate-lighthouse-ghost" />
-      <span className="absolute left-46 size-6 -translate-1/2 rounded-full bg-radial from-transparent from-50% via-warning/25 via-65% to-transparent to-75% opacity-0 motion-safe:group-has-[[data-lh]:hover]/island:animate-lighthouse-ghost motion-safe:group-has-[[data-lh]:focus-visible]/island:animate-lighthouse-ghost" />
+      <span className="absolute size-24 -translate-1/2 rounded-full bg-radial from-zinc-25 from-0% via-muted-foreground/35 via-30% to-transparent to-65% opacity-0 motion-safe:group-has-[[data-lh]:hover]/island:animate-lighthouse-bloom motion-safe:group-has-[[data-lh]:focus-visible]/island:animate-lighthouse-bloom" />
+      <span className="absolute h-0.5 w-28 -translate-1/2 rounded-full bg-linear-to-r from-transparent via-zinc-25 to-transparent opacity-0 drop-shadow-sm motion-safe:group-has-[[data-lh]:hover]/island:animate-lighthouse-streak motion-safe:group-has-[[data-lh]:focus-visible]/island:animate-lighthouse-streak" />
+      <span className="absolute left-26 size-5 -translate-1/2 rounded-full border border-muted-foreground/40 bg-zinc-25/20 opacity-0 motion-safe:group-has-[[data-lh]:hover]/island:animate-lighthouse-ghost motion-safe:group-has-[[data-lh]:focus-visible]/island:animate-lighthouse-ghost" />
+      <span className="absolute left-36 size-2.5 -translate-1/2 rounded-full bg-muted-foreground/30 opacity-0 motion-safe:group-has-[[data-lh]:hover]/island:animate-lighthouse-ghost motion-safe:group-has-[[data-lh]:focus-visible]/island:animate-lighthouse-ghost" />
+      <span className="absolute left-46 size-6 -translate-1/2 rounded-full bg-radial from-transparent from-50% via-muted-foreground/30 via-65% to-transparent to-75% opacity-0 motion-safe:group-has-[[data-lh]:hover]/island:animate-lighthouse-ghost motion-safe:group-has-[[data-lh]:focus-visible]/island:animate-lighthouse-ghost" />
     </span>
   );
 }
