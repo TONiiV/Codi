@@ -6,34 +6,26 @@ import { cn } from "../../lib/utils";
 import { Badge } from "../ui/badge";
 import { SidebarGroup, SidebarMenu, SidebarMenuButton, SidebarMenuItem } from "../ui/sidebar";
 import { chatsFor } from "./lighthouseData";
-import { Mascot, type MascotKind, type MascotState } from "./LighthouseMascot";
+import { Bloub, type AgentState } from "./LighthouseBloub";
 import { normalizeLighthouseSearch, useLighthouseSearch } from "./lighthouseLocation";
 import { useWorkspaceId } from "./workspaceStore";
 
 export function BotAvatar({
-  tone,
+  seed,
   size = "md",
-  readOnly,
-  kind,
   state,
 }: {
-  tone: string;
+  seed: string;
   size?: "xs" | "sm" | "md" | "lg";
-  readOnly?: boolean;
-  kind?: MascotKind;
-  state?: MascotState;
+  state?: AgentState;
 }) {
-  const mascot = kind ?? (readOnly ? "seal" : tone === "bg-foreground" ? "owl" : "otter");
   return (
-    <Mascot
-      kind={mascot}
+    <Bloub
+      seed={seed}
       state={state ?? "idle"}
-      framed={mascot !== "otter"}
-      className={cn(
-        "rounded-full",
-        size === "lg" ? "size-10" : size === "sm" ? "size-6" : size === "xs" ? "size-4" : "size-8",
-        mascot === "otter" && tone,
-      )}
+      className={
+        size === "lg" ? "size-10" : size === "sm" ? "size-6" : size === "xs" ? "size-4" : "size-8"
+      }
     />
   );
 }
@@ -64,8 +56,7 @@ export function LighthouseChatList() {
             >
               <span className="relative">
                 <BotAvatar
-                  tone={c.tone}
-                  readOnly={c.readOnly === true}
+                  seed={c.name}
                   state={!c.online ? "sleeping" : c.unread > 0 ? "waiting" : "idle"}
                 />
                 <span

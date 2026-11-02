@@ -246,7 +246,7 @@ function CosPicker({
           />
         }
       >
-        <BotAvatar tone={current.tone} size="xs" readOnly={current.readOnly === true} />
+        <BotAvatar seed={current.name} size="xs" />
         <span className="truncate font-medium">{current.name}</span>
         <ChevronDownIcon className="size-3.5 shrink-0 text-muted-foreground" />
       </PopoverTrigger>
@@ -276,7 +276,7 @@ function CosPicker({
                 c.id === current.id && "bg-accent",
               )}
             >
-              <BotAvatar tone={c.tone} size="xs" readOnly={c.readOnly === true} />
+              <BotAvatar seed={c.name} size="xs" />
               <span className="min-w-0 truncate">{c.name}</span>
             </button>
           ))}

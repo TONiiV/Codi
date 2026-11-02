@@ -65,7 +65,7 @@ function Assignee({ a }: { a: TaskAssignee }) {
   return (
     <span className="inline-flex shrink-0 items-center gap-1.5">
       {a.kind === "bot" ? (
-        <BotAvatar tone={a.tone} size="sm" readOnly={a.name === "总台"} />
+        <BotAvatar seed={a.name} size="sm" />
       ) : (
         <span className="inline-flex size-6 items-center justify-center rounded-full bg-secondary text-2xs font-medium text-secondary-foreground">
           {a.name[0]}

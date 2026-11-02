@@ -253,7 +253,6 @@ function ChatPage({
   const v = VIEWERS[viewer];
   const asks = asksFor(viewer, workspace, chat === "mine" ? undefined : chat);
   const cosName = chat === "mine" ? v.cos.name : (PROJECT_COS[chat]?.name ?? chat);
-  const tone = chat === "mine" ? "bg-foreground" : (PROJECT_COS[chat]?.tone ?? "bg-foreground");
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="min-h-0 flex-1 overflow-y-auto scrollbar-gutter-both">
@@ -275,7 +274,7 @@ function ChatPage({
           placeholder={`对 ${cosName} 说`}
           label={
             <span className="inline-flex items-center gap-1.5">
-              <BotAvatar tone={tone} size="xs" />
+              <BotAvatar seed={cosName} size="xs" />
               {cosName}
             </span>
           }

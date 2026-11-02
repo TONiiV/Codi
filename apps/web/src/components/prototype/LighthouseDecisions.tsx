@@ -107,7 +107,7 @@ function Chain({ project, filter }: { project: string; filter: WeightFilter }) {
       <header className="flex flex-wrap items-baseline justify-between gap-2">
         <h2 className="text-lg font-semibold">{PROJECTS[project]?.name}</h2>
         <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-          <BotAvatar tone={cos.tone} size="xs" />
+          <BotAvatar seed={cos.name} size="xs" />
           {cos.name} 维护 · {chain.updated} 更新
         </span>
       </header>
