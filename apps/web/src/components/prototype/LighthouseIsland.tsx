@@ -70,26 +70,24 @@ function LighthouseGlyph({ live, ...props }: SVGProps<SVGSVGElement> & { live?: 
   );
 }
 
-// The beam reaching the "camera": a bloom on the lamp and an anamorphic streak across the
-// segment, timed to the moment the beam faces the viewer.
+// The beam reaching the "camera". Drawn outside the island so the island's clipping does not cut it
+// to the segment; anchored on the lamp, which sits a fixed distance left of the island's centre.
+const FLARE_RUN = "motion-safe:group-has-[[data-lh]:hover]/island:opacity-100";
 function LighthouseFlare() {
   return (
     <span
       aria-hidden="true"
-      className="pointer-events-none absolute inset-0 overflow-hidden rounded-xl"
+      className={cn(
+        "pointer-events-none absolute top-1/2 left-1/2 -mt-1 -ms-26 size-0 opacity-0",
+        FLARE_RUN,
+        "motion-safe:group-has-[[data-lh]:focus-visible]/island:opacity-100",
+      )}
     >
-      <span
-        className={cn(
-          "absolute top-[38%] left-[22%] size-16 -translate-x-1/2 -translate-y-1/2 rounded-full bg-radial from-current from-0% via-current/25 via-30% to-transparent to-70% opacity-0",
-          "motion-safe:group-hover/lh:animate-lighthouse-bloom motion-safe:group-focus-visible/lh:animate-lighthouse-bloom",
-        )}
-      />
-      <span
-        className={cn(
-          "absolute inset-x-0 top-[38%] h-0.5 -translate-y-1/2 rounded-full bg-linear-to-r from-transparent via-current to-transparent opacity-0",
-          "motion-safe:group-hover/lh:animate-lighthouse-streak motion-safe:group-focus-visible/lh:animate-lighthouse-streak",
-        )}
-      />
+      <span className="absolute size-24 -translate-1/2 rounded-full bg-radial from-warning/90 from-0% via-warning/30 via-25% to-transparent to-65% opacity-0 motion-safe:group-has-[[data-lh]:hover]/island:animate-lighthouse-bloom motion-safe:group-has-[[data-lh]:focus-visible]/island:animate-lighthouse-bloom" />
+      <span className="absolute h-0.5 w-104 -translate-1/2 rounded-full bg-linear-to-r from-transparent via-warning to-transparent opacity-0 motion-safe:group-has-[[data-lh]:hover]/island:animate-lighthouse-streak motion-safe:group-has-[[data-lh]:focus-visible]/island:animate-lighthouse-streak" />
+      <span className="absolute left-26 size-5 -translate-1/2 rounded-full border border-warning/50 bg-warning/10 opacity-0 motion-safe:group-has-[[data-lh]:hover]/island:animate-lighthouse-ghost motion-safe:group-has-[[data-lh]:focus-visible]/island:animate-lighthouse-ghost" />
+      <span className="absolute left-44 size-2.5 -translate-1/2 rounded-full bg-warning/40 opacity-0 motion-safe:group-has-[[data-lh]:hover]/island:animate-lighthouse-ghost motion-safe:group-has-[[data-lh]:focus-visible]/island:animate-lighthouse-ghost" />
+      <span className="absolute left-56 size-8 -translate-1/2 rounded-full bg-radial from-transparent from-50% via-warning/25 via-65% to-transparent to-75% opacity-0 motion-safe:group-has-[[data-lh]:hover]/island:animate-lighthouse-ghost motion-safe:group-has-[[data-lh]:focus-visible]/island:animate-lighthouse-ghost" />
     </span>
   );
 }
@@ -194,6 +192,7 @@ export function LighthouseIsland() {
             <button
               key={m.id}
               type="button"
+              data-lh={m.id === "work" ? "" : undefined}
               aria-pressed={m.active}
               onClick={m.active ? undefined : m.go}
               className={cn(
@@ -204,7 +203,6 @@ export function LighthouseIsland() {
                   : "cursor-pointer text-muted-foreground hover:text-foreground",
               )}
             >
-              {m.id === "work" ? <LighthouseFlare /> : null}
               {m.id === "work" ? (
                 <LighthouseGlyph className="relative size-4.5" live />
               ) : (
@@ -215,6 +213,7 @@ export function LighthouseIsland() {
           ))}
         </div>
       </div>
+      <LighthouseFlare />
     </div>
   );
 }
