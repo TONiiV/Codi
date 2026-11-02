@@ -1,4 +1,10 @@
-import { ArrowLeftIcon, ArrowRightIcon, ChartNoAxesColumnIcon, SettingsIcon } from "lucide-react";
+import {
+  ArrowLeftIcon,
+  ArrowRightIcon,
+  BriefcaseIcon,
+  ChartNoAxesColumnIcon,
+  SettingsIcon,
+} from "lucide-react";
 import type { ReactNode } from "react";
 import { memo } from "react";
 import { Link, useLocation, useNavigate } from "@tanstack/react-router";
@@ -267,6 +273,19 @@ const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
             label="Usage"
             onClick={handleUsageClick}
           />
+          {import.meta.env.DEV ? (
+            <SidebarUtilityItem
+              icon={<BriefcaseIcon />}
+              label="Work (prototype)"
+              onClick={() => {
+                closeMobileSidebar();
+                void navigate({
+                  to: "/prototype/lighthouse",
+                  search: { variant: "A", as: "admin" },
+                });
+              }}
+            />
+          ) : null}
         </>
       )}
       <SidebarThreadUndoNotice />
