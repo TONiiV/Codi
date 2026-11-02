@@ -1,31 +1,36 @@
 {
   "fill": {
-    "solid": "display-p3:0.00000,0.00000,0.00000,1.00000"
+    "solid": "srgb:0.07843,0.10588,0.12549,1.00000"
   },
   "groups": [
     {
       "layers": [
         {
-          "image-name": "text.svg",
-          "name": "Text",
+          "image-name": "mark.png",
+          "name": "Fold — matte silver",
           "position": {
-            "scale": 8.5,
-            "translation-in-points": [0, 0]
+            "scale": 0.64,
+            "translation-in-points": [
+              0,
+              0
+            ]
           }
         }
       ],
       "shadow": {
         "kind": "neutral",
-        "opacity": 0.5
+        "opacity": 0.35
       },
       "translucency": {
-        "enabled": true,
-        "value": 0.5
+        "enabled": false,
+        "value": 0
       }
     }
   ],
   "supported-platforms": {
-    "circles": ["watchOS"],
+    "circles": [
+      "watchOS"
+    ],
     "squares": "shared"
   }
 }

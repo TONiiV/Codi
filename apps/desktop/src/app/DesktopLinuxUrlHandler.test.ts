@@ -33,7 +33,7 @@ const makeEnvironment = (path: Path.Path, overrides: Record<string, unknown> = {
     platform: "linux",
     isPackaged: true,
     isDevelopment: false,
-    displayName: "T3 Code (Alpha)",
+    displayName: "Codi (Alpha)",
     linuxDesktopEntryName: "com.t3tools.T3Code.desktop",
     linuxApplicationsDir: "/home/alice/.local/share/applications",
     desktopLauncherPath: Option.none(),
@@ -167,14 +167,14 @@ const emptyRecording = (): RecordedRegistration => ({
 describe("DesktopLinuxUrlHandler", () => {
   it("renders a scheme-handler desktop entry with freedesktop Exec quoting", () => {
     const entry = DesktopLinuxUrlHandler.renderUrlHandlerDesktopEntry({
-      displayName: "T3 Code (Nightly)",
+      displayName: "Codi (Nightly)",
       execTarget: '/home/al ice/Apps/T3 "100%" $HOME\\x.AppImage',
       scheme: "t3code",
       iconPath: "/home/al ice/icons/T3\\x.png",
     });
 
     assert.include(entry, "[Desktop Entry]");
-    assert.include(entry, "Name=T3 Code (Nightly)");
+    assert.include(entry, "Name=Codi (Nightly)");
     assert.include(
       entry,
       'Exec="/home/al ice/Apps/T3 \\\\"100%%\\\\" \\\\$HOME\\\\\\\\x.AppImage" %U',
@@ -227,7 +227,7 @@ describe("DesktopLinuxUrlHandler", () => {
       assert.include(
         recorded.files[0]?.content,
         DesktopLinuxUrlHandler.renderUrlHandlerDesktopEntry({
-          displayName: "T3 Code (Alpha)",
+          displayName: "Codi (Alpha)",
           execTarget: process.execPath,
           scheme: "t3code",
           iconPath: "/home/alice/.local/share/icons/com.t3tools.T3Code.desktop.png",
@@ -254,7 +254,7 @@ describe("DesktopLinuxUrlHandler", () => {
     return Effect.gen(function* () {
       yield* runRegister(recorded, {
         existingEntry: DesktopLinuxUrlHandler.renderUrlHandlerDesktopEntry({
-          displayName: "T3 Code (Alpha)",
+          displayName: "Codi (Alpha)",
           execTarget: "/home/alice/Applications/T3-Code.AppImage",
           scheme: "t3code",
           iconPath: "/home/alice/.local/share/icons/com.t3tools.T3Code.desktop.png",
@@ -283,7 +283,7 @@ describe("DesktopLinuxUrlHandler", () => {
       yield* runRegister(recorded, {
         iconSource: "/tmp/.mount_T3/resources/icon.png",
         existingEntry: DesktopLinuxUrlHandler.renderUrlHandlerDesktopEntry({
-          displayName: "T3 Code (Alpha)",
+          displayName: "Codi (Alpha)",
           execTarget: "/home/alice/Applications/T3-Code.AppImage",
           scheme: "t3code",
           iconPath,

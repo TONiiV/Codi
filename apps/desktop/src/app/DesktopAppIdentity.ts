@@ -12,6 +12,9 @@ import * as DesktopAssets from "./DesktopAssets.ts";
 import * as DesktopEnvironment from "./DesktopEnvironment.ts";
 import * as DesktopUserData from "./DesktopUserData.ts";
 
+// Electron keys the macOS Keychain and Linux secret-store entry behind safeStorage on the app name,
+// so renaming it strands secrets saved by earlier releases. Display copy uses `displayName`.
+const RUNTIME_APP_BASE_NAME = "T3 Code";
 const COMMIT_HASH_PATTERN = /^[0-9a-f]{7,40}$/i;
 const COMMIT_HASH_DISPLAY_LENGTH = 12;
 
@@ -92,9 +95,7 @@ export const make = Effect.gen(function* () {
   const configure = Effect.gen(function* () {
     const commitHash = yield* resolveAboutCommitHash;
     // Electron strips spaces but keeps parentheses in its User-Agent token, breaking Turnstile in preview sessions.
-    yield* electronApp.setName(
-      `${environment.branding.baseName} ${environment.branding.stageLabel}`,
-    );
+    yield* electronApp.setName(`${RUNTIME_APP_BASE_NAME} ${environment.branding.stageLabel}`);
     yield* electronApp.setAboutPanelOptions({
       applicationName: environment.displayName,
       applicationVersion: environment.appVersion,
