@@ -120,7 +120,7 @@ export function LighthouseIsland() {
       go: () =>
         void navigate({
           to: "/prototype/lighthouse",
-          search: { variant: "A", as: "admin", chat: "mine", view: "chats" },
+          search: { as: "admin", chat: "mine", view: "chats" },
         }),
     },
     {

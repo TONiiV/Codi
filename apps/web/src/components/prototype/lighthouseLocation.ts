@@ -5,9 +5,7 @@ import { useLocation } from "@tanstack/react-router";
 import { isAppModalPage, peekAppModalReturnHref } from "../sidebar/mainAppLocation";
 import type { LighthouseChatId, LighthouseView, LighthouseViewer } from "./lighthouseData";
 
-export type LighthouseVariant = "A" | "B" | "C";
 export interface LighthouseSearch {
-  readonly variant: LighthouseVariant;
   readonly as: LighthouseViewer;
   readonly chat: LighthouseChatId;
   readonly view: LighthouseView;
@@ -17,14 +15,15 @@ const LIGHTHOUSE_PATH = "/prototype/lighthouse";
 
 export function normalizeLighthouseSearch(raw: Record<string, unknown>): LighthouseSearch {
   return {
-    variant: raw.variant === "B" || raw.variant === "C" ? raw.variant : "A",
     as: raw.as === "lead" || raw.as === "member" ? raw.as : "admin",
-    chat:
-      raw.chat === "codi" || raw.chat === "site" || raw.chat === "app" || raw.chat === "desk"
-        ? raw.chat
-        : "mine",
+    chat: typeof raw.chat === "string" && raw.chat.length > 0 ? raw.chat : "mine",
     view:
-      raw.view === "bots" || raw.view === "dashboard" || raw.view === "tasks" ? raw.view : "chats",
+      raw.view === "bots" ||
+      raw.view === "dashboard" ||
+      raw.view === "tasks" ||
+      raw.view === "members"
+        ? raw.view
+        : "chats",
   };
 }
 

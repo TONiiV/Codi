@@ -1,33 +1,32 @@
-// PROTOTYPE, wipe me. Non-chat views of the Work tab (Bots, Dashboard, Tasks) and the Copilot
-// panel that sits on their right, where the user can switch which Chief of Staff they talk to.
+// PROTOTYPE, wipe me. Non-chat views of Lighthouse (Bots, Dashboard) and the Copilot panel on the
+// right of every non-chat view, where the user picks which Chief of Staff to talk to.
 import { useNavigate } from "@tanstack/react-router";
-import {
-  CpuIcon,
-  ExpandIcon,
-  MessageSquareIcon,
-  PlusIcon,
-  SendIcon,
-  ServerIcon,
-} from "lucide-react";
+import { CpuIcon, ExpandIcon, MessageSquareIcon, PlusIcon, ServerIcon } from "lucide-react";
 import { useState } from "react";
 
 import { cn } from "../../lib/utils";
 import { BotAvatar } from "./LighthouseChatList";
+import { ChatComposerCard, ChatTimeline } from "./LighthouseChat";
 import {
+  ASKS,
   BOTS,
+  PROJECTS,
   TASKS,
   VIEWERS,
+  WORKERS,
   chatsFor,
-  type LighthouseChatId,
+  projectsIn,
   type LighthouseView,
   type LighthouseViewer,
 } from "./lighthouseData";
+import { useWorkspaceId } from "./workspaceStore";
 import { Button } from "../ui/button";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
-import { Textarea } from "../ui/textarea";
 
-export const PROJECT_NAME: Record<string, string> = { codi: "Codi", site: "官网", app: "移动端" };
+export function projectName(id: string): string {
+  return PROJECTS[id]?.name ?? id;
+}
 
 export function ThreadAnchor({ id, muted }: { id: string; muted?: boolean }) {
   return (
@@ -45,19 +44,15 @@ export function ThreadAnchor({ id, muted }: { id: string; muted?: boolean }) {
   );
 }
 
-export function BotsPage({ viewer }: { viewer: LighthouseViewer }) {
-  const v = VIEWERS[viewer];
-  const rows = BOTS.filter((b) => !b.project || v.projects.includes(b.project));
-  const hidden = BOTS.length - rows.length;
+export function BotsPage({ viewer, workspace }: { viewer: LighthouseViewer; workspace: string }) {
+  const open = projectsIn(workspace, viewer).open;
+  const rows = BOTS.filter((b) =>
+    b.project ? open.includes(b.project) : b.kind === "router" || b.kind === "desk",
+  );
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-end justify-between">
-        <div>
-          <h2 className="text-lg font-semibold">Bots</h2>
-          <p className="text-sm text-muted-foreground">
-            常驻的路由、总台、幕僚长，和正在干活的 Worker。每一行都是一个 Codi 线程。
-          </p>
-        </div>
+      <div className="flex items-center justify-between">
+        <h2 className="text-lg font-semibold">Bots</h2>
         <Button size="xs" variant="outline">
           <PlusIcon /> 新建 Worker
         </Button>
@@ -96,10 +91,10 @@ export function BotsPage({ viewer }: { viewer: LighthouseViewer }) {
                     {b.kind === "router"
                       ? "路由"
                       : b.kind === "desk"
-                        ? "总台 · 只读"
+                        ? "总台"
                         : b.kind === "cos"
-                          ? `${PROJECT_NAME[b.project ?? ""] ?? ""} 幕僚长`
-                          : `Worker · ${PROJECT_NAME[b.project ?? ""] ?? ""}`}
+                          ? "项目幕僚长"
+                          : `Worker · ${projectName(b.project ?? "")}`}
                   </span>
                 </TableCell>
                 <TableCell>
@@ -120,20 +115,13 @@ export function BotsPage({ viewer }: { viewer: LighthouseViewer }) {
                     <ThreadAnchor id="线程" />
                   ) : b.chat ? (
                     <ThreadAnchor id="聊天" muted />
-                  ) : (
-                    <span className="text-xs text-muted-foreground">仅管理员</span>
-                  )}
+                  ) : null}
                 </TableCell>
               </TableRow>
             ))}
           </TableBody>
         </Table>
       </div>
-      {hidden > 0 ? (
-        <p className="text-xs text-muted-foreground">
-          另有 {hidden} 个 Bot 属于你看不到的项目，这里只告诉你它们存在。
-        </p>
-      ) : null}
     </div>
   );
 }
@@ -159,41 +147,37 @@ function Tile({
 }
 
 const WEEK = [3, 5, 2, 6, 4, 7, 5];
+const DAYS = ["一", "二", "三", "四", "五", "六", "日"];
 
-export function DashboardPage({ viewer }: { viewer: LighthouseViewer }) {
-  const v = VIEWERS[viewer];
-  const tasks = TASKS.filter((t) => v.projects.includes(t.project));
-  const workers = BOTS.filter(
-    (b) => b.kind === "worker" && b.project && v.projects.includes(b.project),
-  );
+export function DashboardPage({
+  viewer,
+  workspace,
+}: {
+  viewer: LighthouseViewer;
+  workspace: string;
+}) {
+  const open = projectsIn(workspace, viewer).open;
+  const tasks = TASKS.filter((t) => open.includes(t.project));
+  const workers = WORKERS.filter((w) => open.includes(w.project));
+  const asks = ASKS.filter((a) => a.for.includes(viewer) && open.includes(a.project));
   const prs = tasks.flatMap((t) => t.tickets).filter((t) => t.state === "pr").length;
   const max = Math.max(...WEEK);
   return (
     <div className="flex flex-col gap-4">
-      <div>
-        <h2 className="text-lg font-semibold">Dashboard</h2>
-        <p className="text-sm text-muted-foreground">
-          顶层看板，实时。你看到的只是你视野内的 {v.projects.length} 个项目。
-        </p>
-      </div>
+      <h2 className="text-lg font-semibold">Dashboard</h2>
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Tile
           label="等你定"
-          value={String(viewer === "admin" ? 3 : viewer === "lead" ? 2 : 1)}
-          hint="合并、回答、授权"
+          value={String(asks.length)}
+          hint="合并、回答"
           tone="text-warning-foreground"
         />
         <Tile
           label="Worker 在干活"
           value={`${workers.filter((w) => w.online).length}/${workers.length}`}
-          hint="离线的在等机器回来"
+          hint="在线 / 全部"
         />
-        <Tile
-          label="PR 等合并"
-          value={String(prs)}
-          hint="CI 绿，等人点头"
-          tone="text-success-foreground"
-        />
+        <Tile label="PR 等合并" value={String(prs)} hint="CI 绿" tone="text-success-foreground" />
         <Tile label="今日信道消息" value="14" hint="企微 6 · GitHub 5 · 邮箱 3" />
       </div>
       <div className="grid gap-3 lg:grid-cols-3">
@@ -211,7 +195,7 @@ export function DashboardPage({ viewer }: { viewer: LighthouseViewer }) {
             {WEEK.map((n, i) => {
               const h = (n / max) * 60;
               return (
-                <g key={["一", "二", "三", "四", "五", "六", "日"][i]}>
+                <g key={DAYS[i]}>
                   <rect
                     x={i * 40 + 8}
                     y={64 - h}
@@ -226,7 +210,7 @@ export function DashboardPage({ viewer }: { viewer: LighthouseViewer }) {
                     textAnchor="middle"
                     className="fill-muted-foreground text-3xs"
                   >
-                    {["一", "二", "三", "四", "五", "六", "日"][i]}
+                    {DAYS[i]}
                   </text>
                 </g>
               );
@@ -236,22 +220,26 @@ export function DashboardPage({ viewer }: { viewer: LighthouseViewer }) {
         <div className="rounded-lg border bg-card p-4">
           <span className="text-sm font-medium">项目健康</span>
           <ul className="mt-3 flex flex-col gap-2 text-sm">
-            {v.projects.map((p) => {
+            {open.map((p) => {
               const ts = TASKS.filter((t) => t.project === p);
               const done = ts.filter((t) => t.status === "done").length;
               return (
                 <li key={p}>
                   <div className="flex justify-between">
-                    <span>{PROJECT_NAME[p]}</span>
+                    <span>{projectName(p)}</span>
                     <span className="text-xs text-muted-foreground tabular-nums">
-                      {done}/{ts.length} 任务完成
+                      {done}/{ts.length}
                     </span>
                   </div>
                   <div className="mt-1 h-1.5 rounded-full bg-muted">
                     <div
                       className={cn(
                         "h-1.5 rounded-full",
-                        p === "app" ? "bg-warning" : "bg-success",
+                        PROJECTS[p]?.tone === "bad"
+                          ? "bg-destructive"
+                          : PROJECTS[p]?.tone === "warn"
+                            ? "bg-warning"
+                            : "bg-success",
                       )}
                       style={{ width: `${ts.length ? (done / ts.length) * 100 : 0}%` }}
                     />
@@ -263,21 +251,12 @@ export function DashboardPage({ viewer }: { viewer: LighthouseViewer }) {
         </div>
       </div>
       <div className="rounded-lg border bg-card">
-        <div className="flex items-center justify-between px-4 py-2.5 text-sm font-medium">
-          <span>刚刚发生</span>
-          <span className="text-xs font-normal text-muted-foreground">来自路由与幕僚长</span>
-        </div>
+        <div className="px-4 py-2.5 text-sm font-medium">刚刚发生</div>
         <ul className="divide-y border-t text-sm">
-          {[
-            ["10:42", "Codi 幕僚长", "把 #23 的后续评论直通给 W7"],
-            ["10:41", "官网 幕僚长", "PR #88 CI 绿，等人确认合并"],
-            ["10:20", "路由", "企微消息归入已有话题 codi#5，没开新工单"],
-            ["09:58", "移动端 幕僚长", "mac-mini-2 离线，app#41 挂起"],
-          ].map(([t, who, what]) => (
-            <li key={t} className="flex gap-3 px-4 py-2">
-              <span className="w-12 shrink-0 text-xs text-muted-foreground tabular-nums">{t}</span>
-              <span className="w-28 shrink-0 font-medium">{who}</span>
-              <span className="text-muted-foreground">{what}</span>
+          {open.map((p) => (
+            <li key={p} className="flex gap-3 px-4 py-2">
+              <span className="w-28 shrink-0 font-medium">{projectName(p)}</span>
+              <span className="text-muted-foreground">{PROJECTS[p]?.line}</span>
             </li>
           ))}
         </ul>
@@ -288,30 +267,33 @@ export function DashboardPage({ viewer }: { viewer: LighthouseViewer }) {
 
 const COPILOT_LINE: Record<LighthouseView, string> = {
   chats: "",
-  bots: "你在看 Bots。想让我重启哪个、换 harness，还是给某个项目加 Worker？",
-  dashboard: "你在看看板。要我解释哪个数字，还是直接把等你定的三件事列出来？",
-  tasks: "你在看任务。改状态、加工单、改派 Worker，说一句就行。",
+  bots: "要重启哪个，或者给哪个项目加 Worker？",
+  dashboard: "要我解释哪个数字？",
+  tasks: "改状态、加工单、改派 Worker，说一句就行。",
+  members: "要给谁加权限？",
 };
 
 export function CopilotPanel({
   viewer,
+  workspace,
   view,
   chat,
   onChat,
 }: {
   viewer: LighthouseViewer;
+  workspace: string;
   view: LighthouseView;
-  chat: LighthouseChatId;
-  onChat: (c: LighthouseChatId) => void;
+  chat: string;
+  onChat: (c: string) => void;
 }) {
   const navigate = useNavigate();
-  const chats = chatsFor(viewer);
+  const chats = chatsFor(viewer, workspace);
   const current = chats.find((c) => c.id === chat) ?? chats[0]!;
   const readOnly = current.readOnly === true;
   return (
-    <aside className="flex w-[22rem] shrink-0 flex-col border-s bg-sidebar/40">
+    <aside className="flex w-[22rem] shrink-0 flex-col border-s">
       <div className="flex min-h-10 items-center gap-2 border-b px-2">
-        <Select value={current.id} onValueChange={(val) => onChat(val as LighthouseChatId)}>
+        <Select value={current.id} onValueChange={(val) => onChat(String(val))}>
           <SelectTrigger className="min-w-0 flex-1">
             <span className="flex items-center gap-2">
               <BotAvatar tone={current.tone} size="sm" readOnly={readOnly} />
@@ -333,7 +315,7 @@ export function CopilotPanel({
           onClick={() =>
             void navigate({
               to: "/prototype/lighthouse",
-              search: { variant: "A", as: viewer, chat: current.id, view: "chats" },
+              search: { as: viewer, chat: current.id, view: "chats" },
             })
           }
         >
@@ -341,57 +323,38 @@ export function CopilotPanel({
         </Button>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto p-3">
-        <div className="flex gap-2">
-          <BotAvatar tone={current.tone} size="sm" readOnly={readOnly} />
-          <div className="min-w-0 flex-1 text-sm">
-            <div className="text-xs text-muted-foreground">{current.name}</div>
-            <p className="mt-1 leading-6">
-              {readOnly
-                ? "我是总台，只读。能查文档、决定、成员，不派活。"
-                : current.id === "mine"
-                  ? COPILOT_LINE[view]
-                  : `我只管 ${current.name.replace(" 幕僚长", "")} 的事。${COPILOT_LINE[view]}`}
-            </p>
-          </div>
-        </div>
+        <ChatTimeline
+          messages={[
+            {
+              id: "a1",
+              role: "assistant",
+              author: current.name,
+              body: readOnly ? "要查哪份文档或决定？" : COPILOT_LINE[view],
+            },
+          ]}
+        />
       </div>
       <div className="p-3">
-        <div className="rounded-lg border bg-card p-2 shadow-composer">
-          <Textarea
-            rows={2}
-            placeholder={readOnly ? "问总台：文档、决定、谁负责什么" : `对 ${current.name} 说…`}
-          />
-          <div className="flex items-center justify-end px-1 pb-1">
-            <Button size="xs">
-              <SendIcon /> 发送
-            </Button>
-          </div>
-        </div>
+        <ChatComposerCard placeholder={`对 ${current.name} 说`} />
       </div>
     </aside>
   );
 }
 
 export function WorkSubList({ view, viewer }: { view: LighthouseView; viewer: LighthouseViewer }) {
-  const v = VIEWERS[viewer];
+  const workspace = useWorkspaceId();
+  const open = projectsIn(workspace, viewer).open;
   const items =
     view === "tasks"
-      ? [
-          "全部任务",
-          "我负责的",
-          "本周到期",
-          "等确认",
-          ...v.projects.map((p) => `${PROJECT_NAME[p]} 的任务`),
-        ]
+      ? ["全部任务", ...open.map(projectName)]
       : view === "bots"
         ? ["全部", "常驻", "Worker", "离线"]
-        : ["公司", ...v.projects.map((p) => PROJECT_NAME[p] ?? p)];
+        : view === "members"
+          ? [VIEWERS[viewer].title]
+          : ["全部", ...open.map(projectName)];
   const [active, setActive] = useState(0);
   return (
     <div className="flex flex-col gap-0.5 px-2 pt-1">
-      <div className="px-2 pb-2 text-xs font-medium text-sidebar-muted-foreground">
-        {view === "tasks" ? "视图" : view === "bots" ? "筛选" : "范围"}
-      </div>
       {items.map((label, i) => (
         <Button
           key={label}

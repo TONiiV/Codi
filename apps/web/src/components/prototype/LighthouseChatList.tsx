@@ -8,6 +8,7 @@ import { Badge } from "../ui/badge";
 import { SidebarGroup, SidebarMenu, SidebarMenuButton, SidebarMenuItem } from "../ui/sidebar";
 import { chatsFor } from "./lighthouseData";
 import { normalizeLighthouseSearch, useLighthouseSearch } from "./lighthouseLocation";
+import { useWorkspaceId } from "./workspaceStore";
 
 export function BotAvatar({
   tone,
@@ -15,19 +16,30 @@ export function BotAvatar({
   readOnly,
 }: {
   tone: string;
-  size?: "sm" | "md" | "lg";
+  size?: "xs" | "sm" | "md" | "lg";
   readOnly?: boolean;
 }) {
   const Icon = readOnly ? BuildingIcon : BotIcon;
   return (
     <span
       className={cn(
-        "relative inline-flex shrink-0 items-center justify-center rounded-full text-white",
-        size === "lg" ? "size-10" : size === "sm" ? "size-6" : "size-8",
+        "relative inline-flex shrink-0 items-center justify-center rounded-full",
+        size === "lg" ? "size-10" : size === "sm" ? "size-6" : size === "xs" ? "size-4" : "size-8",
         tone,
+        tone === "bg-foreground" ? "text-background" : "text-white",
       )}
     >
-      <Icon className={size === "lg" ? "size-5" : size === "sm" ? "size-3.5" : "size-4"} />
+      <Icon
+        className={
+          size === "lg"
+            ? "size-5"
+            : size === "sm"
+              ? "size-3.5"
+              : size === "xs"
+                ? "size-2.5"
+                : "size-4"
+        }
+      />
     </span>
   );
 }
@@ -37,8 +49,8 @@ export function LighthouseChatList() {
   const search = useLighthouseSearch() ?? normalizeLighthouseSearch({});
   const viewer = search.as;
   const current = search.chat;
-  const variant = search.variant;
-  const chats = chatsFor(viewer);
+  const workspace = useWorkspaceId();
+  const chats = chatsFor(viewer, workspace);
   return (
     <SidebarGroup className="flex-1" role="presentation">
       <div className="px-2 pt-1 pb-2 text-xs font-medium text-sidebar-muted-foreground">幕僚长</div>
@@ -52,7 +64,7 @@ export function LighthouseChatList() {
               onClick={() =>
                 void navigate({
                   to: "/prototype/lighthouse",
-                  search: { variant, as: viewer, chat: c.id, view: "chats" },
+                  search: { as: viewer, chat: c.id, view: "chats" },
                 })
               }
             >
@@ -85,9 +97,6 @@ export function LighthouseChatList() {
           </SidebarMenuItem>
         ))}
       </SidebarMenu>
-      <div className="mt-3 px-2 text-2xs text-sidebar-muted-foreground">
-        只有你的幕僚长能派活。项目幕僚长回答它那个项目的事；总台只读。
-      </div>
     </SidebarGroup>
   );
 }

@@ -84,6 +84,8 @@ import { type AnyRouter, useRouter } from "@tanstack/react-router";
 import { LighthouseChatList } from "./prototype/LighthouseChatList";
 import { LighthouseRail } from "./prototype/LighthouseRail";
 import { useLighthouseSearch } from "./prototype/lighthouseLocation";
+import { WorkspaceFooter } from "./prototype/WorkspaceFooter";
+import { isCodeProjectInWorkspace, useWorkspaceId } from "./prototype/workspaceStore";
 import { WorkSubList } from "./prototype/LighthouseWork";
 
 import {
@@ -828,7 +830,11 @@ function useSidebarLookups() {
   const environments = useEnvironmentIdentities();
   const serverConfigs = useServerConfigs();
   const providerEntriesByEnvironment = useAtomValue(sidebarProviderEntriesAtom);
-  const projectGroups = useSidebarProjectGroups();
+  const workspaceId = useWorkspaceId();
+  // PROTOTYPE, wipe me: Code hides projects bound to another workspace.
+  const projectGroups = useSidebarProjectGroups().filter(
+    (group) => !import.meta.env.DEV || isCodeProjectInWorkspace(group.displayName, workspaceId),
+  );
   const environmentLabelById = new Map(
     environments.map((environment) => [environment.environmentId, environment.label] as const),
   );
@@ -3011,6 +3017,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
             )}
           </SidebarContent>
         </div>
+        <WorkspaceFooter />
       </>
     );
   }

@@ -1,6 +1,69 @@
 // PROTOTYPE, wipe me. Shared mock data for the Lighthouse Work tab prototype.
 export type LighthouseViewer = "admin" | "lead" | "member";
-export type LighthouseChatId = "mine" | "codi" | "site" | "app" | "desk";
+export type LighthouseChatId = string;
+
+export interface LighthouseWorkspace {
+  id: string;
+  name: string;
+}
+
+export const WORKSPACES: ReadonlyArray<LighthouseWorkspace> = [
+  { id: "toniiv", name: "TONiiV" },
+  { id: "dimx", name: "DimensionX" },
+];
+
+export const PROJECTS: Record<
+  string,
+  {
+    name: string;
+    workspace: string;
+    lead: string;
+    tone: "ok" | "warn" | "bad";
+    line: string;
+    pr: string;
+  }
+> = {
+  codi: {
+    name: "Codi",
+    workspace: "toniiv",
+    lead: "林砚",
+    tone: "ok",
+    line: "Lighthouse 地图 8 票，3 关；PR #14 原型等试。",
+    pr: "2 个 PR 等合并确认",
+  },
+  site: {
+    name: "官网",
+    workspace: "toniiv",
+    lead: "沈叙白",
+    tone: "warn",
+    line: "价格页 Safari 错位修好了，等人确认合并。",
+    pr: "PR #88 CI 绿",
+  },
+  app: {
+    name: "移动端",
+    workspace: "toniiv",
+    lead: "周清野",
+    tone: "bad",
+    line: "家里电脑离线 2 小时，app#41 挂起。",
+    pr: "PR #140 CI 红",
+  },
+  gripper: {
+    name: "夹爪 Demo",
+    workspace: "dimx",
+    lead: "林砚",
+    tone: "ok",
+    line: "硬件设计完成，软件开发进行中，视频录制排在 7/25。",
+    pr: "PR #7 CI 绿",
+  },
+  tactile: {
+    name: "触觉传感器",
+    workspace: "dimx",
+    lead: "周清野",
+    tone: "warn",
+    line: "ESP32-S3 四路电阻式已验证，护膝角度 Demo 两天方案进行中。",
+    pr: "PR #3 等评审",
+  },
+};
 
 export const VIEWERS: Record<
   LighthouseViewer,
@@ -9,37 +72,173 @@ export const VIEWERS: Record<
     title: string;
     projects: ReadonlyArray<string>;
     docs: ReadonlyArray<string>;
-    cos: { name: string; motto: string; tone: string };
+    cos: { name: string };
   }
 > = {
   admin: {
     name: "林砚",
     title: "管理员",
-    projects: ["codi", "site", "app"],
+    projects: ["codi", "site", "app", "gripper", "tactile"],
     docs: ["public", "team", "confidential"],
-    cos: { name: "砚书", motto: "把复杂留在边界，把简单留给你。", tone: "克制，先给结论" },
+    cos: { name: "砚书" },
   },
   lead: {
     name: "沈叙白",
     title: "官网负责人",
-    projects: ["site"],
+    projects: ["site", "gripper"],
     docs: ["public", "team"],
-    cos: { name: "小满", motto: "今天只做最重要的三件。", tone: "活泼，爱列清单" },
+    cos: { name: "小满" },
   },
   member: {
     name: "周清野",
-    title: "移动端成员",
-    projects: ["app"],
+    title: "成员",
+    projects: ["app", "tactile"],
     docs: ["public"],
-    cos: { name: "助理", motto: "先量出来，再谈感觉。", tone: "默认人设，未自定义" },
+    cos: { name: "助理" },
   },
 };
+
+/** Projects of the workspace, split into the ones the viewer can open and the ones they cannot. */
+export function projectsIn(workspace: string, viewer: LighthouseViewer) {
+  const all = Object.keys(PROJECTS).filter((id) => PROJECTS[id]!.workspace === workspace);
+  const open = all.filter((id) => VIEWERS[viewer].projects.includes(id));
+  return { all, open, locked: all.filter((id) => !open.includes(id)) };
+}
 
 export const PROJECT_COS: Record<string, { name: string; tone: string }> = {
   codi: { name: "Codi 幕僚长", tone: "bg-primary" },
   site: { name: "官网 幕僚长", tone: "bg-success" },
   app: { name: "移动端 幕僚长", tone: "bg-warning" },
+  gripper: { name: "夹爪 幕僚长", tone: "bg-info" },
+  tactile: { name: "触觉 幕僚长", tone: "bg-success" },
 };
+
+export interface LighthouseAsk {
+  kind: "merge" | "question";
+  project: string;
+  thread: string;
+  text: string;
+  for: ReadonlyArray<LighthouseViewer>;
+}
+
+export const ASKS: ReadonlyArray<LighthouseAsk> = [
+  {
+    kind: "merge",
+    project: "site",
+    thread: "W3",
+    text: "PR #88 价格页修复：CI 绿，评审通过。合并到 main？",
+    for: ["admin", "lead"],
+  },
+  {
+    kind: "question",
+    project: "codi",
+    thread: "W9",
+    text: "反查工具要不要同时返回已结算的线程？",
+    for: ["admin"],
+  },
+  {
+    kind: "question",
+    project: "app",
+    thread: "W11",
+    text: "家里电脑离线 2 小时，app#41 改派到云容器？",
+    for: ["admin", "member"],
+  },
+  {
+    kind: "question",
+    project: "site",
+    thread: "W4",
+    text: "RSS 封面图用 og:image 还是首图？",
+    for: ["lead"],
+  },
+  {
+    kind: "merge",
+    project: "gripper",
+    thread: "W21",
+    text: "夹爪软件 PR #7：CI 绿。合并？",
+    for: ["admin", "lead"],
+  },
+  {
+    kind: "question",
+    project: "tactile",
+    thread: "W24",
+    text: "护膝 Demo 用电阻还是电容方案先做？",
+    for: ["admin", "member"],
+  },
+];
+
+export const WORKERS: ReadonlyArray<{
+  id: string;
+  project: string;
+  harness: string;
+  where: string;
+  ticket: string;
+  status: string;
+  online: boolean;
+}> = [
+  {
+    id: "W3",
+    project: "site",
+    harness: "Codex / gpt-5",
+    where: "lighthouse-01",
+    ticket: "site#12",
+    status: "等人确认合并",
+    online: true,
+  },
+  {
+    id: "W4",
+    project: "site",
+    harness: "Codex / mini",
+    where: "lighthouse-01",
+    ticket: "site#14",
+    status: "刚启动",
+    online: true,
+  },
+  {
+    id: "W7",
+    project: "codi",
+    harness: "Claude Code / Opus",
+    where: "ws-lin-3",
+    ticket: "codi#23",
+    status: "等 CI",
+    online: true,
+  },
+  {
+    id: "W9",
+    project: "codi",
+    harness: "Claude Code / Sonnet",
+    where: "ws-lin-3",
+    ticket: "codi#31",
+    status: "写代码",
+    online: true,
+  },
+  {
+    id: "W11",
+    project: "app",
+    harness: "Claude Code / Opus",
+    where: "mac-mini-2",
+    ticket: "app#41",
+    status: "环境离线",
+    online: false,
+  },
+  {
+    id: "W21",
+    project: "gripper",
+    harness: "Codex / gpt-5",
+    where: "lab-pc",
+    ticket: "gripper#7",
+    status: "等人确认合并",
+    online: true,
+  },
+  {
+    id: "W24",
+    project: "tactile",
+    harness: "Claude Code / Sonnet",
+    where: "lab-pc",
+    ticket: "tactile#3",
+    status: "等评审",
+    online: true,
+  },
+];
 
 export interface LighthouseChat {
   id: LighthouseChatId;
@@ -52,52 +251,42 @@ export interface LighthouseChat {
   readOnly?: boolean;
 }
 
-export function chatsFor(viewer: LighthouseViewer): ReadonlyArray<LighthouseChat> {
+const LAST_LINE: Record<string, { last: string; time: string; unread: number }> = {
+  codi: { last: "把 #23 的后续评论直通给 W7。", time: "10:42", unread: 0 },
+  site: { last: "PR #88 CI 绿，等人确认合并。", time: "10:41", unread: 1 },
+  app: { last: "环境离线，app#41 挂起。", time: "09:58", unread: 0 },
+  gripper: { last: "PR #7 CI 绿。", time: "10:12", unread: 1 },
+  tactile: { last: "护膝方案等你选。", time: "09:40", unread: 0 },
+};
+
+export function chatsFor(
+  viewer: LighthouseViewer,
+  workspace: string,
+): ReadonlyArray<LighthouseChat> {
   const v = VIEWERS[viewer];
+  const open = projectsIn(workspace, viewer).open;
+  const asks = ASKS.filter((a) => a.for.includes(viewer) && open.includes(a.project));
   const mine: LighthouseChat = {
     id: "mine",
-    name: `${v.cos.name}（我的）`,
+    name: v.cos.name,
     tone: "bg-foreground",
-    last:
-      viewer === "admin"
-        ? "官网 PR #88 我建议今天合…"
-        : viewer === "lead"
-          ? "PR #88 是你的，合并前要不要…"
-          : "云容器配额我已经起草了申请…",
+    last: asks[0]?.text ?? "今天没有要你定的事。",
     time: "09:05",
-    unread: viewer === "admin" ? 3 : viewer === "lead" ? 2 : 1,
+    unread: asks.length,
     online: true,
   };
-  const projects: ReadonlyArray<LighthouseChat> = [
-    {
-      id: "codi" as const,
-      last: "把 #23 的后续评论直通给 W7，不新开工单。",
-      time: "10:42",
-      unread: 0,
-      online: true,
-    },
-    {
-      id: "site" as const,
-      last: "PR #88 CI 绿，等人确认合并。",
-      time: "10:41",
-      unread: 1,
-      online: true,
-    },
-    {
-      id: "app" as const,
-      last: "环境离线，app#41 挂起，等机器回来。",
-      time: "09:58",
-      unread: 0,
-      online: false,
-    },
-  ]
-    .filter((c) => v.projects.includes(c.id))
-    .map((c) => ({ ...c, name: PROJECT_COS[c.id]!.name, tone: PROJECT_COS[c.id]!.tone }));
+  const projects = open.map((id) => ({
+    id,
+    name: PROJECT_COS[id]!.name,
+    tone: PROJECT_COS[id]!.tone,
+    online: id !== "app",
+    ...LAST_LINE[id]!,
+  }));
   const desk: LighthouseChat = {
     id: "desk",
     name: "总台",
     tone: "bg-muted-foreground",
-    last: "本周周报已整理。只读。",
+    last: "本周周报已整理。",
     time: "09:00",
     unread: 0,
     online: true,
@@ -106,7 +295,7 @@ export function chatsFor(viewer: LighthouseViewer): ReadonlyArray<LighthouseChat
   return [mine, ...projects, desk];
 }
 
-export type LighthouseView = "chats" | "bots" | "dashboard" | "tasks";
+export type LighthouseView = "chats" | "bots" | "dashboard" | "tasks" | "members";
 
 export type TaskStatus = "todo" | "doing" | "review" | "done";
 export type TaskPriority = "high" | "medium" | "low";
@@ -168,7 +357,7 @@ export interface LighthouseTask {
   }>;
 }
 
-export const TASKS: ReadonlyArray<LighthouseTask> = [
+const TONIIV_TASKS: ReadonlyArray<LighthouseTask> = [
   {
     id: "T-12",
     title: "官网 RSS 与封面图",
@@ -286,6 +475,80 @@ export const TASKS: ReadonlyArray<LighthouseTask> = [
     tickets: [],
   },
 ];
+
+const DIMX_TASKS: ReadonlyArray<LighthouseTask> = [
+  {
+    id: "D-01",
+    title: "工业夹取机器人 / 灵巧手触觉 PoC",
+    project: "gripper",
+    status: "doing",
+    assignees: [B("夹爪 幕僚长", "bg-info")],
+    priority: "high",
+    type: "feature",
+    description: "DimensionX 机器人方向第一版 Demo。",
+    tickets: [{ id: "gripper#1", title: "PoC 范围", state: "open" }],
+  },
+  {
+    id: "D-02",
+    title: "夹爪 Demo 硬件设计",
+    project: "gripper",
+    status: "done",
+    assignees: [P("林砚"), P("沈叙白")],
+    due: "2026-07-11",
+    priority: "high",
+    tickets: [{ id: "gripper#2", title: "结构与选型", state: "merged" }],
+  },
+  {
+    id: "D-03",
+    title: "夹爪 Demo 软件开发",
+    project: "gripper",
+    status: "doing",
+    assignees: [P("林砚"), B("夹爪 幕僚长", "bg-info")],
+    due: "2026-07-18",
+    tickets: [{ id: "gripper#7", title: "抓取控制", worker: "W21", state: "pr" }],
+  },
+  {
+    id: "D-04",
+    title: "夹爪 Demo 视频录制",
+    project: "gripper",
+    status: "todo",
+    assignees: [P("林砚"), P("沈叙白")],
+    due: "2026-07-25",
+    tickets: [],
+  },
+  {
+    id: "D-05",
+    title: "ESP32-S3 四路电阻式传感器 + BLE Demo",
+    project: "tactile",
+    status: "done",
+    assignees: [P("周清野")],
+    priority: "medium",
+    type: "feature",
+    description: "GPIO4/5/6/7，每路一个分压。",
+    tickets: [{ id: "tactile#1", title: "BLE 传输", state: "merged" }],
+  },
+  {
+    id: "D-06",
+    title: "护膝膝关节角度 Demo（电阻 + 电容，2 天方案）",
+    project: "tactile",
+    status: "doing",
+    assignees: [P("周清野"), B("触觉 幕僚长", "bg-success")],
+    type: "feature",
+    description: "用现有 5×5 cm 传感器、ESP32-S3 和护膝。",
+    tickets: [{ id: "tactile#3", title: "角度标定", worker: "W24", state: "pr" }],
+  },
+  {
+    id: "D-07",
+    title: "Robot Tactile Project Research",
+    project: "tactile",
+    status: "todo",
+    assignees: [],
+    type: "research",
+    tickets: [],
+  },
+];
+
+export const TASKS: ReadonlyArray<LighthouseTask> = [...TONIIV_TASKS, ...DIMX_TASKS];
 
 export interface LighthouseBot {
   id: string;
@@ -412,5 +675,51 @@ export const BOTS: ReadonlyArray<LighthouseBot> = [
     status: "环境离线 · app#41",
     online: false,
     project: "app",
+  },
+  {
+    id: "cos-gripper",
+    name: "夹爪 幕僚长",
+    kind: "cos",
+    tone: "bg-info",
+    harness: "Codi 滚动线程 / Sonnet",
+    where: "lab-pc",
+    status: "管 1 个 Worker",
+    online: true,
+    project: "gripper",
+    chat: "gripper",
+  },
+  {
+    id: "cos-tactile",
+    name: "触觉 幕僚长",
+    kind: "cos",
+    tone: "bg-success",
+    harness: "Codi 滚动线程 / Sonnet",
+    where: "lab-pc",
+    status: "等人选方案",
+    online: true,
+    project: "tactile",
+    chat: "tactile",
+  },
+  {
+    id: "W21",
+    name: "W21",
+    kind: "worker",
+    tone: "bg-info",
+    harness: "Codex / gpt-5",
+    where: "lab-pc",
+    status: "等人确认合并 · gripper#7",
+    online: true,
+    project: "gripper",
+  },
+  {
+    id: "W24",
+    name: "W24",
+    kind: "worker",
+    tone: "bg-success",
+    harness: "Claude Code / Sonnet",
+    where: "lab-pc",
+    status: "等评审 · tactile#3",
+    online: true,
+    project: "tactile",
   },
 ];

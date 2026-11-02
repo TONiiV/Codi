@@ -33,12 +33,13 @@ import {
   TASK_STATUS,
   TASK_TYPE,
   VIEWERS,
+  projectsIn,
   type LighthouseTask,
   type LighthouseViewer,
   type TaskAssignee,
   type TaskStatus,
 } from "./lighthouseData";
-import { PROJECT_NAME, ThreadAnchor } from "./LighthouseWork";
+import { ThreadAnchor, projectName } from "./LighthouseWork";
 import { PullRequestGlyph } from "../pullRequest/pullRequestIcons";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
@@ -277,6 +278,96 @@ function Checklist({ tasks }: { tasks: ReadonlyArray<LighthouseTask> }) {
   );
 }
 
+function TaskCard({ task }: { task: LighthouseTask }) {
+  return (
+    <div className="flex flex-col gap-2 rounded-lg border bg-card p-3 text-sm shadow-xs">
+      <span className="flex items-start gap-2 font-medium">
+        <CircleCheckBigIcon
+          className={cn(
+            "mt-0.5 size-4 shrink-0",
+            task.status === "done" ? "text-success" : "text-muted-foreground",
+          )}
+        />
+        {task.title}
+      </span>
+      {task.assignees.length > 0 ? (
+        <span className="flex flex-wrap gap-x-3 gap-y-1 text-xs">
+          {task.assignees.map((a) => (
+            <Assignee key={a.name} a={a} />
+          ))}
+        </span>
+      ) : null}
+      {task.priority || task.type ? (
+        <span className="flex flex-wrap gap-1.5">
+          {task.priority ? (
+            <Badge variant={TASK_PRIORITY[task.priority].badge} size="lg">
+              {TASK_PRIORITY[task.priority].label}
+            </Badge>
+          ) : null}
+          {task.type ? (
+            <Badge variant={TASK_TYPE[task.type].badge} size="lg">
+              {TASK_TYPE[task.type].label}
+            </Badge>
+          ) : null}
+        </span>
+      ) : null}
+      {task.tickets.length > 0 ? (
+        <span className="flex flex-wrap gap-1">
+          {task.tickets.map((tk) => (
+            <span key={tk.id} className="rounded-sm border px-1 font-mono text-2xs">
+              {tk.id}
+            </span>
+          ))}
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
+const STATUS_TINT: Record<TaskStatus, string> = {
+  todo: "bg-muted/60",
+  doing: "bg-info/8",
+  review: "bg-warning/8",
+  done: "bg-success/8",
+};
+
+function NewTaskButton() {
+  return (
+    <button
+      type="button"
+      className="flex h-9 items-center gap-1.5 rounded-lg px-3 text-sm text-muted-foreground hover:bg-card"
+    >
+      <PlusIcon className="size-3.5" /> 新任务
+    </button>
+  );
+}
+
+/** Notion's "By Status": one kanban column per status, tinted by it. */
+function StatusBoard({ tasks }: { tasks: ReadonlyArray<LighthouseTask> }) {
+  return (
+    <div className="flex items-start gap-3 overflow-x-auto pb-2">
+      {STATUS_ORDER.map((s) => {
+        const col = tasks.filter((t) => t.status === s);
+        return (
+          <div
+            key={s}
+            className={cn("flex w-72 shrink-0 flex-col gap-2 rounded-xl p-2", STATUS_TINT[s])}
+          >
+            <div className="flex items-center gap-2 px-1 pt-1">
+              <StatusPill status={s} />
+              <span className="text-xs text-muted-foreground tabular-nums">{col.length}</span>
+            </div>
+            {col.map((t) => (
+              <TaskCard key={t.id} task={t} />
+            ))}
+            <NewTaskButton />
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function ProjectBoard({
   tasks,
   projects,
@@ -285,48 +376,19 @@ function ProjectBoard({
   projects: ReadonlyArray<string>;
 }) {
   return (
-    <div className="flex gap-3 overflow-x-auto pb-2">
+    <div className="flex items-start gap-3 overflow-x-auto pb-2">
       {projects.map((p) => {
         const col = tasks.filter((t) => t.project === p);
         return (
-          <div key={p} className="flex w-72 shrink-0 flex-col gap-2">
-            <div className="flex items-center gap-2 px-1 text-sm">
-              <span className="font-medium">{PROJECT_NAME[p]}</span>
-              <span className="text-muted-foreground tabular-nums">{col.length}</span>
+          <div key={p} className="flex w-72 shrink-0 flex-col gap-2 rounded-xl bg-muted/40 p-2">
+            <div className="flex items-center gap-2 px-1 pt-1 text-sm">
+              <span className="font-medium">{projectName(p)}</span>
+              <span className="text-xs text-muted-foreground tabular-nums">{col.length}</span>
             </div>
             {col.map((t) => (
-              <div
-                key={t.id}
-                className="flex flex-col gap-2 rounded-md border bg-card p-3 text-sm shadow-xs"
-              >
-                <span className="font-medium">{t.title}</span>
-                <span className="flex flex-wrap gap-1.5">
-                  <StatusPill status={t.status} />
-                  {t.priority ? (
-                    <Badge variant={TASK_PRIORITY[t.priority].badge} size="lg">
-                      {TASK_PRIORITY[t.priority].label}
-                    </Badge>
-                  ) : null}
-                </span>
-                <span className="flex flex-wrap gap-2 text-xs">
-                  {t.assignees.map((a) => (
-                    <Assignee key={a.name} a={a} />
-                  ))}
-                </span>
-                {t.tickets.length > 0 ? (
-                  <span className="flex flex-wrap gap-1">
-                    {t.tickets.map((tk) => (
-                      <span key={tk.id} className="rounded-sm border px-1 font-mono text-2xs">
-                        {tk.id}
-                      </span>
-                    ))}
-                  </span>
-                ) : null}
-              </div>
+              <TaskCard key={t.id} task={t} />
             ))}
-            <Button size="xs" variant="ghost-muted" className="justify-start">
-              <PlusIcon /> 新任务
-            </Button>
+            <NewTaskButton />
           </div>
         );
       })}
@@ -334,10 +396,11 @@ function ProjectBoard({
   );
 }
 
-export function TasksPage({ viewer }: { viewer: LighthouseViewer }) {
+export function TasksPage({ viewer, workspace }: { viewer: LighthouseViewer; workspace: string }) {
   const v = VIEWERS[viewer];
   const [view, setView] = useState<TaskView>("all");
-  const tasks = TASKS.filter((t) => v.projects.includes(t.project));
+  const open = projectsIn(workspace, viewer).open;
+  const tasks = TASKS.filter((t) => open.includes(t.project));
   const mine = tasks.filter((t) =>
     t.assignees.some((a) => a.name === v.name || a.name === v.cos.name),
   );
@@ -347,9 +410,6 @@ export function TasksPage({ viewer }: { viewer: LighthouseViewer }) {
         <CircleCheckBigIcon className="size-8 text-success" />
         任务追踪
       </h2>
-      <p className="mt-1.5 text-sm text-muted-foreground">
-        一个任务对应若干工单。你改任务，幕僚长去动工单和 Worker。
-      </p>
       <div className="mt-6 flex items-center gap-1 border-b pb-1.5">
         {VIEWS.map((x) => (
           <Button
@@ -384,20 +444,9 @@ export function TasksPage({ viewer }: { viewer: LighthouseViewer }) {
         {view === "all" ? <Database groups={[{ key: "all", tasks }]} /> : null}
         {view === "mine" ? <Database groups={[{ key: "mine", tasks: mine }]} /> : null}
         {view === "status" ? (
-          <Database
-            groups={STATUS_ORDER.map((s) => ({
-              key: s,
-              head: (
-                <span className="flex items-center gap-2">
-                  <StatusPill status={s} />
-                  <span className="text-xs text-muted-foreground tabular-nums">
-                    {tasks.filter((t) => t.status === s).length}
-                  </span>
-                </span>
-              ),
-              tasks: tasks.filter((t) => t.status === s),
-            }))}
-          />
+          <div className="pt-3">
+            <StatusBoard tasks={tasks} />
+          </div>
         ) : null}
         {view === "checklist" ? (
           <div className="pt-3">
@@ -406,7 +455,7 @@ export function TasksPage({ viewer }: { viewer: LighthouseViewer }) {
         ) : null}
         {view === "projects" ? (
           <div className="pt-3">
-            <ProjectBoard tasks={tasks} projects={v.projects} />
+            <ProjectBoard tasks={tasks} projects={open} />
           </div>
         ) : null}
       </div>

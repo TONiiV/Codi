@@ -1,18 +1,13 @@
 // PROTOTYPE, wipe me. Teams-style vertical rail on the Work tab: chats, bots, dashboard, tasks.
 import { useNavigate } from "@tanstack/react-router";
-import {
-  BotIcon,
-  LayoutDashboardIcon,
-  ListChecksIcon,
-  MessagesSquareIcon,
-  SettingsIcon,
-} from "lucide-react";
+import { BotIcon, LayoutDashboardIcon, ListChecksIcon, MessagesSquareIcon } from "lucide-react";
 
 import { cn } from "../../lib/utils";
 import { Button } from "../ui/button";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { type LighthouseView } from "./lighthouseData";
 import { normalizeLighthouseSearch, useLighthouseSearch } from "./lighthouseLocation";
+import { SettingsIconButton, WorkspaceUserMenu } from "./WorkspaceFooter";
 
 export const RAIL_ITEMS: ReadonlyArray<{
   id: LighthouseView;
@@ -65,22 +60,12 @@ export function LighthouseRail({ collapsed }: { collapsed?: boolean }) {
           <TooltipPopup side="right">{item.label}</TooltipPopup>
         </Tooltip>
       ))}
-      <Tooltip>
-        <TooltipTrigger
-          render={
-            <Button
-              aria-label="Settings"
-              size="icon"
-              variant="ghost-muted"
-              className="mt-auto"
-              onClick={() => void navigate({ to: "/settings" })}
-            />
-          }
-        >
-          <SettingsIcon />
-        </TooltipTrigger>
-        <TooltipPopup side="right">Settings</TooltipPopup>
-      </Tooltip>
+      {collapsed === true ? (
+        <div className="mt-auto flex flex-col items-center gap-1">
+          <SettingsIconButton />
+          <WorkspaceUserMenu compact />
+        </div>
+      ) : null}
     </nav>
   );
 }
