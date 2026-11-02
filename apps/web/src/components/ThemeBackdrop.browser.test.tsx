@@ -30,7 +30,7 @@ it("keeps a live context through a StrictMode effect replay", async () => {
     <StrictMode>
       <ThemeBackdrop />
     </StrictMode>,
-    { router: false },
+    { router: false }, // no routes involved
   );
   await vi.waitFor(() => expect(backdropActive()).toBe(true));
   expect(contextOf(screen.container).isContextLost()).toBe(false);
@@ -38,7 +38,7 @@ it("keeps a live context through a StrictMode effect replay", async () => {
 
 it("comes back when the browser restores a lost context", async () => {
   using _setup = setup();
-  await using screen = await render(<ThemeBackdrop />, { router: false });
+  await using screen = await render(<ThemeBackdrop />, { router: false }); // no routes involved
   await vi.waitFor(() => expect(backdropActive()).toBe(true));
   const loseContext = contextOf(screen.container).getExtension("WEBGL_lose_context");
   if (!loseContext) throw new Error("WEBGL_lose_context is unavailable");
@@ -55,7 +55,7 @@ it("gives the browser chrome an opaque color while the backdrop veils the main s
   main.dataset.slot = "sidebar-inset";
   document.body.append(main);
   using _main = { [Symbol.dispose]: () => main.remove() };
-  await using _screen = await render(<ThemeBackdrop />, { router: false });
+  await using _screen = await render(<ThemeBackdrop />, { router: false }); // no routes involved
   await vi.waitFor(() => expect(backdropActive()).toBe(true));
 
   syncBrowserChromeTheme();
