@@ -6,7 +6,8 @@ import type { SVGProps } from "react";
 
 import { cn } from "../../lib/utils";
 
-function LighthouseGlyph(props: SVGProps<SVGSVGElement>) {
+function LighthouseGlyph({ beam, ...props }: SVGProps<SVGSVGElement> & { beam?: boolean }) {
+  const pivot = { transformBox: "view-box", transformOrigin: "12px 8px" } as const;
   return (
     <svg
       viewBox="0 0 24 24"
@@ -23,8 +24,35 @@ function LighthouseGlyph(props: SVGProps<SVGSVGElement>) {
       <path d="M9 6.5 12 3.5l3 3" />
       <path d="M8.8 15.2h6.4" />
       <path d="M4 21h16" />
-      <path d="M2.5 5.5 7.5 7" />
-      <path d="M21.5 5.5 16.5 7" />
+      <g
+        className={cn(
+          "transition-opacity duration-200",
+          beam && "group-hover/island:opacity-0 group-has-[:focus-visible]/island:opacity-0",
+        )}
+      >
+        <path d="M2.5 5.5 7.5 7" />
+        <path d="M21.5 5.5 16.5 7" />
+      </g>
+      {beam ? (
+        <>
+          <path
+            d="M12 8 1.5 4.5v7z"
+            fill="currentColor"
+            stroke="none"
+            style={pivot}
+            className="opacity-0 group-hover/island:opacity-55 group-has-[:focus-visible]/island:opacity-55 motion-safe:group-hover/island:animate-lighthouse-beam motion-safe:group-has-[:focus-visible]/island:animate-lighthouse-beam"
+          />
+          <circle
+            cx="12"
+            cy="8"
+            r="1"
+            fill="currentColor"
+            stroke="none"
+            style={pivot}
+            className="opacity-0 group-hover/island:opacity-35 group-has-[:focus-visible]/island:opacity-35 motion-safe:group-hover/island:animate-lighthouse-lamp motion-safe:group-has-[:focus-visible]/island:animate-lighthouse-lamp"
+          />
+        </>
+      ) : null}
     </svg>
   );
 }
@@ -86,20 +114,20 @@ export function LighthouseIsland() {
           "relative flex h-6 w-14 items-center justify-center overflow-hidden rounded-full border border-transparent bg-foreground/85 opacity-45 shadow-sm",
           "transition-[width,height,border-radius,background-color,opacity,box-shadow] duration-300 ease-out motion-reduce:transition-none",
           "group-hover/island:h-11 group-hover/island:w-64 group-hover/island:rounded-2xl group-hover/island:border-border group-hover/island:bg-popover/90 group-hover/island:opacity-100 group-hover/island:shadow-xl group-hover/island:backdrop-blur-xl",
-          "group-focus-within/island:h-11 group-focus-within/island:w-64 group-focus-within/island:rounded-2xl group-focus-within/island:border-border group-focus-within/island:bg-popover/90 group-focus-within/island:opacity-100 group-focus-within/island:shadow-xl",
+          "group-has-[:focus-visible]/island:h-11 group-has-[:focus-visible]/island:w-64 group-has-[:focus-visible]/island:rounded-2xl group-has-[:focus-visible]/island:border-border group-has-[:focus-visible]/island:bg-popover/90 group-has-[:focus-visible]/island:opacity-100 group-has-[:focus-visible]/island:shadow-xl",
         )}
       >
         <Current
           className={cn(
             "absolute size-3.5 text-background transition-[opacity,scale] duration-200 motion-reduce:transition-none",
-            "group-hover/island:scale-50 group-hover/island:opacity-0 group-focus-within/island:scale-50 group-focus-within/island:opacity-0",
+            "group-hover/island:scale-50 group-hover/island:opacity-0 group-has-[:focus-visible]/island:scale-50 group-has-[:focus-visible]/island:opacity-0",
           )}
         />
         <div
           className={cn(
             "relative grid h-9 w-62 shrink-0 scale-75 grid-cols-2 p-0 opacity-0 transition-[opacity,scale] duration-300 ease-out motion-reduce:transition-none",
             "pointer-events-none group-hover/island:pointer-events-auto group-hover/island:scale-100 group-hover/island:opacity-100",
-            "group-focus-within/island:pointer-events-auto group-focus-within/island:scale-100 group-focus-within/island:opacity-100",
+            "group-has-[:focus-visible]/island:pointer-events-auto group-has-[:focus-visible]/island:scale-100 group-has-[:focus-visible]/island:opacity-100",
           )}
         >
           <span
@@ -122,7 +150,11 @@ export function LighthouseIsland() {
                   : "cursor-pointer text-muted-foreground hover:text-foreground",
               )}
             >
-              <m.Icon className="size-4.5" />
+              {m.id === "work" ? (
+                <LighthouseGlyph className="size-4.5" beam />
+              ) : (
+                <m.Icon className="size-4.5" />
+              )}
               {m.label}
             </button>
           ))}

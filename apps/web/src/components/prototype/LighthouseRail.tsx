@@ -1,6 +1,12 @@
 // PROTOTYPE, wipe me. Teams-style vertical rail on the Work tab: chats, bots, dashboard, tasks.
 import { useLocation, useNavigate } from "@tanstack/react-router";
-import { BotIcon, LayoutDashboardIcon, ListChecksIcon, MessagesSquareIcon } from "lucide-react";
+import {
+  BotIcon,
+  LayoutDashboardIcon,
+  ListChecksIcon,
+  MessagesSquareIcon,
+  SettingsIcon,
+} from "lucide-react";
 
 import { cn } from "../../lib/utils";
 import { Button } from "../ui/button";
@@ -40,6 +46,7 @@ export function LighthouseRail({ collapsed }: { collapsed?: boolean }) {
       aria-label="工作区导航"
       className={cn(
         "flex w-12 shrink-0 flex-col items-center gap-1 py-2",
+        collapsed === true && "flex-1",
         collapsed !== true && "border-e",
       )}
     >
@@ -74,6 +81,22 @@ export function LighthouseRail({ collapsed }: { collapsed?: boolean }) {
           <TooltipPopup side="right">{item.label}</TooltipPopup>
         </Tooltip>
       ))}
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <Button
+              aria-label="Settings"
+              size="icon"
+              variant="ghost-muted"
+              className="mt-auto"
+              onClick={() => void navigate({ to: "/settings" })}
+            />
+          }
+        >
+          <SettingsIcon />
+        </TooltipTrigger>
+        <TooltipPopup side="right">Settings</TooltipPopup>
+      </Tooltip>
     </nav>
   );
 }
