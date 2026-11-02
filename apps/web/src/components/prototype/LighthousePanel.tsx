@@ -25,6 +25,7 @@ import {
   createWorker,
   findTask,
   useSideChatRequest,
+  type Kickoff,
 } from "./lighthouseActions";
 import { BotAvatar } from "./LighthouseChatList";
 import {
@@ -76,6 +77,7 @@ const LAUNCH = [
 
 const OPENING_LINE: Record<LighthouseView, string> = {
   chats: "要我先看哪件？",
+  projects: "要接入哪个项目，或者改哪位幕僚长的权限？",
   bots: "要重启哪个，或者给哪个项目加 Worker？",
   dashboard: "要我解释哪个数字？",
   tasks: "改状态、加工单、改派 Worker，说一句就行。",
@@ -333,6 +335,7 @@ function SideChatSurface({
   picked,
   onPick,
   taskId,
+  kickoff,
   onClearTask,
 }: {
   viewer: LighthouseViewer;
@@ -342,6 +345,7 @@ function SideChatSurface({
   picked: string | null;
   onPick: (id: string) => void;
   taskId: string | null;
+  kickoff: Kickoff | null;
   onClearTask: () => void;
 }) {
   const choices = chatsFor(viewer, workspace).filter((c) => c.id !== mainChat);
@@ -408,13 +412,39 @@ function SideChatSurface({
     body: summary ? summary : current.readOnly === true ? "要查哪份文档？" : OPENING_LINE[view],
   };
 
+  const started: ReadonlyArray<ChatMessage> =
+    task && kickoff
+      ? [
+          { id: "u-start", role: "user", body: `把 ${task.id} 拖到了进行中` },
+          {
+            id: "a-start",
+            role: "assistant",
+            author: current.name,
+            body: kickoff.fresh ? (
+              <>
+                开干。{kickoff.worker} 接 {kickoff.ticket.id}，开工后我会盯着，有 PR
+                或卡住就告诉你。
+                <Created
+                  kind="Worker"
+                  id={kickoff.worker}
+                  text={`${kickoff.ticket.id} · ${kickoff.ticket.title}`}
+                  by={by}
+                />
+              </>
+            ) : (
+              `已经有人在做：在 ${kickoff.worker}（${kickoff.ticket.id}）的线程里催了一下，有回复就告诉你。`
+            ),
+          },
+        ]
+      : [];
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex shrink-0 items-center px-2 pb-2">
         <CosPicker choices={choices} current={current} onPick={onPick} />
       </div>
       <div ref={scroller} className="min-h-0 flex-1 overflow-y-auto px-4 py-2">
-        <ChatTimeline messages={[opening, ...log]} />
+        <ChatTimeline messages={[...(started.length > 0 ? started : [opening]), ...log]} />
       </div>
       <div className="flex flex-col gap-2 p-3">
         {task ? (
@@ -469,6 +499,7 @@ export function LighthousePanel({
   const [maximized, setMaximized] = useState(false);
   const [picked, setPicked] = useState<string | null>(null);
   const [taskId, setTaskId] = useState<string | null>(null);
+  const [kickoff, setKickoff] = useState<Kickoff | null>(null);
   const request = useSideChatRequest();
   const [seenRequest, setSeenRequest] = useState(request?.seq ?? 0);
   // A task sent from the tracker opens the side chat on its agent, once per request.
@@ -476,6 +507,7 @@ export function LighthousePanel({
     setSeenRequest(request.seq);
     setPicked(request.chat);
     setTaskId(request.task);
+    setKickoff(request.kickoff ?? null);
     setPanelOpen(true);
     if (!surfaces.some((x) => x.kind === "sidechat")) {
       setSurfaces([...surfaces, { id: "sidechat", kind: "sidechat" }]);
@@ -605,7 +637,7 @@ export function LighthousePanel({
           {active?.kind === "browser" ? <BrowserSurface workspace={workspace} /> : null}
           {active?.kind === "sidechat" ? (
             <SideChatSurface
-              key={`${picked ?? ""}:${taskId ?? ""}`}
+              key={`${picked ?? ""}:${taskId ?? ""}:${seenRequest}`}
               viewer={viewer}
               workspace={workspace}
               view={view}
@@ -613,7 +645,11 @@ export function LighthousePanel({
               picked={picked}
               onPick={setPicked}
               taskId={taskId}
-              onClearTask={() => setTaskId(null)}
+              kickoff={kickoff}
+              onClearTask={() => {
+                setTaskId(null);
+                setKickoff(null);
+              }}
             />
           ) : null}
         </div>

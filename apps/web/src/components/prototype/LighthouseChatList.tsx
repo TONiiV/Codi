@@ -5,7 +5,8 @@ import { useNavigate } from "@tanstack/react-router";
 import { cn } from "../../lib/utils";
 import { Badge } from "../ui/badge";
 import { SidebarGroup, SidebarMenu, SidebarMenuButton, SidebarMenuItem } from "../ui/sidebar";
-import { chatsFor } from "./lighthouseData";
+import { useLinkedProjects } from "./lighthouseActions";
+import { chatsFor, type LighthouseViewer } from "./lighthouseData";
 import { Bloub, type AgentState } from "./LighthouseBloub";
 import { normalizeLighthouseSearch, useLighthouseSearch } from "./lighthouseLocation";
 import { useWorkspaceId } from "./workspaceStore";
@@ -30,13 +31,18 @@ export function BotAvatar({
   );
 }
 
+// Projects linked at runtime live in module data; `linked` makes the React Compiler recompute.
+const chatsWith = (viewer: LighthouseViewer, workspace: string, _linked: ReadonlyArray<string>) =>
+  chatsFor(viewer, workspace);
+
 export function LighthouseChatList() {
   const navigate = useNavigate();
   const search = useLighthouseSearch() ?? normalizeLighthouseSearch({});
   const viewer = search.as;
   const current = search.chat;
   const workspace = useWorkspaceId();
-  const chats = chatsFor(viewer, workspace);
+  const linked = useLinkedProjects();
+  const chats = chatsWith(viewer, workspace, linked);
   return (
     <SidebarGroup className="flex-1" role="presentation">
       <div className="px-2 pt-1 pb-2 text-xs font-medium text-sidebar-muted-foreground">幕僚长</div>

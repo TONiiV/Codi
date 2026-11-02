@@ -2,6 +2,7 @@
 import { useNavigate } from "@tanstack/react-router";
 import {
   BotIcon,
+  FolderGit2Icon,
   GitBranchIcon,
   LayoutDashboardIcon,
   ListChecksIcon,
@@ -22,6 +23,7 @@ export const RAIL_ITEMS: ReadonlyArray<{
   badge?: number;
 }> = [
   { id: "chats", label: "幕僚长们", icon: MessagesSquareIcon, badge: 4 },
+  { id: "projects", label: "项目", icon: FolderGit2Icon },
   { id: "bots", label: "Bots", icon: BotIcon },
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboardIcon },
   { id: "tasks", label: "任务", icon: ListChecksIcon, badge: 2 },

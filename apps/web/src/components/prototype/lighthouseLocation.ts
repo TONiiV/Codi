@@ -18,6 +18,7 @@ export function normalizeLighthouseSearch(raw: Record<string, unknown>): Lightho
     as: raw.as === "lead" || raw.as === "member" ? raw.as : "admin",
     chat: typeof raw.chat === "string" && raw.chat.length > 0 ? raw.chat : "mine",
     view:
+      raw.view === "projects" ||
       raw.view === "bots" ||
       raw.view === "dashboard" ||
       raw.view === "tasks" ||

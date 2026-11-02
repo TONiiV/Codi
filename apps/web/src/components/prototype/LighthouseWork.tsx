@@ -8,11 +8,8 @@ import { BotAvatar } from "./LighthouseChatList";
 import { useAllBots } from "./lighthouseActions";
 import { AGENT_STATES, Bloub, type AgentState } from "./LighthouseBloub";
 import {
-  ASKS,
   PROJECTS,
-  TASKS,
   VIEWERS,
-  WORKERS,
   projectsIn,
   type LighthouseBot,
   type LighthouseView,
@@ -163,145 +160,6 @@ export function BotsPage({ viewer, workspace }: { viewer: LighthouseViewer; work
             ))}
           </TableBody>
         </Table>
-      </div>
-    </div>
-  );
-}
-
-function Tile({
-  label,
-  value,
-  hint,
-  tone,
-}: {
-  label: string;
-  value: string;
-  hint: string;
-  tone?: string;
-}) {
-  return (
-    <div className="rounded-lg border bg-card p-4">
-      <div className="text-xs text-muted-foreground">{label}</div>
-      <div className={cn("mt-1 text-2xl font-semibold tabular-nums", tone)}>{value}</div>
-      <div className="mt-1 text-xs text-muted-foreground">{hint}</div>
-    </div>
-  );
-}
-
-const WEEK = [3, 5, 2, 6, 4, 7, 5];
-const DAYS = ["一", "二", "三", "四", "五", "六", "日"];
-
-export function DashboardPage({
-  viewer,
-  workspace,
-}: {
-  viewer: LighthouseViewer;
-  workspace: string;
-}) {
-  const open = projectsIn(workspace, viewer).open;
-  const tasks = TASKS.filter((t) => open.includes(t.project));
-  const workers = WORKERS.filter((w) => open.includes(w.project));
-  const asks = ASKS.filter((a) => a.for.includes(viewer) && open.includes(a.project));
-  const prs = tasks.flatMap((t) => t.tickets).filter((t) => t.state === "pr").length;
-  const max = Math.max(...WEEK);
-  return (
-    <div className="flex flex-col gap-4">
-      <h2 className="text-lg font-semibold">Dashboard</h2>
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Tile
-          label="等你定"
-          value={String(asks.length)}
-          hint="合并、回答"
-          tone="text-warning-foreground"
-        />
-        <Tile
-          label="Worker 在干活"
-          value={`${workers.filter((w) => w.online).length}/${workers.length}`}
-          hint="在线 / 全部"
-        />
-        <Tile label="PR 等合并" value={String(prs)} hint="CI 绿" tone="text-success-foreground" />
-        <Tile label="今日信道消息" value="14" hint="企微 6 · GitHub 5 · 邮箱 3" />
-      </div>
-      <div className="grid gap-3 lg:grid-cols-3">
-        <div className="rounded-lg border bg-card p-4 lg:col-span-2">
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-medium">本周合并</span>
-            <span className="text-xs text-muted-foreground">PR / 天</span>
-          </div>
-          <svg
-            viewBox="0 0 280 80"
-            className="mt-3 h-24 w-full"
-            role="img"
-            aria-label="本周每天合并数"
-          >
-            {WEEK.map((n, i) => {
-              const h = (n / max) * 60;
-              return (
-                <g key={DAYS[i]}>
-                  <rect
-                    x={i * 40 + 8}
-                    y={64 - h}
-                    width={24}
-                    height={h}
-                    rx={3}
-                    className={i === 6 ? "fill-primary" : "fill-primary/35"}
-                  />
-                  <text
-                    x={i * 40 + 20}
-                    y={76}
-                    textAnchor="middle"
-                    className="fill-muted-foreground text-3xs"
-                  >
-                    {DAYS[i]}
-                  </text>
-                </g>
-              );
-            })}
-          </svg>
-        </div>
-        <div className="rounded-lg border bg-card p-4">
-          <span className="text-sm font-medium">项目健康</span>
-          <ul className="mt-3 flex flex-col gap-2 text-sm">
-            {open.map((p) => {
-              const ts = TASKS.filter((t) => t.project === p);
-              const done = ts.filter((t) => t.status === "done").length;
-              return (
-                <li key={p}>
-                  <div className="flex justify-between">
-                    <span>{projectName(p)}</span>
-                    <span className="text-xs text-muted-foreground tabular-nums">
-                      {done}/{ts.length}
-                    </span>
-                  </div>
-                  <div className="mt-1 h-1.5 rounded-full bg-muted">
-                    <div
-                      className={cn(
-                        "h-1.5 rounded-full",
-                        PROJECTS[p]?.tone === "bad"
-                          ? "bg-destructive"
-                          : PROJECTS[p]?.tone === "warn"
-                            ? "bg-warning"
-                            : "bg-success",
-                      )}
-                      style={{ width: `${ts.length ? (done / ts.length) * 100 : 0}%` }}
-                    />
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-        </div>
-      </div>
-      <div className="rounded-lg border bg-card">
-        <div className="px-4 py-2.5 text-sm font-medium">刚刚发生</div>
-        <ul className="divide-y border-t text-sm">
-          {open.map((p) => (
-            <li key={p} className="flex gap-3 px-4 py-2">
-              <span className="w-28 shrink-0 font-medium">{projectName(p)}</span>
-              <span className="text-muted-foreground">{PROJECTS[p]?.line}</span>
-            </li>
-          ))}
-        </ul>
       </div>
     </div>
   );

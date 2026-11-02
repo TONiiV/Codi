@@ -21,8 +21,10 @@ import {
 import { normalizeLighthouseSearch, useLighthouseSearch } from "./lighthouseLocation";
 import { RAIL_ITEMS } from "./LighthouseRail";
 import { TasksPage } from "./LighthouseTasks";
-import { BotsPage, DashboardPage } from "./LighthouseWork";
+import { DashboardPage } from "./LighthouseDashboard";
+import { BotsPage } from "./LighthouseWork";
 import { DecisionsPage } from "./LighthouseDecisions";
+import { ProjectsPage } from "./LighthouseProjects";
 import { useWorkspaceId } from "./workspaceStore";
 import { PullRequestGlyph } from "../pullRequest/pullRequestIcons";
 import { Badge } from "../ui/badge";
@@ -374,9 +376,14 @@ export function LighthousePrototypePage({ background }: { background?: boolean }
                       ? "px-8 pt-10"
                       : view === "decisions"
                         ? "mx-auto max-w-3xl px-5 pt-10"
-                        : "mx-auto max-w-5xl px-5",
+                        : view === "projects"
+                          ? "mx-auto max-w-5xl px-5 pt-10"
+                          : "mx-auto max-w-5xl px-5",
                   )}
                 >
+                  {view === "projects" ? (
+                    <ProjectsPage viewer={viewer} workspace={workspace} />
+                  ) : null}
                   {view === "bots" ? <BotsPage viewer={viewer} workspace={workspace} /> : null}
                   {view === "dashboard" ? (
                     <DashboardPage viewer={viewer} workspace={workspace} />

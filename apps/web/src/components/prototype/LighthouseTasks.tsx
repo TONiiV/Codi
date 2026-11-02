@@ -40,7 +40,7 @@ import {
   type TaskStatus,
 } from "./lighthouseData";
 import { ThreadAnchor, projectName } from "./LighthouseWork";
-import { openTaskInSideChat, taskAgent, useAllTasks } from "./lighthouseActions";
+import { moveTask, openTaskInSideChat, taskAgent, useAllTasks } from "./lighthouseActions";
 import { normalizeLighthouseSearch, useLighthouseSearch } from "./lighthouseLocation";
 import { useWorkspaceId } from "./workspaceStore";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
@@ -311,7 +311,7 @@ function Checklist({ tasks }: { tasks: ReadonlyArray<LighthouseTask> }) {
   return (
     <ul className="flex max-w-2xl flex-col">
       {tasks.map((t) => (
-        <li key={t.id} className="flex items-center gap-2.5 border-b py-2 text-sm">
+        <li key={t.id} className="group flex items-center gap-2.5 border-b py-2 text-sm">
           {t.status === "done" ? (
             <SquareCheckBigIcon className="size-4 text-primary" />
           ) : (
@@ -320,6 +320,7 @@ function Checklist({ tasks }: { tasks: ReadonlyArray<LighthouseTask> }) {
           <span className={cn(t.status === "done" && "text-muted-foreground line-through")}>
             {t.title}
           </span>
+          <SideChatButton task={t} />
           <span className="ms-auto text-xs text-muted-foreground tabular-nums">{t.due ?? ""}</span>
         </li>
       ))}
@@ -327,9 +328,19 @@ function Checklist({ tasks }: { tasks: ReadonlyArray<LighthouseTask> }) {
   );
 }
 
-function TaskCard({ task }: { task: LighthouseTask }) {
+function TaskCard({ task, draggable }: { task: LighthouseTask; draggable?: boolean }) {
   return (
-    <div className="flex flex-col gap-2 rounded-lg border bg-card p-3 text-sm shadow-xs">
+    <div
+      draggable={draggable}
+      onDragStart={(event) => {
+        event.dataTransfer.setData("text/plain", task.id);
+        event.dataTransfer.effectAllowed = "move";
+      }}
+      className={cn(
+        "group flex flex-col gap-2 rounded-lg border bg-card p-3 text-sm shadow-xs",
+        draggable && "cursor-grab active:cursor-grabbing",
+      )}
+    >
       <span className="flex items-start gap-2 font-medium">
         <CircleCheckBigIcon
           className={cn(
@@ -337,7 +348,8 @@ function TaskCard({ task }: { task: LighthouseTask }) {
             task.status === "done" ? "text-success" : "text-muted-foreground",
           )}
         />
-        {task.title}
+        <span className="min-w-0 flex-1">{task.title}</span>
+        <SideChatButton task={task} />
       </span>
       {task.assignees.length > 0 ? (
         <span className="flex flex-wrap gap-x-3 gap-y-1 text-xs">
@@ -391,8 +403,14 @@ function NewTaskButton() {
   );
 }
 
-/** Notion's "By Status": one kanban column per status, tinted by it. */
+/**
+ * Notion's "By Status": one kanban column per status, tinted by it. Dragging a card from
+ * 待开始 into 进行中 tells its Chief of Staff to start it.
+ */
 function StatusBoard({ tasks }: { tasks: ReadonlyArray<LighthouseTask> }) {
+  const search = useLighthouseSearch() ?? normalizeLighthouseSearch({});
+  const workspace = useWorkspaceId();
+  const [over, setOver] = useState<TaskStatus | null>(null);
   return (
     <div className="flex items-start gap-3 overflow-x-auto pb-2">
       {STATUS_ORDER.map((s) => {
@@ -400,15 +418,37 @@ function StatusBoard({ tasks }: { tasks: ReadonlyArray<LighthouseTask> }) {
         return (
           <div
             key={s}
-            className={cn("flex w-72 shrink-0 flex-col gap-2 rounded-xl p-2", STATUS_TINT[s])}
+            onDragOver={(event) => {
+              event.preventDefault();
+              if (over !== s) setOver(s);
+            }}
+            onDragLeave={(event) => {
+              if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setOver(null);
+            }}
+            onDrop={(event) => {
+              event.preventDefault();
+              setOver(null);
+              const task = tasks.find((t) => t.id === event.dataTransfer.getData("text/plain"));
+              if (task) moveTask(task, s, taskAgent(task, search.as, workspace));
+            }}
+            className={cn(
+              "flex w-72 shrink-0 flex-col gap-2 rounded-xl p-2",
+              STATUS_TINT[s],
+              over === s && "ring-2 ring-primary/40",
+            )}
           >
             <div className="flex items-center gap-2 px-1 pt-1">
               <StatusPill status={s} />
               <span className="text-xs text-muted-foreground tabular-nums">{col.length}</span>
             </div>
             {col.map((t) => (
-              <TaskCard key={t.id} task={t} />
+              <TaskCard key={t.id} task={t} draggable />
             ))}
+            {s === "doing" && over === "doing" ? (
+              <div className="rounded-lg border border-dashed border-primary/50 px-3 py-2 text-xs text-muted-foreground">
+                放下就开干：幕僚长派 Worker 或催进度
+              </div>
+            ) : null}
             <NewTaskButton />
           </div>
         );

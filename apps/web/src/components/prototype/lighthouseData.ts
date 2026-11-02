@@ -121,6 +121,20 @@ export function projectsIn(workspace: string, viewer: LighthouseViewer) {
   return { all, open, locked: all.filter((id) => !open.includes(id)) };
 }
 
+/**
+ * The Codi project behind each Lighthouse project: the same record the Code page shows
+ * (title, workspace root, repository, machine). Lighthouse adds a Chief of Staff and members.
+ */
+export const PROJECT_SOURCE: Record<string, { root: string; repo: string; machine: string }> = {
+  codi: { root: "~/code/codi", repo: "github.com/TONiiV/Codi", machine: "lighthouse-01" },
+  site: { root: "~/code/site", repo: "github.com/TONiiV/site", machine: "lighthouse-01" },
+  app: { root: "~/code/app", repo: "github.com/TONiiV/app", machine: "mac-mini-2" },
+  docs: { root: "~/code/docs", repo: "github.com/TONiiV/docs", machine: "lighthouse-01" },
+  ops: { root: "~/code/ops", repo: "gitlab.com/toniiv/ops", machine: "ws-lin-3" },
+  gripper: { root: "~/dimx/gripper", repo: "gitlab.com/dimx/gripper", machine: "ws-lin-3" },
+  tactile: { root: "~/dimx/tactile", repo: "gitlab.com/dimx/tactile", machine: "mac-mini-2" },
+};
+
 export const PROJECT_COS: Record<string, { name: string; tone: string }> = {
   codi: { name: "Codi 幕僚长", tone: "bg-primary" },
   site: { name: "官网 幕僚长", tone: "bg-success" },
@@ -279,6 +293,27 @@ const LAST_LINE: Record<string, { last: string; time: string; unread: number }> 
   tactile: { last: "护膝方案等你选。", time: "09:40", unread: 0 },
 };
 
+/** Prototype only: a project linked from Code joins every registry the views read. */
+export function registerProject(
+  id: string,
+  project: { name: string; workspace: string; lead: string; cos: string; viewer: LighthouseViewer },
+  source: { root: string; repo: string; machine: string },
+) {
+  PROJECTS[id] = {
+    name: project.name,
+    workspace: project.workspace,
+    lead: project.lead,
+    tone: "ok",
+    line: "刚接入，幕僚长在读仓库和最近的 PR。",
+    pr: "还没有 PR",
+  };
+  PROJECT_SOURCE[id] = source;
+  PROJECT_COS[id] = { name: project.cos, tone: "bg-primary" };
+  LAST_LINE[id] = { last: "接入完成，正在读仓库。", time: "刚刚", unread: 0 };
+  const v = VIEWERS[project.viewer];
+  v.projects = [...v.projects, id];
+}
+
 export function chatsFor(
   viewer: LighthouseViewer,
   workspace: string,
@@ -315,7 +350,14 @@ export function chatsFor(
   return [mine, ...projects, desk];
 }
 
-export type LighthouseView = "chats" | "bots" | "dashboard" | "tasks" | "decisions" | "members";
+export type LighthouseView =
+  | "chats"
+  | "projects"
+  | "bots"
+  | "dashboard"
+  | "tasks"
+  | "decisions"
+  | "members";
 
 export type TaskStatus = "todo" | "doing" | "review" | "done";
 export type TaskPriority = "high" | "medium" | "low";
