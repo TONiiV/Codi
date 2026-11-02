@@ -41,6 +41,9 @@
   },
   "settings": {
     "title": "设置",
+    "navLabel": "设置分区",
+    "breadcrumbLabel": "设置面包屑导航",
+    "openSourceLicenses": "开源许可",
     "resetToDefault": "恢复默认",
     "resetLabel": "将“{{label}}”恢复为默认值",
     "sections": {

@@ -417,6 +417,7 @@ export function useSettingsRestore(onRestored?: () => void) {
     clearThemeHalves,
     themeHalves,
   } = useTheme();
+  const { t } = useTranslation();
   const settings = useScopedSettings();
   const updateSettings = useUpdateScopedSettings();
 
@@ -427,6 +428,9 @@ export function useSettingsRestore(onRestored?: () => void) {
   const isBackgroundActivityDirty = hasChangedBackgroundActivitySettings(settings);
 
   const changedSettingLabels = [
+    ...(settings.language !== DEFAULT_UNIFIED_SETTINGS.language
+      ? [t("settings.items.language")]
+      : []),
     ...(theme !== "system" ? ["Theme"] : []),
     ...(!followSystem ? ["Follow system"] : []),
     ...(themeHalves !== null ? ["Theme mix"] : []),
@@ -610,6 +614,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       return;
     }
     updateSettings({
+      language: DEFAULT_UNIFIED_SETTINGS.language,
       appearanceContrast: DEFAULT_UNIFIED_SETTINGS.appearanceContrast,
       diffColorScheme: DEFAULT_UNIFIED_SETTINGS.diffColorScheme,
       chatWidth: DEFAULT_UNIFIED_SETTINGS.chatWidth,
@@ -791,7 +796,7 @@ export function GeneralSettingsPanel() {
 
   return (
     <SettingsPageContainer>
-      <SettingsSection id="language" title={t("settings.general.language.section")}>
+      <SettingsSection title={t("settings.general.language.section")}>
         <SettingsRow
           {...searchableSetting("language", t)}
           description={t("settings.general.language.description")}

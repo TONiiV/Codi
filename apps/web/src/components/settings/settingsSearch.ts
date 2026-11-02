@@ -1,6 +1,5 @@
 import { HOSTED_APP_CHANNEL } from "~/branding";
 import { isElectron, isSecretsFeatureEnabled } from "~/env";
-import { i18n } from "~/i18n";
 import type { TFunction } from "i18next";
 import { isMacPlatform, isWindowsPlatform, normalizeSearchText } from "~/lib/utils";
 import { STATIC_KEYBINDING_COMMANDS, type KeybindingCommand } from "@t3tools/contracts";
@@ -1335,13 +1334,13 @@ export function isSettingsSearchScopeAvailable(
 /** Pass the hook's `t` from translated panels so React Compiler's memo cache is keyed on the language. */
 export function searchableSetting(
   id: SettingsSearchItemId,
-  t: TFunction = i18n.t,
+  t?: TFunction,
 ): {
   readonly id: string;
   readonly title: string;
 } {
   const { id: anchorId, title } = SEARCH_ITEMS_BY_ID.get(id)!;
-  return { id: anchorId, title: t(`settings.items.${id}`, { defaultValue: title }) };
+  return { id: anchorId, title: t ? t(`settings.items.${id}`) : title };
 }
 
 export function filterAvailableSettingsSearchItems(

@@ -12,7 +12,9 @@ function settingsBreadcrumbLabel(pathname: string, t: TFunction): string | null 
   if (normalizedPathname in SETTINGS_SECTION_LABELS) {
     return settingsSectionLabel(normalizedPathname as SettingsPath, t);
   }
-  return normalizedPathname === "/settings/open-source-licenses" ? "Open source licenses" : null;
+  return normalizedPathname === "/settings/open-source-licenses"
+    ? t("settings.openSourceLicenses")
+    : null;
 }
 
 export function SettingsBreadcrumb({ pathname }: { pathname: string }) {
@@ -20,7 +22,7 @@ export function SettingsBreadcrumb({ pathname }: { pathname: string }) {
   const sectionLabel = settingsBreadcrumbLabel(pathname, t);
 
   return (
-    <WorkspaceBreadcrumb ariaLabel="Settings breadcrumb">
+    <WorkspaceBreadcrumb ariaLabel={t("settings.breadcrumbLabel")}>
       {sectionLabel ? (
         <>
           <WorkspaceBreadcrumbItem>{t("settings.title")}</WorkspaceBreadcrumbItem>

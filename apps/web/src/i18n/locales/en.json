@@ -41,6 +41,9 @@
   },
   "settings": {
     "title": "Settings",
+    "navLabel": "Settings sections",
+    "breadcrumbLabel": "Settings breadcrumb",
+    "openSourceLicenses": "Open source licenses",
     "resetToDefault": "Reset to default",
     "resetLabel": "Reset {{label}} to default",
     "sections": {
