@@ -1,0 +1,42 @@
+{
+  "owl-personal-cos": {
+    "subject": "round baby owl with two short blunt rounded ear tufts",
+    "c1": "warm caramel brown",
+    "c2": "soft cream",
+    "bg": "muted slate navy",
+    "model": "google/gemini-3-pro-image-preview",
+    "constraints": "main-prompt constraints"
+  },
+  "otter-project-cos": {
+    "subject": "baby sea otter with a big round cream muzzle",
+    "c1": "cocoa brown",
+    "c2": "soft cream",
+    "bg": "muted sea teal",
+    "model": "google/gemini-3-pro-image-preview",
+    "constraints": "main-prompt constraints"
+  },
+  "beaver-worker": {
+    "subject": "baby beaver with two big blunt rounded front teeth",
+    "c1": "warm orange brown",
+    "c2": "ivory",
+    "bg": "muted sage green",
+    "model": "google/gemini-3-pro-image-preview",
+    "constraints": "main-prompt constraints"
+  },
+  "puffin-router": {
+    "subject": "baby puffin with one large rounded blunt orange beak",
+    "c1": "charcoal black",
+    "c2": "warm orange",
+    "bg": "muted sky blue",
+    "model": "google/gemini-3-pro-image-preview",
+    "constraints": "main-prompt constraints"
+  },
+  "seal-desk": {
+    "subject": "baby harbor seal pup with a big round head and two tiny round flippers",
+    "c1": "light pearl grey",
+    "c2": "charcoal",
+    "bg": "muted lavender",
+    "model": "google/gemini-3-pro-image-preview",
+    "constraints": "main-prompt constraints"
+  }
+}

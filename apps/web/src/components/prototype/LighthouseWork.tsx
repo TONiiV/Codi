@@ -6,6 +6,13 @@ import { useState } from "react";
 import { cn } from "../../lib/utils";
 import { BotAvatar } from "./LighthouseChatList";
 import {
+  MASCOT_STATES,
+  MASCOTS,
+  Mascot,
+  type MascotKind,
+  type MascotState,
+} from "./LighthouseMascot";
+import {
   ASKS,
   BOTS,
   PROJECTS,
@@ -13,6 +20,7 @@ import {
   VIEWERS,
   WORKERS,
   projectsIn,
+  type LighthouseBot,
   type LighthouseView,
   type LighthouseViewer,
 } from "./lighthouseData";
@@ -40,6 +48,62 @@ export function ThreadAnchor({ id, muted }: { id: string; muted?: boolean }) {
   );
 }
 
+const BOT_MASCOT: Record<LighthouseBot["kind"], MascotKind> = {
+  router: "puffin",
+  desk: "seal",
+  cos: "otter",
+  worker: "beaver",
+};
+
+function botState(b: LighthouseBot): MascotState {
+  if (!b.online) return "sleeping";
+  if (/写代码|刚启动|分发/.test(b.status)) return "working";
+  if (/等/.test(b.status)) return "waiting";
+  return "idle";
+}
+
+const SHOWCASE: ReadonlyArray<MascotKind> = ["owl", "otter", "beaver", "puffin", "seal"];
+
+function MascotShowcase() {
+  const [state, setState] = useState<MascotState>("idle");
+  return (
+    <section className="flex flex-col gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 className="text-lg font-semibold">Agent IP</h2>
+        <div className="flex flex-wrap gap-1">
+          {MASCOT_STATES.map((s) => (
+            <Button
+              key={s.id}
+              size="xs"
+              variant={state === s.id ? "secondary" : "ghost-muted"}
+              onClick={() => setState(s.id)}
+            >
+              {s.label}
+            </Button>
+          ))}
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
+        {SHOWCASE.map((k) => (
+          <figure key={k} className="flex flex-col gap-2">
+            <Mascot
+              kind={k}
+              state={state}
+              framed
+              followPointer
+              className="aspect-square w-full rounded-2xl text-white"
+            />
+            <figcaption className="text-xs">
+              <div className="font-medium">{MASCOTS[k].name}</div>
+              <div className="text-muted-foreground">{MASCOTS[k].role}</div>
+            </figcaption>
+          </figure>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 export function BotsPage({ viewer, workspace }: { viewer: LighthouseViewer; workspace: string }) {
   const open = projectsIn(workspace, viewer).open;
   const rows = BOTS.filter((b) =>
@@ -47,7 +111,8 @@ export function BotsPage({ viewer, workspace }: { viewer: LighthouseViewer; work
   );
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between">
+      <MascotShowcase />
+      <div className="mt-6 flex items-center justify-between">
         <h2 className="text-lg font-semibold">Bots</h2>
         <Button size="xs" variant="outline">
           <PlusIcon /> 新建 Worker
@@ -71,7 +136,12 @@ export function BotsPage({ viewer, workspace }: { viewer: LighthouseViewer; work
                 <TableCell>
                   <span className="flex items-center gap-2">
                     <span className="relative">
-                      <BotAvatar tone={b.tone} size="sm" readOnly={b.kind === "desk"} />
+                      <BotAvatar
+                        tone={b.tone}
+                        size="sm"
+                        kind={BOT_MASCOT[b.kind]}
+                        state={botState(b)}
+                      />
                       <span
                         className={cn(
                           "absolute -end-0.5 -bottom-0.5 size-2 rounded-full border-2 border-card",
