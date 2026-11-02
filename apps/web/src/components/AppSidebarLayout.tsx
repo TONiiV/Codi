@@ -9,6 +9,7 @@ import {
 } from "react";
 import { useLocation, useRouter, type AnyRouter } from "@tanstack/react-router";
 import { LighthouseIsland } from "./prototype/LighthouseIsland";
+import { useLighthouseSearch } from "./prototype/lighthouseLocation";
 
 import { moveWorkspaceFocus, workspaceAreaProps } from "../lib/workspaceFocus";
 import { isCommandPaletteOpen } from "../commandPaletteBus";
@@ -412,7 +413,7 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
     usePanelAnimationSettings();
   const pathname = useLocation({ select: (location) => location.pathname });
   // PROTOTYPE, wipe me: on the Work tab collapsing the sidebar keeps its vertical rail.
-  const onLighthousePrototype = pathname.startsWith("/prototype/lighthouse");
+  const onLighthousePrototype = useLighthouseSearch() !== null;
   const panelAnimationsSuppressed = usePanelNavigationSuppression(pathname);
   const routePanelAnimationsActive = panelAnimationsActive && !panelAnimationsSuppressed;
   const isMacosDesktop = isElectron && isMacPlatform(navigator.platform);

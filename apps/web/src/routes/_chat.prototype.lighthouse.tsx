@@ -1,21 +1,14 @@
 import { createFileRoute } from "@tanstack/react-router";
 
+import { LighthousePrototypePage } from "../components/prototype/LighthousePrototype";
 import {
-  LighthousePrototypePage,
+  normalizeLighthouseSearch,
   type LighthouseSearch,
-} from "../components/prototype/LighthousePrototype";
+} from "../components/prototype/lighthouseLocation";
 
 // PROTOTYPE, wipe me. See components/prototype/LighthousePrototype.tsx.
 export const Route = createFileRoute("/_chat/prototype/lighthouse")({
-  validateSearch: (raw: Record<string, unknown>): LighthouseSearch => ({
-    variant: raw.variant === "B" || raw.variant === "C" ? raw.variant : "A",
-    as: raw.as === "lead" || raw.as === "member" ? raw.as : "admin",
-    chat:
-      raw.chat === "codi" || raw.chat === "site" || raw.chat === "app" || raw.chat === "desk"
-        ? raw.chat
-        : "mine",
-    view:
-      raw.view === "bots" || raw.view === "dashboard" || raw.view === "tasks" ? raw.view : "chats",
-  }),
-  component: LighthousePrototypePage,
+  validateSearch: (raw: Record<string, unknown>): LighthouseSearch =>
+    normalizeLighthouseSearch(raw),
+  component: () => <LighthousePrototypePage />,
 });

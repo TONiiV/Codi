@@ -4,6 +4,8 @@ import { useState } from "react";
 
 import { ThreadRouteView } from "../components/ThreadRouteView";
 import { isAppModalPage } from "../components/sidebar/mainAppLocation";
+import { LighthousePrototypePage } from "../components/prototype/LighthousePrototype";
+import { useLighthouseSearch } from "../components/prototype/lighthouseLocation";
 import { SidebarInset } from "../components/ui/sidebar";
 import { resolveThreadRouteTarget, type ThreadRouteTarget } from "../threadRoutes";
 import { retainThreadFindForRoute } from "../components/chat/threadFindStore";
@@ -28,6 +30,8 @@ function ChatRouteLayout() {
     setBackgroundTarget(threadTarget);
   }
   const shownTarget = modalOpen ? backgroundTarget : threadTarget;
+  // PROTOTYPE, wipe me: Settings opened from Lighthouse keeps Lighthouse behind it.
+  const lighthouseBehind = useLighthouseSearch() !== null;
   return (
     <>
       {shownTarget?.kind === "server" && !modalOpen ? (
@@ -35,6 +39,8 @@ function ChatRouteLayout() {
       ) : null}
       {shownTarget ? (
         <ThreadRouteView target={shownTarget} background={modalOpen} />
+      ) : modalOpen && lighthouseBehind ? (
+        <LighthousePrototypePage background />
       ) : modalOpen ? (
         <SidebarInset className="h-dvh" />
       ) : (

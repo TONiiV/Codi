@@ -1,5 +1,5 @@
 // PROTOTYPE, wipe me. Teams-style vertical rail on the Work tab: chats, bots, dashboard, tasks.
-import { useLocation, useNavigate } from "@tanstack/react-router";
+import { useNavigate } from "@tanstack/react-router";
 import {
   BotIcon,
   LayoutDashboardIcon,
@@ -11,11 +11,8 @@ import {
 import { cn } from "../../lib/utils";
 import { Button } from "../ui/button";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
-import {
-  type LighthouseChatId,
-  type LighthouseView,
-  type LighthouseViewer,
-} from "./lighthouseData";
+import { type LighthouseView } from "./lighthouseData";
+import { normalizeLighthouseSearch, useLighthouseSearch } from "./lighthouseLocation";
 
 export const RAIL_ITEMS: ReadonlyArray<{
   id: LighthouseView;
@@ -31,16 +28,8 @@ export const RAIL_ITEMS: ReadonlyArray<{
 
 export function LighthouseRail({ collapsed }: { collapsed?: boolean }) {
   const navigate = useNavigate();
-  const search = useLocation({
-    select: (l) =>
-      l.search as {
-        as?: LighthouseViewer;
-        chat?: LighthouseChatId;
-        variant?: "A" | "B" | "C";
-        view?: LighthouseView;
-      },
-  });
-  const view = search.view ?? "chats";
+  const search = useLighthouseSearch() ?? normalizeLighthouseSearch({});
+  const view = search.view;
   return (
     <nav
       aria-label="工作区导航"
@@ -62,12 +51,7 @@ export function LighthouseRail({ collapsed }: { collapsed?: boolean }) {
                 onClick={() =>
                   void navigate({
                     to: "/prototype/lighthouse",
-                    search: {
-                      variant: search.variant ?? "A",
-                      as: search.as ?? "admin",
-                      chat: search.chat ?? "mine",
-                      view: item.id,
-                    },
+                    search: { ...search, view: item.id },
                   })
                 }
               />

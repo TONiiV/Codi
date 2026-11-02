@@ -2,7 +2,7 @@
 // /prototype/lighthouse. Three layouts behind ?variant=A|B|C, a viewer switch behind ?as=.
 // Rule under test: on this tab the user talks only to their Chief of Staff; company information is
 // read-only and everything else is a link, a Worker link opening its Codi thread. Mock data only.
-import { useNavigate, useSearch } from "@tanstack/react-router";
+import { useNavigate } from "@tanstack/react-router";
 import {
   ArrowLeftIcon,
   ArrowRightIcon,
@@ -20,13 +20,13 @@ import { useEffect, useState, type ReactNode } from "react";
 
 import { cn } from "../../lib/utils";
 import { BotAvatar } from "./LighthouseChatList";
+import { PROJECT_COS, VIEWERS, type LighthouseViewer } from "./lighthouseData";
 import {
-  PROJECT_COS,
-  VIEWERS,
-  type LighthouseChatId,
-  type LighthouseView,
-  type LighthouseViewer,
-} from "./lighthouseData";
+  normalizeLighthouseSearch,
+  useLighthouseSearch,
+  type LighthouseSearch,
+  type LighthouseVariant,
+} from "./lighthouseLocation";
 import { RAIL_ITEMS } from "./LighthouseRail";
 import { TasksPage } from "./LighthouseTasks";
 import { BotsPage, CopilotPanel, DashboardPage } from "./LighthouseWork";
@@ -41,14 +41,6 @@ import {
   WorkspaceBreadcrumbItem,
   WorkspaceBreadcrumbSeparator,
 } from "../WorkspaceBreadcrumb";
-
-export type LighthouseVariant = "A" | "B" | "C";
-export interface LighthouseSearch {
-  readonly variant: LighthouseVariant;
-  readonly as: LighthouseViewer;
-  readonly chat: LighthouseChatId;
-  readonly view: LighthouseView;
-}
 
 const PROJECTS: Record<
   string,
@@ -669,8 +661,8 @@ function VariantC({ viewer }: { viewer: LighthouseViewer }) {
   );
 }
 
-export function LighthousePrototypePage() {
-  const search = useSearch({ from: "/_chat/prototype/lighthouse" });
+export function LighthousePrototypePage({ background }: { background?: boolean }) {
+  const search = useLighthouseSearch() ?? normalizeLighthouseSearch({});
   const navigate = useNavigate();
   const variant = search.variant;
   const viewer = search.as;
@@ -688,6 +680,7 @@ export function LighthousePrototypePage() {
   };
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- prototype switcher listens to the window for arrow keys
   useEffect(() => {
+    if (background) return;
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement | null;
       if (t?.closest("input,textarea,[contenteditable]")) return;

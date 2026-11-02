@@ -36,6 +36,11 @@ export function useNavigateToMainApp() {
   return () => navigate({ href: mainAppHref ?? "/" });
 }
 
+/** The page Settings or Usage would return to, read during render. */
+export function peekAppModalReturnHref() {
+  return appModalReturnHref;
+}
+
 /** Leaves Settings or Usage for the page that opened it. */
 export function useCloseAppModal() {
   const navigate = useNavigate();

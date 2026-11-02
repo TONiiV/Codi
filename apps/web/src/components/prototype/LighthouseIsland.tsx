@@ -1,12 +1,17 @@
 // PROTOTYPE, wipe me. Floating Lighthouse / Code switch at the top centre of the app. It rests as a
 // faint capsule and morphs into a two-icon switch when the pointer comes near. Pure CSS hover, so
 // nothing animates while the pointer is elsewhere.
-import { useLocation, useNavigate } from "@tanstack/react-router";
+import { useNavigate } from "@tanstack/react-router";
 import type { SVGProps } from "react";
 
 import { cn } from "../../lib/utils";
+import { useLighthouseSearch } from "./lighthouseLocation";
 
-function LighthouseGlyph({ beam, ...props }: SVGProps<SVGSVGElement> & { beam?: boolean }) {
+// Hover animations are scoped to each segment's own group, so they run only while that segment is
+// under the pointer (or keyboard focus) and stop the moment it leaves.
+const LH_HOT = "group-hover/lh:opacity-100 group-focus-visible/lh:opacity-100";
+
+function LighthouseGlyph({ live, ...props }: SVGProps<SVGSVGElement> & { live?: boolean }) {
   const pivot = { transformBox: "view-box", transformOrigin: "12px 8px" } as const;
   return (
     <svg
@@ -27,20 +32,24 @@ function LighthouseGlyph({ beam, ...props }: SVGProps<SVGSVGElement> & { beam?: 
       <g
         className={cn(
           "transition-opacity duration-200",
-          beam && "group-hover/island:opacity-0 group-has-[:focus-visible]/island:opacity-0",
+          live && "group-hover/lh:opacity-0 group-focus-visible/lh:opacity-0",
         )}
       >
         <path d="M2.5 5.5 7.5 7" />
         <path d="M21.5 5.5 16.5 7" />
       </g>
-      {beam ? (
+      {live ? (
         <>
           <path
             d="M12 8 1.5 4.5v7z"
             fill="currentColor"
             stroke="none"
             style={pivot}
-            className="opacity-0 group-hover/island:opacity-55 group-has-[:focus-visible]/island:opacity-55 motion-safe:group-hover/island:animate-lighthouse-beam motion-safe:group-has-[:focus-visible]/island:animate-lighthouse-beam"
+            className={cn(
+              "opacity-0",
+              LH_HOT,
+              "motion-safe:group-hover/lh:animate-lighthouse-beam motion-safe:group-focus-visible/lh:animate-lighthouse-beam",
+            )}
           />
           <circle
             cx="12"
@@ -49,7 +58,11 @@ function LighthouseGlyph({ beam, ...props }: SVGProps<SVGSVGElement> & { beam?: 
             fill="currentColor"
             stroke="none"
             style={pivot}
-            className="opacity-0 group-hover/island:opacity-35 group-has-[:focus-visible]/island:opacity-35 motion-safe:group-hover/island:animate-lighthouse-lamp motion-safe:group-has-[:focus-visible]/island:animate-lighthouse-lamp"
+            className={cn(
+              "opacity-0",
+              LH_HOT,
+              "motion-safe:group-hover/lh:animate-lighthouse-lamp motion-safe:group-focus-visible/lh:animate-lighthouse-lamp",
+            )}
           />
         </>
       ) : null}
@@ -57,7 +70,48 @@ function LighthouseGlyph({ beam, ...props }: SVGProps<SVGSVGElement> & { beam?: 
   );
 }
 
-function CodeGlyph(props: SVGProps<SVGSVGElement>) {
+// The beam reaching the "camera": a bloom on the lamp and an anamorphic streak across the
+// segment, timed to the moment the beam faces the viewer.
+function LighthouseFlare() {
+  return (
+    <span
+      aria-hidden="true"
+      className="pointer-events-none absolute inset-0 overflow-hidden rounded-xl"
+    >
+      <span
+        className={cn(
+          "absolute top-[38%] left-[22%] size-16 -translate-x-1/2 -translate-y-1/2 rounded-full bg-radial from-current from-0% via-current/25 via-30% to-transparent to-70% opacity-0",
+          "motion-safe:group-hover/lh:animate-lighthouse-bloom motion-safe:group-focus-visible/lh:animate-lighthouse-bloom",
+        )}
+      />
+      <span
+        className={cn(
+          "absolute inset-x-0 top-[38%] h-0.5 -translate-y-1/2 rounded-full bg-linear-to-r from-transparent via-current to-transparent opacity-0",
+          "motion-safe:group-hover/lh:animate-lighthouse-streak motion-safe:group-focus-visible/lh:animate-lighthouse-streak",
+        )}
+      />
+    </span>
+  );
+}
+
+function CodeGlyph({ live, ...props }: SVGProps<SVGSVGElement> & { live?: boolean }) {
+  const dot = (x: number, hot: string, delay: string) => (
+    <circle
+      cx={x}
+      cy="7"
+      r="0.85"
+      stroke="none"
+      fill="currentColor"
+      style={{ animationDelay: delay }}
+      className={cn(
+        "opacity-60",
+        live && hot,
+        live &&
+          "motion-safe:group-hover/code:animate-code-dot motion-safe:group-focus-visible/code:animate-code-dot",
+      )}
+    />
+  );
+  const pivot = { transformBox: "view-box", transformOrigin: "12px 14px" } as const;
   return (
     <svg
       viewBox="0 0 24 24"
@@ -69,24 +123,45 @@ function CodeGlyph(props: SVGProps<SVGSVGElement>) {
       aria-hidden="true"
       {...props}
     >
-      <path d="m8 7-5 5 5 5" />
-      <path d="m16 7 5 5-5 5" />
-      <path d="m13.5 4.5-3 15" />
+      <rect x="2.5" y="3.5" width="19" height="17" rx="3" />
+      <path d="M2.5 9.5h19" strokeWidth={1.25} />
+      {dot(6, "group-hover/code:fill-destructive group-focus-visible/code:fill-destructive", "0ms")}
+      {dot(8.6, "group-hover/code:fill-warning group-focus-visible/code:fill-warning", "150ms")}
+      {dot(11.2, "group-hover/code:fill-success group-focus-visible/code:fill-success", "300ms")}
+      <path
+        d="m9 11.5-2.5 2.5L9 16.5"
+        className={cn(
+          live &&
+            "motion-safe:group-hover/code:animate-code-left motion-safe:group-focus-visible/code:animate-code-left",
+        )}
+      />
+      <path
+        d="m15 11.5 2.5 2.5-2.5 2.5"
+        className={cn(
+          live &&
+            "motion-safe:group-hover/code:animate-code-right motion-safe:group-focus-visible/code:animate-code-right",
+        )}
+      />
+      <path
+        d="m13 11-2 6"
+        style={pivot}
+        className={cn(
+          live &&
+            "motion-safe:group-hover/code:animate-code-slash motion-safe:group-focus-visible/code:animate-code-slash",
+        )}
+      />
     </svg>
   );
 }
 
 export function LighthouseIsland() {
   const navigate = useNavigate();
-  const onWork = useLocation({
-    select: (l) => l.pathname.startsWith("/prototype/lighthouse"),
-  });
+  const onWork = useLighthouseSearch() !== null;
   const Current = onWork ? LighthouseGlyph : CodeGlyph;
   const modes = [
     {
       id: "work",
       label: "Lighthouse",
-      Icon: LighthouseGlyph,
       active: onWork,
       go: () =>
         void navigate({
@@ -97,7 +172,6 @@ export function LighthouseIsland() {
     {
       id: "code",
       label: "Code",
-      Icon: CodeGlyph,
       active: !onWork,
       go: () => void navigate({ to: "/" }),
     },
@@ -145,15 +219,17 @@ export function LighthouseIsland() {
               onClick={m.active ? undefined : m.go}
               className={cn(
                 "relative z-10 flex items-center justify-center gap-2 rounded-xl text-sm font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
+                m.id === "work" ? "group/lh" : "group/code",
                 m.active
                   ? "cursor-default text-background"
                   : "cursor-pointer text-muted-foreground hover:text-foreground",
               )}
             >
+              {m.id === "work" ? <LighthouseFlare /> : null}
               {m.id === "work" ? (
-                <LighthouseGlyph className="size-4.5" beam />
+                <LighthouseGlyph className="relative size-4.5" live />
               ) : (
-                <m.Icon className="size-4.5" />
+                <CodeGlyph className="relative size-4.5" live />
               )}
               {m.label}
             </button>

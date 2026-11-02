@@ -80,9 +80,10 @@ import {
   type MouseEvent as ReactMouseEvent,
   type ReactNode,
 } from "react";
-import { type AnyRouter, useLocation, useRouter } from "@tanstack/react-router";
+import { type AnyRouter, useRouter } from "@tanstack/react-router";
 import { LighthouseChatList } from "./prototype/LighthouseChatList";
 import { LighthouseRail } from "./prototype/LighthouseRail";
+import { useLighthouseSearch } from "./prototype/lighthouseLocation";
 import { WorkSubList } from "./prototype/LighthouseWork";
 
 import {
@@ -915,22 +916,11 @@ function readRouteThreadKey(router: AnyRouter): string | null {
 }
 
 export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReveal }) {
-  const onLighthousePrototype = useLocation({
-    select: (location) => location.pathname.startsWith("/prototype/lighthouse"),
-  });
-  const lighthouseView = useLocation({
-    select: (location) => {
-      const view = (location.search as { view?: unknown }).view;
-      return view === "bots" || view === "dashboard" || view === "tasks" ? view : "chats";
-    },
-  });
+  const lighthouseSearch = useLighthouseSearch();
+  const onLighthousePrototype = lighthouseSearch !== null;
+  const lighthouseView = lighthouseSearch?.view ?? "chats";
+  const lighthouseViewer = lighthouseSearch?.as ?? "admin";
   const lighthouseSidebarState = useSidebar().state;
-  const lighthouseViewer = useLocation({
-    select: (location) => {
-      const as = (location.search as { as?: unknown }).as;
-      return as === "lead" || as === "member" ? as : "admin";
-    },
-  });
   const {
     projects,
     serverConfigs,

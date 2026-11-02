@@ -1,12 +1,13 @@
 // PROTOTYPE, wipe me. On the Work tab the real sidebar body becomes a Teams-style list of
 // Chief of Staff chats. Mock data only.
-import { useLocation, useNavigate } from "@tanstack/react-router";
+import { useNavigate } from "@tanstack/react-router";
 import { BotIcon, BuildingIcon } from "lucide-react";
 
 import { cn } from "../../lib/utils";
 import { Badge } from "../ui/badge";
 import { SidebarGroup, SidebarMenu, SidebarMenuButton, SidebarMenuItem } from "../ui/sidebar";
-import { chatsFor, type LighthouseChatId, type LighthouseViewer } from "./lighthouseData";
+import { chatsFor } from "./lighthouseData";
+import { normalizeLighthouseSearch, useLighthouseSearch } from "./lighthouseLocation";
 
 export function BotAvatar({
   tone,
@@ -33,12 +34,10 @@ export function BotAvatar({
 
 export function LighthouseChatList() {
   const navigate = useNavigate();
-  const search = useLocation({
-    select: (l) => l.search as { as?: LighthouseViewer; chat?: LighthouseChatId; variant?: string },
-  });
-  const viewer = search.as ?? "admin";
-  const current = search.chat ?? "mine";
-  const variant = search.variant === "B" || search.variant === "C" ? search.variant : "A";
+  const search = useLighthouseSearch() ?? normalizeLighthouseSearch({});
+  const viewer = search.as;
+  const current = search.chat;
+  const variant = search.variant;
   const chats = chatsFor(viewer);
   return (
     <SidebarGroup className="flex-1" role="presentation">
