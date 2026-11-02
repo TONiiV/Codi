@@ -53,7 +53,7 @@ export function LighthouseChatList() {
               onClick={() =>
                 void navigate({
                   to: "/prototype/lighthouse",
-                  search: { variant, as: viewer, chat: c.id },
+                  search: { variant, as: viewer, chat: c.id, view: "chats" },
                 })
               }
             >

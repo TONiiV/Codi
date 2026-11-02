@@ -281,7 +281,7 @@ const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
                 closeMobileSidebar();
                 void navigate({
                   to: "/prototype/lighthouse",
-                  search: { variant: "A", as: "admin" },
+                  search: { variant: "A", as: "admin", chat: "mine", view: "chats" },
                 });
               }}
             />

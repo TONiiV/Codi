@@ -14,6 +14,8 @@ export const Route = createFileRoute("/_chat/prototype/lighthouse")({
       raw.chat === "codi" || raw.chat === "site" || raw.chat === "app" || raw.chat === "desk"
         ? raw.chat
         : "mine",
+    view:
+      raw.view === "bots" || raw.view === "dashboard" || raw.view === "tasks" ? raw.view : "chats",
   }),
   component: LighthousePrototypePage,
 });

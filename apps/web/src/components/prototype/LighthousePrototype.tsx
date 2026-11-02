@@ -24,8 +24,11 @@ import {
   PROJECT_COS,
   VIEWERS,
   type LighthouseChatId,
+  type LighthouseView,
   type LighthouseViewer,
 } from "./lighthouseData";
+import { RAIL_ITEMS } from "./LighthouseRail";
+import { BotsPage, CopilotPanel, DashboardPage, TasksPage } from "./LighthouseWork";
 import { PullRequestGlyph } from "../pullRequest/pullRequestIcons";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
@@ -43,6 +46,7 @@ export interface LighthouseSearch {
   readonly variant: LighthouseVariant;
   readonly as: LighthouseViewer;
   readonly chat: LighthouseChatId;
+  readonly view: LighthouseView;
 }
 
 const PROJECTS: Record<
@@ -670,9 +674,11 @@ export function LighthousePrototypePage() {
   const variant = search.variant;
   const viewer = search.as;
   const chat = search.chat;
+  const view = search.view;
   const v = VIEWERS[viewer];
   const chatName =
     chat === "mine" ? v.cos.name : chat === "desk" ? "总台" : (PROJECT_COS[chat]?.name ?? chat);
+  const viewLabel = RAIL_ITEMS.find((r) => r.id === view)?.label ?? view;
   const set = (patch: Partial<LighthouseSearch>) =>
     void navigate({ to: "/prototype/lighthouse", search: { ...search, ...patch }, replace: true });
   const cycle = (dir: 1 | -1) => {
@@ -684,6 +690,7 @@ export function LighthousePrototypePage() {
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement | null;
       if (t?.closest("input,textarea,[contenteditable]")) return;
+      if (view !== "chats") return;
       if (e.key === "ArrowLeft") cycle(-1);
       if (e.key === "ArrowRight") cycle(1);
     };
@@ -704,12 +711,18 @@ export function LighthousePrototypePage() {
         </div>
         <WorkspaceBreadcrumb ariaLabel="Lighthouse breadcrumb" className="min-w-0">
           <WorkspaceBreadcrumbItem>
-            <h1>{chatName}</h1>
+            <h1>{view === "chats" ? chatName : viewLabel}</h1>
           </WorkspaceBreadcrumbItem>
           <WorkspaceBreadcrumbSeparator />
           <WorkspaceBreadcrumbItem current>
             <span>
-              {chat === "desk" ? "只读" : chat === "mine" ? `${v.name} · 今天` : "只回答本项目的事"}
+              {view !== "chats"
+                ? `右侧和 ${chatName} 聊`
+                : chat === "desk"
+                  ? "只读"
+                  : chat === "mine"
+                    ? `${v.name} · 今天`
+                    : "只回答本项目的事"}
             </span>
           </WorkspaceBreadcrumbItem>
         </WorkspaceBreadcrumb>
@@ -728,46 +741,70 @@ export function LighthousePrototypePage() {
         </div>
       </header>
       <div className="relative flex min-h-0 flex-1 flex-col">
-        {chat === "desk" ? (
+        {view !== "chats" ? (
+          <div className="flex min-h-0 flex-1">
+            <div className="min-h-0 flex-1 overflow-y-auto scrollbar-gutter-both">
+              <div className="mx-auto w-full max-w-5xl px-5 py-6">
+                {view === "bots" ? <BotsPage viewer={viewer} /> : null}
+                {view === "dashboard" ? <DashboardPage viewer={viewer} /> : null}
+                {view === "tasks" ? <TasksPage key={viewer} viewer={viewer} /> : null}
+              </div>
+            </div>
+            <CopilotPanel
+              viewer={viewer}
+              view={view}
+              chat={chat}
+              onChat={(c) => set({ chat: c })}
+            />
+          </div>
+        ) : null}
+        {view === "chats" && chat === "desk" ? (
           <div className="min-h-0 flex-1 overflow-y-auto scrollbar-gutter-both">
             <div className="mx-auto w-full max-w-(--chat-content-max-width) px-5 py-6">
               <CompanyPage page="desk" viewer={viewer} />
             </div>
           </div>
         ) : null}
-        {chat !== "desk" && variant === "A" ? (
+        {view === "chats" && chat !== "desk" && variant === "A" ? (
           <VariantA key={viewer + chat} viewer={viewer} />
         ) : null}
-        {chat !== "desk" && variant === "B" ? (
+        {view === "chats" && chat !== "desk" && variant === "B" ? (
           <VariantB key={viewer + chat} viewer={viewer} />
         ) : null}
-        {chat !== "desk" && variant === "C" ? (
+        {view === "chats" && chat !== "desk" && variant === "C" ? (
           <VariantC key={viewer + chat} viewer={viewer} />
         ) : null}
-        <div className="pointer-events-none absolute inset-x-0 bottom-3 flex justify-center lg:justify-start lg:ps-6">
-          <div className="pointer-events-auto flex items-center gap-2 rounded-full bg-black px-2 py-1.5 text-xs text-white shadow-lg">
-            <button
-              type="button"
-              className="rounded-full bg-white/15 p-1"
-              onClick={() => cycle(-1)}
-              aria-label="上一个"
-            >
-              <ArrowLeftIcon className="size-3.5" />
-            </button>
-            <span className="min-w-56 text-center">
-              <b className="font-mono">{variant}</b> · {VARIANT_LABEL[variant]}
-            </span>
-            <button
-              type="button"
-              className="rounded-full bg-white/15 p-1"
-              onClick={() => cycle(1)}
-              aria-label="下一个"
-            >
-              <ArrowRightIcon className="size-3.5" />
-            </button>
+        {view === "chats" ? (
+          <div className="pointer-events-none absolute inset-x-0 bottom-3 flex justify-center lg:justify-start lg:ps-6">
+            <div className="pointer-events-auto flex items-center gap-2 rounded-full bg-black px-2 py-1.5 text-xs text-white shadow-lg">
+              <button
+                type="button"
+                className="rounded-full bg-white/15 p-1"
+                onClick={() => cycle(-1)}
+                aria-label="上一个"
+              >
+                <ArrowLeftIcon className="size-3.5" />
+              </button>
+              <span className="min-w-56 text-center">
+                <b className="font-mono">{variant}</b> · {VARIANT_LABEL[variant]}
+              </span>
+              <button
+                type="button"
+                className="rounded-full bg-white/15 p-1"
+                onClick={() => cycle(1)}
+                aria-label="下一个"
+              >
+                <ArrowRightIcon className="size-3.5" />
+              </button>
+            </div>
           </div>
-        </div>
-        <div className="pointer-events-none absolute end-3 bottom-3 hidden text-2xs text-muted-foreground lg:block">
+        ) : null}
+        <div
+          className={cn(
+            "pointer-events-none absolute bottom-3 hidden text-2xs text-muted-foreground lg:block",
+            view === "chats" ? "end-3" : "start-3",
+          )}
+        >
           <CircleDotIcon className="me-1 inline size-3" />
           原型 · variant={variant} · as={viewer} · 可见项目 {v.projects.length}/3 · 可见文档{" "}
           {DOCS.filter((d) => v.docs.includes(d.level)).length}/{DOCS.length}

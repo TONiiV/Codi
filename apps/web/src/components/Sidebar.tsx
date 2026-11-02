@@ -82,6 +82,8 @@ import {
 } from "react";
 import { type AnyRouter, useLocation, useRouter } from "@tanstack/react-router";
 import { LighthouseChatList } from "./prototype/LighthouseChatList";
+import { LighthouseRail } from "./prototype/LighthouseRail";
+import { WorkSubList } from "./prototype/LighthouseWork";
 
 import {
   isAtomCommandInterrupted,
@@ -915,6 +917,18 @@ function readRouteThreadKey(router: AnyRouter): string | null {
 export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReveal }) {
   const onLighthousePrototype = useLocation({
     select: (location) => location.pathname.startsWith("/prototype/lighthouse"),
+  });
+  const lighthouseView = useLocation({
+    select: (location) => {
+      const view = (location.search as { view?: unknown }).view;
+      return view === "bots" || view === "dashboard" || view === "tasks" ? view : "chats";
+    },
+  });
+  const lighthouseViewer = useLocation({
+    select: (location) => {
+      const as = (location.search as { as?: unknown }).as;
+      return as === "lead" || as === "member" ? as : "admin";
+    },
   });
   const {
     projects,
@@ -2988,9 +3002,16 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
     return (
       <>
         <SidebarChromeHeader isElectron={isElectron} />
-        <SidebarContent className="min-h-full">
-          <LighthouseChatList />
-        </SidebarContent>
+        <div className="flex min-h-0 flex-1">
+          <LighthouseRail />
+          <SidebarContent className="min-h-full">
+            {lighthouseView === "chats" ? (
+              <LighthouseChatList />
+            ) : (
+              <WorkSubList view={lighthouseView} viewer={lighthouseViewer} />
+            )}
+          </SidebarContent>
+        </div>
         <SidebarChromeFooter />
       </>
     );
