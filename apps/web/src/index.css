@@ -236,7 +236,6 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(t3-mobil
   --animate-lighthouse-lamp: lighthouse-lamp 3s infinite;
   --animate-lighthouse-bloom: lighthouse-bloom 3s infinite;
   --animate-lighthouse-streak: lighthouse-streak 3s infinite;
-  --animate-code-dot: code-dot 2.4s infinite;
   --animate-code-left: code-left 2.4s infinite;
   --animate-code-right: code-right 2.4s infinite;
   --animate-code-slash: code-slash 2.4s infinite;
@@ -449,19 +448,6 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(t3-mobil
       scale: 1.4 1;
     }
   }
-  @keyframes code-dot {
-    /* Window controls light up in turn; each dot carries its own delay. */
-    0%,
-    100% {
-      opacity: 0.6;
-      animation-timing-function: steps(2);
-    }
-    12%,
-    50% {
-      opacity: 1;
-      animation-timing-function: steps(2);
-    }
-  }
   @keyframes code-left {
     0%,
     20%,
@@ -471,7 +457,7 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(t3-mobil
       animation-timing-function: steps(4);
     }
     35% {
-      translate: -1.5px 0;
+      translate: -2px 0;
       animation-timing-function: steps(4);
     }
   }
@@ -484,7 +470,7 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(t3-mobil
       animation-timing-function: steps(4);
     }
     35% {
-      translate: 1.5px 0;
+      translate: 2px 0;
       animation-timing-function: steps(4);
     }
   }

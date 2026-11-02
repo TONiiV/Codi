@@ -95,23 +95,7 @@ function LighthouseFlare() {
 }
 
 function CodeGlyph({ live, ...props }: SVGProps<SVGSVGElement> & { live?: boolean }) {
-  const dot = (x: number, hot: string, delay: string) => (
-    <circle
-      cx={x}
-      cy="7"
-      r="0.85"
-      stroke="none"
-      fill="currentColor"
-      style={{ animationDelay: delay }}
-      className={cn(
-        "opacity-60",
-        live && hot,
-        live &&
-          "motion-safe:group-hover/code:animate-code-dot motion-safe:group-focus-visible/code:animate-code-dot",
-      )}
-    />
-  );
-  const pivot = { transformBox: "view-box", transformOrigin: "12px 14px" } as const;
+  const pivot = { transformBox: "view-box", transformOrigin: "12px 12px" } as const;
   return (
     <svg
       viewBox="0 0 24 24"
@@ -123,27 +107,22 @@ function CodeGlyph({ live, ...props }: SVGProps<SVGSVGElement> & { live?: boolea
       aria-hidden="true"
       {...props}
     >
-      <rect x="2.5" y="3.5" width="19" height="17" rx="3" />
-      <path d="M2.5 9.5h19" strokeWidth={1.25} />
-      {dot(6, "group-hover/code:fill-destructive group-focus-visible/code:fill-destructive", "0ms")}
-      {dot(8.6, "group-hover/code:fill-warning group-focus-visible/code:fill-warning", "150ms")}
-      {dot(11.2, "group-hover/code:fill-success group-focus-visible/code:fill-success", "300ms")}
       <path
-        d="m9 11.5-2.5 2.5L9 16.5"
+        d="m8 7-5 5 5 5"
         className={cn(
           live &&
             "motion-safe:group-hover/code:animate-code-left motion-safe:group-focus-visible/code:animate-code-left",
         )}
       />
       <path
-        d="m15 11.5 2.5 2.5-2.5 2.5"
+        d="m16 7 5 5-5 5"
         className={cn(
           live &&
             "motion-safe:group-hover/code:animate-code-right motion-safe:group-focus-visible/code:animate-code-right",
         )}
       />
       <path
-        d="m13 11-2 6"
+        d="m13.5 4.5-3 15"
         style={pivot}
         className={cn(
           live &&
