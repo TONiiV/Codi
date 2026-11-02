@@ -1,12 +1,10 @@
 // PROTOTYPE, wipe me. Non-chat views of Lighthouse (Bots, Dashboard) and the Copilot panel on the
 // right of every non-chat view, where the user picks which Chief of Staff to talk to.
-import { useNavigate } from "@tanstack/react-router";
-import { CpuIcon, ExpandIcon, MessageSquareIcon, PlusIcon, ServerIcon } from "lucide-react";
+import { CpuIcon, MessageSquareIcon, PlusIcon, ServerIcon } from "lucide-react";
 import { useState } from "react";
 
 import { cn } from "../../lib/utils";
 import { BotAvatar } from "./LighthouseChatList";
-import { ChatComposerCard, ChatTimeline } from "./LighthouseChat";
 import {
   ASKS,
   BOTS,
@@ -14,14 +12,12 @@ import {
   TASKS,
   VIEWERS,
   WORKERS,
-  chatsFor,
   projectsIn,
   type LighthouseView,
   type LighthouseViewer,
 } from "./lighthouseData";
 import { useWorkspaceId } from "./workspaceStore";
 import { Button } from "../ui/button";
-import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
 
 export function projectName(id: string): string {
@@ -262,82 +258,6 @@ export function DashboardPage({
         </ul>
       </div>
     </div>
-  );
-}
-
-const COPILOT_LINE: Record<LighthouseView, string> = {
-  chats: "",
-  bots: "要重启哪个，或者给哪个项目加 Worker？",
-  dashboard: "要我解释哪个数字？",
-  tasks: "改状态、加工单、改派 Worker，说一句就行。",
-  members: "要给谁加权限？",
-};
-
-export function CopilotPanel({
-  viewer,
-  workspace,
-  view,
-  chat,
-  onChat,
-}: {
-  viewer: LighthouseViewer;
-  workspace: string;
-  view: LighthouseView;
-  chat: string;
-  onChat: (c: string) => void;
-}) {
-  const navigate = useNavigate();
-  const chats = chatsFor(viewer, workspace);
-  const current = chats.find((c) => c.id === chat) ?? chats[0]!;
-  const readOnly = current.readOnly === true;
-  return (
-    <aside className="flex w-[22rem] shrink-0 flex-col border-s">
-      <div className="flex min-h-10 items-center gap-2 border-b px-2">
-        <Select value={current.id} onValueChange={(val) => onChat(String(val))}>
-          <SelectTrigger className="min-w-0 flex-1">
-            <span className="flex items-center gap-2">
-              <BotAvatar tone={current.tone} size="sm" readOnly={readOnly} />
-              <SelectValue>{current.name}</SelectValue>
-            </span>
-          </SelectTrigger>
-          <SelectPopup>
-            {chats.map((c) => (
-              <SelectItem key={c.id} value={c.id}>
-                {c.name}
-              </SelectItem>
-            ))}
-          </SelectPopup>
-        </Select>
-        <Button
-          size="icon-xs"
-          variant="ghost-muted"
-          aria-label="全屏对话"
-          onClick={() =>
-            void navigate({
-              to: "/prototype/lighthouse",
-              search: { as: viewer, chat: current.id, view: "chats" },
-            })
-          }
-        >
-          <ExpandIcon />
-        </Button>
-      </div>
-      <div className="min-h-0 flex-1 overflow-y-auto p-3">
-        <ChatTimeline
-          messages={[
-            {
-              id: "a1",
-              role: "assistant",
-              author: current.name,
-              body: readOnly ? "要查哪份文档或决定？" : COPILOT_LINE[view],
-            },
-          ]}
-        />
-      </div>
-      <div className="p-3">
-        <ChatComposerCard placeholder={`对 ${current.name} 说`} />
-      </div>
-    </aside>
   );
 }
 

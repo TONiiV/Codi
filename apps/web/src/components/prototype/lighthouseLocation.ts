@@ -21,6 +21,7 @@ export function normalizeLighthouseSearch(raw: Record<string, unknown>): Lightho
       raw.view === "bots" ||
       raw.view === "dashboard" ||
       raw.view === "tasks" ||
+      raw.view === "decisions" ||
       raw.view === "members"
         ? raw.view
         : "chats",

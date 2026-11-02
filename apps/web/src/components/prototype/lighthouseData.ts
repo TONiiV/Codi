@@ -295,7 +295,7 @@ export function chatsFor(
   return [mine, ...projects, desk];
 }
 
-export type LighthouseView = "chats" | "bots" | "dashboard" | "tasks" | "members";
+export type LighthouseView = "chats" | "bots" | "dashboard" | "tasks" | "decisions" | "members";
 
 export type TaskStatus = "todo" | "doing" | "review" | "done";
 export type TaskPriority = "high" | "medium" | "low";
@@ -723,3 +723,254 @@ export const BOTS: ReadonlyArray<LighthouseBot> = [
     project: "tactile",
   },
 ];
+
+export type DecisionWeight = "key" | "major" | "minor";
+export type DecisionState = "chosen" | "rejected" | "open" | "replaced";
+
+export interface DecisionNode {
+  id: string;
+  when: string;
+  weight: DecisionWeight;
+  state: DecisionState;
+  title: string;
+  why: string;
+  owner: string;
+  source: string;
+}
+
+/** Per project, oldest first: the chain of decisions that led to the project's current state. */
+export const DECISION_CHAINS: Record<
+  string,
+  { now: string; updated: string; nodes: ReadonlyArray<DecisionNode> }
+> = {
+  codi: {
+    now: "Lighthouse 原型在 PR #14 等试用，地图 #6 下 8 张票。",
+    updated: "今天 09:00",
+    nodes: [
+      {
+        id: "c1",
+        when: "10-12",
+        weight: "key",
+        state: "chosen",
+        title: "fork t3code，改名 Codi",
+        why: "多 harness 已经现成，不重写。",
+        owner: "林砚",
+        source: "codi#1",
+      },
+      {
+        id: "c2",
+        when: "10-28",
+        weight: "minor",
+        state: "chosen",
+        title: "Worker 线程沿用 Codi thread",
+        why: "不另起执行模型。",
+        owner: "林砚",
+        source: "W7",
+      },
+      {
+        id: "c3",
+        when: "11-02",
+        weight: "key",
+        state: "chosen",
+        title: "Lighthouse 架在 Codi 之上，Codi 只当 Worker 池",
+        why: "公司层状态和权限不进 Codi 服务器。",
+        owner: "林砚",
+        source: "#6",
+      },
+      {
+        id: "c4",
+        when: "11-02",
+        weight: "major",
+        state: "rejected",
+        title: "全部塞进 Codi 服务器",
+        why: "权限和多租户会污染单机模型。",
+        owner: "林砚",
+        source: "#6",
+      },
+      {
+        id: "c5",
+        when: "11-02",
+        weight: "major",
+        state: "chosen",
+        title: "工作区既是权限边界也是筛选",
+        why: "绑定存在 Lighthouse 的表里。",
+        owner: "林砚",
+        source: "#15",
+      },
+      {
+        id: "c6",
+        when: "未定",
+        weight: "major",
+        state: "open",
+        title: "项目幕僚长每项目一个，还是每人一个",
+        why: "建议每项目一个，加每人一个私人幕僚长。",
+        owner: "林砚",
+        source: "#15",
+      },
+    ],
+  },
+  site: {
+    now: "价格页 Safari 错位已修，PR #88 CI 绿，等合并。",
+    updated: "今天 08:40",
+    nodes: [
+      {
+        id: "s1",
+        when: "09-03",
+        weight: "key",
+        state: "chosen",
+        title: "官网改用 Astro 静态站",
+        why: "首屏快，内容同学能直接改 md。",
+        owner: "沈叙白",
+        source: "site#2",
+      },
+      {
+        id: "s2",
+        when: "09-20",
+        weight: "minor",
+        state: "replaced",
+        title: "价格页用 CSS Grid 双列",
+        why: "Safari 16 下错位，被 s4 取代。",
+        owner: "沈叙白",
+        source: "W3",
+      },
+      {
+        id: "s3",
+        when: "10-15",
+        weight: "major",
+        state: "chosen",
+        title: "Q4 目标：转化 +15%",
+        why: "OKR 对齐。",
+        owner: "林砚",
+        source: "OKR",
+      },
+      {
+        id: "s4",
+        when: "11-01",
+        weight: "minor",
+        state: "chosen",
+        title: "价格页改回 flex 布局",
+        why: "修 Safari，PR #88。",
+        owner: "沈叙白",
+        source: "W3 · site#12",
+      },
+    ],
+  },
+  app: {
+    now: "家里电脑离线 2 小时，app#41 挂起，PR #140 CI 红。",
+    updated: "今天 09:05",
+    nodes: [
+      {
+        id: "a1",
+        when: "08-30",
+        weight: "key",
+        state: "chosen",
+        title: "移动端用 Expo",
+        why: "和 Codi mobile 共享代码。",
+        owner: "周清野",
+        source: "app#1",
+      },
+      {
+        id: "a2",
+        when: "10-10",
+        weight: "major",
+        state: "chosen",
+        title: "Worker 跑在家里电脑",
+        why: "省云容器费用。",
+        owner: "周清野",
+        source: "W11",
+      },
+      {
+        id: "a3",
+        when: "今天",
+        weight: "major",
+        state: "open",
+        title: "app#41 改派到云容器？",
+        why: "家里电脑离线，等你定。",
+        owner: "周清野",
+        source: "W11 · app#41",
+      },
+    ],
+  },
+  gripper: {
+    now: "单指触觉标定中，PR #12 等评审。",
+    updated: "昨天 18:00",
+    nodes: [
+      {
+        id: "g1",
+        when: "06-20",
+        weight: "key",
+        state: "chosen",
+        title: "夹爪走电驱，不用气动",
+        why: "比赛场地没有气源。",
+        owner: "沈叙白",
+        source: "gripper#1",
+      },
+      {
+        id: "g2",
+        when: "07-11",
+        weight: "key",
+        state: "chosen",
+        title: "先做单指触觉，再做整手",
+        why: "先验证传感器精度。",
+        owner: "沈叙白",
+        source: "gripper#4",
+      },
+      {
+        id: "g3",
+        when: "08-02",
+        weight: "minor",
+        state: "chosen",
+        title: "主控用 ESP32-S3",
+        why: "现货多，社区成熟。",
+        owner: "沈叙白",
+        source: "W21",
+      },
+      {
+        id: "g4",
+        when: "10-30",
+        weight: "major",
+        state: "chosen",
+        title: "标定数据存仓库 LFS",
+        why: "评审时能复现。",
+        owner: "沈叙白",
+        source: "W21 · gripper#12",
+      },
+    ],
+  },
+  tactile: {
+    now: "护膝 Demo 方案未定，PoC 路线在写。",
+    updated: "今天 07:30",
+    nodes: [
+      {
+        id: "t1",
+        when: "09-01",
+        weight: "key",
+        state: "chosen",
+        title: "触觉阵列 16×16",
+        why: "成本和分辨率折中。",
+        owner: "周清野",
+        source: "tactile#1",
+      },
+      {
+        id: "t2",
+        when: "10-05",
+        weight: "minor",
+        state: "rejected",
+        title: "柔性 PCB 自己打样",
+        why: "周期太长，外包。",
+        owner: "周清野",
+        source: "W24",
+      },
+      {
+        id: "t3",
+        when: "未定",
+        weight: "major",
+        state: "open",
+        title: "护膝 Demo 先做电阻还是电容",
+        why: "电阻便宜，电容更稳。",
+        owner: "周清野",
+        source: "tactile#7",
+      },
+    ],
+  },
+};

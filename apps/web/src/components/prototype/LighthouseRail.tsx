@@ -1,6 +1,12 @@
-// PROTOTYPE, wipe me. Teams-style vertical rail on the Work tab: chats, bots, dashboard, tasks.
+// PROTOTYPE, wipe me. Teams-style vertical rail on the Work tab: chats, bots, dashboard, tasks, decisions.
 import { useNavigate } from "@tanstack/react-router";
-import { BotIcon, LayoutDashboardIcon, ListChecksIcon, MessagesSquareIcon } from "lucide-react";
+import {
+  BotIcon,
+  GitBranchIcon,
+  LayoutDashboardIcon,
+  ListChecksIcon,
+  MessagesSquareIcon,
+} from "lucide-react";
 
 import { cn } from "../../lib/utils";
 import { Button } from "../ui/button";
@@ -19,6 +25,7 @@ export const RAIL_ITEMS: ReadonlyArray<{
   { id: "bots", label: "Bots", icon: BotIcon },
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboardIcon },
   { id: "tasks", label: "任务", icon: ListChecksIcon, badge: 2 },
+  { id: "decisions", label: "决定", icon: GitBranchIcon },
 ];
 
 export function LighthouseRail({ collapsed }: { collapsed?: boolean }) {

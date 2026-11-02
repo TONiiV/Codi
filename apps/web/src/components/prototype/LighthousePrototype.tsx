@@ -1,18 +1,12 @@
 // PROTOTYPE, wipe me. The Lighthouse mode inside the real Codi shell at /prototype/lighthouse.
 // Everything is scoped to the current workspace and filtered by the viewer's permissions. The
 // user talks only to a Chief of Staff; Workers, tickets and PRs are links. Mock data only.
-import {
-  BookOpenIcon,
-  BuildingIcon,
-  FolderKanbanIcon,
-  LockIcon,
-  MessageSquareIcon,
-  ScaleIcon,
-} from "lucide-react";
+import { LockIcon, MessageSquareIcon } from "lucide-react";
 import { useState, type ReactNode } from "react";
 
 import { cn } from "../../lib/utils";
 import { BotAvatar } from "./LighthouseChatList";
+import { LighthousePanel } from "./LighthousePanel";
 import { ChatComposerCard, ChatTimeline, type ChatMessage } from "./LighthouseChat";
 import {
   ASKS,
@@ -27,7 +21,8 @@ import {
 import { normalizeLighthouseSearch, useLighthouseSearch } from "./lighthouseLocation";
 import { RAIL_ITEMS } from "./LighthouseRail";
 import { TasksPage } from "./LighthouseTasks";
-import { BotsPage, CopilotPanel, DashboardPage } from "./LighthouseWork";
+import { BotsPage, DashboardPage } from "./LighthouseWork";
+import { DecisionsPage } from "./LighthouseDecisions";
 import { useWorkspaceId } from "./workspaceStore";
 import { PullRequestGlyph } from "../pullRequest/pullRequestIcons";
 import { Badge } from "../ui/badge";
@@ -39,72 +34,6 @@ import {
   WorkspaceBreadcrumbSeparator,
 } from "../WorkspaceBreadcrumb";
 import { useNavigate } from "@tanstack/react-router";
-
-const DOCS = [
-  {
-    workspace: "toniiv",
-    level: "public",
-    kind: "制度",
-    title: "远程协作约定（第 3 版）",
-    meta: "上周更新",
-  },
-  { workspace: "toniiv", level: "public", kind: "周报", title: "本周周报", meta: "今天 09:00" },
-  {
-    workspace: "toniiv",
-    level: "team",
-    kind: "OKR",
-    title: "Q4：Lighthouse v1 上线，官网转化 +15%",
-    meta: "10-01",
-  },
-  {
-    workspace: "toniiv",
-    level: "confidential",
-    kind: "财务",
-    title: "11 月模型与算力账单预估",
-    meta: "11-01",
-  },
-  { workspace: "dimx", level: "public", kind: "周报", title: "机器人方向周报", meta: "今天 09:00" },
-  {
-    workspace: "dimx",
-    level: "team",
-    kind: "方案",
-    title: "灵巧手触觉 PoC 技术路线",
-    meta: "10-20",
-  },
-  {
-    workspace: "dimx",
-    level: "confidential",
-    kind: "合同",
-    title: "太湖杯比赛合作协议",
-    meta: "09-12",
-  },
-];
-
-const DECISIONS = [
-  {
-    workspace: "toniiv",
-    state: "chosen",
-    when: "11-02",
-    title: "Lighthouse 架在 Codi 之上，Codi 只当 Worker 池",
-  },
-  { workspace: "toniiv", state: "rejected", when: "11-02", title: "全部塞进 Codi 服务器" },
-  {
-    workspace: "toniiv",
-    state: "open",
-    when: "#15",
-    title: "项目幕僚长每个项目一个，还是每人一个",
-  },
-  { workspace: "dimx", state: "chosen", when: "07-11", title: "夹爪先做单指触觉，再做整手" },
-  { workspace: "dimx", state: "open", when: "未排期", title: "护膝 Demo 先做电阻还是电容" },
-] as const;
-
-const COMPANY_PAGES = [
-  { id: "desk", label: "总台", icon: BuildingIcon },
-  { id: "projects", label: "项目", icon: FolderKanbanIcon },
-  { id: "docs", label: "文档", icon: BookOpenIcon },
-  { id: "decisions", label: "决定", icon: ScaleIcon },
-] as const;
-type CompanyPageId = (typeof COMPANY_PAGES)[number]["id"];
 
 function ToneDot({ tone }: { tone: "ok" | "warn" | "bad" }) {
   return (
@@ -155,9 +84,9 @@ function Inbox({ asks }: { asks: ReturnType<typeof asksFor> }) {
   const [done, setDone] = useState<ReadonlySet<string>>(new Set());
   if (asks.length === 0) return null;
   return (
-    <ul className="divide-y rounded-xl border bg-card px-3">
+    <ul className="flex flex-col gap-4">
       {asks.map((a) => (
-        <li key={a.text} className="flex gap-3 py-3">
+        <li key={a.text} className="flex gap-3">
           <span className="mt-1.5">
             <ToneDot tone={a.kind === "merge" ? "ok" : "warn"} />
           </span>
@@ -199,11 +128,11 @@ function ProjectRows({
   const { all, open } = projectsIn(workspace, viewer);
   const ids = only ? [only] : all;
   return (
-    <ul className="divide-y rounded-xl border bg-card px-3">
+    <ul className="flex flex-col gap-4">
       {ids.map((id) => {
         const p = PROJECTS[id]!;
         return (
-          <li key={id} className="py-2.5 text-sm">
+          <li key={id} className="text-sm">
             {open.includes(id) ? (
               <div className="flex items-start gap-3">
                 <span className="mt-1.5">
@@ -234,70 +163,17 @@ function ProjectRows({
   );
 }
 
-function CompanyPage({
-  page,
-  viewer,
-  workspace,
-}: {
-  page: CompanyPageId;
-  viewer: LighthouseViewer;
-  workspace: string;
-}) {
-  const v = VIEWERS[viewer];
-  if (page === "projects") return <ProjectRows viewer={viewer} workspace={workspace} />;
-  if (page === "docs") {
-    return (
-      <ul className="divide-y rounded-xl border bg-card px-3 text-sm">
-        {DOCS.filter((d) => d.workspace === workspace).map((d) => (
-          <li key={d.title} className="flex items-start gap-3 py-2.5">
-            <Badge variant="outline" className="mt-0.5 w-12 justify-center">
-              {d.kind}
-            </Badge>
-            {v.docs.includes(d.level) ? (
-              <div>
-                <div className="font-medium">{d.title}</div>
-                <div className="text-xs text-muted-foreground">{d.meta}</div>
-              </div>
-            ) : (
-              <Locked>{d.kind}</Locked>
-            )}
-          </li>
-        ))}
-      </ul>
-    );
-  }
-  if (page === "decisions") {
-    return (
-      <ul className="flex flex-col gap-2 text-sm">
-        {DECISIONS.filter((d) => d.workspace === workspace).map((d) => (
-          <li
-            key={d.title}
-            className={cn(
-              "rounded-lg border-s-2 bg-card py-2 ps-3",
-              d.state === "chosen" && "border-s-foreground",
-              d.state === "rejected" && "border-s-border text-muted-foreground",
-              d.state === "open" && "border-s-warning",
-            )}
-          >
-            <div className="text-xs text-muted-foreground">
-              {d.state === "chosen" ? "已定" : d.state === "rejected" ? "否决" : "待定"} · {d.when}
-            </div>
-            {d.title}
-          </li>
-        ))}
-      </ul>
-    );
-  }
+function DeskPage({ viewer, workspace }: { viewer: LighthouseViewer; workspace: string }) {
   const all = asksFor("admin", workspace).filter((a) =>
     projectsIn(workspace, viewer).open.includes(a.project),
   );
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-6">
       <ProjectRows viewer={viewer} workspace={workspace} />
       {all.length > 0 ? (
-        <ul className="divide-y rounded-xl border bg-card px-3 text-sm">
+        <ul className="flex flex-col gap-3 text-sm">
           {all.map((a) => (
-            <li key={a.text} className="py-2.5">
+            <li key={a.text}>
               <div className="text-xs text-muted-foreground">
                 {PROJECTS[a.project]?.name} · {a.thread}
               </div>
@@ -307,29 +183,6 @@ function CompanyPage({
         </ul>
       ) : null}
     </div>
-  );
-}
-
-function CompanyPanel({ viewer, workspace }: { viewer: LighthouseViewer; workspace: string }) {
-  const [page, setPage] = useState<CompanyPageId>("desk");
-  return (
-    <aside className="flex w-[20rem] shrink-0 flex-col border-s">
-      <div className="flex min-h-10 flex-wrap items-center gap-1 border-b px-2 py-1">
-        {COMPANY_PAGES.map((p) => (
-          <Button
-            key={p.id}
-            size="xs"
-            variant={page === p.id ? "secondary" : "ghost-muted"}
-            onClick={() => setPage(p.id)}
-          >
-            <p.icon /> {p.label}
-          </Button>
-        ))}
-      </div>
-      <div className="min-h-0 flex-1 overflow-y-auto p-3">
-        <CompanyPage page={page} viewer={viewer} workspace={workspace} />
-      </div>
-    </aside>
   );
 }
 
@@ -393,10 +246,12 @@ function ChatPage({
   viewer,
   workspace,
   chat,
+  onExpand,
 }: {
   viewer: LighthouseViewer;
   workspace: string;
   chat: string;
+  onExpand: (chat: string) => void;
 }) {
   const v = VIEWERS[viewer];
   const asks = asksFor(viewer, workspace, chat === "mine" ? undefined : chat);
@@ -431,7 +286,13 @@ function ChatPage({
           />
         </div>
       </div>
-      <CompanyPanel viewer={viewer} workspace={workspace} />
+      <LighthousePanel
+        viewer={viewer}
+        workspace={workspace}
+        view="chats"
+        mainChat={chat}
+        onExpand={onExpand}
+      />
     </div>
   );
 }
@@ -440,7 +301,7 @@ function MembersPage({ workspace }: { workspace: string }) {
   return (
     <div className="flex flex-col gap-4">
       <h2 className="text-lg font-semibold">成员与授权</h2>
-      <ul className="divide-y rounded-xl border bg-card px-3 text-sm">
+      <ul className="divide-y text-sm">
         {(Object.keys(VIEWERS) as Array<LighthouseViewer>).map((k) => {
           const open = projectsIn(workspace, k).open;
           return (
@@ -478,12 +339,14 @@ export function LighthousePrototypePage({ background }: { background?: boolean }
       : "mine";
   const chatName =
     chat === "mine" ? v.cos.name : chat === "desk" ? "总台" : (PROJECT_COS[chat]?.name ?? chat);
+  const onExpand = (c: string) =>
+    void navigate({ to: "/prototype/lighthouse", search: { ...search, view: "chats", chat: c } });
   const viewLabel =
     view === "members" ? "成员与授权" : (RAIL_ITEMS.find((r) => r.id === view)?.label ?? view);
 
   return (
     <SidebarInset className="h-dvh min-h-0 overflow-hidden overscroll-y-none" inert={background}>
-      <header className="flex min-h-12 shrink-0 items-center gap-3 border-b ps-5 pe-3">
+      <header className="flex h-(--workspace-topbar-height) min-h-(--workspace-topbar-height) shrink-0 items-center pl-(--workspace-gutter-start) pr-(--workspace-gutter-end)">
         <WorkspaceBreadcrumb ariaLabel="Lighthouse breadcrumb" className="min-w-0">
           <WorkspaceBreadcrumbItem>
             <span>{workspaceName}</span>
@@ -498,7 +361,7 @@ export function LighthousePrototypePage({ background }: { background?: boolean }
         {view === "chats" && chat === "desk" ? (
           <div className="min-h-0 flex-1 overflow-y-auto scrollbar-gutter-both">
             <div className="mx-auto w-full max-w-(--chat-content-max-width) px-5 py-6">
-              <CompanyPage page="desk" viewer={viewer} workspace={workspace} />
+              <DeskPage viewer={viewer} workspace={workspace} />
             </div>
           </div>
         ) : null}
@@ -508,6 +371,7 @@ export function LighthousePrototypePage({ background }: { background?: boolean }
             viewer={viewer}
             workspace={workspace}
             chat={chat}
+            onExpand={onExpand}
           />
         ) : null}
         {view !== "chats" ? (
@@ -516,7 +380,11 @@ export function LighthousePrototypePage({ background }: { background?: boolean }
               <div
                 className={cn(
                   "w-full py-6",
-                  view === "tasks" ? "px-8 pt-10" : "mx-auto max-w-5xl px-5",
+                  view === "tasks"
+                    ? "px-8 pt-10"
+                    : view === "decisions"
+                      ? "mx-auto max-w-3xl px-5 pt-10"
+                      : "mx-auto max-w-5xl px-5",
                 )}
               >
                 {view === "bots" ? <BotsPage viewer={viewer} workspace={workspace} /> : null}
@@ -527,20 +395,17 @@ export function LighthousePrototypePage({ background }: { background?: boolean }
                   <TasksPage key={viewer + workspace} viewer={viewer} workspace={workspace} />
                 ) : null}
                 {view === "members" ? <MembersPage workspace={workspace} /> : null}
+                {view === "decisions" ? (
+                  <DecisionsPage viewer={viewer} workspace={workspace} />
+                ) : null}
               </div>
             </div>
-            <CopilotPanel
+            <LighthousePanel
               viewer={viewer}
               workspace={workspace}
               view={view}
-              chat={chat}
-              onChat={(c) =>
-                void navigate({
-                  to: "/prototype/lighthouse",
-                  search: { ...search, chat: c },
-                  replace: true,
-                })
-              }
+              mainChat={null}
+              onExpand={onExpand}
             />
           </div>
         ) : null}

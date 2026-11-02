@@ -40,7 +40,7 @@ export function WorkspaceUserMenu({ compact }: { compact?: boolean }) {
             type="button"
             className={cn(
               "flex min-w-0 items-center gap-2 rounded-md p-1 text-start text-sm outline-none hover:bg-sidebar-row-hover focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
-              !compact && "flex-1",
+              !compact && "pe-2",
             )}
           />
         }
@@ -50,7 +50,7 @@ export function WorkspaceUserMenu({ compact }: { compact?: boolean }) {
         </span>
         {compact ? null : (
           <>
-            <span className="min-w-0 flex-1 truncate">
+            <span className="min-w-0 truncate">
               <span className="font-medium">{viewer.name}</span>
               <span className="text-muted-foreground"> · {workspace.name}</span>
             </span>
@@ -127,7 +127,7 @@ export function SettingsIconButton() {
 /** Lighthouse footer: account row with a top border, settings on the right. */
 export function WorkspaceFooter() {
   return (
-    <div className="flex shrink-0 items-center gap-1 border-t px-2 py-2">
+    <div className="flex shrink-0 items-center justify-between gap-1 border-t px-2 py-2">
       <WorkspaceUserMenu />
       <SettingsIconButton />
     </div>
