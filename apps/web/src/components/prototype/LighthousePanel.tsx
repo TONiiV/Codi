@@ -4,7 +4,6 @@ import {
   ChevronDownIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
-  ExpandIcon,
   FileTextIcon,
   FilesIcon,
   FolderIcon,
@@ -284,13 +283,11 @@ function SideChatSurface({
   workspace,
   view,
   mainChat,
-  onExpand,
 }: {
   viewer: LighthouseViewer;
   workspace: string;
   view: LighthouseView;
   mainChat: string | null;
-  onExpand: (chat: string) => void;
 }) {
   const choices = chatsFor(viewer, workspace).filter((c) => c.id !== mainChat);
   const [picked, setPicked] = useState<string | null>(null);
@@ -298,16 +295,8 @@ function SideChatSurface({
   if (!current) return null;
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex shrink-0 items-center justify-between gap-1 px-2 pb-2">
+      <div className="flex shrink-0 items-center px-2 pb-2">
         <CosPicker choices={choices} current={current} onPick={setPicked} />
-        <Button
-          size="icon-xs"
-          variant="ghost-muted"
-          aria-label="在主窗口打开"
-          onClick={() => onExpand(current.id)}
-        >
-          <ExpandIcon />
-        </Button>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-2">
         <ChatTimeline
@@ -336,14 +325,12 @@ export function LighthousePanel({
   workspace,
   view,
   mainChat,
-  onExpand,
   children,
 }: {
   viewer: LighthouseViewer;
   workspace: string;
   view: LighthouseView;
   mainChat: string | null;
-  onExpand: (chat: string) => void;
   children: ReactNode;
 }) {
   const first: Surface =
@@ -479,7 +466,6 @@ export function LighthousePanel({
               workspace={workspace}
               view={view}
               mainChat={mainChat}
-              onExpand={onExpand}
             />
           ) : null}
         </div>

@@ -33,7 +33,6 @@ import {
   WorkspaceBreadcrumbItem,
   WorkspaceBreadcrumbSeparator,
 } from "../WorkspaceBreadcrumb";
-import { useNavigate } from "@tanstack/react-router";
 
 function ToneDot({ tone }: { tone: "ok" | "warn" | "bad" }) {
   return (
@@ -315,7 +314,6 @@ function MembersPage({ workspace }: { workspace: string }) {
 
 export function LighthousePrototypePage({ background }: { background?: boolean }) {
   const search = useLighthouseSearch() ?? normalizeLighthouseSearch({});
-  const navigate = useNavigate();
   const workspace = useWorkspaceId();
   const workspaceName = WORKSPACES.find((w) => w.id === workspace)?.name ?? workspace;
   const { as: viewer, view } = search;
@@ -328,8 +326,6 @@ export function LighthousePrototypePage({ background }: { background?: boolean }
       : "mine";
   const chatName =
     chat === "mine" ? v.cos.name : chat === "desk" ? "总台" : (PROJECT_COS[chat]?.name ?? chat);
-  const onExpand = (c: string) =>
-    void navigate({ to: "/prototype/lighthouse", search: { ...search, view: "chats", chat: c } });
   const viewLabel =
     view === "members" ? "成员与授权" : (RAIL_ITEMS.find((r) => r.id === view)?.label ?? view);
 
@@ -341,7 +337,6 @@ export function LighthousePrototypePage({ background }: { background?: boolean }
         workspace={workspace}
         view={view}
         mainChat={view === "chats" ? chat : null}
-        onExpand={onExpand}
       >
         <header className="flex h-(--workspace-topbar-height) min-h-(--workspace-topbar-height) shrink-0 items-center pl-(--workspace-gutter-start) pr-(--workspace-gutter-end)">
           <WorkspaceBreadcrumb ariaLabel="Lighthouse breadcrumb" className="min-w-0">
