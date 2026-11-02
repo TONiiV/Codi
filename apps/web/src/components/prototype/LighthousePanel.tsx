@@ -8,20 +8,31 @@ import {
   FilesIcon,
   FolderIcon,
   Globe2Icon,
+  ListChecksIcon,
   LockIcon,
   MessagesSquareIcon,
   PlusIcon,
   RotateCwIcon,
+  XIcon,
 } from "lucide-react";
-import { useState, type KeyboardEvent, type ReactNode } from "react";
+import { useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 
 import { cn } from "../../lib/utils";
-import { ChatComposerCard, ChatTimeline } from "./LighthouseChat";
+import { ChatComposerCard, ChatTimeline, type ChatMessage } from "./LighthouseChat";
+import {
+  createTask,
+  createTicket,
+  createWorker,
+  findTask,
+  useSideChatRequest,
+} from "./lighthouseActions";
 import { BotAvatar } from "./LighthouseChatList";
 import {
   PROJECTS,
   VIEWERS,
+  TASK_STATUS,
   chatsFor,
+  type LighthouseTask,
   type LighthouseChat,
   type LighthouseView,
   type LighthouseViewer,
@@ -278,39 +289,156 @@ function CosPicker({
   );
 }
 
+type ActionId = "nudge" | "ticket" | "worker" | "task";
+
+const ACTIONS: ReadonlyArray<{ id: ActionId; label: string }> = [
+  { id: "nudge", label: "催进度" },
+  { id: "ticket", label: "开工单" },
+  { id: "worker", label: "派 Worker" },
+  { id: "task", label: "拆成新任务" },
+];
+
+function Created({ kind, id, text, by }: { kind: string; id: string; text: string; by: string }) {
+  return (
+    <div className="mt-2 flex flex-col gap-1 rounded-lg bg-muted/60 px-3 py-2">
+      <div className="flex items-center gap-2 text-xs">
+        <Badge variant="success">已创建</Badge>
+        <span className="text-muted-foreground">{kind}</span>
+        <span className="font-mono">{id}</span>
+      </div>
+      <div className="text-sm">{text}</div>
+      <div className="text-xs text-muted-foreground">以 {by} 的权限执行</div>
+    </div>
+  );
+}
+
+function taskSummary(task: LighthouseTask) {
+  const status = TASK_STATUS[task.status].label;
+  const open = task.tickets.filter((t) => t.state !== "merged");
+  const parts = open.map((t) =>
+    t.state === "pr"
+      ? `${t.id} PR 等合并`
+      : t.worker
+        ? `${t.id} ${t.worker} 在做`
+        : `${t.id} 没人接`,
+  );
+  return `${task.id}「${task.title}」${status}。${parts.length > 0 ? parts.join("，") + "。" : "还没有工单。"}要我推进哪一步？`;
+}
+
 function SideChatSurface({
   viewer,
   workspace,
   view,
   mainChat,
+  picked,
+  onPick,
+  taskId,
+  onClearTask,
 }: {
   viewer: LighthouseViewer;
   workspace: string;
   view: LighthouseView;
   mainChat: string | null;
+  picked: string | null;
+  onPick: (id: string) => void;
+  taskId: string | null;
+  onClearTask: () => void;
 }) {
   const choices = chatsFor(viewer, workspace).filter((c) => c.id !== mainChat);
-  const [picked, setPicked] = useState<string | null>(null);
   const current = choices.find((c) => c.id === picked) ?? choices[0];
+  const task = taskId ? findTask(taskId) : undefined;
+  const [log, setLog] = useState<ReadonlyArray<ChatMessage>>([]);
+  const [summary] = useState(() => (task ? taskSummary(task) : null));
+  const scroller = useRef<HTMLDivElement>(null);
   if (!current) return null;
+  const by = VIEWERS[viewer].name;
+
+  const act = (id: ActionId) => {
+    if (!task) return;
+    const label = ACTIONS.find((a) => a.id === id)!.label;
+    const ask: ChatMessage = { id: `u${log.length}`, role: "user", body: label };
+    let body: ReactNode;
+    if (id === "nudge") {
+      const waiting = task.tickets.filter((t) => t.state !== "merged" && t.worker);
+      body =
+        waiting.length > 0
+          ? `已在 ${waiting.map((t) => `${t.worker}（${t.id}）`).join("、")} 的线程里追问，有回复就告诉你。`
+          : "这个任务还没有 Worker 在跑，要不要我开工单再派人？";
+    } else if (id === "ticket") {
+      const ticket = createTicket(task, `跟进 ${task.title}`);
+      body = (
+        <>
+          开好了，挂在 {task.id} 下面。
+          <Created kind="工单" id={ticket.id} text={ticket.title} by={by} />
+        </>
+      );
+    } else if (id === "worker") {
+      const fresh = findTask(task.id)!;
+      const ticket =
+        fresh.tickets.find((t) => t.state === "open" && !t.worker) ??
+        createTicket(task, `跟进 ${task.title}`);
+      const worker = createWorker(task, ticket);
+      body = (
+        <>
+          派好了，{worker.id} 接 {ticket.id}。
+          <Created
+            kind="Worker"
+            id={worker.id}
+            text={`${worker.harness} · ${worker.where}`}
+            by={by}
+          />
+        </>
+      );
+    } else {
+      const next = createTask(task, `${task.title} · 后续`);
+      body = (
+        <>
+          拆出来了，先放在待开始。
+          <Created kind="任务" id={next.id} text={next.title} by={by} />
+        </>
+      );
+    }
+    setLog([...log, ask, { id: `a${log.length}`, role: "assistant", author: current.name, body }]);
+  };
+
+  const opening: ChatMessage = {
+    id: "a-open",
+    role: "assistant",
+    author: current.name,
+    body: summary ? summary : current.readOnly === true ? "要查哪份文档？" : OPENING_LINE[view],
+  };
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex shrink-0 items-center px-2 pb-2">
-        <CosPicker choices={choices} current={current} onPick={setPicked} />
+        <CosPicker choices={choices} current={current} onPick={onPick} />
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-2">
-        <ChatTimeline
-          messages={[
-            {
-              id: "a1",
-              role: "assistant",
-              author: current.name,
-              body: current.readOnly === true ? "要查哪份文档？" : OPENING_LINE[view],
-            },
-          ]}
-        />
+      <div ref={scroller} className="min-h-0 flex-1 overflow-y-auto px-4 py-2">
+        <ChatTimeline messages={[opening, ...log]} />
       </div>
-      <div className="p-3">
+      <div className="flex flex-col gap-2 p-3">
+        {task ? (
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="inline-flex max-w-full items-center gap-1 rounded-md bg-muted px-1.5 py-0.5 text-xs">
+              <ListChecksIcon className="size-3 shrink-0 text-muted-foreground" />
+              <span className="font-mono">{task.id}</span>
+              <span className="truncate">{task.title}</span>
+              <button
+                type="button"
+                aria-label="移除任务"
+                onClick={onClearTask}
+                className="cursor-pointer rounded-sm text-muted-foreground hover:text-foreground"
+              >
+                <XIcon className="size-3" />
+              </button>
+            </span>
+            {ACTIONS.map((a) => (
+              <Button key={a.id} size="xs" variant="outline" onClick={() => act(a.id)}>
+                {a.label}
+              </Button>
+            ))}
+          </div>
+        ) : null}
         <ChatComposerCard placeholder={`对 ${current.name} 说`} />
       </div>
     </div>
@@ -339,6 +467,21 @@ export function LighthousePanel({
   const [activeId, setActiveId] = useState<string | null>(first.id);
   const [panelOpen, setPanelOpen] = useState(true);
   const [maximized, setMaximized] = useState(false);
+  const [picked, setPicked] = useState<string | null>(null);
+  const [taskId, setTaskId] = useState<string | null>(null);
+  const request = useSideChatRequest();
+  const [seenRequest, setSeenRequest] = useState(request?.seq ?? 0);
+  // A task sent from the tracker opens the side chat on its agent, once per request.
+  if (request && request.seq !== seenRequest) {
+    setSeenRequest(request.seq);
+    setPicked(request.chat);
+    setTaskId(request.task);
+    setPanelOpen(true);
+    if (!surfaces.some((x) => x.kind === "sidechat")) {
+      setSurfaces([...surfaces, { id: "sidechat", kind: "sidechat" }]);
+    }
+    setActiveId("sidechat");
+  }
   const active = surfaces.find((s) => s.id === activeId) ?? null;
 
   const open = (surface: Surface) => {
@@ -462,10 +605,15 @@ export function LighthousePanel({
           {active?.kind === "browser" ? <BrowserSurface workspace={workspace} /> : null}
           {active?.kind === "sidechat" ? (
             <SideChatSurface
+              key={`${picked ?? ""}:${taskId ?? ""}`}
               viewer={viewer}
               workspace={workspace}
               view={view}
               mainChat={mainChat}
+              picked={picked}
+              onPick={setPicked}
+              taskId={taskId}
+              onClearTask={() => setTaskId(null)}
             />
           ) : null}
         </div>

@@ -5,6 +5,7 @@ import { useState } from "react";
 
 import { cn } from "../../lib/utils";
 import { BotAvatar } from "./LighthouseChatList";
+import { useAllBots } from "./lighthouseActions";
 import {
   MASCOT_STATES,
   MASCOTS,
@@ -14,7 +15,6 @@ import {
 } from "./LighthouseMascot";
 import {
   ASKS,
-  BOTS,
   PROJECTS,
   TASKS,
   VIEWERS,
@@ -91,6 +91,7 @@ function MascotShowcase() {
               state={state}
               framed
               followPointer
+              lively
               className="aspect-square w-full rounded-2xl text-white"
             />
             <figcaption className="text-xs">
@@ -106,7 +107,7 @@ function MascotShowcase() {
 
 export function BotsPage({ viewer, workspace }: { viewer: LighthouseViewer; workspace: string }) {
   const open = projectsIn(workspace, viewer).open;
-  const rows = BOTS.filter((b) =>
+  const rows = useAllBots().filter((b) =>
     b.project ? open.includes(b.project) : b.kind === "router" || b.kind === "desk",
   );
   return (

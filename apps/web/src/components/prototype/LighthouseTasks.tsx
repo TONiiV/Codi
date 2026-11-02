@@ -12,6 +12,7 @@ import {
   FlagIcon,
   ListChecksIcon,
   ListFilterIcon,
+  MessageSquarePlusIcon,
   PlusIcon,
   SearchIcon,
   ShapesIcon,
@@ -28,7 +29,6 @@ import { Fragment, useState, type ReactNode } from "react";
 import { cn } from "../../lib/utils";
 import { BotAvatar } from "./LighthouseChatList";
 import {
-  TASKS,
   TASK_PRIORITY,
   TASK_STATUS,
   TASK_TYPE,
@@ -40,6 +40,10 @@ import {
   type TaskStatus,
 } from "./lighthouseData";
 import { ThreadAnchor, projectName } from "./LighthouseWork";
+import { openTaskInSideChat, taskAgent, useAllTasks } from "./lighthouseActions";
+import { normalizeLighthouseSearch, useLighthouseSearch } from "./lighthouseLocation";
+import { useWorkspaceId } from "./workspaceStore";
+import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { PullRequestGlyph } from "../pullRequest/pullRequestIcons";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
@@ -143,6 +147,28 @@ function Cell({ children, className }: { children?: ReactNode; className?: strin
   );
 }
 
+function SideChatButton({ task }: { task: LighthouseTask }) {
+  const search = useLighthouseSearch() ?? normalizeLighthouseSearch({});
+  const workspace = useWorkspaceId();
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <button
+            type="button"
+            aria-label={`把 ${task.id} 加到 Side chat`}
+            onClick={() => openTaskInSideChat(taskAgent(task, search.as, workspace), task.id)}
+            className="hidden size-6 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground group-hover:inline-flex hover:bg-accent hover:text-foreground focus-visible:inline-flex"
+          />
+        }
+      >
+        <MessageSquarePlusIcon className="size-3.5" />
+      </TooltipTrigger>
+      <TooltipPopup>加到 Side chat，和负责的幕僚长推进</TooltipPopup>
+    </Tooltip>
+  );
+}
+
 function TaskRow({ task }: { task: LighthouseTask }) {
   const [open, setOpen] = useState(false);
   const merged = task.tickets.filter((t) => t.state === "merged").length;
@@ -155,6 +181,7 @@ function TaskRow({ task }: { task: LighthouseTask }) {
             <span className="ms-auto hidden shrink-0 font-mono text-2xs text-muted-foreground group-hover:inline">
               {task.id}
             </span>
+            <SideChatButton task={task} />
           </span>
         </Cell>
         <Cell>
@@ -422,7 +449,7 @@ export function TasksPage({ viewer, workspace }: { viewer: LighthouseViewer; wor
   const v = VIEWERS[viewer];
   const [view, setView] = useState<TaskView>("all");
   const open = projectsIn(workspace, viewer).open;
-  const tasks = TASKS.filter((t) => open.includes(t.project));
+  const tasks = useAllTasks().filter((t) => open.includes(t.project));
   const mine = tasks.filter((t) =>
     t.assignees.some((a) => a.name === v.name || a.name === v.cos.name),
   );
