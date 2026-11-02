@@ -14,7 +14,6 @@ import {
 import { primaryServerKeybindingsAtom } from "../../state/server";
 import { cn } from "../../lib/utils";
 import { CodiLockup } from "../CodiLockup";
-import { WorkspaceUserMenu } from "../prototype/WorkspaceFooter";
 import { usePullRequestsSupported } from "../../state/environments";
 import {
   resolveEnvironmentIdentificationPillLabel,
@@ -241,7 +240,7 @@ const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
   };
 
   return (
-    <SidebarMenu className={cn("flex-row items-center", !isOnUtilityPage && "w-auto")}>
+    <SidebarMenu className="flex-row items-center">
       {isOnUtilityPage ? (
         <SidebarMenuItem className="min-w-0 flex-1">
           <SidebarMenuButton onClick={handleBackClick}>
@@ -277,22 +276,11 @@ const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
 });
 
 export const SidebarChromeFooter = memo(function SidebarChromeFooter() {
-  const isOnUtilityPage = useLocation({
-    select: (location) => isSidebarUtilityPage(location.pathname),
-  });
   return (
     <SidebarFooter>
       <SidebarProviderUpdatePill />
       <SidebarUpdateArchitectureWarning />
-      {import.meta.env.DEV && !isOnUtilityPage ? (
-        // PROTOTYPE, wipe me: account and workspace on the left, utilities on the right.
-        <div className="-mx-(--sidebar-content-inset) flex items-center gap-1 border-t px-(--sidebar-content-inset) pt-2">
-          <WorkspaceUserMenu />
-          <SidebarUtilityMenu />
-        </div>
-      ) : (
-        <SidebarUtilityMenu />
-      )}
+      <SidebarUtilityMenu />
     </SidebarFooter>
   );
 });
