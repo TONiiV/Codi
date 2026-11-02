@@ -3,41 +3,25 @@ import { describe, expect, it } from "vite-plus/test";
 import en from "./locales/en.json";
 import zhCN from "./locales/zh-CN.json";
 
-const flatten = (node: unknown, path = ""): Array<[string, unknown]> =>
+// Each key maps to its sorted placeholders, or a per-locale marker when the value is not a usable
+// translation, so a missing key, a renamed placeholder and a blank or non-string value all differ.
+const leafShape = (locale: string, value: unknown) =>
+  typeof value === "string" && value.trim() !== ""
+    ? [...value.matchAll(/\{\{\s*([^}]*?)\s*\}\}/g)].map((match) => `{{${match[1]}}}`).toSorted()
+    : `<unusable ${locale}: ${JSON.stringify(value)}>`;
+
+const shapes = (locale: string, node: unknown, path = ""): Record<string, unknown> =>
   typeof node === "object" && node !== null
-    ? Object.entries(node).flatMap(([key, value]) => flatten(value, path ? `${path}.${key}` : key))
-    : [[path, node]];
-
-const placeholders = (value: unknown) =>
-  typeof value === "string" ? (value.match(/\{\{[^}]*\}\}/g) ?? []).toSorted() : [];
-
-const enEntries = new Map(flatten(en));
-const zhEntries = new Map(flatten(zhCN));
+    ? Object.assign(
+        {},
+        ...Object.entries(node).map(([key, value]) =>
+          shapes(locale, value, path ? `${path}.${key}` : key),
+        ),
+      )
+    : { [path]: leafShape(locale, node) };
 
 describe("locale files", () => {
-  it("define the same keys", () => {
-    const missingInZh = [...enEntries.keys()].filter((key) => !zhEntries.has(key)).toSorted();
-    const extraInZh = [...zhEntries.keys()].filter((key) => !enEntries.has(key)).toSorted();
-    expect({ missingInZh, extraInZh }).toEqual({ missingInZh: [], extraInZh: [] });
-  });
-
-  it("use the same interpolation placeholders per key", () => {
-    const mismatched = [...enEntries]
-      .filter(([key]) => zhEntries.has(key))
-      .map(([key, value]) => ({
-        key,
-        en: placeholders(value),
-        zh: placeholders(zhEntries.get(key)),
-      }))
-      .filter((entry) => entry.en.join() !== entry.zh.join());
-    expect(mismatched).toEqual([]);
-  });
-
-  it("have no empty translations", () => {
-    const empty = [
-      ...[...enEntries].filter(([, value]) => value === "").map(([key]) => `en:${key}`),
-      ...[...zhEntries].filter(([, value]) => value === "").map(([key]) => `zh-CN:${key}`),
-    ];
-    expect(empty).toEqual([]);
+  it("define the same usable keys with the same interpolation placeholders", () => {
+    expect(shapes("zh-CN", zhCN)).toEqual(shapes("en", en));
   });
 });

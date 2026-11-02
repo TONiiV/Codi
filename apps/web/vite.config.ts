@@ -133,7 +133,8 @@ const browserTestProject = {
     browser: {
       enabled: true,
       headless: true,
-      provider: playwright(),
+      // Pin the locale so translated text does not depend on the host machine.
+      provider: playwright({ contextOptions: { locale: "en-US" } }),
       instances: [{ browser: "chromium" }],
       screenshotFailures: false,
       commands: {

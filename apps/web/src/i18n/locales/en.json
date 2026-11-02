@@ -41,7 +41,6 @@
   },
   "settings": {
     "title": "Settings",
-    "navLabel": "Settings sections",
     "breadcrumbLabel": "Settings breadcrumb",
     "openSourceLicenses": "Open source licenses",
     "resetToDefault": "Reset to default",
@@ -98,7 +97,6 @@
     "general": {
       "language": {
         "section": "Language",
-        "title": "Language",
         "description": "Language of the Codi interface. System default follows your browser or OS language.",
         "system": "System default",
         "reset": "language"

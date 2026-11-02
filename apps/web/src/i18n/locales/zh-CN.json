@@ -41,7 +41,6 @@
   },
   "settings": {
     "title": "设置",
-    "navLabel": "设置分区",
     "breadcrumbLabel": "设置面包屑导航",
     "openSourceLicenses": "开源许可",
     "resetToDefault": "恢复默认",
@@ -98,7 +97,6 @@
     "general": {
       "language": {
         "section": "语言",
-        "title": "语言",
         "description": "Codi 界面使用的语言。“跟随系统”会使用浏览器或操作系统的语言。",
         "system": "跟随系统",
         "reset": "语言"
