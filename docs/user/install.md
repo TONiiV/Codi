@@ -208,3 +208,4 @@ For provider-specific setup and accounts, see [Codex](./providers-codex.md),
 - [Remote access](./remote-access.md): connect from another device.
 - [Running in the background](./background-service.md): keep a Linux or macOS host available.
 - [Updating Codi](./updating.md): update the app and connected servers.
+- [Managed policy](./managed-policy.md): configure Codi for everyone on a machine.
