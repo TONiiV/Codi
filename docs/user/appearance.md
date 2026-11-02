@@ -48,6 +48,18 @@ The main sidebar, right panel, and terminal drawer open and close immediately by
 in your operating system. Moving between threads always snaps to the selected thread's panel state
 without replaying its transitions.
 
+### Animated background
+
+Turn on **Settings → Appearance → Animated background** to show a slow fluid backdrop behind the
+main area. Its colors come from your current theme's canvas and accent, so switching themes or
+editing those colors in the theme editor changes it right away. When reduced motion is enabled in
+your operating system, or the device has no graphics acceleration, it shows a still image instead.
+It also holds still while the window is not focused, so a window left open in the background costs
+nothing. If the device cannot run WebGL2 at all, the setting says it is unavailable.
+
+The setting is saved separately in each browser and desktop app, so turning it on in the desktop
+app does not turn it on in app.t3.codes. The mobile app does not show it.
+
 ## Custom themes
 
 On web and desktop, choose **Create theme** to adjust a palette, or import a Codi or VS Code

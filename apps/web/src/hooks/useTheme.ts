@@ -282,8 +282,11 @@ export function syncBrowserChromeTheme() {
   const themeChromeColor = document.documentElement.dataset.themeId
     ? normalizeThemeColor(rootStyles.getPropertyValue("--app-chrome-background"))
     : null;
+  // The animated backdrop veils the surface with a translucent color; the chrome needs the opaque one.
   const surfaceColor = normalizeThemeColor(
-    getComputedStyle(resolveBrowserChromeSurface()).backgroundColor,
+    document.documentElement.hasAttribute("data-theme-backdrop")
+      ? rootStyles.getPropertyValue("--background")
+      : getComputedStyle(resolveBrowserChromeSurface()).backgroundColor,
   );
   const fallbackColor = normalizeThemeColor(getComputedStyle(document.body).backgroundColor);
   const backgroundColor = themeChromeColor ?? surfaceColor ?? fallbackColor;
