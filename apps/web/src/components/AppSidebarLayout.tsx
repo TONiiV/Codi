@@ -410,6 +410,8 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
   const { active: panelAnimationsActive, durationMs: panelAnimationDurationMs } =
     usePanelAnimationSettings();
   const pathname = useLocation({ select: (location) => location.pathname });
+  // PROTOTYPE, wipe me: on the Work tab collapsing the sidebar keeps its vertical rail.
+  const onLighthousePrototype = pathname.startsWith("/prototype/lighthouse");
   const panelAnimationsSuppressed = usePanelNavigationSuppression(pathname);
   const routePanelAnimationsActive = panelAnimationsActive && !panelAnimationsSuppressed;
   const isMacosDesktop = isElectron && isMacPlatform(navigator.platform);
@@ -453,7 +455,7 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
         <SidebarBrandWidthProbe isElectron={isElectron} onWidthChange={setBrandWidth} />
         <Sidebar
           side="left"
-          collapsible="offcanvas"
+          collapsible={onLighthousePrototype ? "icon" : "offcanvas"}
           data-app-sidebar=""
           {...sidebarArea}
           role="navigation"

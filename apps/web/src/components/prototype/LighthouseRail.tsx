@@ -2,6 +2,7 @@
 import { useLocation, useNavigate } from "@tanstack/react-router";
 import { BotIcon, LayoutDashboardIcon, ListChecksIcon, MessagesSquareIcon } from "lucide-react";
 
+import { cn } from "../../lib/utils";
 import { Button } from "../ui/button";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import {
@@ -22,7 +23,7 @@ export const RAIL_ITEMS: ReadonlyArray<{
   { id: "tasks", label: "任务", icon: ListChecksIcon, badge: 2 },
 ];
 
-export function LighthouseRail() {
+export function LighthouseRail({ collapsed }: { collapsed?: boolean }) {
   const navigate = useNavigate();
   const search = useLocation({
     select: (l) =>
@@ -37,7 +38,10 @@ export function LighthouseRail() {
   return (
     <nav
       aria-label="工作区导航"
-      className="flex w-12 shrink-0 flex-col items-center gap-1 border-e py-2"
+      className={cn(
+        "flex w-12 shrink-0 flex-col items-center gap-1 py-2",
+        collapsed !== true && "border-e",
+      )}
     >
       {RAIL_ITEMS.map((item) => (
         <Tooltip key={item.id}>

@@ -924,6 +924,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
       return view === "bots" || view === "dashboard" || view === "tasks" ? view : "chats";
     },
   });
+  const lighthouseSidebarState = useSidebar().state;
   const lighthouseViewer = useLocation({
     select: (location) => {
       const as = (location.search as { as?: unknown }).as;
@@ -2997,6 +2998,14 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
       ? shortcutLabelForCommand(keybindings, "chat.newLocal")
       : undefined);
   const newThreadInProjectShortcutLabel = shortcutLabelForCommand(keybindings, "chat.newLocal");
+  if (onLighthousePrototype && lighthouseSidebarState === "collapsed") {
+    return (
+      <div className="flex min-h-0 flex-1 flex-col">
+        <div className="h-(--workspace-topbar-height) shrink-0" />
+        <LighthouseRail collapsed />
+      </div>
+    );
+  }
   if (onLighthousePrototype) {
     // PROTOTYPE, wipe me: the Work tab turns the thread list into a Chief of Staff chat list.
     return (
