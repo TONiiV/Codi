@@ -421,7 +421,7 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(t3-mobil
     }
   }
   @keyframes lighthouse-streak {
-    /* The anamorphic streak through the lamp, wider than the island. */
+    /* A short anamorphic streak through the lamp. */
     0%,
     16% {
       opacity: 0;
@@ -434,7 +434,7 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(t3-mobil
     40%,
     100% {
       opacity: 0;
-      scale: 1.3 1;
+      scale: 1.15 1;
     }
   }
   @keyframes lighthouse-ghost {

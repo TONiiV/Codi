@@ -84,10 +84,10 @@ function LighthouseFlare() {
       )}
     >
       <span className="absolute size-24 -translate-1/2 rounded-full bg-radial from-warning/90 from-0% via-warning/30 via-25% to-transparent to-65% opacity-0 motion-safe:group-has-[[data-lh]:hover]/island:animate-lighthouse-bloom motion-safe:group-has-[[data-lh]:focus-visible]/island:animate-lighthouse-bloom" />
-      <span className="absolute h-0.5 w-104 -translate-1/2 rounded-full bg-linear-to-r from-transparent via-warning to-transparent opacity-0 motion-safe:group-has-[[data-lh]:hover]/island:animate-lighthouse-streak motion-safe:group-has-[[data-lh]:focus-visible]/island:animate-lighthouse-streak" />
+      <span className="absolute h-0.5 w-28 -translate-1/2 rounded-full bg-linear-to-r from-transparent via-warning/80 to-transparent opacity-0 motion-safe:group-has-[[data-lh]:hover]/island:animate-lighthouse-streak motion-safe:group-has-[[data-lh]:focus-visible]/island:animate-lighthouse-streak" />
       <span className="absolute left-26 size-5 -translate-1/2 rounded-full border border-warning/50 bg-warning/10 opacity-0 motion-safe:group-has-[[data-lh]:hover]/island:animate-lighthouse-ghost motion-safe:group-has-[[data-lh]:focus-visible]/island:animate-lighthouse-ghost" />
-      <span className="absolute left-44 size-2.5 -translate-1/2 rounded-full bg-warning/40 opacity-0 motion-safe:group-has-[[data-lh]:hover]/island:animate-lighthouse-ghost motion-safe:group-has-[[data-lh]:focus-visible]/island:animate-lighthouse-ghost" />
-      <span className="absolute left-56 size-8 -translate-1/2 rounded-full bg-radial from-transparent from-50% via-warning/25 via-65% to-transparent to-75% opacity-0 motion-safe:group-has-[[data-lh]:hover]/island:animate-lighthouse-ghost motion-safe:group-has-[[data-lh]:focus-visible]/island:animate-lighthouse-ghost" />
+      <span className="absolute left-36 size-2.5 -translate-1/2 rounded-full bg-warning/40 opacity-0 motion-safe:group-has-[[data-lh]:hover]/island:animate-lighthouse-ghost motion-safe:group-has-[[data-lh]:focus-visible]/island:animate-lighthouse-ghost" />
+      <span className="absolute left-46 size-6 -translate-1/2 rounded-full bg-radial from-transparent from-50% via-warning/25 via-65% to-transparent to-75% opacity-0 motion-safe:group-has-[[data-lh]:hover]/island:animate-lighthouse-ghost motion-safe:group-has-[[data-lh]:focus-visible]/island:animate-lighthouse-ghost" />
     </span>
   );
 }
