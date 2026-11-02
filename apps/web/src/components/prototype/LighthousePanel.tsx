@@ -1,5 +1,5 @@
-// PROTOTYPE, wipe me. The Code right panel, cut down to Browser, Files and a side chat with a
-// Chief of Staff. The side chat never opens the conversation already in the main pane.
+// PROTOTYPE, wipe me. The Code right panel, cut down to Browser, Files and a side chat with the
+// Chief of Staff or a project Chief Agent. The side chat never opens the conversation already in the main pane.
 import {
   ChevronDownIcon,
   ChevronLeftIcon,
@@ -24,6 +24,7 @@ import {
   createTicket,
   createWorker,
   findTask,
+  useRegistryVersion,
   useSideChatRequest,
   type Kickoff,
 } from "./lighthouseActions";
@@ -77,7 +78,7 @@ const LAUNCH = [
 
 const OPENING_LINE: Record<LighthouseView, string> = {
   chats: "要我先看哪件？",
-  projects: "要接入哪个项目，或者改哪位幕僚长的权限？",
+  projects: "要接入哪个项目，或者改哪位 Chief Agent 的权限？",
   bots: "要重启哪个，或者给哪个项目加 Worker？",
   dashboard: "要我解释哪个数字？",
   tasks: "改状态、加工单、改派 Worker，说一句就行。",
@@ -258,7 +259,7 @@ function CosPicker({
             nativeInput
             size="compact"
             autoFocus
-            placeholder="搜索幕僚长"
+            placeholder="搜索 agent"
             value={query}
             onChange={(e) => setQuery(e.currentTarget.value)}
           />
@@ -327,6 +328,9 @@ function taskSummary(task: LighthouseTask) {
   return `${task.id}「${task.title}」${status}。${parts.length > 0 ? parts.join("，") + "。" : "还没有工单。"}要我推进哪一步？`;
 }
 
+const chatsAt = (viewer: LighthouseViewer, workspace: string, _version: number) =>
+  chatsFor(viewer, workspace);
+
 function SideChatSurface({
   viewer,
   workspace,
@@ -348,7 +352,7 @@ function SideChatSurface({
   kickoff: Kickoff | null;
   onClearTask: () => void;
 }) {
-  const choices = chatsFor(viewer, workspace).filter((c) => c.id !== mainChat);
+  const choices = chatsAt(viewer, workspace, useRegistryVersion()).filter((c) => c.id !== mainChat);
   const current = choices.find((c) => c.id === picked) ?? choices[0];
   const task = taskId ? findTask(taskId) : undefined;
   const [log, setLog] = useState<ReadonlyArray<ChatMessage>>([]);

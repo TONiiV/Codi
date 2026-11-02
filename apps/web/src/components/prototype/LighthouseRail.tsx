@@ -22,7 +22,7 @@ export const RAIL_ITEMS: ReadonlyArray<{
   icon: typeof BotIcon;
   badge?: number;
 }> = [
-  { id: "chats", label: "幕僚长们", icon: MessagesSquareIcon, badge: 4 },
+  { id: "chats", label: "对话", icon: MessagesSquareIcon, badge: 4 },
   { id: "projects", label: "项目", icon: FolderGit2Icon },
   { id: "bots", label: "Bots", icon: BotIcon },
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboardIcon },

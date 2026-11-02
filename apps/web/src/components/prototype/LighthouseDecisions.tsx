@@ -1,5 +1,5 @@
 // PROTOTYPE, wipe me. Per project, the chain of decisions that led to where it is now. Each
-// node names its owner and source; the project Chief of Staff keeps the chain current.
+// node names its owner and source; the project Chief Agent keeps the chain current.
 import { LockIcon } from "lucide-react";
 import { useState } from "react";
 

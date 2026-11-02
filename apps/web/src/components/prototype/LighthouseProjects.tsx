@@ -1,7 +1,7 @@
 // PROTOTYPE, wipe me. Lighthouse projects are Code projects: the same title, workspace root,
 // repository and machine. Adding one goes through Code's own add-project flow; linking it
-// gives it a Chief of Staff, whose owner and powers are set here.
-import { FolderGit2Icon, LockIcon, PlusIcon, Settings2Icon } from "lucide-react";
+// gives it a project Chief Agent, whose owner and powers are set here.
+import { FolderGit2Icon, LockIcon, PencilIcon, PlusIcon, Settings2Icon } from "lucide-react";
 import { useId, useState } from "react";
 
 import { openCommandPalette } from "../../commandPaletteBus";
@@ -10,8 +10,10 @@ import { BotAvatar } from "./LighthouseChatList";
 import {
   linkProject,
   saveCos,
+  renameChiefOfStaff,
   useCosSetup,
-  useLinkedProjects,
+  useRegistryVersion,
+  useViewer,
   type CosPower,
   type CosSetup,
 } from "./lighthouseActions";
@@ -51,7 +53,8 @@ const HARNESSES = [
   "Claude Code / Sonnet",
   "Codex / gpt-5",
 ];
-const MACHINES = ["lighthouse-01", "mac-mini-2", "ws-lin-3", "本机"];
+// The Chief of Staff and every Chief Agent run here; Workers run where the code is.
+const CLOUD = "公司云服务器 · lighthouse-01";
 const MEMBERS = Object.values(VIEWERS).map((v) => v.name);
 
 interface Source {
@@ -65,12 +68,14 @@ function CosDialog({
   title,
   source,
   initial,
+  canRename,
   onSave,
   onClose,
 }: {
   title: string;
   source: Source;
   initial: CosSetup;
+  canRename: (setup: CosSetup) => boolean;
   onSave: (setup: CosSetup) => void;
   onClose: () => void;
 }) {
@@ -98,22 +103,29 @@ function CosDialog({
           <DialogHeader>
             <DialogTitle>{title}</DialogTitle>
             <DialogDescription>
-              {source.title} · {source.root} · {source.repo} · {source.machine}
+              {source.title} · {source.root} · {source.repo} · 代码在 {source.machine}
             </DialogDescription>
           </DialogHeader>
           <DialogPanel>
             <div className="flex flex-col gap-4">
               <div className="flex items-center gap-3">
                 <BotAvatar seed={setup.name} size="lg" />
-                <Label className="flex flex-1 flex-col items-stretch" htmlFor={`${id}-name`}>
-                  幕僚长名字
-                  <Input
-                    nativeInput
-                    id={`${id}-name`}
-                    value={setup.name}
-                    onChange={(e) => set("name", e.currentTarget.value)}
-                  />
-                </Label>
+                {canRename(setup) ? (
+                  <Label className="flex flex-1 flex-col items-stretch" htmlFor={`${id}-name`}>
+                    名字
+                    <Input
+                      nativeInput
+                      id={`${id}-name`}
+                      value={setup.name}
+                      onChange={(e) => set("name", e.currentTarget.value)}
+                    />
+                  </Label>
+                ) : (
+                  <div className="flex flex-1 flex-col">
+                    <span className="font-medium">{setup.name}</span>
+                    <span className="text-xs text-muted-foreground">只有项目负责人能改名</span>
+                  </div>
+                )}
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <Label className="flex flex-col items-stretch">
@@ -162,21 +174,10 @@ function CosDialog({
                     </SelectPopup>
                   </Select>
                 </Label>
-                <Label className="flex flex-col items-stretch">
-                  跑在哪台机器
-                  <Select value={setup.machine} onValueChange={(v) => v && set("machine", v)}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectPopup>
-                      {MACHINES.map((m) => (
-                        <SelectItem key={m} value={m}>
-                          {m}
-                        </SelectItem>
-                      ))}
-                    </SelectPopup>
-                  </Select>
-                </Label>
+                <div className="flex flex-col gap-1 text-sm">
+                  <span className="font-medium">运行在</span>
+                  <span className="text-muted-foreground">{CLOUD}</span>
+                </div>
               </div>
               <fieldset className="flex flex-col gap-2">
                 <legend className="mb-1 text-sm font-medium">不用问 {setup.owner} 就能做</legend>
@@ -193,7 +194,7 @@ function CosDialog({
                   </label>
                 ))}
                 <p className="text-xs text-muted-foreground">
-                  没勾的事，幕僚长先问 {setup.owner}。它每次动手都以提问人的权限执行并记审计。
+                  没勾的事，Chief Agent 先问 {setup.owner}。它每次动手都以提问人的权限执行并记审计。
                 </p>
               </fieldset>
             </div>
@@ -209,6 +210,50 @@ function CosDialog({
         </form>
       </DialogPopup>
     </Dialog>
+  );
+}
+
+/** Your own Chief of Staff (总幕僚长): only you can rename it. */
+function ChiefOfStaffCard({ viewer, name }: { viewer: LighthouseViewer; name: string }) {
+  const [draft, setDraft] = useState<string | null>(null);
+  return (
+    <section className="flex items-center gap-3 rounded-lg border bg-card p-4">
+      <BotAvatar seed={name} size="lg" />
+      <div className="min-w-0 flex-1">
+        {draft === null ? (
+          <div className="font-medium">{name}</div>
+        ) : (
+          <form
+            className="flex items-center gap-2"
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (draft.trim()) renameChiefOfStaff(viewer, draft.trim());
+              setDraft(null);
+            }}
+          >
+            <Input
+              nativeInput
+              size="sm"
+              autoFocus
+              aria-label="Chief of Staff 名字"
+              value={draft}
+              onChange={(e) => setDraft(e.currentTarget.value)}
+            />
+            <Button type="submit" size="sm">
+              保存
+            </Button>
+          </form>
+        )}
+        <div className="text-xs text-muted-foreground">
+          你的 Chief of Staff（总幕僚长），管你能看到的所有项目 Chief Agent · 运行在 {CLOUD}
+        </div>
+      </div>
+      {draft === null ? (
+        <Button size="xs" variant="ghost-muted" onClick={() => setDraft(name)}>
+          <PencilIcon /> 改名
+        </Button>
+      ) : null}
+    </section>
   );
 }
 
@@ -256,13 +301,12 @@ function ProjectRow({ id, onEdit }: { id: string; onEdit: () => void }) {
   );
 }
 
-const HEADS = ["项目", "仓库", "机器", "幕僚长", ""];
+const HEADS = ["项目", "仓库", "代码所在机器", "Chief Agent（公司云）", ""];
 
-// Registries are module data; passing `linked` makes the React Compiler recompute on a link.
-const visible = (workspace: string, viewer: LighthouseViewer, _linked: ReadonlyArray<string>) =>
+// Registries are module data; passing the version makes the React Compiler recompute.
+const visible = (workspace: string, viewer: LighthouseViewer, _version: number) =>
   projectsIn(workspace, viewer);
-const rootsOf = (_linked: ReadonlyArray<string>) =>
-  new Set(Object.values(PROJECT_SOURCE).map((s) => s.root));
+const rootsOf = (_version: number) => new Set(Object.values(PROJECT_SOURCE).map((s) => s.root));
 
 export function ProjectsPage({
   viewer,
@@ -271,10 +315,11 @@ export function ProjectsPage({
   viewer: LighthouseViewer;
   workspace: string;
 }) {
-  const linked = useLinkedProjects();
-  const { open, locked } = visible(workspace, viewer, linked);
+  const version = useRegistryVersion();
+  const me = useViewer(viewer);
+  const { open, locked } = visible(workspace, viewer, version);
   const code = useProjects().filter((p) => p.isScratch !== true && p.archivedAt == null);
-  const linkedRoots = rootsOf(linked);
+  const linkedRoots = rootsOf(version);
   const unlinked = code.filter((p) => !linkedRoots.has(p.workspaceRoot));
   const [editing, setEditing] = useState<
     { kind: "edit"; id: string } | { kind: "link"; source: Source } | null
@@ -287,13 +332,15 @@ export function ProjectsPage({
         <div>
           <h1 className="text-2xl font-semibold">项目</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            和 Code 里是同一个项目：名字、目录、仓库、机器都一样。Lighthouse 只多一位幕僚长。
+            和 Code 里是同一个项目：名字、目录、仓库、机器都一样。Lighthouse 只多一位 Chief Agent。
           </p>
         </div>
         <Button size="sm" onClick={() => openCommandPalette({ open: "add-project" })}>
           <PlusIcon /> 添加项目
         </Button>
       </div>
+
+      <ChiefOfStaffCard viewer={viewer} name={me.cos.name} />
 
       <section className="flex flex-col gap-3">
         <h2 className="text-sm font-medium">在 Lighthouse 里</h2>
@@ -329,7 +376,9 @@ export function ProjectsPage({
       <section className="flex flex-col gap-3">
         <div className="flex items-baseline justify-between gap-2">
           <h2 className="text-sm font-medium">Code 里还没接入的项目</h2>
-          <span className="text-xs text-muted-foreground">接入后，幕僚长会出现在左侧聊天列表</span>
+          <span className="text-xs text-muted-foreground">
+            接入后，Chief Agent 会出现在左侧聊天列表
+          </span>
         </div>
         {unlinked.length === 0 ? (
           <div className="flex flex-col items-start gap-2 rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
@@ -362,7 +411,7 @@ export function ProjectsPage({
                     variant="outline"
                     onClick={() => setEditing({ kind: "link", source })}
                   >
-                    接入并设幕僚长
+                    接入并设 Chief Agent
                   </Button>
                 </li>
               );
@@ -373,12 +422,13 @@ export function ProjectsPage({
 
       {editing?.kind === "edit" ? (
         <CosDialog
-          title="设定幕僚长"
+          title="设定 Chief Agent"
           source={{
             title: PROJECTS[editing.id]?.name ?? editing.id,
             ...(PROJECT_SOURCE[editing.id] ?? { root: "", repo: "", machine: "" }),
           }}
           initial={editingSetup}
+          canRename={() => PROJECTS[editing.id]?.lead === me.name}
           onClose={() => setEditing(null)}
           onSave={(setup) => {
             saveCos(editing.id, setup);
@@ -391,13 +441,13 @@ export function ProjectsPage({
           title={`接入 ${editing.source.title}`}
           source={editing.source}
           initial={{
-            name: `${editing.source.title} 幕僚长`,
-            owner: VIEWERS[viewer].name,
+            name: `${editing.source.title} Chief Agent`,
+            owner: me.name,
             harness: HARNESSES[0]!,
-            machine: MACHINES[0]!,
             powers: ["ticket", "worker", "answer"],
             report: "daily",
           }}
+          canRename={(setup) => setup.owner === me.name}
           onClose={() => setEditing(null)}
           onSave={(setup) => {
             linkProject(editing.source, workspace, viewer, setup);

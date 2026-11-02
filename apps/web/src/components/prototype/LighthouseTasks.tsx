@@ -32,7 +32,6 @@ import {
   TASK_PRIORITY,
   TASK_STATUS,
   TASK_TYPE,
-  VIEWERS,
   projectsIn,
   type LighthouseTask,
   type LighthouseViewer,
@@ -40,7 +39,13 @@ import {
   type TaskStatus,
 } from "./lighthouseData";
 import { ThreadAnchor, projectName } from "./LighthouseWork";
-import { moveTask, openTaskInSideChat, taskAgent, useAllTasks } from "./lighthouseActions";
+import {
+  moveTask,
+  openTaskInSideChat,
+  taskAgent,
+  useAllTasks,
+  useViewer,
+} from "./lighthouseActions";
 import { normalizeLighthouseSearch, useLighthouseSearch } from "./lighthouseLocation";
 import { useWorkspaceId } from "./workspaceStore";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
@@ -164,7 +169,7 @@ function SideChatButton({ task }: { task: LighthouseTask }) {
       >
         <MessageSquarePlusIcon className="size-3.5" />
       </TooltipTrigger>
-      <TooltipPopup>加到 Side chat，和负责的幕僚长推进</TooltipPopup>
+      <TooltipPopup>加到 Side chat，和负责的 Chief Agent 推进</TooltipPopup>
     </Tooltip>
   );
 }
@@ -405,7 +410,7 @@ function NewTaskButton() {
 
 /**
  * Notion's "By Status": one kanban column per status, tinted by it. Dragging a card from
- * 待开始 into 进行中 tells its Chief of Staff to start it.
+ * 待开始 into 进行中 tells its project Chief Agent to start it.
  */
 function StatusBoard({ tasks }: { tasks: ReadonlyArray<LighthouseTask> }) {
   const search = useLighthouseSearch() ?? normalizeLighthouseSearch({});
@@ -446,7 +451,7 @@ function StatusBoard({ tasks }: { tasks: ReadonlyArray<LighthouseTask> }) {
             ))}
             {s === "doing" && over === "doing" ? (
               <div className="rounded-lg border border-dashed border-primary/50 px-3 py-2 text-xs text-muted-foreground">
-                放下就开干：幕僚长派 Worker 或催进度
+                放下就开干：Chief Agent 派 Worker 或催进度
               </div>
             ) : null}
             <NewTaskButton />
@@ -486,7 +491,7 @@ function ProjectBoard({
 }
 
 export function TasksPage({ viewer, workspace }: { viewer: LighthouseViewer; workspace: string }) {
-  const v = VIEWERS[viewer];
+  const v = useViewer(viewer);
   const [view, setView] = useState<TaskView>("all");
   const open = projectsIn(workspace, viewer).open;
   const tasks = useAllTasks().filter((t) => open.includes(t.project));

@@ -1,5 +1,5 @@
 // PROTOTYPE, wipe me. Non-chat views of Lighthouse (Bots, Dashboard) and the Copilot panel on the
-// right of every non-chat view, where the user picks which Chief of Staff to talk to.
+// right of every non-chat view, where the user picks which Chief Agent to talk to.
 import { CpuIcon, MessageSquareIcon, PlusIcon, ServerIcon } from "lucide-react";
 import { useState } from "react";
 
@@ -132,7 +132,7 @@ export function BotsPage({ viewer, workspace }: { viewer: LighthouseViewer; work
                       : b.kind === "desk"
                         ? "总台"
                         : b.kind === "cos"
-                          ? "项目幕僚长"
+                          ? "项目 Chief Agent"
                           : `Worker · ${projectName(b.project ?? "")}`}
                   </span>
                 </TableCell>

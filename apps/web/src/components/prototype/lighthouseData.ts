@@ -88,6 +88,7 @@ export const VIEWERS: Record<
     title: string;
     projects: ReadonlyArray<string>;
     docs: ReadonlyArray<string>;
+    /** The viewer's Chief of Staff (总幕僚长), over every project Chief Agent they can see. */
     cos: { name: string };
   }
 > = {
@@ -96,21 +97,21 @@ export const VIEWERS: Record<
     title: "管理员",
     projects: ["codi", "site", "app", "docs", "ops", "gripper", "tactile"],
     docs: ["public", "team", "confidential"],
-    cos: { name: "砚书" },
+    cos: { name: "Chief of Staff" },
   },
   lead: {
     name: "Keting Chen",
     title: "官网负责人",
     projects: ["site", "gripper"],
     docs: ["public", "team"],
-    cos: { name: "小满" },
+    cos: { name: "Chief of Staff" },
   },
   member: {
     name: "Max",
     title: "成员",
     projects: ["app", "tactile"],
     docs: ["public"],
-    cos: { name: "助理" },
+    cos: { name: "Chief of Staff" },
   },
 };
 
@@ -122,8 +123,9 @@ export function projectsIn(workspace: string, viewer: LighthouseViewer) {
 }
 
 /**
- * The Codi project behind each Lighthouse project: the same record the Code page shows
- * (title, workspace root, repository, machine). Lighthouse adds a Chief of Staff and members.
+ * The Codi project behind each Lighthouse project, as the Code page shows it. `machine` is where
+ * the code and its Workers live; the Chief of Staff and every Chief Agent run on the company
+ * cloud server. Lighthouse adds a project Chief Agent and members.
  */
 export const PROJECT_SOURCE: Record<string, { root: string; repo: string; machine: string }> = {
   codi: { root: "~/code/codi", repo: "github.com/TONiiV/Codi", machine: "lighthouse-01" },
@@ -136,13 +138,13 @@ export const PROJECT_SOURCE: Record<string, { root: string; repo: string; machin
 };
 
 export const PROJECT_COS: Record<string, { name: string; tone: string }> = {
-  codi: { name: "Codi 幕僚长", tone: "bg-primary" },
-  site: { name: "官网 幕僚长", tone: "bg-success" },
-  app: { name: "移动端 幕僚长", tone: "bg-warning" },
-  docs: { name: "文档站 幕僚长", tone: "bg-info" },
-  ops: { name: "运维 幕僚长", tone: "bg-muted-foreground" },
-  gripper: { name: "夹爪 幕僚长", tone: "bg-info" },
-  tactile: { name: "触觉 幕僚长", tone: "bg-success" },
+  codi: { name: "Codi Chief Agent", tone: "bg-primary" },
+  site: { name: "官网 Chief Agent", tone: "bg-success" },
+  app: { name: "移动端 Chief Agent", tone: "bg-warning" },
+  docs: { name: "文档站 Chief Agent", tone: "bg-info" },
+  ops: { name: "运维 Chief Agent", tone: "bg-muted-foreground" },
+  gripper: { name: "夹爪 Chief Agent", tone: "bg-info" },
+  tactile: { name: "触觉 Chief Agent", tone: "bg-success" },
 };
 
 export interface LighthouseAsk {
@@ -304,7 +306,7 @@ export function registerProject(
     workspace: project.workspace,
     lead: project.lead,
     tone: "ok",
-    line: "刚接入，幕僚长在读仓库和最近的 PR。",
+    line: "刚接入，Chief Agent 在读仓库和最近的 PR。",
     pr: "还没有 PR",
   };
   PROJECT_SOURCE[id] = source;
@@ -334,7 +336,7 @@ export function chatsFor(
     id,
     name: PROJECT_COS[id]!.name,
     tone: PROJECT_COS[id]!.tone,
-    online: id !== "app",
+    online: true,
     ...LAST_LINE[id]!,
   }));
   const desk: LighthouseChat = {
@@ -425,7 +427,7 @@ const TONIIV_TASKS: ReadonlyArray<LighthouseTask> = [
     title: "官网 RSS 与封面图",
     project: "site",
     status: "review",
-    assignees: [P("Keting Chen"), B("官网 幕僚长", "bg-success")],
+    assignees: [P("Keting Chen"), B("官网 Chief Agent", "bg-success")],
     due: "2026-11-03",
     priority: "high",
     type: "feature",
@@ -440,7 +442,7 @@ const TONIIV_TASKS: ReadonlyArray<LighthouseTask> = [
     title: "Webhook 入口签名校验",
     project: "codi",
     status: "doing",
-    assignees: [P("Tonic"), B("Codi 幕僚长", "bg-primary")],
+    assignees: [P("Tonic"), B("Codi Chief Agent", "bg-primary")],
     due: "2026-11-05",
     priority: "high",
     type: "feature",
@@ -456,7 +458,7 @@ const TONIIV_TASKS: ReadonlyArray<LighthouseTask> = [
     title: "移动端离线缓存",
     project: "app",
     status: "doing",
-    assignees: [P("Max"), B("移动端 幕僚长", "bg-warning")],
+    assignees: [P("Max"), B("移动端 Chief Agent", "bg-warning")],
     due: "2026-11-08",
     priority: "medium",
     type: "feature",
@@ -468,7 +470,7 @@ const TONIIV_TASKS: ReadonlyArray<LighthouseTask> = [
     title: "企微 Bot 接入总台",
     project: "codi",
     status: "todo",
-    assignees: [B("Codi 幕僚长", "bg-primary")],
+    assignees: [B("Codi Chief Agent", "bg-primary")],
     due: "2026-11-12",
     priority: "medium",
     type: "feature",
@@ -483,7 +485,7 @@ const TONIIV_TASKS: ReadonlyArray<LighthouseTask> = [
     title: "价格页 Safari 错位",
     project: "site",
     status: "done",
-    assignees: [B("官网 幕僚长", "bg-success")],
+    assignees: [B("官网 Chief Agent", "bg-success")],
     due: "2026-10-30",
     priority: "high",
     type: "bug",
@@ -506,7 +508,7 @@ const TONIIV_TASKS: ReadonlyArray<LighthouseTask> = [
   },
   {
     id: "T-22",
-    title: "幕僚长上下文轮换",
+    title: "Chief Agent 上下文轮换",
     project: "codi",
     status: "todo",
     assignees: [P("Tonic")],
@@ -544,7 +546,7 @@ const DIMX_TASKS: ReadonlyArray<LighthouseTask> = [
     title: "工业夹取机器人 / 灵巧手触觉 PoC",
     project: "gripper",
     status: "doing",
-    assignees: [B("夹爪 幕僚长", "bg-info")],
+    assignees: [B("夹爪 Chief Agent", "bg-info")],
     priority: "high",
     type: "feature",
     description: "DimensionX 机器人方向第一版 Demo。",
@@ -565,7 +567,7 @@ const DIMX_TASKS: ReadonlyArray<LighthouseTask> = [
     title: "夹爪 Demo 软件开发",
     project: "gripper",
     status: "doing",
-    assignees: [P("Tonic"), B("夹爪 幕僚长", "bg-info")],
+    assignees: [P("Tonic"), B("夹爪 Chief Agent", "bg-info")],
     due: "2026-07-18",
     tickets: [{ id: "gripper#7", title: "抓取控制", worker: "W21", state: "pr" }],
   },
@@ -594,7 +596,7 @@ const DIMX_TASKS: ReadonlyArray<LighthouseTask> = [
     title: "护膝膝关节角度 Demo（电阻 + 电容，2 天方案）",
     project: "tactile",
     status: "doing",
-    assignees: [P("Max"), B("触觉 幕僚长", "bg-success")],
+    assignees: [P("Max"), B("触觉 Chief Agent", "bg-success")],
     type: "feature",
     description: "用现有 5×5 cm 传感器、ESP32-S3 和护膝。",
     tickets: [{ id: "tactile#3", title: "角度标定", worker: "W24", state: "pr" }],
@@ -632,7 +634,7 @@ export const BOTS: ReadonlyArray<LighthouseBot> = [
     kind: "router",
     tone: "bg-foreground",
     harness: "Codi 常驻线程 / Haiku",
-    where: "lighthouse-01",
+    where: "公司云 · lighthouse-01",
     status: "盯 6 个信道，今天分发 14 条",
     online: true,
   },
@@ -642,18 +644,18 @@ export const BOTS: ReadonlyArray<LighthouseBot> = [
     kind: "desk",
     tone: "bg-muted-foreground",
     harness: "Codi 线程 / Sonnet",
-    where: "lighthouse-01",
+    where: "公司云 · lighthouse-01",
     status: "只读，按权限过滤",
     online: true,
     chat: "desk",
   },
   {
     id: "cos-codi",
-    name: "Codi 幕僚长",
+    name: "Codi Chief Agent",
     kind: "cos",
     tone: "bg-primary",
     harness: "Codi 滚动线程 / Opus",
-    where: "lighthouse-01",
+    where: "公司云 · lighthouse-01",
     status: "管 2 个 Worker",
     online: true,
     project: "codi",
@@ -661,11 +663,11 @@ export const BOTS: ReadonlyArray<LighthouseBot> = [
   },
   {
     id: "cos-site",
-    name: "官网 幕僚长",
+    name: "官网 Chief Agent",
     kind: "cos",
     tone: "bg-success",
     harness: "Codi 滚动线程 / Sonnet",
-    where: "lighthouse-01",
+    where: "公司云 · lighthouse-01",
     status: "等人确认 PR #88",
     online: true,
     project: "site",
@@ -673,13 +675,13 @@ export const BOTS: ReadonlyArray<LighthouseBot> = [
   },
   {
     id: "cos-app",
-    name: "移动端 幕僚长",
+    name: "移动端 Chief Agent",
     kind: "cos",
     tone: "bg-warning",
     harness: "Codi 滚动线程 / Sonnet",
-    where: "mac-mini-2",
-    status: "环境离线，挂起",
-    online: false,
+    where: "公司云 · lighthouse-01",
+    status: "Worker 机器 mac-mini-2 离线，app#41 挂起",
+    online: true,
     project: "app",
     chat: "app",
   },
@@ -740,11 +742,11 @@ export const BOTS: ReadonlyArray<LighthouseBot> = [
   },
   {
     id: "cos-gripper",
-    name: "夹爪 幕僚长",
+    name: "夹爪 Chief Agent",
     kind: "cos",
     tone: "bg-info",
     harness: "Codi 滚动线程 / Sonnet",
-    where: "lab-pc",
+    where: "公司云 · lighthouse-01",
     status: "管 1 个 Worker",
     online: true,
     project: "gripper",
@@ -752,11 +754,11 @@ export const BOTS: ReadonlyArray<LighthouseBot> = [
   },
   {
     id: "cos-tactile",
-    name: "触觉 幕僚长",
+    name: "触觉 Chief Agent",
     kind: "cos",
     tone: "bg-success",
     harness: "Codi 滚动线程 / Sonnet",
-    where: "lab-pc",
+    where: "公司云 · lighthouse-01",
     status: "等人选方案",
     online: true,
     project: "tactile",
@@ -864,8 +866,8 @@ export const DECISION_CHAINS: Record<
         when: "未定",
         weight: "major",
         state: "open",
-        title: "项目幕僚长每项目一个，还是每人一个",
-        why: "建议每项目一个，加每人一个私人幕僚长。",
+        title: "Chief Agent 每项目一个，还是每人一个",
+        why: "建议每项目一个 Chief Agent，加每人一个 Chief of Staff（总幕僚长）统管。",
         owner: "Tonic",
         source: "#15",
       },

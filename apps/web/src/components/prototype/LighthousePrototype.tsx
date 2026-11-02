@@ -1,6 +1,7 @@
 // PROTOTYPE, wipe me. The Lighthouse mode inside the real Codi shell at /prototype/lighthouse.
 // Everything is scoped to the current workspace and filtered by the viewer's permissions. The
-// user talks only to a Chief of Staff; Workers, tickets and PRs are links. Mock data only.
+// user talks only to their Chief of Staff (总幕僚长) or a project Chief Agent; Workers,
+// tickets and PRs are links. Mock data only.
 import { LockIcon, MessageSquareIcon } from "lucide-react";
 import { useState, type ReactNode } from "react";
 
@@ -20,12 +21,16 @@ import {
 } from "./lighthouseData";
 import { normalizeLighthouseSearch, useLighthouseSearch } from "./lighthouseLocation";
 import { RAIL_ITEMS } from "./LighthouseRail";
+import { useRegistryVersion, useViewer } from "./lighthouseActions";
 import { TasksPage } from "./LighthouseTasks";
 import { DashboardPage } from "./LighthouseDashboard";
 import { BotsPage } from "./LighthouseWork";
 import { DecisionsPage } from "./LighthouseDecisions";
 import { ProjectsPage } from "./LighthouseProjects";
 import { useWorkspaceId } from "./workspaceStore";
+
+// Chief Agent names can change at runtime; the version argument keeps the compiler honest.
+const chiefAgentName = (chat: string, _version: number) => PROJECT_COS[chat]?.name ?? chat;
 import { PullRequestGlyph } from "../pullRequest/pullRequestIcons";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
@@ -105,7 +110,7 @@ function Inbox({ asks }: { asks: ReturnType<typeof asksFor> }) {
                     {a.kind === "merge" ? "合并" : "回答"}
                   </Button>
                   <Button size="xs" variant="outline">
-                    {a.kind === "merge" ? "先看 diff" : "让幕僚长定"}
+                    {a.kind === "merge" ? "先看 diff" : "让 Chief of Staff 定"}
                   </Button>
                 </>
               )}
@@ -192,7 +197,7 @@ function conversation(
   workspace: string,
   chat: string,
 ): ReadonlyArray<ChatMessage> {
-  const v = VIEWERS[viewer];
+  const v = useViewer(viewer);
   const { open, locked } = projectsIn(workspace, viewer);
   if (chat !== "mine") {
     const p = PROJECTS[chat];
@@ -252,9 +257,10 @@ function ChatPage({
   workspace: string;
   chat: string;
 }) {
-  const v = VIEWERS[viewer];
+  const v = useViewer(viewer);
+  const version = useRegistryVersion();
   const asks = asksFor(viewer, workspace, chat === "mine" ? undefined : chat);
-  const cosName = chat === "mine" ? v.cos.name : (PROJECT_COS[chat]?.name ?? chat);
+  const cosName = chat === "mine" ? v.cos.name : chiefAgentName(chat, version);
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="min-h-0 flex-1 overflow-y-auto scrollbar-gutter-both">
@@ -318,15 +324,16 @@ export function LighthousePrototypePage({ background }: { background?: boolean }
   const workspace = useWorkspaceId();
   const workspaceName = WORKSPACES.find((w) => w.id === workspace)?.name ?? workspace;
   const { as: viewer, view } = search;
-  const v = VIEWERS[viewer];
+  const v = useViewer(viewer);
+  const version = useRegistryVersion();
   const openProjects = projectsIn(workspace, viewer).open;
-  // A project chat from another workspace falls back to the personal Chief of Staff.
+  // A project chat from another workspace falls back to the viewer's Chief of Staff (总幕僚长).
   const chat =
     search.chat === "mine" || search.chat === "desk" || openProjects.includes(search.chat)
       ? search.chat
       : "mine";
   const chatName =
-    chat === "mine" ? v.cos.name : chat === "desk" ? "总台" : (PROJECT_COS[chat]?.name ?? chat);
+    chat === "mine" ? v.cos.name : chat === "desk" ? "总台" : chiefAgentName(chat, version);
   const viewLabel =
     view === "members" ? "成员与授权" : (RAIL_ITEMS.find((r) => r.id === view)?.label ?? view);
 

@@ -150,7 +150,7 @@ const METRICS = [
     better: "down",
     of: (ts: Ticket[]) => ts.filter((t) => t.stuck).length,
     rows: (t: Ticket) => t.stuck !== null,
-    how: "未合并且 Worker 或幕僚长标了阻塞原因的工单。阻塞解除就不再算。",
+    how: "未合并且 Worker 或 Chief Agent 标了阻塞原因的工单。阻塞解除就不再算。",
   },
   {
     id: "wait",
@@ -435,8 +435,8 @@ function Timeline({ t }: { t: Ticket }) {
         {t.stuck ? <Badge variant="warning">卡住：{t.stuck}</Badge> : null}
       </div>
       <div className="text-xs text-muted-foreground">
-        {projectName(t.project)} · Worker {t.worker} · 负责人 {PROJECTS[t.project]?.lead} · 幕僚长{" "}
-        {PROJECT_COS[t.project]?.name}
+        {projectName(t.project)} · Worker {t.worker} · 负责人 {PROJECTS[t.project]?.lead} · Chief
+        Agent {PROJECT_COS[t.project]?.name}
       </div>
       <ol className="relative flex flex-col gap-3 before:absolute before:start-1.5 before:top-1 before:bottom-1 before:w-px before:bg-border">
         {reached.map((s, i) => (
@@ -446,7 +446,7 @@ function Timeline({ t }: { t: Ticket }) {
               {DAYS[Math.min(6, t.day + Math.floor(i / 2))]} {hours[i]}:0{i}
             </span>
             <span>
-              {s.id === "created" ? `幕僚长开单，派给 ${t.worker}` : null}
+              {s.id === "created" ? `Chief Agent 开单，派给 ${t.worker}` : null}
               {s.id === "started" ? `${t.worker} 开工` : null}
               {s.id === "pr" ? "PR 已开，等 CI" : null}
               {s.id === "green"

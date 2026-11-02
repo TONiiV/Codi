@@ -1,4 +1,4 @@
-// PROTOTYPE, wipe me. What a Chief of Staff created from a side chat (tasks, tickets, Workers),
+// PROTOTYPE, wipe me. What a Chief Agent created from a side chat (tasks, tickets, Workers),
 // and requests to open a task in the side chat. In-memory only; the real thing is Lighthouse
 // state that syncs to every member of the workspace.
 import { useSyncExternalStore } from "react";
@@ -8,6 +8,7 @@ import {
   PROJECTS,
   PROJECT_COS,
   TASKS,
+  VIEWERS,
   projectsIn,
   registerProject,
   type LighthouseBot,
@@ -25,22 +26,22 @@ interface Store {
   status: Readonly<Record<string, TaskStatus>>;
   cos: Readonly<Record<string, CosSetup>>;
   linked: ReadonlyArray<string>;
+  version: number;
   request: SideChatRequest | null;
 }
 
 export type CosPower = "ticket" | "worker" | "answer" | "merge";
 
-/** How a project's Chief of Staff is set up, and what it may do without asking its owner. */
+/** How a project Chief Agent is set up, and what it may do without asking its owner. */
 export interface CosSetup {
   name: string;
   owner: string;
   harness: string;
-  machine: string;
   powers: ReadonlyArray<CosPower>;
   report: "daily" | "weekly";
 }
 
-/** What the Chief of Staff did when a task was dragged into 进行中. */
+/** What the project Chief Agent did when a task was dragged into 进行中. */
 export interface Kickoff {
   ticket: Ticket;
   worker: string;
@@ -61,6 +62,7 @@ let store: Store = {
   status: {},
   cos: {},
   linked: [],
+  version: 0,
   request: null,
 };
 const listeners = new Set<() => void>();
@@ -110,7 +112,7 @@ export function findTask(id: string): LighthouseTask | undefined {
   return t ? withChanges(store, t) : undefined;
 }
 
-/** The agent that owns a task: its project's Chief of Staff, or the desk for desk tasks. */
+/** The agent that owns a task: its project Chief Agent, or the desk for desk tasks. */
 export function taskAgent(task: LighthouseTask, viewer: LighthouseViewer, workspace: string) {
   if (task.assignees.some((a) => a.kind === "bot" && a.name === "总台")) return "desk";
   return projectsIn(workspace, viewer).open.includes(task.project) ? task.project : "mine";
@@ -122,7 +124,7 @@ export function openTaskInSideChat(chat: string, task: string, kickoff?: Kickoff
 }
 
 /**
- * Moving a task on the board. Into 进行中 from 待开始 means "start it": the Chief of Staff
+ * Moving a task on the board. Into 进行中 from 待开始 means "start it": the project Chief Agent
  * puts a Worker on its first unclaimed ticket, opening one if needed, or chases the Workers
  * already on it, and reports in the side chat.
  */
@@ -192,10 +194,9 @@ export function createTask(from: LighthouseTask, title: string): LighthouseTask 
 
 function defaultCos(project: string): CosSetup {
   return {
-    name: PROJECT_COS[project]?.name ?? `${project} 幕僚长`,
+    name: PROJECT_COS[project]?.name ?? `${project} Chief Agent`,
     owner: PROJECTS[project]?.lead ?? "Tonic",
     harness: "Codi 滚动线程 / Sonnet",
-    machine: "lighthouse-01",
     powers: ["ticket", "worker", "answer"],
     report: "daily",
   };
@@ -205,18 +206,37 @@ export function useCosSetup(project: string): CosSetup {
   return useStore().cos[project] ?? defaultCos(project);
 }
 
-/** Re-renders a view when projects are linked, since their registries live outside React. */
-export function useLinkedProjects(): ReadonlyArray<string> {
-  return useStore().linked;
+/**
+ * Bumps when a project is linked or an agent renamed. Those registries are module data, so a
+ * view passes this into what it derives from them, or the React Compiler keeps the old value.
+ */
+export function useRegistryVersion(): number {
+  return useStore().version;
 }
 
+const viewerAt = (viewer: LighthouseViewer, _version: number) => ({
+  ...VIEWERS[viewer],
+  cos: { ...VIEWERS[viewer].cos },
+});
+
+export function useViewer(viewer: LighthouseViewer) {
+  return viewerAt(viewer, useStore().version);
+}
+
+/** Only the viewer renames their own Chief of Staff. */
+export function renameChiefOfStaff(viewer: LighthouseViewer, name: string) {
+  VIEWERS[viewer].cos = { name };
+  update({ version: store.version + 1 });
+}
+
+/** Only a project's own lead renames its Chief Agent; the dialog enforces that. */
 export function saveCos(project: string, setup: CosSetup) {
   const cos = PROJECT_COS[project];
   if (cos) PROJECT_COS[project] = { ...cos, name: setup.name };
-  update({ cos: { ...store.cos, [project]: setup } });
+  update({ cos: { ...store.cos, [project]: setup }, version: store.version + 1 });
 }
 
-/** Turns a Code project into a Lighthouse project: same record, plus a Chief of Staff. */
+/** Turns a Code project into a Lighthouse project: same record, plus a project Chief Agent. */
 export function linkProject(
   source: { title: string; root: string; repo: string; machine: string },
   workspace: string,
@@ -229,6 +249,10 @@ export function linkProject(
     { name: source.title, workspace, lead: setup.owner, cos: setup.name, viewer },
     { root: source.root, repo: source.repo, machine: source.machine },
   );
-  update({ linked: [...store.linked, id], cos: { ...store.cos, [id]: setup } });
+  update({
+    linked: [...store.linked, id],
+    cos: { ...store.cos, [id]: setup },
+    version: store.version + 1,
+  });
   return id;
 }
