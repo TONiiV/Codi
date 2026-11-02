@@ -1,0 +1,300 @@
+<!doctype html>
+<!--
+  PROTOTYPE, wipe me. Three variants of the Lighthouse top-level board, switchable via ?variant=A|B|C
+  (floating bar at the bottom, arrow keys). Lighthouse has no page yet, so this is a standalone file
+  (sub-shape B). Mock data only, nothing is persisted, nothing talks to Codi.
+  Open: apps/lighthouse/prototype/index.html
+-->
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lighthouse 看板原型</title>
+<style>
+  :root{
+    --bg:#f6f7f9;--fg:#1b1f24;--muted:#6b7280;--line:#e2e5ea;--panel:#fff;--soft:#eef1f5;
+    --accent:#0f6e6a;--accent-soft:#d9efec;--ok:#15803d;--ok-soft:#dcfce7;--warn:#b45309;--warn-soft:#fef3c7;--bad:#b91c1c;--bad-soft:#fee2e2;--info:#1d4ed8;--info-soft:#dbeafe;
+    --font:"PingFang SC","Noto Sans SC","Microsoft YaHei",system-ui,sans-serif;--mono:"JetBrains Mono",Menlo,monospace;
+  }
+  @media (prefers-color-scheme:dark){:root{--bg:#121417;--fg:#e6e8eb;--muted:#9aa3ad;--line:#2a2f36;--panel:#1a1e23;--soft:#232930;--accent:#4fc3b8;--accent-soft:#163b38;--ok:#4ade80;--ok-soft:#14321f;--warn:#fbbf24;--warn-soft:#3a2d0c;--bad:#f87171;--bad-soft:#3f1a1a;--info:#60a5fa;--info-soft:#172554;color-scheme:dark}}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.5 var(--font)}
+  header.top{display:flex;align-items:center;gap:16px;padding:10px 20px;border-bottom:1px solid var(--line);background:var(--panel);position:sticky;top:0;z-index:5}
+  header.top .brand{font-weight:700;letter-spacing:.02em}
+  header.top .brand span{color:var(--accent)}
+  header.top nav{display:flex;gap:4px;margin-left:12px}
+  header.top nav a{padding:4px 10px;border-radius:6px;color:var(--muted);text-decoration:none}
+  header.top nav a.on{background:var(--soft);color:var(--fg)}
+  header.top .right{margin-left:auto;display:flex;gap:14px;color:var(--muted);font-size:12px;align-items:center}
+  .dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--ok);margin-right:6px;vertical-align:middle}
+  main{padding:16px 20px 90px;max-width:1600px;margin:0 auto}
+  h2{font-size:13px;margin:0 0 8px;color:var(--muted);font-weight:600;letter-spacing:.04em;text-transform:uppercase}
+  .pill{display:inline-block;padding:1px 8px;border-radius:999px;font-size:11px;font-weight:600;line-height:18px}
+  .p-ok{background:var(--ok-soft);color:var(--ok)}.p-warn{background:var(--warn-soft);color:var(--warn)}.p-bad{background:var(--bad-soft);color:var(--bad)}.p-info{background:var(--info-soft);color:var(--info)}.p-acc{background:var(--accent-soft);color:var(--accent)}.p-mute{background:var(--soft);color:var(--muted)}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px 12px}
+  .meter{height:6px;background:var(--soft);border-radius:3px;overflow:hidden}
+  .meter i{display:block;height:100%;background:var(--accent)}
+  .meter i.hot{background:var(--warn)}
+  .mono{font-family:var(--mono);font-size:12px}
+  .muted{color:var(--muted)}
+  .btn{border:1px solid var(--line);background:var(--panel);color:var(--fg);border-radius:6px;padding:4px 10px;font:inherit;font-size:12px;cursor:pointer}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  .btn:hover{filter:brightness(.97)}
+  /* KPI strip */
+  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px}
+  .kpi{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px 12px}
+  .kpi b{display:block;font-size:22px;font-variant-numeric:tabular-nums}
+  .kpi span{color:var(--muted);font-size:12px}
+  /* A: tower */
+  .tower{display:grid;grid-template-columns:minmax(260px,1fr) minmax(300px,1.2fr) minmax(320px,1.4fr);gap:14px}
+  .col{min-width:0}
+  .feed{display:flex;flex-direction:column;gap:6px}
+  .ev{display:grid;grid-template-columns:52px 1fr auto;gap:8px;align-items:start;background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:7px 9px}
+  .ev time{color:var(--muted);font-size:11px;font-variant-numeric:tabular-nums;padding-top:2px}
+  .ev .src{font-size:11px;color:var(--muted)}
+  .ev.route{border-left:3px solid var(--accent)}
+  .ev.pass{border-left:3px solid var(--ok)}
+  .ev.drop{border-left:3px solid var(--line);opacity:.65}
+  .decision{border-left:3px solid var(--accent);margin-bottom:8px}
+  .decision .who{font-size:11px;color:var(--muted)}
+  .decision .verdict{margin-top:4px}
+  .lanes{display:flex;flex-direction:column;gap:12px}
+  .lane{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px 12px}
+  .lane h3{margin:0 0 8px;font-size:13px;display:flex;justify-content:space-between}
+  .lane h3 small{color:var(--muted);font-weight:400}
+  .worker{display:grid;grid-template-columns:1fr auto;gap:4px 10px;padding:8px 0;border-top:1px dashed var(--line)}
+  .worker:first-of-type{border-top:0}
+  .worker .t{font-weight:600}
+  .worker .meta{grid-column:1/-1;display:flex;gap:10px;align-items:center;font-size:12px;color:var(--muted)}
+  .worker .meter{width:90px;display:inline-block;vertical-align:middle}
+  /* B: kanban */
+  .filters{display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap}
+  .filters .btn.on{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}
+  .board{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(220px,1fr);gap:10px;overflow-x:auto;padding-bottom:8px}
+  .kcol{background:var(--soft);border-radius:8px;padding:8px;min-height:420px}
+  .kcol h3{font-size:12px;margin:2px 4px 8px;display:flex;justify-content:space-between;color:var(--muted)}
+  .kcol.merge{outline:2px solid var(--accent);outline-offset:-2px}
+  .tk{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:8px 10px;margin-bottom:8px;cursor:pointer}
+  .tk.sel{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft)}
+  .tk .id{font-family:var(--mono);font-size:11px;color:var(--muted)}
+  .tk .title{font-weight:600;margin:2px 0 6px}
+  .tk .row{display:flex;gap:6px;flex-wrap:wrap;align-items:center;font-size:11px;color:var(--muted)}
+  .drawer{position:fixed;top:0;right:0;bottom:0;width:380px;max-width:100%;background:var(--panel);border-left:1px solid var(--line);padding:16px;overflow:auto;box-shadow:-8px 0 24px rgba(0,0,0,.08);z-index:6;transform:translateX(100%);transition:transform .15s}
+  .drawer.open{transform:none}
+  .drawer h3{margin:0 0 4px}
+  .drawer .hist{border-left:2px solid var(--line);margin:10px 0 0 6px;padding-left:12px;display:flex;flex-direction:column;gap:8px;font-size:12px}
+  .drawer .hist time{display:block;color:var(--muted);font-size:11px}
+  @media (prefers-reduced-motion:reduce){.drawer{transition:none}}
+  /* C: chain of command */
+  .chain{display:grid;grid-template-columns:minmax(0,2fr) minmax(300px,1fr);gap:14px}
+  .tree{display:flex;flex-direction:column;align-items:center;gap:0}
+  .node{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px 12px;min-width:220px}
+  .node.router{border-color:var(--accent);min-width:320px}
+  .node h4{margin:0;font-size:13px;display:flex;justify-content:space-between;gap:10px}
+  .node .sub{font-size:12px;color:var(--muted);margin-top:2px}
+  .node .last{font-size:12px;margin-top:6px;padding:6px 8px;background:var(--soft);border-radius:6px}
+  .stem{width:2px;height:18px;background:var(--line)}
+  .branches{display:grid;grid-template-columns:repeat(3,minmax(220px,1fr));gap:14px;width:100%;position:relative;padding-top:18px}
+  .branches::before{content:"";position:absolute;left:16.6%;right:16.6%;top:0;height:2px;background:var(--line)}
+  .branch{display:flex;flex-direction:column;align-items:center}
+  .branch::before{content:"";width:2px;height:18px;background:var(--line);margin-top:-18px}
+  .kids{width:100%;margin-top:10px;display:flex;flex-direction:column;gap:6px}
+  .kid{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:6px 8px;font-size:12px;display:grid;grid-template-columns:1fr auto;gap:2px 8px}
+  .kid .n{font-weight:600}
+  .kid .m{grid-column:1/-1;color:var(--muted);display:flex;gap:8px;align-items:center}
+  .kid .meter{width:70px;display:inline-block}
+  .inbox{display:flex;flex-direction:column;gap:8px}
+  .ask{background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--warn);border-radius:8px;padding:10px 12px}
+  .ask.merge{border-left-color:var(--accent)}
+  .ask.refused{border-left-color:var(--line)}
+  .ask .from{font-size:11px;color:var(--muted)}
+  .ask .acts{margin-top:8px;display:flex;gap:6px}
+  /* switcher */
+  #switcher{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);display:flex;align-items:center;gap:10px;background:#111;color:#fff;border-radius:999px;padding:8px 10px 8px 14px;box-shadow:0 8px 24px rgba(0,0,0,.35);z-index:50;font-size:13px}
+  #switcher button{background:#333;color:#fff;border:0;border-radius:999px;width:30px;height:30px;cursor:pointer;font-size:14px}
+  #switcher .lab{min-width:200px;text-align:center}
+  #switcher .lab b{font-family:var(--mono)}
+  #state{position:fixed;left:12px;bottom:12px;max-width:360px;font-size:11px;color:var(--muted);background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:6px 8px;z-index:40}
+  #state b{color:var(--fg)}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="brand">Lighthouse <span>·</span> 公司看板</div>
+  <nav><a class="on" href="#">总览</a><a href="#">工单</a><a href="#">项目</a><a href="#">成员与授权</a><a href="#">信道</a></nav>
+  <div class="right"><span><i class="dot"></i>Router 在线</span><span>3 个环境 · 2 在线</span><span>Tonic（管理员）</span></div>
+</header>
+<main id="app"></main>
+<aside id="drawer" class="drawer" aria-hidden="true"></aside>
+<div id="state"></div>
+<div id="switcher"><button id="prev" aria-label="上一个">◀</button><span class="lab" id="lab"></span><button id="next" aria-label="下一个">▶</button></div>
+
+<script>
+// ---------- mock data (shared by every variant) ----------
+const ENVS = [
+  {id:"office", name:"办公室 Mac", harness:"Claude Code", online:true},
+  {id:"cloud",  name:"云容器 · codi-runner-1", harness:"Codex", online:true},
+  {id:"home",   name:"家里电脑", harness:"Claude Code", online:false},
+];
+const PROJECTS = [
+  {id:"codi", name:"Codi", env:"office", cos:{ctx:0.62, rot:2, last:"把 #23 的后续评论直通给 Worker W7，不新开工单。"}},
+  {id:"site", name:"官网", env:"cloud",  cos:{ctx:0.31, rot:0, last:"Issue #12 已分级为 bug / P2，派给 Codex Worker。"}},
+  {id:"app",  name:"移动端", env:"home", cos:{ctx:0.88, rot:1, last:"环境离线，工单 #41 挂起，等机器回来。"}},
+];
+const STATES = ["新","已分级","已派工","进行中","评审中","待合并","完成"];
+const TICKETS = [
+  {id:"codi#23", title:"webhook 直通已链接线程", project:"codi", state:"评审中", worker:"W7", pr:"#23", ci:"ok", prio:"P1", src:"GitHub"},
+  {id:"codi#31", title:"反查线程暴露成 MCP 工具", project:"codi", state:"进行中", worker:"W9", pr:null, ci:null, prio:"P2", src:"GitHub"},
+  {id:"codi#35", title:"Router 线程换班机制", project:"codi", state:"已分级", worker:null, pr:null, ci:null, prio:"P2", src:"企微"},
+  {id:"codi#36", title:"看板实时推送", project:"codi", state:"新", worker:null, pr:null, ci:null, prio:"—", src:"微信"},
+  {id:"site#12", title:"价格页在 Safari 下错位", project:"site", state:"待合并", worker:"W3", pr:"#88", ci:"ok", prio:"P2", src:"GitHub"},
+  {id:"site#14", title:"博客 RSS 缺少封面图", project:"site", state:"已派工", worker:"W4", pr:null, ci:null, prio:"P3", src:"企微"},
+  {id:"site#9",  title:"首页首屏 LCP 超 2.5s", project:"site", state:"完成", worker:"W2", pr:"#81", ci:"ok", prio:"P1", src:"GitHub"},
+  {id:"app#41",  title:"Android 推送偶尔重复", project:"app", state:"已派工", worker:"W11", pr:null, ci:null, prio:"P1", src:"微信"},
+  {id:"app#40",  title:"登录页深色模式对比度", project:"app", state:"评审中", worker:"W10", pr:"#140", ci:"fail", prio:"P3", src:"GitHub"},
+];
+const WORKERS = [
+  {id:"W7",  env:"office", harness:"Claude Code / Opus",  ticket:"codi#23", status:"等 CI", ctx:0.44},
+  {id:"W9",  env:"office", harness:"Claude Code / Sonnet",ticket:"codi#31", status:"写代码", ctx:0.57},
+  {id:"W3",  env:"cloud",  harness:"Codex / gpt-5",       ticket:"site#12", status:"等人确认合并", ctx:0.71},
+  {id:"W4",  env:"cloud",  harness:"Codex / mini",        ticket:"site#14", status:"刚启动", ctx:0.05},
+  {id:"W11", env:"home",   harness:"Claude Code / Opus",  ticket:"app#41",  status:"环境离线", ctx:0.12},
+  {id:"W10", env:"home",   harness:"Claude Code / Sonnet",ticket:"app#40",  status:"修 CI 失败", ctx:0.66},
+];
+const EVENTS = [
+  {t:"10:42", src:"GitHub", kind:"pass",  text:"PR #23 新评论（reviewer: julius）→ 直通 W7"},
+  {t:"10:41", src:"CI",     kind:"pass",  text:"site PR #88 检查通过 → 直通 W3，W3 请求合并确认"},
+  {t:"10:38", src:"企微",   kind:"route", text:"@Lighthouse 价格页在 Safari 下错位 → Router：已有工单 site#12，追加到话题"},
+  {t:"10:35", src:"微信",   kind:"route", text:"「看板能不能实时刷新」→ Router：开工单 codi#36（观察模式，未派）"},
+  {t:"10:30", src:"GitHub", kind:"drop",  text:"codi PR #23 CI 开始运行 → 程序过滤：无需动作"},
+  {t:"10:27", src:"GitHub", kind:"pass",  text:"app PR #140 检查失败 → 直通 W10"},
+  {t:"10:20", src:"企微",   kind:"route", text:"「Router 多久换一次班」→ Router：开工单 codi#35，分级 P2，交给 Codi 的 CoS"},
+  {t:"10:12", src:"定时",   kind:"route", text:"扫描未派工 issue → site#14 派给 W4（Codex / mini）"},
+  {t:"09:58", src:"GitHub", kind:"drop",  text:"bot dependabot 评论 → 程序过滤：忽略"},
+  {t:"09:50", src:"微信",   kind:"drop",  text:"群聊闲聊 ×6 → 程序过滤：忽略"},
+];
+const ASKS = [
+  {kind:"merge",   from:"官网 · CoS", text:"site#12 价格页修复：CI 绿，评审 agent 通过。合并到 main？", pr:"#88"},
+  {kind:"question",from:"Codi · W9",  text:"反查工具要不要同时返回已结算的线程？默认只返回未结算。"},
+  {kind:"question",from:"移动端 · CoS", text:"家里电脑离线 2 小时，app#41 要改派到云容器吗？（需要 Android 模拟器）"},
+  {kind:"refused", from:"Router",     text:"微信消息「看板能不能实时刷新」：没有明确需求和方向，先只记录为 codi#36，未派工。"},
+];
+const P = Object.fromEntries(PROJECTS.map(p=>[p.id,p]));
+const E = Object.fromEntries(ENVS.map(e=>[e.id,e]));
+const esc = s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const pct = x=>Math.round(x*100)+"%";
+const ciPill = ci=> ci==="ok"?'<span class="pill p-ok">CI 通过</span>': ci==="fail"?'<span class="pill p-bad">CI 失败</span>':'';
+const kpis = ()=>`<div class="kpis">
+  <div class="kpi"><b>${EVENTS.length}</b><span>今日事件</span></div>
+  <div class="kpi"><b>${pct(EVENTS.filter(e=>e.kind==="pass").length/EVENTS.filter(e=>e.kind!=="drop").length)}</b><span>直通率（不经 Router）</span></div>
+  <div class="kpi"><b>${TICKETS.filter(t=>t.state!=="完成").length}</b><span>未完成工单</span></div>
+  <div class="kpi"><b>${WORKERS.filter(w=>E[w.env].online).length}/${WORKERS.length}</b><span>在线 Worker</span></div>
+  <div class="kpi"><b>${ASKS.filter(a=>a.kind!=="refused").length}</b><span>等你决定</span></div>
+</div>`;
+
+// ---------- Variant A: 塔台 ----------
+function VariantA(){
+  const feed = EVENTS.map(e=>`<div class="ev ${e.kind}"><time>${e.t}</time><div><div class="src">${esc(e.src)}</div>${esc(e.text)}</div><span class="pill ${e.kind==="pass"?"p-ok":e.kind==="route"?"p-acc":"p-mute"}">${e.kind==="pass"?"直通":e.kind==="route"?"Router":"过滤"}</span></div>`).join("");
+  const decisions = [
+    {who:"Router · 10:38", v:"企微消息命中已有工单 site#12 → 追加到话题，不新开。"},
+    {who:"Router · 10:35", v:"微信「看板实时刷新」证据不足 → 只记录 codi#36，<b>不派工</b>（观察模式）。"},
+    {who:"Codi · CoS · 10:20", v:"codi#35 分级 P2 → 开 Worker W12（Claude Code / Sonnet，办公室 Mac）。<span class='pill p-warn'>排队中</span>"},
+    {who:"官网 · CoS · 10:12", v:"定时扫描：site#14 无人认领 → 派给 W4（Codex / mini）。"},
+    {who:"官网 · CoS · 10:41", v:"site#12 CI 绿 + 评审通过 → <b>等你在企微里确认合并</b>。"},
+  ].map(d=>`<div class="card decision"><div class="who">${d.who}</div><div class="verdict">${d.v}</div></div>`).join("");
+  const lanes = ENVS.map(env=>{
+    const ws = WORKERS.filter(w=>w.env===env.id);
+    return `<div class="lane"><h3>${esc(env.name)} <small>${esc(env.harness)} · ${env.online?'<span class="pill p-ok">在线</span>':'<span class="pill p-bad">离线</span>'}</small></h3>
+      ${ws.map(w=>{const t=TICKETS.find(t=>t.id===w.ticket);return `<div class="worker"><div class="t">${w.id} · ${esc(t.title)}</div><span class="pill ${w.status.includes("离线")?"p-bad":w.status.includes("确认")?"p-acc":"p-info"}">${esc(w.status)}</span>
+        <div class="meta"><span class="mono">${esc(w.ticket)}</span><span>${esc(w.harness)}</span><span>上下文 <span class="meter"><i class="${w.ctx>0.6?'hot':''}" style="width:${pct(w.ctx)}"></i></span> ${pct(w.ctx)}</span>${t.pr?`<span>PR ${t.pr}</span>`:""}${ciPill(t.ci)}</div></div>`}).join("") || '<div class="muted">没有 Worker</div>'}
+    </div>`}).join("");
+  return `${kpis()}<div class="tower">
+    <section class="col"><h2>事件流（入口）</h2><div class="feed">${feed}</div></section>
+    <section class="col"><h2>判断与派工（Router · Chief of Staff）</h2>${decisions}</section>
+    <section class="col"><h2>Worker 跑道（按环境）</h2><div class="lanes">${lanes}</div></section>
+  </div>`;
+}
+VariantA.label = "塔台：事件 → 判断 → 跑道";
+
+// ---------- Variant B: 看板 ----------
+let selected = null, projFilter = "all";
+function VariantB(){
+  const list = TICKETS.filter(t=>projFilter==="all"||t.project===projFilter);
+  const cols = STATES.map(s=>{
+    const ts = list.filter(t=>t.state===s);
+    return `<div class="kcol ${s==="待合并"?"merge":""}"><h3><span>${s}</span><span>${ts.length}</span></h3>
+      ${ts.map(t=>`<div class="tk ${selected===t.id?'sel':''}" data-id="${t.id}"><div class="id">${esc(t.id)} · ${esc(P[t.project].name)}</div><div class="title">${esc(t.title)}</div>
+        <div class="row"><span class="pill ${t.prio==="P1"?"p-bad":t.prio==="P2"?"p-warn":"p-mute"}">${t.prio}</span>${t.worker?`<span>${t.worker}</span>`:'<span class="pill p-mute">未派</span>'}${t.pr?`<span>PR ${t.pr}</span>`:""}${ciPill(t.ci)}<span>来自 ${esc(t.src)}</span></div>
+        ${s==="待合并"?'<div style="margin-top:8px"><button class="btn primary" data-act="merge">确认合并</button> <button class="btn">先看 diff</button></div>':''}</div>`).join("")}
+    </div>`}).join("");
+  const filters = `<div class="filters"><button class="btn ${projFilter==="all"?"on":""}" data-pf="all">全部项目</button>${PROJECTS.map(p=>`<button class="btn ${projFilter===p.id?"on":""}" data-pf="${p.id}">${esc(p.name)} · CoS 上下文 ${pct(p.cos.ctx)}</button>`).join("")}</div>`;
+  return `${kpis()}${filters}<div class="board">${cols}</div><p class="muted" style="font-size:12px">点一张卡看它的来龙去脉。主入口是「待合并」那一列：Lighthouse v1 由人确认合并。</p>`;
+}
+VariantB.label = "看板：按工单状态，点卡看详情";
+function drawer(id){
+  const d = document.getElementById("drawer");
+  const t = TICKETS.find(t=>t.id===id);
+  if(!t){d.classList.remove("open");d.innerHTML="";return}
+  const w = WORKERS.find(w=>w.id===t.worker);
+  d.innerHTML = `<button class="btn" style="float:right" data-act="close">关闭</button><div class="mono muted">${esc(t.id)}</div><h3>${esc(t.title)}</h3>
+    <div><span class="pill p-acc">${esc(t.state)}</span> <span class="pill p-mute">${esc(P[t.project].name)}</span> <span class="pill p-mute">来自 ${esc(t.src)}</span></div>
+    <h2 style="margin-top:14px">归属</h2>
+    <div class="card">${w?`Worker <b>${w.id}</b> · ${esc(w.harness)} · ${esc(E[w.env].name)}<br><span class="muted">线程上下文 ${pct(w.ctx)} · 状态：${esc(w.status)}</span>`:'<span class="muted">还没派给 Worker</span>'}<br><span class="muted">Chief of Staff：${esc(P[t.project].name)} · 上下文 ${pct(P[t.project].cos.ctx)}</span></div>
+    <h2 style="margin-top:14px">来龙去脉</h2>
+    <div class="hist">
+      <div><time>09:40 · ${esc(t.src)}</time>有人报告：「${esc(t.title)}」</div>
+      <div><time>09:41 · Router</time>程序查重：无同类工单 → 交给 ${esc(P[t.project].name)} 的 CoS</div>
+      <div><time>09:43 · CoS</time>分级 ${t.prio}${t.worker?`，派给 ${t.worker}`:"，暂不派工"}</div>
+      ${t.pr?`<div><time>10:05 · ${t.worker}</time>开了 PR ${t.pr}，自动链接到本工单</div>`:""}
+      ${t.ci==="ok"?`<div><time>10:41 · CI</time>检查通过 → 直通 ${t.worker}</div>`:t.ci==="fail"?`<div><time>10:27 · CI</time>检查失败 → 直通 ${t.worker}，正在修</div>`:""}
+      ${t.state==="待合并"?`<div><time>10:41 · CoS</time><b>等你确认合并</b></div>`:""}
+    </div>
+    <h2 style="margin-top:14px">动作</h2>
+    <div style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn">打开 Codi 线程</button><button class="btn">在 ${esc(t.src)} 回复</button>${t.state==="待合并"?'<button class="btn primary" data-act="merge">确认合并</button>':''}<button class="btn">改派</button><button class="btn">关闭工单</button></div>`;
+  d.classList.add("open");
+}
+
+// ---------- Variant C: 指挥链 ----------
+function VariantC(){
+  const router = `<div class="node router"><h4>Router <span class="pill p-ok">在线 · 控制环境</span></h4><div class="sub">只看项目不明的消息和跨项目的事 · 今日 ${EVENTS.filter(e=>e.kind==="route").length} 次判断 · 收件 0 积压</div><div class="last">最近一次：微信「看板能不能实时刷新」→ 证据不足，只记录 codi#36</div></div>`;
+  const branches = PROJECTS.map(p=>{
+    const env=E[p.env]; const ws=WORKERS.filter(w=>w.env===p.env && TICKETS.find(t=>t.id===w.ticket).project===p.id);
+    return `<div class="branch"><div class="node"><h4>${esc(p.name)} · CoS ${env.online?'<span class="pill p-ok">在线</span>':'<span class="pill p-bad">环境离线</span>'}</h4>
+      <div class="sub">${esc(env.name)} · ${esc(env.harness)} · 换班 ${p.cos.rot} 次</div>
+      <div class="sub">上下文 <span class="meter" style="display:inline-block;width:100px;vertical-align:middle"><i class="${p.cos.ctx>0.6?'hot':''}" style="width:${pct(p.cos.ctx)}"></i></span> ${pct(p.cos.ctx)}${p.cos.ctx>0.6?' · <span class="pill p-warn">快到换班线</span>':''}</div>
+      <div class="last">${esc(p.cos.last)}</div></div>
+      <div class="kids">${ws.map(w=>{const t=TICKETS.find(t=>t.id===w.ticket);return `<div class="kid"><span class="n">${w.id} · ${esc(t.title)}</span><span class="pill ${w.status.includes("离线")?"p-bad":w.status.includes("确认")?"p-acc":"p-info"}">${esc(w.status)}</span><span class="m"><span class="mono">${esc(t.id)}</span><span>${esc(w.harness)}</span><span class="meter"><i style="width:${pct(w.ctx)}"></i></span></span></div>`}).join("")||'<div class="kid muted">没有 Worker</div>'}
+      ${TICKETS.filter(t=>t.project===p.id&&!t.worker).map(t=>`<div class="kid" style="opacity:.6"><span class="n">${esc(t.id)} · ${esc(t.title)}</span><span class="pill p-mute">未派</span></div>`).join("")}</div></div>`}).join("");
+  const inbox = ASKS.map(a=>`<div class="ask ${a.kind}"><div class="from">${esc(a.from)}</div>${esc(a.text)}
+    <div class="acts">${a.kind==="merge"?`<button class="btn primary" data-act="merge">合并 ${a.pr}</button><button class="btn">先看 diff</button>`:a.kind==="question"?'<button class="btn primary">回答</button><button class="btn">让 CoS 自己定</button>':'<button class="btn">改成派工</button><button class="btn">同意忽略</button>'}</div></div>`).join("");
+  return `${kpis()}<div class="chain">
+    <section><h2>指挥链</h2><div class="tree">${router}<div class="stem"></div><div class="branches">${branches}</div></div></section>
+    <section><h2>需要人的事（${ASKS.filter(a=>a.kind!=="refused").length}）</h2><div class="inbox">${inbox}</div></section>
+  </div>`;
+}
+VariantC.label = "指挥链：Router → CoS → Worker，右侧是人的收件箱";
+
+// ---------- switcher + state ----------
+const VARIANTS = {A:VariantA, B:VariantB, C:VariantC};
+const keys = Object.keys(VARIANTS);
+function current(){ const v=new URLSearchParams(location.search).get("variant"); return keys.includes(v)?v:"A"; }
+function go(v){ const u=new URL(location); u.searchParams.set("variant",v); history.replaceState(null,"",u); render(); }
+function render(){
+  const v=current(); document.getElementById("app").innerHTML = VARIANTS[v]();
+  document.getElementById("lab").innerHTML = `<b>${v}</b> · ${VARIANTS[v].label}`;
+  if(v!=="B") drawer(null); else drawer(selected);
+  document.getElementById("state").innerHTML = `<b>状态</b> variant=${v} · 项目筛选=${projFilter} · 选中工单=${selected??"无"} · 工单 ${TICKETS.length} · Worker ${WORKERS.length} · 事件 ${EVENTS.length}`;
+}
+document.getElementById("prev").onclick=()=>go(keys[(keys.indexOf(current())+keys.length-1)%keys.length]);
+document.getElementById("next").onclick=()=>go(keys[(keys.indexOf(current())+1)%keys.length]);
+document.addEventListener("keydown",e=>{ const t=e.target; if(t.closest&&t.closest("input,textarea,[contenteditable]")) return;
+  if(e.key==="ArrowLeft") document.getElementById("prev").click(); if(e.key==="ArrowRight") document.getElementById("next").click(); });
+document.addEventListener("click",e=>{
+  const pf=e.target.closest("[data-pf]"); if(pf){projFilter=pf.dataset.pf; render(); return}
+  const tk=e.target.closest(".tk"); if(tk && !e.target.closest("button")){selected=tk.dataset.id; render(); return}
+  const act=e.target.closest("[data-act]"); if(act){ if(act.dataset.act==="close"){selected=null;render()} if(act.dataset.act==="merge"){ act.textContent="已请求合并（原型，不生效）"; act.disabled=true } }
+});
+render();
+</script>
+</body>
+</html>
