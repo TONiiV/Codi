@@ -1,0 +1,164 @@
+{
+  "common": {
+    "search": "Search",
+    "back": "Back"
+  },
+  "sidebar": {
+    "toggle": "Toggle main sidebar",
+    "goBack": "Go back",
+    "goForward": "Go forward",
+    "home": "Codi home",
+    "settings": "Settings",
+    "pullRequests": "Pull requests",
+    "usage": "Usage",
+    "newThread": "New thread",
+    "newThreadInProject": "New thread in current project: Shift+click",
+    "searchThreads": "Search threads",
+    "clearSearch": "Clear thread search",
+    "addProject": "Add project",
+    "allProjects": "All projects",
+    "filterByProject": "Filter threads by project",
+    "searchProjects": "Search projects",
+    "searchProjectsPlaceholder": "Search projects...",
+    "noMatchingProjects": "No matching projects.",
+    "threadSearchResults": "Thread search results",
+    "searchingMessages": "Searching thread messages…",
+    "noThreadsFound": "No threads found",
+    "sections": {
+      "pinned": "Pinned",
+      "active": "Active",
+      "working": "Working",
+      "snoozed": "Snoozed",
+      "settled": "Settled"
+    },
+    "loading": "Loading",
+    "loadOlderFailed": "Could not load older threads. Retry",
+    "showMore": "Show {{count}} more",
+    "noProjects": "No projects yet",
+    "noThreadsInProjects": "No threads in these projects yet",
+    "noThreadsInProject": "No threads in {{name}} yet",
+    "noThreads": "No threads yet"
+  },
+  "settings": {
+    "title": "Settings",
+    "resetToDefault": "Reset to default",
+    "resetLabel": "Reset {{label}} to default",
+    "sections": {
+      "diagnostics": "Diagnostics",
+      "projects": "Projects",
+      "general": "General",
+      "appearance": "Appearance",
+      "chat": "Chat",
+      "diffs": "Diffs & pull requests",
+      "keybindings": "Keybindings",
+      "snap-shot": "SnapShots",
+      "providers": "Providers",
+      "threads": "Threads",
+      "browser": "Browser",
+      "devices": "Devices",
+      "scheduled-tasks": "Scheduled tasks",
+      "source-control": "Source control",
+      "worktrees": "Worktrees",
+      "connections": "Environments",
+      "access": "Sharing & access",
+      "secrets": "Secrets",
+      "maintenance": "Maintenance",
+      "labs": "Labs",
+      "about": "About",
+      "archived": "Archive"
+    },
+    "groups": {
+      "Agents": "Agents",
+      "Code": "Code",
+      "Connections": "Connections"
+    },
+    "nav": {
+      "searchSettings": "Search settings",
+      "clearSearch": "Clear settings search",
+      "noResults": "No settings found",
+      "searchResults": "Settings search results",
+      "sections": "Settings sections"
+    },
+    "items": {
+      "language": "Language",
+      "project-grouping": "Project grouping",
+      "project-order": "Project order",
+      "working-shelf": "Working section",
+      "thread-notifications": "Thread notifications",
+      "in-app-notifications": "In-app notifications",
+      "unpin-confirmation": "Unpin confirmation",
+      "archive-confirmation": "Archive confirmation",
+      "delete-confirmation": "Delete confirmation",
+      "quit-confirmation": "Quit shortcut",
+      "time-format": "Time format"
+    },
+    "general": {
+      "language": {
+        "section": "Language",
+        "title": "Language",
+        "description": "Language of the Codi interface. System default follows your browser or OS language.",
+        "system": "System default",
+        "reset": "language"
+      },
+      "notifications": {
+        "section": "Notifications",
+        "description": "System alerts when a thread finishes, fails, or needs input or approval. Applies to this device while Codi is open.",
+        "needsHttps": "Notifications need a supported browser over HTTPS, or the desktop app. Sound only is still available.",
+        "unavailable": "Notifications are unavailable in this browser. Sound only is still available.",
+        "denied": "Allow notifications in your browser or system settings, then choose this option again. Sound only is still available.",
+        "inAppDescription": "Show a toast when another thread finishes, fails, or needs input or approval while this app has focus.",
+        "mode": {
+          "off": "Off",
+          "notifications": "Notifications only",
+          "sound": "Sound only",
+          "notifications-and-sound": "Notifications with sound"
+        }
+      },
+      "sidebar": {
+        "section": "Sidebar",
+        "projectGroupingDescription": "Combine matching repositories across environments.",
+        "projectGroupingReset": "project grouping",
+        "projectOrderDescription": "Order of projects in the sidebar project picker and command palette.",
+        "projectOrderReset": "project order",
+        "projectOrder": {
+          "updated_at": "Last user message",
+          "created_at": "Created at",
+          "manual": "Manual"
+        },
+        "workingShelfDescription": "Fold working and monitoring threads into a Working section. They return to the top of the inbox when they need you. The boring sidebar in Labs has no Working section.",
+        "workingShelfReset": "working section"
+      },
+      "confirmations": {
+        "section": "Confirmations",
+        "unpinDescription": "Ask before unpinning a thread from the pinned section.",
+        "unpinReset": "unpin confirmation",
+        "unpinAria": "Confirm thread unpinning",
+        "archiveDescription": "Require a second click on the inline archive action before a thread is archived.",
+        "archiveReset": "archive confirmation",
+        "archiveAria": "Confirm thread archiving",
+        "deleteDescription": "Ask before deleting a thread and its chat history.",
+        "deleteReset": "delete confirmation",
+        "deleteAria": "Confirm thread deletion",
+        "quitDescription": "Hold mode also quits on two quick presses.",
+        "quitReset": "quit shortcut behavior",
+        "quitAria": "Quit shortcut behavior",
+        "quit": {
+          "direct": "Direct",
+          "hold": "Hold",
+          "double-click": "Double press"
+        }
+      },
+      "display": {
+        "section": "Display",
+        "timeFormatDescription": "System default follows your browser or OS clock preference.",
+        "timeFormatReset": "time format",
+        "timeFormatAria": "Timestamp format",
+        "timeFormat": {
+          "locale": "System default",
+          "12-hour": "12-hour",
+          "24-hour": "24-hour"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,164 @@
+{
+  "common": {
+    "search": "搜索",
+    "back": "返回"
+  },
+  "sidebar": {
+    "toggle": "切换主侧边栏",
+    "goBack": "后退",
+    "goForward": "前进",
+    "home": "Codi 主页",
+    "settings": "设置",
+    "pullRequests": "拉取请求",
+    "usage": "用量",
+    "newThread": "新建会话",
+    "newThreadInProject": "在当前项目中新建会话：Shift+点击",
+    "searchThreads": "搜索会话",
+    "clearSearch": "清除会话搜索",
+    "addProject": "添加项目",
+    "allProjects": "所有项目",
+    "filterByProject": "按项目筛选会话",
+    "searchProjects": "搜索项目",
+    "searchProjectsPlaceholder": "搜索项目...",
+    "noMatchingProjects": "没有匹配的项目。",
+    "threadSearchResults": "会话搜索结果",
+    "searchingMessages": "正在搜索会话消息…",
+    "noThreadsFound": "未找到会话",
+    "sections": {
+      "pinned": "已置顶",
+      "active": "进行中",
+      "working": "运行中",
+      "snoozed": "已延后",
+      "settled": "已完结"
+    },
+    "loading": "加载中",
+    "loadOlderFailed": "无法加载更早的会话。重试",
+    "showMore": "再显示 {{count}} 个",
+    "noProjects": "还没有项目",
+    "noThreadsInProjects": "这些项目中还没有会话",
+    "noThreadsInProject": "{{name}} 中还没有会话",
+    "noThreads": "还没有会话"
+  },
+  "settings": {
+    "title": "设置",
+    "resetToDefault": "恢复默认",
+    "resetLabel": "将“{{label}}”恢复为默认值",
+    "sections": {
+      "diagnostics": "诊断",
+      "projects": "项目",
+      "general": "通用",
+      "appearance": "外观",
+      "chat": "聊天",
+      "diffs": "差异与拉取请求",
+      "keybindings": "快捷键",
+      "snap-shot": "快照",
+      "providers": "提供方",
+      "threads": "会话",
+      "browser": "浏览器",
+      "devices": "设备",
+      "scheduled-tasks": "定时任务",
+      "source-control": "源代码管理",
+      "worktrees": "工作树",
+      "connections": "环境",
+      "access": "共享与访问",
+      "secrets": "密钥",
+      "maintenance": "维护",
+      "labs": "实验室",
+      "about": "关于",
+      "archived": "归档"
+    },
+    "groups": {
+      "Agents": "智能体",
+      "Code": "代码",
+      "Connections": "连接"
+    },
+    "nav": {
+      "searchSettings": "搜索设置",
+      "clearSearch": "清除设置搜索",
+      "noResults": "未找到设置",
+      "searchResults": "设置搜索结果",
+      "sections": "设置分区"
+    },
+    "items": {
+      "language": "语言",
+      "project-grouping": "项目分组",
+      "project-order": "项目排序",
+      "working-shelf": "运行中分区",
+      "thread-notifications": "会话通知",
+      "in-app-notifications": "应用内通知",
+      "unpin-confirmation": "取消置顶确认",
+      "archive-confirmation": "归档确认",
+      "delete-confirmation": "删除确认",
+      "quit-confirmation": "退出快捷键",
+      "time-format": "时间格式"
+    },
+    "general": {
+      "language": {
+        "section": "语言",
+        "title": "语言",
+        "description": "Codi 界面使用的语言。“跟随系统”会使用浏览器或操作系统的语言。",
+        "system": "跟随系统",
+        "reset": "语言"
+      },
+      "notifications": {
+        "section": "通知",
+        "description": "会话完成、失败，或需要输入或批准时发出系统提醒。仅在 Codi 打开时对本设备生效。",
+        "needsHttps": "通知需要支持的浏览器并通过 HTTPS 访问，或使用桌面应用。仍可单独使用声音提醒。",
+        "unavailable": "此浏览器不支持通知。仍可单独使用声音提醒。",
+        "denied": "请在浏览器或系统设置中允许通知，然后重新选择此选项。仍可单独使用声音提醒。",
+        "inAppDescription": "当本应用处于前台，且其他会话完成、失败，或需要输入或批准时，显示一条提示。",
+        "mode": {
+          "off": "关闭",
+          "notifications": "仅通知",
+          "sound": "仅声音",
+          "notifications-and-sound": "通知并播放声音"
+        }
+      },
+      "sidebar": {
+        "section": "侧边栏",
+        "projectGroupingDescription": "合并不同环境中相同的仓库。",
+        "projectGroupingReset": "项目分组",
+        "projectOrderDescription": "侧边栏项目选择器和命令面板中项目的排列顺序。",
+        "projectOrderReset": "项目排序",
+        "projectOrder": {
+          "updated_at": "最近用户消息",
+          "created_at": "创建时间",
+          "manual": "手动"
+        },
+        "workingShelfDescription": "将运行中和监控中的会话折叠到“运行中”分区。需要你处理时，它们会回到收件箱顶部。实验室中的简约侧边栏没有“运行中”分区。",
+        "workingShelfReset": "运行中分区"
+      },
+      "confirmations": {
+        "section": "确认",
+        "unpinDescription": "从置顶分区取消置顶会话前先询问。",
+        "unpinReset": "取消置顶确认",
+        "unpinAria": "确认取消置顶会话",
+        "archiveDescription": "归档会话前，需要再点击一次行内归档按钮。",
+        "archiveReset": "归档确认",
+        "archiveAria": "确认归档会话",
+        "deleteDescription": "删除会话及其聊天记录前先询问。",
+        "deleteReset": "删除确认",
+        "deleteAria": "确认删除会话",
+        "quitDescription": "“长按”模式下，快速连按两次也会退出。",
+        "quitReset": "退出快捷键行为",
+        "quitAria": "退出快捷键行为",
+        "quit": {
+          "direct": "直接退出",
+          "hold": "长按",
+          "double-click": "连按两次"
+        }
+      },
+      "display": {
+        "section": "显示",
+        "timeFormatDescription": "“跟随系统”会使用浏览器或操作系统的时钟偏好。",
+        "timeFormatReset": "时间格式",
+        "timeFormatAria": "时间格式",
+        "timeFormat": {
+          "locale": "跟随系统",
+          "12-hour": "12 小时制",
+          "24-hour": "24 小时制"
+        }
+      }
+    }
+  }
+}

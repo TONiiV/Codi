@@ -24,6 +24,7 @@ import { startGuideRunNotifications } from "./components/pullRequest/guide/PullR
 import { APP_BASE_NAME, APP_DISPLAY_NAME, APP_STAGE_LABEL } from "./branding";
 import { resolveServerBackedAppDisplayName } from "./branding.logic";
 import { isElectron } from "./env";
+import { applyLanguage } from "./i18n";
 import {
   subscribeComposerDraftModelReconciliation,
   subscribeDraftThreadPromotion,
@@ -55,6 +56,13 @@ import { installCommandPaletteCommands } from "./shortcuts/commandPaletteCommand
 import { registerOpenFavoriteEditorCommand } from "./components/chat/OpenInPickerShortcut";
 import { environmentThreadShells } from "./state/threads";
 import { resolveThreadRouteTarget } from "./threadRoutes";
+
+/** Keeps i18next on the Language setting; "system" follows navigator.language. */
+function startLanguageSync(): void {
+  const apply = () => applyLanguage(getClientSettings().language);
+  subscribeClientSettings(apply);
+  apply();
+}
 
 /** Writes appearance settings onto the document, touching only the groups that changed. */
 function startClientAppearance(): void {
@@ -179,6 +187,7 @@ export function startAppServices(): AppRouter {
   installDesktopPasteAsText(window.desktopBridge, window);
 
   startClientAppearance();
+  startLanguageSync();
   startDocumentTitle();
   startEnvironmentThemeRepaint();
   startBrowserChromeThemeSync(router);
