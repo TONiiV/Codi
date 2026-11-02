@@ -33,10 +33,10 @@ Terms whose meaning matters across Codi. Architecture and lifecycle constraints 
 
 | Term                | Meaning                                                                                                      |
 | ------------------- | ------------------------------------------------------------------------------------------------------------ |
-| Provider            | The agent runtime Codi controls, such as Codex or Claude Code.                                            |
+| Provider            | The agent runtime Codi controls, such as Codex or Claude Code.                                               |
 | Driver              | The integration for a provider kind.                                                                         |
 | Provider instance   | One configured provider, with its own settings and lifecycle. Multiple instances can use the same driver.    |
-| Adapter             | The boundary translating a provider's native protocol into Codi operations and events.                    |
+| Adapter             | The boundary translating a provider's native protocol into Codi operations and events.                       |
 | Session             | The provider runtime attached to a thread. A session can be stopped and resumed without deleting the thread. |
 | Runtime mode        | The thread's permission policy. See [permission modes](../user/permission-modes.md).                         |
 | Interaction mode    | How the agent approaches the task, such as planning. Separate from permission policy.                        |
