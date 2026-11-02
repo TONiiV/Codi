@@ -86,8 +86,7 @@ export const make = Effect.gen(function* () {
       // The launcher is a few KB; never read a large binary another `t3` links to.
       const info = yield* fs.stat(link);
       if (info.type !== "File" || Number(info.size) > 16_384) return false;
-      const content = yield* fs.readFileString(link);
-      return content.includes(DesktopCliShim.MARKER);
+      return DesktopCliShim.isAppLauncher(yield* fs.readFileString(link));
     },
     Effect.orElseSucceed(() => false),
   );
@@ -100,7 +99,7 @@ export const make = Effect.gen(function* () {
       if (resolved !== ours) return false;
       const info = yield* fs.stat(candidate);
       if (info.type !== "File" || Number(info.size) > 16_384) return false;
-      return (yield* fs.readFileString(candidate)).includes(DesktopCliShim.MARKER);
+      return DesktopCliShim.isAppLauncher(yield* fs.readFileString(candidate));
     },
     Effect.orElseSucceed(() => false),
   );

@@ -6,7 +6,7 @@ import * as NodePath from "node:path";
 
 import { afterEach, describe, expect, it } from "vite-plus/test";
 
-import { type CliShimTarget, renderCliShim } from "./DesktopCliShim.ts";
+import { type CliShimTarget, isAppLauncher, renderCliShim } from "./DesktopCliShim.ts";
 
 const directories: Array<string> = [];
 afterEach(() => {
@@ -120,5 +120,18 @@ describe("renderCliShim", () => {
     );
     expect(bare).toEqual([]);
     expect(lines).toContain('set "T3CODE_CLI_PATH=C:\\Users\\José\\.t3\\bin\\t3.cmd"');
+  });
+});
+
+describe("isAppLauncher", () => {
+  it("keeps owning launchers written before the rename, and refuses foreign ones", () => {
+    const script = renderCliShim({
+      target: { kind: "direct", executable: "/opt/T3 Code/t3code", entry: "/bin.mjs" },
+      shimPath: "/home/me/.t3/bin/t3",
+      t3Home: "/home/me/.t3",
+    });
+    expect(isAppLauncher(script)).toBe(true);
+    expect(isAppLauncher(script.replace("Written by Codi", "Written by T3 Code"))).toBe(true);
+    expect(isAppLauncher("npm's t3\n")).toBe(false);
   });
 });

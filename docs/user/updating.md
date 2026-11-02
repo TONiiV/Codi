@@ -138,11 +138,11 @@ directory and pair with the running server.
 ### macOS app does not reopen after an Alpha update
 
 Updating an older **T3 Code (Alpha)** installation can replace it with
-**T3 Code (Beta)** without reopening the app. Open **T3 Code (Beta)** from
+**Codi (Beta)** without reopening the app. Open **Codi (Beta)** from
 Applications, or run:
 
 ```sh
-open "/Applications/T3 Code (Beta).app"
+open "/Applications/Codi (Beta).app"
 ```
 
 If an old Dock shortcut no longer opens the app, remove it and add the Beta app
