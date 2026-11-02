@@ -246,53 +246,42 @@ function ChatPage({
   viewer,
   workspace,
   chat,
-  onExpand,
 }: {
   viewer: LighthouseViewer;
   workspace: string;
   chat: string;
-  onExpand: (chat: string) => void;
 }) {
   const v = VIEWERS[viewer];
   const asks = asksFor(viewer, workspace, chat === "mine" ? undefined : chat);
   const cosName = chat === "mine" ? v.cos.name : (PROJECT_COS[chat]?.name ?? chat);
   const tone = chat === "mine" ? "bg-foreground" : (PROJECT_COS[chat]?.tone ?? "bg-foreground");
   return (
-    <div className="flex min-h-0 flex-1">
-      <div className="flex min-w-0 flex-1 flex-col">
-        <div className="min-h-0 flex-1 overflow-y-auto scrollbar-gutter-both">
-          <div className="mx-auto w-full max-w-(--chat-content-max-width) px-5 py-6">
-            {asks.length > 0 ? (
-              <div className="mb-8">
-                <h2 className="mb-3 flex items-center gap-2 text-lg font-semibold">
-                  需要你定
-                  <Badge variant="secondary">{asks.length}</Badge>
-                </h2>
-                <Inbox asks={asks} />
-              </div>
-            ) : null}
-            <ChatTimeline messages={conversation(viewer, workspace, chat)} />
-          </div>
-        </div>
-        <div className="mx-auto w-full max-w-(--chat-content-max-width) px-5 pb-4">
-          <ChatComposerCard
-            placeholder={`对 ${cosName} 说`}
-            label={
-              <span className="inline-flex items-center gap-1.5">
-                <BotAvatar tone={tone} size="xs" />
-                {cosName}
-              </span>
-            }
-          />
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="min-h-0 flex-1 overflow-y-auto scrollbar-gutter-both">
+        <div className="mx-auto w-full max-w-(--chat-content-max-width) px-5 py-6">
+          {asks.length > 0 ? (
+            <div className="mb-8">
+              <h2 className="mb-3 flex items-center gap-2 text-lg font-semibold">
+                需要你定
+                <Badge variant="secondary">{asks.length}</Badge>
+              </h2>
+              <Inbox asks={asks} />
+            </div>
+          ) : null}
+          <ChatTimeline messages={conversation(viewer, workspace, chat)} />
         </div>
       </div>
-      <LighthousePanel
-        viewer={viewer}
-        workspace={workspace}
-        view="chats"
-        mainChat={chat}
-        onExpand={onExpand}
-      />
+      <div className="mx-auto w-full max-w-(--chat-content-max-width) px-5 pb-4">
+        <ChatComposerCard
+          placeholder={`对 ${cosName} 说`}
+          label={
+            <span className="inline-flex items-center gap-1.5">
+              <BotAvatar tone={tone} size="xs" />
+              {cosName}
+            </span>
+          }
+        />
+      </div>
     </div>
   );
 }
@@ -346,70 +335,71 @@ export function LighthousePrototypePage({ background }: { background?: boolean }
 
   return (
     <SidebarInset className="h-dvh min-h-0 overflow-hidden overscroll-y-none" inert={background}>
-      <header className="flex h-(--workspace-topbar-height) min-h-(--workspace-topbar-height) shrink-0 items-center pl-(--workspace-gutter-start) pr-(--workspace-gutter-end)">
-        <WorkspaceBreadcrumb ariaLabel="Lighthouse breadcrumb" className="min-w-0">
-          <WorkspaceBreadcrumbItem>
-            <span>{workspaceName}</span>
-          </WorkspaceBreadcrumbItem>
-          <WorkspaceBreadcrumbSeparator />
-          <WorkspaceBreadcrumbItem current>
-            <h1>{view === "chats" ? chatName : viewLabel}</h1>
-          </WorkspaceBreadcrumbItem>
-        </WorkspaceBreadcrumb>
-      </header>
-      <div className="flex min-h-0 flex-1 flex-col">
-        {view === "chats" && chat === "desk" ? (
-          <div className="min-h-0 flex-1 overflow-y-auto scrollbar-gutter-both">
-            <div className="mx-auto w-full max-w-(--chat-content-max-width) px-5 py-6">
-              <DeskPage viewer={viewer} workspace={workspace} />
-            </div>
-          </div>
-        ) : null}
-        {view === "chats" && chat !== "desk" ? (
-          <ChatPage
-            key={viewer + chat + workspace}
-            viewer={viewer}
-            workspace={workspace}
-            chat={chat}
-            onExpand={onExpand}
-          />
-        ) : null}
-        {view !== "chats" ? (
-          <div className="flex min-h-0 flex-1">
+      <LighthousePanel
+        key={view}
+        viewer={viewer}
+        workspace={workspace}
+        view={view}
+        mainChat={view === "chats" ? chat : null}
+        onExpand={onExpand}
+      >
+        <header className="flex h-(--workspace-topbar-height) min-h-(--workspace-topbar-height) shrink-0 items-center pl-(--workspace-gutter-start) pr-(--workspace-gutter-end)">
+          <WorkspaceBreadcrumb ariaLabel="Lighthouse breadcrumb" className="min-w-0">
+            <WorkspaceBreadcrumbItem>
+              <span>{workspaceName}</span>
+            </WorkspaceBreadcrumbItem>
+            <WorkspaceBreadcrumbSeparator />
+            <WorkspaceBreadcrumbItem current>
+              <h1>{view === "chats" ? chatName : viewLabel}</h1>
+            </WorkspaceBreadcrumbItem>
+          </WorkspaceBreadcrumb>
+        </header>
+        <div className="flex min-h-0 flex-1 flex-col">
+          {view === "chats" && chat === "desk" ? (
             <div className="min-h-0 flex-1 overflow-y-auto scrollbar-gutter-both">
-              <div
-                className={cn(
-                  "w-full py-6",
-                  view === "tasks"
-                    ? "px-8 pt-10"
-                    : view === "decisions"
-                      ? "mx-auto max-w-3xl px-5 pt-10"
-                      : "mx-auto max-w-5xl px-5",
-                )}
-              >
-                {view === "bots" ? <BotsPage viewer={viewer} workspace={workspace} /> : null}
-                {view === "dashboard" ? (
-                  <DashboardPage viewer={viewer} workspace={workspace} />
-                ) : null}
-                {view === "tasks" ? (
-                  <TasksPage key={viewer + workspace} viewer={viewer} workspace={workspace} />
-                ) : null}
-                {view === "members" ? <MembersPage workspace={workspace} /> : null}
-                {view === "decisions" ? (
-                  <DecisionsPage viewer={viewer} workspace={workspace} />
-                ) : null}
+              <div className="mx-auto w-full max-w-(--chat-content-max-width) px-5 py-6">
+                <DeskPage viewer={viewer} workspace={workspace} />
               </div>
             </div>
-            <LighthousePanel
+          ) : null}
+          {view === "chats" && chat !== "desk" ? (
+            <ChatPage
+              key={viewer + chat + workspace}
               viewer={viewer}
               workspace={workspace}
-              view={view}
-              mainChat={null}
-              onExpand={onExpand}
+              chat={chat}
             />
-          </div>
-        ) : null}
-      </div>
+          ) : null}
+          {view !== "chats" ? (
+            <div className="flex min-h-0 flex-1">
+              <div className="min-h-0 flex-1 overflow-y-auto scrollbar-gutter-both">
+                <div
+                  className={cn(
+                    "w-full py-6",
+                    view === "tasks"
+                      ? "px-8 pt-10"
+                      : view === "decisions"
+                        ? "mx-auto max-w-3xl px-5 pt-10"
+                        : "mx-auto max-w-5xl px-5",
+                  )}
+                >
+                  {view === "bots" ? <BotsPage viewer={viewer} workspace={workspace} /> : null}
+                  {view === "dashboard" ? (
+                    <DashboardPage viewer={viewer} workspace={workspace} />
+                  ) : null}
+                  {view === "tasks" ? (
+                    <TasksPage key={viewer + workspace} viewer={viewer} workspace={workspace} />
+                  ) : null}
+                  {view === "members" ? <MembersPage workspace={workspace} /> : null}
+                  {view === "decisions" ? (
+                    <DecisionsPage viewer={viewer} workspace={workspace} />
+                  ) : null}
+                </div>
+              </div>
+            </div>
+          ) : null}
+        </div>
+      </LighthousePanel>
     </SidebarInset>
   );
 }

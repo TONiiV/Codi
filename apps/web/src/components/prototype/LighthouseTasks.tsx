@@ -72,11 +72,32 @@ function Assignee({ a }: { a: TaskAssignee }) {
   );
 }
 
+// Live states reuse the repo's stepped status animations: a ping while work runs, a pulse
+// while it waits on a person.
+function LiveDot({ live, className }: { live: "running" | "waiting" | null; className: string }) {
+  return (
+    <span className={cn("relative inline-flex shrink-0", className)}>
+      {live === "running" ? (
+        <span className="absolute inline-flex size-full rounded-full bg-current opacity-75 motion-safe:animate-status-ping" />
+      ) : null}
+      <span
+        className={cn(
+          "relative inline-flex size-full rounded-full bg-current",
+          live === "waiting" && "motion-safe:animate-status-pulse",
+        )}
+      />
+    </span>
+  );
+}
+
 function StatusPill({ status }: { status: TaskStatus }) {
   const s = TASK_STATUS[status];
   return (
     <Badge variant={s.badge} size="lg">
-      <span className="size-1.5 rounded-full bg-current" />
+      <LiveDot
+        className="size-1.5"
+        live={status === "doing" ? "running" : status === "review" ? "waiting" : null}
+      />
       {s.label}
     </Badge>
   );
@@ -86,12 +107,13 @@ function TicketChip({ ticket }: { ticket: LighthouseTask["tickets"][number] }) {
   return (
     <span className="inline-flex items-center gap-1 rounded-sm border bg-card px-1.5 py-0.5 text-xs">
       {ticket.state === "open" ? (
-        <span className="size-2 rounded-full bg-success" />
+        <LiveDot className="size-2 text-success" live={ticket.worker ? "running" : null} />
       ) : (
         <PullRequestGlyph.pullRequest
           className={cn(
             "size-3",
             ticket.state === "merged" ? "text-muted-foreground" : "text-success",
+            ticket.state === "pr" && "motion-safe:animate-status-pulse",
           )}
         />
       )}

@@ -47,6 +47,22 @@ export const PROJECTS: Record<
     line: "家里电脑离线 2 小时，app#41 挂起。",
     pr: "PR #140 CI 红",
   },
+  docs: {
+    name: "文档站",
+    workspace: "toniiv",
+    lead: "沈叙白",
+    tone: "ok",
+    line: "API 参考自动生成已上线。",
+    pr: "无待合并",
+  },
+  ops: {
+    name: "运维",
+    workspace: "toniiv",
+    lead: "林砚",
+    tone: "ok",
+    line: "云容器配额本周够用。",
+    pr: "无待合并",
+  },
   gripper: {
     name: "夹爪 Demo",
     workspace: "dimx",
@@ -78,7 +94,7 @@ export const VIEWERS: Record<
   admin: {
     name: "林砚",
     title: "管理员",
-    projects: ["codi", "site", "app", "gripper", "tactile"],
+    projects: ["codi", "site", "app", "docs", "ops", "gripper", "tactile"],
     docs: ["public", "team", "confidential"],
     cos: { name: "砚书" },
   },
@@ -109,6 +125,8 @@ export const PROJECT_COS: Record<string, { name: string; tone: string }> = {
   codi: { name: "Codi 幕僚长", tone: "bg-primary" },
   site: { name: "官网 幕僚长", tone: "bg-success" },
   app: { name: "移动端 幕僚长", tone: "bg-warning" },
+  docs: { name: "文档站 幕僚长", tone: "bg-info" },
+  ops: { name: "运维 幕僚长", tone: "bg-muted-foreground" },
   gripper: { name: "夹爪 幕僚长", tone: "bg-info" },
   tactile: { name: "触觉 幕僚长", tone: "bg-success" },
 };
@@ -255,6 +273,8 @@ const LAST_LINE: Record<string, { last: string; time: string; unread: number }> 
   codi: { last: "把 #23 的后续评论直通给 W7。", time: "10:42", unread: 0 },
   site: { last: "PR #88 CI 绿，等人确认合并。", time: "10:41", unread: 1 },
   app: { last: "环境离线，app#41 挂起。", time: "09:58", unread: 0 },
+  docs: { last: "API 参考已重新生成。", time: "08:30", unread: 0 },
+  ops: { last: "配额够用。", time: "昨天", unread: 0 },
   gripper: { last: "PR #7 CI 绿。", time: "10:12", unread: 1 },
   tactile: { last: "护膝方案等你选。", time: "09:40", unread: 0 },
 };

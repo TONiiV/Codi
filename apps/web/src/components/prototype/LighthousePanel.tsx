@@ -1,6 +1,7 @@
 // PROTOTYPE, wipe me. The Code right panel, cut down to Browser, Files and a side chat with a
 // Chief of Staff. The side chat never opens the conversation already in the main pane.
 import {
+  ChevronDownIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
   ExpandIcon,
@@ -13,7 +14,7 @@ import {
   PlusIcon,
   RotateCwIcon,
 } from "lucide-react";
-import { useState } from "react";
+import { useState, type KeyboardEvent, type ReactNode } from "react";
 
 import { cn } from "../../lib/utils";
 import { ChatComposerCard, ChatTimeline } from "./LighthouseChat";
@@ -22,15 +23,19 @@ import {
   PROJECTS,
   VIEWERS,
   chatsFor,
+  type LighthouseChat,
   type LighthouseView,
   type LighthouseViewer,
 } from "./lighthouseData";
 import { PreviewPanelShell } from "../preview/PreviewPanelShell";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
-import { Menu, MenuItem, MenuPopup, MenuTrigger } from "../ui/menu";
+import { Menu, MenuItem, MenuPopup, MenuShortcut, MenuTrigger } from "../ui/menu";
 import { PanelTabCloseButton } from "../ui/panel-tab-close-button";
-import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
+import { Input } from "../ui/input";
+import { Kbd } from "../ui/kbd";
+import { Popover, PopoverPopup, PopoverTrigger } from "../ui/popover";
+import { PanelLayoutControls, RightPanelMaximizeControl } from "../chat/PanelLayoutControls";
 
 const DOCS = [
   { workspace: "toniiv", level: "public", kind: "制度", title: "远程协作约定（第 3 版）" },
@@ -54,9 +59,9 @@ type Surface =
   | { id: string; kind: "file"; title: string; folder: string; locked: boolean };
 
 const LAUNCH = [
-  { kind: "browser", label: "Browser", icon: Globe2Icon },
-  { kind: "files", label: "Files", icon: FilesIcon },
-  { kind: "sidechat", label: "Side chat", icon: MessagesSquareIcon },
+  { kind: "browser", label: "Browser", icon: Globe2Icon, shortcut: "B" },
+  { kind: "files", label: "Files", icon: FilesIcon, shortcut: "F" },
+  { kind: "sidechat", label: "Side chat", icon: MessagesSquareIcon, shortcut: "S" },
 ] as const;
 
 const OPENING_LINE: Record<LighthouseView, string> = {
@@ -198,6 +203,82 @@ function BrowserSurface({ workspace }: { workspace: string }) {
   );
 }
 
+const PICKER_LIMIT = 5;
+
+function CosPicker({
+  choices,
+  current,
+  onPick,
+}: {
+  choices: ReadonlyArray<LighthouseChat>;
+  current: LighthouseChat;
+  onPick: (id: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const searchable = choices.length > PICKER_LIMIT;
+  const shown = choices
+    .filter((c) => c.name.toLowerCase().includes(query.trim().toLowerCase()))
+    .slice(0, PICKER_LIMIT);
+  return (
+    <Popover
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next);
+        if (!next) setQuery("");
+      }}
+    >
+      <PopoverTrigger
+        render={
+          <button
+            type="button"
+            className="flex h-7 min-w-0 cursor-pointer items-center gap-2 rounded-md px-1.5 text-sm hover:bg-accent/60"
+          />
+        }
+      >
+        <BotAvatar tone={current.tone} size="xs" readOnly={current.readOnly === true} />
+        <span className="truncate font-medium">{current.name}</span>
+        <ChevronDownIcon className="size-3.5 shrink-0 text-muted-foreground" />
+      </PopoverTrigger>
+      <PopoverPopup align="start" padding="compact" width="sm">
+        {searchable ? (
+          <Input
+            nativeInput
+            size="compact"
+            autoFocus
+            placeholder="搜索幕僚长"
+            value={query}
+            onChange={(e) => setQuery(e.currentTarget.value)}
+          />
+        ) : null}
+        <div className={cn("flex flex-col gap-0.5", searchable && "mt-2")}>
+          {shown.map((c) => (
+            <button
+              key={c.id}
+              type="button"
+              onClick={() => {
+                onPick(c.id);
+                setOpen(false);
+                setQuery("");
+              }}
+              className={cn(
+                "flex h-8 w-full cursor-pointer items-center gap-2 rounded-md px-2 text-left text-sm hover:bg-accent/60",
+                c.id === current.id && "bg-accent",
+              )}
+            >
+              <BotAvatar tone={c.tone} size="xs" readOnly={c.readOnly === true} />
+              <span className="min-w-0 truncate">{c.name}</span>
+            </button>
+          ))}
+          {shown.length === 0 ? (
+            <div className="px-2 py-1.5 text-sm text-muted-foreground">没有匹配</div>
+          ) : null}
+        </div>
+      </PopoverPopup>
+    </Popover>
+  );
+}
+
 function SideChatSurface({
   viewer,
   workspace,
@@ -218,28 +299,7 @@ function SideChatSurface({
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex shrink-0 items-center justify-between gap-1 px-2 pb-2">
-        <div className="w-52 min-w-0">
-          <Select value={current.id} onValueChange={(val) => setPicked(String(val))}>
-            <SelectTrigger size="sm">
-              <SelectValue>
-                <span className="flex items-center gap-2">
-                  <BotAvatar tone={current.tone} size="xs" readOnly={current.readOnly === true} />
-                  {current.name}
-                </span>
-              </SelectValue>
-            </SelectTrigger>
-            <SelectPopup>
-              {choices.map((c) => (
-                <SelectItem key={c.id} value={c.id}>
-                  <span className="flex items-center gap-2">
-                    <BotAvatar tone={c.tone} size="xs" readOnly={c.readOnly === true} />
-                    {c.name}
-                  </span>
-                </SelectItem>
-              ))}
-            </SelectPopup>
-          </Select>
-        </div>
+        <CosPicker choices={choices} current={current} onPick={setPicked} />
         <Button
           size="icon-xs"
           variant="ghost-muted"
@@ -268,23 +328,30 @@ function SideChatSurface({
   );
 }
 
+const noop = () => {};
+
+/** The main column plus the Code-style right panel and its top-right layout controls. */
 export function LighthousePanel({
   viewer,
   workspace,
   view,
   mainChat,
   onExpand,
+  children,
 }: {
   viewer: LighthouseViewer;
   workspace: string;
   view: LighthouseView;
   mainChat: string | null;
   onExpand: (chat: string) => void;
+  children: ReactNode;
 }) {
   const first: Surface =
     view === "chats" ? { id: "files", kind: "files" } : { id: "sidechat", kind: "sidechat" };
   const [surfaces, setSurfaces] = useState<ReadonlyArray<Surface>>([first]);
   const [activeId, setActiveId] = useState<string | null>(first.id);
+  const [panelOpen, setPanelOpen] = useState(true);
+  const [maximized, setMaximized] = useState(false);
   const active = surfaces.find((s) => s.id === activeId) ?? null;
 
   const open = (surface: Surface) => {
@@ -297,107 +364,150 @@ export function LighthousePanel({
     setSurfaces(next);
     if (activeId === surface.id) setActiveId(next[Math.max(0, index - 1)]?.id ?? null);
   };
-  const launch = (kind: Surface["kind"] & (typeof LAUNCH)[number]["kind"]) =>
-    open({ id: kind, kind });
+  const launch = (kind: (typeof LAUNCH)[number]["kind"]) => open({ id: kind, kind });
+  const onLauncherKey = (event: KeyboardEvent<HTMLDivElement>) => {
+    const hit = LAUNCH.find((a) => a.shortcut.toLowerCase() === event.key.toLowerCase());
+    if (!hit || event.metaKey || event.ctrlKey || event.altKey) return;
+    event.preventDefault();
+    launch(hit.kind);
+  };
 
   return (
-    <PreviewPanelShell
-      mode="inline"
-      widthStorageKey="lighthouse-prototype-panel"
-      defaultWidth={400}
-    >
-      <div className="flex h-(--workspace-topbar-height) min-h-(--workspace-topbar-height) shrink-0 items-center gap-1 pr-3 pl-2">
-        <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
-          {surfaces.map((s) => (
-            <div
-              key={s.id}
-              className={cn(
-                "group/tab flex h-6 max-w-36 shrink-0 cursor-pointer items-center gap-0.5 rounded-md pr-2 pl-1.5 text-xs",
-                s.id === activeId
-                  ? "bg-accent text-foreground"
-                  : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
-              )}
-            >
-              <PanelTabCloseButton label={`Close ${surfaceTitle(s)}`} onClick={() => close(s)}>
-                <SurfaceIcon surface={s} />
-              </PanelTabCloseButton>
-              <button
-                type="button"
-                className="flex min-w-0 cursor-pointer items-center"
-                onClick={() => setActiveId(s.id)}
-              >
-                <span className="truncate">{surfaceTitle(s)}</span>
-              </button>
-            </div>
-          ))}
-          <Menu>
-            <MenuTrigger
-              render={
-                <Button
-                  aria-label="Add panel surface"
-                  className="shrink-0"
-                  size="icon-xs"
-                  variant="ghost-muted"
-                />
-              }
-            >
-              <PlusIcon className="size-3.5" />
-            </MenuTrigger>
-            <MenuPopup align="start" side="bottom" sideOffset={6}>
-              {LAUNCH.map((a) => (
-                <MenuItem key={a.kind} onClick={() => launch(a.kind)}>
-                  <a.icon />
-                  {a.label}
-                </MenuItem>
-              ))}
-            </MenuPopup>
-          </Menu>
-        </div>
+    <div className="flex min-h-0 min-w-0 flex-1">
+      <div className={cn("flex min-w-0 flex-1 flex-col", panelOpen && maximized && "hidden")}>
+        {children}
       </div>
-      <div className="flex min-h-0 flex-1 flex-col">
-        {active === null ? (
-          <div className="flex min-h-0 flex-1 items-center justify-center px-6 pb-(--workspace-topbar-height)">
-            <div className="w-full max-w-xs py-6">
-              <h3 className="mb-3 text-center text-sm font-medium text-foreground">
-                Open a surface
-              </h3>
-              <div className="flex flex-col gap-0.5">
+      <PreviewPanelShell
+        mode="inline"
+        open={panelOpen}
+        maximized={panelOpen && maximized}
+        widthStorageKey="lighthouse-prototype-panel"
+        defaultWidth={420}
+      >
+        <div className="flex h-(--workspace-topbar-height) min-h-(--workspace-topbar-height) shrink-0 items-center gap-1 pr-28 pl-2">
+          <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
+            {surfaces.map((s) => (
+              <div
+                key={s.id}
+                className={cn(
+                  "group/tab flex h-6 max-w-36 shrink-0 cursor-pointer items-center gap-0.5 rounded-md pr-2 pl-1.5 text-xs",
+                  s.id === activeId
+                    ? "bg-accent text-foreground"
+                    : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
+                )}
+              >
+                <PanelTabCloseButton label={`Close ${surfaceTitle(s)}`} onClick={() => close(s)}>
+                  <SurfaceIcon surface={s} />
+                </PanelTabCloseButton>
+                <button
+                  type="button"
+                  className="flex min-w-0 cursor-pointer items-center"
+                  onClick={() => setActiveId(s.id)}
+                >
+                  <span className="truncate">{surfaceTitle(s)}</span>
+                </button>
+              </div>
+            ))}
+            <Menu>
+              <MenuTrigger
+                render={
+                  <Button
+                    aria-label="Add panel surface"
+                    className="shrink-0"
+                    size="icon-xs"
+                    variant="ghost-muted"
+                  />
+                }
+              >
+                <PlusIcon className="size-3.5" />
+              </MenuTrigger>
+              <MenuPopup align="start" side="bottom" sideOffset={6}>
                 {LAUNCH.map((a) => (
-                  <button
-                    key={a.kind}
-                    type="button"
-                    onClick={() => launch(a.kind)}
-                    className="flex h-8 w-full cursor-pointer items-center gap-2.5 rounded-(--control-radius) px-2.5 text-left text-sm transition-colors hover:bg-accent/60"
-                  >
-                    <a.icon className="size-4 shrink-0" />
-                    <span className="min-w-0 flex-1 truncate">{a.label}</span>
-                  </button>
+                  <MenuItem key={a.kind} onClick={() => launch(a.kind)}>
+                    <a.icon />
+                    {a.label}
+                    <MenuShortcut>{a.shortcut}</MenuShortcut>
+                  </MenuItem>
                 ))}
+              </MenuPopup>
+            </Menu>
+          </div>
+        </div>
+        <div className="flex min-h-0 flex-1 flex-col">
+          {active === null ? (
+            <div
+              tabIndex={0}
+              onKeyDown={onLauncherKey}
+              aria-label="Open a surface"
+              className="flex min-h-0 flex-1 items-center justify-center px-6 pb-(--workspace-topbar-height) outline-none"
+            >
+              <div className="w-full max-w-xs py-6">
+                <h3 className="mb-3 text-center text-sm font-medium text-foreground">
+                  Open a surface
+                </h3>
+                <div className="flex flex-col gap-0.5">
+                  {LAUNCH.map((a) => (
+                    <button
+                      key={a.kind}
+                      type="button"
+                      onClick={() => launch(a.kind)}
+                      className="flex h-8 w-full cursor-pointer items-center gap-2.5 rounded-(--control-radius) px-2.5 text-left text-sm transition-colors hover:bg-accent/60"
+                    >
+                      <a.icon className="size-4 shrink-0" />
+                      <span className="min-w-0 flex-1 truncate">{a.label}</span>
+                      <Kbd>{a.shortcut}</Kbd>
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
-          </div>
-        ) : null}
-        {active?.kind === "files" ? (
-          <FilesSurface
-            viewer={viewer}
-            workspace={workspace}
-            onOpen={(title, folder, locked) =>
-              open({ id: `file:${title}`, kind: "file", title, folder, locked })
-            }
+          ) : null}
+          {active?.kind === "files" ? (
+            <FilesSurface
+              viewer={viewer}
+              workspace={workspace}
+              onOpen={(title, folder, locked) =>
+                open({ id: `file:${title}`, kind: "file", title, folder, locked })
+              }
+            />
+          ) : null}
+          {active?.kind === "file" ? <FileSurface surface={active} /> : null}
+          {active?.kind === "browser" ? <BrowserSurface workspace={workspace} /> : null}
+          {active?.kind === "sidechat" ? (
+            <SideChatSurface
+              viewer={viewer}
+              workspace={workspace}
+              view={view}
+              mainChat={mainChat}
+              onExpand={onExpand}
+            />
+          ) : null}
+        </div>
+      </PreviewPanelShell>
+      <div className="fixed top-(--workspace-controls-top) right-(--workspace-controls-right) z-50 flex h-(--workspace-topbar-height) items-center gap-1">
+        {panelOpen ? (
+          <RightPanelMaximizeControl
+            maximized={maximized}
+            onToggle={() => setMaximized(!maximized)}
           />
         ) : null}
-        {active?.kind === "file" ? <FileSurface surface={active} /> : null}
-        {active?.kind === "browser" ? <BrowserSurface workspace={workspace} /> : null}
-        {active?.kind === "sidechat" ? (
-          <SideChatSurface
-            viewer={viewer}
-            workspace={workspace}
-            view={view}
-            mainChat={mainChat}
-            onExpand={onExpand}
-          />
-        ) : null}
+        <PanelLayoutControls
+          showThreadPanelControl={false}
+          showTerminalControl={false}
+          terminalAvailable={false}
+          terminalOpen={false}
+          terminalShortcutLabel={null}
+          threadPanelOpen={false}
+          threadPanelPresentation="inline"
+          threadPanelShortcutLabel={null}
+          rightPanelAvailable
+          rightPanelOpen={panelOpen}
+          rightPanelShortcutLabel={null}
+          onToggleTerminal={noop}
+          onToggleThreadPanel={noop}
+          onToggleRightPanel={() => setPanelOpen(!panelOpen)}
+        />
       </div>
-    </PreviewPanelShell>
+    </div>
   );
 }
