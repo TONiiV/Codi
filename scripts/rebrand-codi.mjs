@@ -10,7 +10,7 @@ const TEXT_FILE =
 // the installer banners drawn next to the old logo, files that name existing installs, tests whose
 // fixtures are matched by a "t3" query, a legacy path pattern or both brand names, and this file.
 const SKIP_PATH =
-  /^(?:\.repos|evals|native|patches)\/|\.ndjson$|(?:^|\/)(?:pnpm-lock\.yaml|tweets\.ts|install\.(?:sh|ps1)|installer\.nsh|rebrand-codi\.mjs|paletteSearch\.test\.ts|t3McpToolPresentation\.test\.ts|DesktopAppIdentity\.test\.ts|DesktopUserData(?:\.test)?\.ts|DesktopLegacyLocalStorage(?:\.test)?\.ts)$/;
+  /^(?:\.repos|evals|native|patches)\/|\.ndjson$|(?:^|\/)(?:pnpm-lock\.yaml|tweets\.ts|install\.(?:sh|ps1)|installer\.nsh|rebrand-codi\.mjs|paletteSearch\.test\.ts|t3McpToolPresentation\.test\.ts|DesktopAppIdentity(?:\.test)?\.ts|DesktopUserData(?:\.test)?\.ts|DesktopLegacyLocalStorage(?:\.test)?\.ts)$/;
 // The retired Alpha name that old installs keep, a launcher path whose space is the fixture, the
 // marker old launchers carry, and the client name sent to providers. Beta, Dev and Nightly are
 // current product names and must be renamed.
