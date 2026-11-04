@@ -7,9 +7,12 @@ import {
   type SnoozePreset,
 } from "@t3tools/client-runtime/state/thread-settled";
 
+import i18n from "i18next";
+
 import { appAtomRegistry } from "../rpc/atomRegistry";
 import { serverEnvironment } from "../state/server";
 import { formatShortTimestamp } from "../timestampFormat";
+import { localizeSnoozeLabel, localizeSnoozeWhen } from "./settings/SnoozePresetsSettings.logic";
 import { toastManager } from "./ui/toast";
 
 export { snoozeWakeLabel, type SnoozePreset };
@@ -20,7 +23,13 @@ export function resolveSnoozePresets(
   timestampFormat: TimestampFormat,
   environmentId: EnvironmentId,
 ): ReadonlyArray<SnoozePreset> {
-  return resolveSharedSnoozePresets(now, snoozeOptions(timestampFormat, environmentId));
+  const options = snoozeOptions(timestampFormat, environmentId);
+  // The shared resolver is English-only and prefixes a wake day in the browser's locale.
+  return resolveSharedSnoozePresets(now, options).map((preset) => ({
+    ...preset,
+    label: localizeSnoozeLabel(preset.label, i18n.t),
+    whenLabel: localizeSnoozeWhen(preset, options.formatTime, i18n.language),
+  }));
 }
 
 /** A shown menu choice as picked; see the shared `pickSnoozePreset`. */
@@ -39,8 +48,8 @@ export function pickSnoozePreset(
   if (!picked) {
     toastManager.add({
       type: "warning",
-      title: "Could not snooze thread",
-      description: "That snooze time has passed. Choose another time.",
+      title: i18n.t("settings.parallelFinalUI.snoozeFailedTitle"),
+      description: i18n.t("settings.parallelFinalUI.snoozeFailedDescription"),
     });
   }
   return picked;

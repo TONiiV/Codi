@@ -19,11 +19,23 @@ import { CommandDialog, CommandDialogPopup, CommandFooterAction } from "../ui/co
 import { toastManager } from "../ui/toast";
 import { ProjectFaviconThumbnail } from "./ProjectFaviconThumbnail";
 import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
+import { englishT } from "~/i18n/englishT";
 
-function emptyMessage(query: string, error: string | null, isPending: boolean): string {
+function emptyMessage(
+  query: string,
+  error: string | null,
+  isPending: boolean,
+  t: TFunction = englishT,
+): string {
   if (error) return error;
-  if (isPending) return query.trim() ? "Searching project files…" : "Indexing project files…";
-  return query.trim() ? "No matching image files." : "No image files found.";
+  if (isPending)
+    return query.trim()
+      ? t("settings.text.searchingProjectFiles")
+      : t("settings.text.indexingProjectFiles");
+  return query.trim()
+    ? t("settings.text.noMatchingImageFiles")
+    : t("settings.text.noImageFilesFound");
 }
 export function canPickExternalProjectFavicon(cwd: string, platform: string): boolean {
   return !isWindowsPlatform(platform) || isWindowsAbsolutePath(cwd);
@@ -144,7 +156,7 @@ export function ProjectFaviconPickerDialog(props: {
                 props.onOpenChange(false);
                 void item.run();
               }}
-              emptyStateMessage={emptyMessage(query, result.error, result.isPending)}
+              emptyStateMessage={emptyMessage(query, result.error, result.isPending, t)}
             />
           </CommandPaletteContent>
         </CommandDialogPopup>

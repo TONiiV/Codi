@@ -28,6 +28,8 @@ import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../
 import { toastManager } from "../ui/toast";
 import { SettingsRow } from "./settingsLayout";
 import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
+import { englishT } from "~/i18n/englishT";
 
 interface AcpSessionProject {
   readonly id: ProjectId;
@@ -35,18 +37,23 @@ interface AcpSessionProject {
   readonly workspaceRoot: string;
 }
 
-function reportFailure(title: string, result: AtomCommandResult<unknown, unknown>) {
+function reportFailure(
+  title: string,
+  result: AtomCommandResult<unknown, unknown>,
+  t: TFunction = englishT,
+) {
   if (result._tag !== "Failure" || isAtomCommandInterrupted(result)) return;
   const error = squashAtomCommandFailure(result);
   toastManager.add({
     type: "error",
     title,
-    description: error instanceof Error ? error.message : "The ACP operation failed.",
+    description: error instanceof Error ? error.message : t("settings.text.theAcpOperationFailed"),
   });
 }
 
 function parseProviderHeaders(
   text: string,
+  t: TFunction = englishT,
 ):
   | { readonly ok: true; readonly headers: Record<string, string> | undefined }
   | { readonly ok: false; readonly error: string } {
@@ -57,7 +64,7 @@ function parseProviderHeaders(
   } catch (error) {
     return {
       ok: false,
-      error: error instanceof Error ? error.message : "Headers must be valid JSON.",
+      error: error instanceof Error ? error.message : t("settings.text.headersMustBeValidJson"),
     };
   }
   if (
@@ -66,7 +73,7 @@ function parseProviderHeaders(
     Array.isArray(parsed) ||
     !Object.values(parsed).every((value) => typeof value === "string")
   ) {
-    return { ok: false, error: "Headers must be a JSON object with string values." };
+    return { ok: false, error: t("settings.parallelProviders.headersMustBeJsonObject") };
   }
   return { ok: true, headers: parsed as Record<string, string> };
 }
@@ -149,7 +156,7 @@ export function AcpSessionManagementSection(props: {
       setNextCursor(result.value.nextCursor);
       return;
     }
-    reportFailure(t("settings.text.couldNotListAcpSessions"), result);
+    reportFailure(t("settings.text.couldNotListAcpSessions"), result, t);
   };
 
   const importNativeSession = async (session: AcpRegistrySession) => {
@@ -187,14 +194,16 @@ export function AcpSessionManagementSection(props: {
       });
       return;
     }
-    reportFailure(t("settings.text.couldNotImportAcpSession"), result);
+    reportFailure(t("settings.text.couldNotImportAcpSession"), result, t);
   };
 
   const deleteNativeSession = async (session: AcpRegistrySession) => {
     if (projectId === null || deletingSessionId !== null || session.importedThreadId !== null)
       return;
     const confirmed = await ensureLocalApi().dialogs.confirm(
-      `Permanently delete native ACP session "${session.title ?? session.sessionId}"?`,
+      t("settings.parallelProviders.deleteNativeSessionConfirm", {
+        session: session.title ?? session.sessionId,
+      }),
       { variant: "destructive" },
     );
     if (!confirmed || !readEnvironmentScope(props.environmentId, AuthOrchestrationOperateScope))
@@ -212,7 +221,7 @@ export function AcpSessionManagementSection(props: {
       toastManager.add({ type: "success", title: t("settings.text.acpSessionDeleted") });
       return;
     }
-    reportFailure(t("settings.text.couldNotDeleteAcpSession"), result);
+    reportFailure(t("settings.text.couldNotDeleteAcpSession"), result, t);
   };
 
   const loadProviders = async (resetProviderId?: string) => {
@@ -241,7 +250,7 @@ export function AcpSessionManagementSection(props: {
       );
       return;
     }
-    reportFailure(t("settings.text.couldNotListAcpProviders"), result);
+    reportFailure(t("settings.text.couldNotListAcpProviders"), result, t);
   };
 
   const saveProvider = async (provider: AcpRegistryConfigurableProvider) => {
@@ -254,7 +263,7 @@ export function AcpSessionManagementSection(props: {
       return;
     const draft = providerDrafts[provider.providerId];
     if (draft === undefined || draft.apiType.length === 0 || draft.baseUrl.length === 0) return;
-    const parsedHeaders = parseProviderHeaders(draft.headers);
+    const parsedHeaders = parseProviderHeaders(draft.headers, t);
     if (!parsedHeaders.ok) {
       toastManager.add({
         type: "error",
@@ -282,7 +291,7 @@ export function AcpSessionManagementSection(props: {
       await loadProviders(provider.providerId);
       return;
     }
-    reportFailure(t("settings.text.couldNotConfigureAcpProvider"), result);
+    reportFailure(t("settings.text.couldNotConfigureAcpProvider"), result, t);
   };
 
   const disableConfiguredProvider = async (provider: AcpRegistryConfigurableProvider) => {
@@ -304,7 +313,7 @@ export function AcpSessionManagementSection(props: {
       await loadProviders(provider.providerId);
       return;
     }
-    reportFailure(t("settings.text.couldNotDisableAcpProvider"), result);
+    reportFailure(t("settings.text.couldNotDisableAcpProvider"), result, t);
   };
 
   const logoutProvider = async () => {
@@ -321,7 +330,7 @@ export function AcpSessionManagementSection(props: {
       toastManager.add({ type: "success", title: t("settings.text.loggedOutOfAcpAgent") });
       return;
     }
-    reportFailure(t("settings.text.couldNotLogOutOfAcp"), result);
+    reportFailure(t("settings.text.couldNotLogOutOfAcp"), result, t);
   };
 
   return (
@@ -331,7 +340,7 @@ export function AcpSessionManagementSection(props: {
         description={t("settings.text.resumeAgentOwnedConversationsAsT3")}
         status={
           canList && props.projects.length === 0
-            ? "Add a project before importing sessions."
+            ? t("settings.parallelProviders.addProjectBeforeImporting")
             : undefined
         }
         control={

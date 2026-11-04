@@ -80,7 +80,10 @@ export function ProviderAuthenticationSection({
     (provider.auth.type === "gemini-api-key" || provider.auth.type === "agent-platform");
   const accountDescription = active
     ? auth?.phase === "starting"
-      ? (auth.message ?? (usesCredentials ? "Connecting…" : t("settings.text.startingSignIn")))
+      ? (auth.message ??
+        (usesCredentials
+          ? t("settings.parallelProviders.connectingEllipsis")
+          : t("settings.text.startingSignIn")))
       : auth?.phase === "verifying"
         ? usesCredentials
           ? t("settings.text.checkingCredentialsAndLoadingModels")
@@ -248,7 +251,9 @@ export function ProviderAuthenticationSection({
                           await copied;
                           if (interaction?.type === "browser" && interaction.requiresConsent)
                             await send({ type: "browser", action: "accept" });
-                        })().catch(() => setError("Could not copy the sign-in link."));
+                        })().catch(() =>
+                          setError(t("settings.parallelProviders.couldNotCopySignInLink")),
+                        );
                       }}
                     >
                       <CopyIcon />
@@ -322,7 +327,10 @@ export function ProviderAuthenticationSection({
                 onClick={() => {
                   void ensureLocalApi()
                     .dialogs.confirm(
-                      `Sign out of ${provider.displayName ?? provider.driver} on ${environmentLabel}? This stops running threads that share this sign-in. Thread history is kept.`,
+                      t("settings.parallelProviders.signOutProviderConfirm", {
+                        provider: provider.displayName ?? provider.driver,
+                        environmentLabel,
+                      }),
                     )
                     .then((confirmed) => {
                       if (confirmed) void run(() => logout(target));

@@ -126,15 +126,43 @@ import {
   SETTINGS_PICKER_TRIGGER_CLASSNAME,
 } from "./settingsLayout";
 import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
+import { englishT } from "~/i18n/englishT";
 
 const WEEKDAY_ORDER = [1, 2, 3, 4, 5, 6, 0] as const;
-const WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
-const WEEKDAY_SHORT = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"] as const;
+const WEEKDAY_LABEL_KEYS = [
+  "settings.parallelSystem.weekdaySun",
+  "settings.parallelSystem.weekdayMon",
+  "settings.parallelSystem.weekdayTue",
+  "settings.parallelSystem.weekdayWed",
+  "settings.parallelSystem.weekdayThu",
+  "settings.parallelSystem.weekdayFri",
+  "settings.parallelSystem.weekdaySat",
+] as const;
+const WEEKDAY_SHORT_KEYS = [
+  "settings.parallelSystem.weekdayShortSun",
+  "settings.parallelSystem.weekdayShortMon",
+  "settings.parallelSystem.weekdayShortTue",
+  "settings.parallelSystem.weekdayShortWed",
+  "settings.parallelSystem.weekdayShortThu",
+  "settings.parallelSystem.weekdayShortFri",
+  "settings.parallelSystem.weekdayShortSat",
+] as const;
 
-const WORKSPACE_MODE_LABELS: Record<WorkspaceMode, string> = {
-  worktree: "Create a new worktree",
-  root: "Use the project checkout",
-  existing_worktree: "Use a specific checkout",
+function weekdayLabel(day: number, t: TFunction = englishT): string {
+  const key = WEEKDAY_LABEL_KEYS[day];
+  return key ? t(key) : String(day);
+}
+
+function weekdayShortLabel(day: number, t: TFunction = englishT): string {
+  const key = WEEKDAY_SHORT_KEYS[day];
+  return key ? t(key) : String(day);
+}
+
+const WORKSPACE_MODE_LABEL_KEYS: Record<WorkspaceMode, string> = {
+  worktree: "settings.text.createANewWorktree",
+  root: "settings.text.useTheProjectCheckout",
+  existing_worktree: "settings.text.useASpecificCheckout",
 };
 
 const EMPTY_DRAFT: DraftState = {
@@ -300,46 +328,52 @@ const ONCE_FORMATTER = new Intl.DateTimeFormat(undefined, {
   timeStyle: "short",
 });
 
-export function scheduleLabel(schedule: ScheduledTaskSchedule): string {
-  if (schedule.type === "webhook") return "On webhook";
-  if (schedule.type === "once") return `Once, ${ONCE_FORMATTER.format(new Date(schedule.runAt))}`;
+export function scheduleLabel(schedule: ScheduledTaskSchedule, t: TFunction = englishT): string {
+  if (schedule.type === "webhook") return t("settings.text.onWebhook");
+  if (schedule.type === "once")
+    return t("settings.parallelSystem.scheduleOnce", {
+      date: ONCE_FORMATTER.format(new Date(schedule.runAt)),
+    });
   if (schedule.type === "interval") {
     const minutes = schedule.everyMs / 60_000;
     return Number.isInteger(minutes)
-      ? `Every ${minutes} min`
-      : `Every ${Math.round(schedule.everyMs / 1000)} sec`;
+      ? t("settings.parallelSystem.scheduleEveryMinutes", { minutes })
+      : t("settings.parallelSystem.scheduleEverySeconds", {
+          seconds: Math.round(schedule.everyMs / 1000),
+        });
   }
   const weekdays = schedule.weekdays ?? [];
   const days =
     weekdays.length === 0
-      ? "Daily"
+      ? t("settings.text.daily")
       : weekdays.length === 5 && weekdays.every((day) => day >= 1 && day <= 5)
-        ? "Weekdays"
-        : weekdays.map((day) => WEEKDAY_LABELS[day]).join(", ");
-  return `${days} at ${schedule.timeOfDay}`;
+        ? t("settings.text.weekdays")
+        : weekdays.map((day) => weekdayLabel(day, t)).join(", ");
+  return t("settings.parallelSystem.scheduleAtTime", { days, time: schedule.timeOfDay });
 }
 
 /** formatRelativeTime handles only the past; upcoming runs need future labels. */
-function relativeLabel(value: string | null, nowMs: number): string {
-  if (!value) return "Not scheduled";
+function relativeLabel(value: string | null, nowMs: number, t: TFunction = englishT): string {
+  if (!value) return t("settings.text.notScheduled");
   const diffMs = new Date(value).getTime() - nowMs;
   if (diffMs <= 0) {
-    const relative = formatRelativeTime(value, nowMs);
-    if (!relative) return "Not scheduled";
+    const relative = formatRelativeTime(value, nowMs, t);
+    if (!relative) return t("settings.text.notScheduled");
     return relative.suffix ? `${relative.value} ${relative.suffix}` : relative.value;
   }
   const minutes = Math.ceil(diffMs / 60_000);
-  if (minutes < 2) return "in under a minute";
-  if (minutes < 60) return `in ${minutes}m`;
+  if (minutes < 2) return t("settings.parallelSystem.relativeUnderAMinute");
+  if (minutes < 60) return t("settings.parallelSystem.relativeInMinutes", { minutes });
   const hours = Math.round(minutes / 60);
-  if (hours < 24) return `in ${hours}h`;
-  return `in ${Math.round(hours / 24)}d`;
+  if (hours < 24) return t("settings.parallelSystem.relativeInHours", { hours });
+  return t("settings.parallelSystem.relativeInDays", { days: Math.round(hours / 24) });
 }
 
 // Use the label's minute tick because the compiler caches render-time Date.now() on the timestamp.
 export function ScheduledRelativeLabel(props: { value: string | null }) {
+  const { t } = useTranslation();
   const nowMinute = useNowMinute();
-  return relativeLabel(props.value, Date.parse(`${nowMinute}:00.000Z`));
+  return relativeLabel(props.value, Date.parse(`${nowMinute}:00.000Z`), t);
 }
 
 function deliveryOutcomeVariant(outcome: string) {
@@ -362,6 +396,16 @@ function statusVariant(status: ScheduledTask["lastRunStatus"]) {
   if (status === "succeeded") return "success";
   if (status === "running") return "info";
   return "outline";
+}
+
+function lastRunStatusLabel(
+  status: ScheduledTask["lastRunStatus"],
+  t: TFunction = englishT,
+): string {
+  if (status === "succeeded") return t("settings.parallelSystem.lastRunSucceeded");
+  if (status === "failed") return t("settings.parallelSystem.lastRunFailed");
+  if (status === "running") return t("settings.parallelSystem.lastRunRunning");
+  return status;
 }
 
 export function ScheduledTasksSettings(target: {
@@ -540,24 +584,22 @@ function ScheduledTaskEnvironmentList({
 
   const loaded = states.filter((state) => state.connected && state.error === null && state.tasks);
   const populated = loaded.filter((state) => state.tasks && state.tasks.length > 0);
-  const summaries: Record<string, string[]> = {
-    "Not connected:": [],
-    "Loading scheduled tasks on": [],
-    "Could not load scheduled tasks:": [],
-    "No tasks on": [],
-  };
+  const summaries = [
+    { key: "settings.parallelSystem.summaryNotConnected", entries: [] as string[] },
+    { key: "settings.parallelSystem.summaryLoading", entries: [] as string[] },
+    { key: "settings.parallelSystem.summaryCouldNotLoad", entries: [] as string[] },
+    { key: "settings.parallelSystem.summaryNoTasks", entries: [] as string[] },
+  ];
   for (const { environment, connected, tasks, error } of states) {
     const label = settingsScopeEnvironmentLabel(environment, environments);
     if (!connected) {
-      summaries["Not connected:"]!.push(
-        `${label} (${connectionStatusTitle(environment.connection)})`,
-      );
+      summaries[0]!.entries.push(`${label} (${connectionStatusTitle(environment.connection)})`);
     } else if (error !== null) {
-      summaries["Could not load scheduled tasks:"]!.push(`${label}: ${error}`);
+      summaries[2]!.entries.push(`${label}: ${error}`);
     } else if (!tasks) {
-      summaries["Loading scheduled tasks on"]!.push(label);
+      summaries[1]!.entries.push(label);
     } else if (tasks.length === 0 && populated.length > 0) {
-      summaries["No tasks on"]!.push(label);
+      summaries[3]!.entries.push(label);
     }
   }
 
@@ -606,11 +648,11 @@ function ScheduledTaskEnvironmentList({
           description={t("settings.text.noTasksMatchThisEnvironmentAnd")}
         />
       ) : null}
-      {Object.entries(summaries).map(([label, entries]) => {
+      {summaries.map(({ key, entries }) => {
         if (entries.length === 0) return null;
-        const summary = `${label} ${entries.join(", ")}`;
+        const summary = t(key, { entries: entries.join(", ") });
         return (
-          <Tooltip key={label}>
+          <Tooltip key={key}>
             <TooltipTrigger
               render={
                 <p
@@ -779,7 +821,7 @@ function ScheduledTaskRow({
       status={
         <div className="flex flex-wrap items-center gap-2">
           <span>
-            {scheduleLabel(task.schedule)} ·{" "}
+            {scheduleLabel(task.schedule, t)} ·{" "}
             {task.blockedByPolicy !== undefined ? (
               task.blockedByPolicy
             ) : !task.enabled ? (
@@ -788,14 +830,17 @@ function ScheduledTaskRow({
               t("settings.text.listening")
             ) : task.nextRunAt ? (
               <>
-                Next run <ScheduledRelativeLabel value={task.nextRunAt} />
+                {t("settings.parallelSystem.nextRun")}{" "}
+                <ScheduledRelativeLabel value={task.nextRunAt} />
               </>
             ) : (
               t("settings.text.notScheduled")
             )}
           </span>
           {task.lastRunStatus !== "never" ? (
-            <Badge variant={statusVariant(task.lastRunStatus)}>{task.lastRunStatus}</Badge>
+            <Badge variant={statusVariant(task.lastRunStatus)}>
+              {lastRunStatusLabel(task.lastRunStatus, t)}
+            </Badge>
           ) : null}
           {task.lastRunError ? <span className="text-destructive">{task.lastRunError}</span> : null}
         </div>
@@ -914,7 +959,7 @@ function WebhookDeliveriesDialog({
                     selected.pendingWindow ? "coalesced" : selected.outcome,
                   )}
                 >
-                  {webhookDeliveryLabel(selected)}
+                  {webhookDeliveryLabel(selected, t)}
                 </Badge>
                 <span>
                   {selected.method} · <ScheduledRelativeLabel value={selected.receivedAt} />
@@ -950,7 +995,9 @@ function WebhookDeliveriesDialog({
               </DeliveryBlock>
               {selected.missingFields.length > 0 ? (
                 <p className="text-sm text-muted-foreground">
-                  Empty placeholders: {selected.missingFields.join(", ")}
+                  {t("settings.parallelSystem.emptyPlaceholders", {
+                    fields: selected.missingFields.join(", "),
+                  })}
                 </p>
               ) : null}
               <DeliveryBlock title={t("settings.text.headers")}>
@@ -968,7 +1015,7 @@ function WebhookDeliveriesDialog({
                     : t("settings.text.body")
                 }
               >
-                {selected.body || "(empty)"}
+                {selected.body || t("settings.parallelSystem.emptyValue")}
               </DeliveryBlock>
             </div>
           ) : selectedId !== null ? null : deliveries === null ? (
@@ -991,7 +1038,7 @@ function WebhookDeliveriesDialog({
                         delivery.pendingWindow ? "coalesced" : delivery.outcome,
                       )}
                     >
-                      {webhookDeliveryLabel(delivery)}
+                      {webhookDeliveryLabel(delivery, t)}
                     </Badge>
                     <span>{delivery.method}</span>
                     <span className="text-muted-foreground">
@@ -1097,7 +1144,7 @@ function WebhookEndpointField({
       <div className="flex items-center gap-2">
         <Input
           readOnly
-          aria-label="Webhook URL"
+          aria-label={t("settings.parallelSystem.webhookUrl")}
           value={url}
           onFocus={(event) => event.currentTarget.select()}
         />
@@ -1579,7 +1626,7 @@ function ScheduledTaskEditorForm({
                 }
               >
                 <SelectTrigger size="sm" id="scheduled-task-workspace">
-                  <SelectValue>{WORKSPACE_MODE_LABELS[draft.workspaceMode]}</SelectValue>
+                  <SelectValue>{t(WORKSPACE_MODE_LABEL_KEYS[draft.workspaceMode])}</SelectValue>
                 </SelectTrigger>
                 <SelectPopup>
                   <SelectItem value="worktree">{t("settings.text.createANewWorktree")}</SelectItem>
@@ -1731,9 +1778,7 @@ function ScheduledTaskEditorForm({
               <div className="space-y-4">
                 <WebhookEndpointField environmentId={environmentId} task={liveTask} />
                 <p className="text-xs text-muted-foreground">
-                  {
-                    "Each request runs the prompt. Use {{body.path}}, {{headers.name}}, {{query.name}}, {{body}} or {{request}} in the prompt; only what it names reaches the agent."
-                  }
+                  {t("settings.parallelSystem.webhookPromptHint")}
                 </p>
                 <Field
                   label={t("settings.text.skipRequestsOlderThan")}
@@ -1957,8 +2002,8 @@ function ScheduledTaskEditorForm({
                   }}
                 >
                   {WEEKDAY_ORDER.map((day) => (
-                    <Toggle key={day} value={String(day)} aria-label={WEEKDAY_LABELS[day]}>
-                      {WEEKDAY_SHORT[day]}
+                    <Toggle key={day} value={String(day)} aria-label={weekdayLabel(day, t)}>
+                      {weekdayShortLabel(day, t)}
                     </Toggle>
                   ))}
                 </ToggleGroup>

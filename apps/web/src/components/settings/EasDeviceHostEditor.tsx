@@ -31,9 +31,9 @@ import { useTranslation } from "react-i18next";
 const FROM_THREAD_PROJECT = "thread-project";
 
 const CREDENTIAL_SOURCES: Record<DeviceEasAccount["credentialSource"], string> = {
-  settings: "the access token saved here",
-  env: "EXPO_TOKEN on the server",
-  "eas-login": "the server's eas login",
+  settings: "settings.parallelConnections.credentialSourceSaved",
+  env: "settings.parallelConnections.credentialSourceEnv",
+  "eas-login": "settings.parallelConnections.credentialSourceEasLogin",
 };
 
 const failureMessage = (cause: Cause.Cause<unknown>) => {
@@ -233,7 +233,10 @@ export function EasDeviceHostEditor(props: {
             <div className="flex items-center justify-between gap-3 rounded-lg border border-border/60 px-3 py-2.5">
               <p role="status" className="min-w-0 text-xs text-muted-foreground">
                 {account.status === "signed-in"
-                  ? `Signed in as ${account.account.signedInAs} with ${CREDENTIAL_SOURCES[account.account.credentialSource]}.`
+                  ? t("settings.parallelConnections.signedInAsWithSource", {
+                      account: account.account.signedInAs,
+                      source: t(CREDENTIAL_SOURCES[account.account.credentialSource]),
+                    })
                   : account.status === "failed"
                     ? account.error
                     : account.status === "checking"
@@ -247,7 +250,8 @@ export function EasDeviceHostEditor(props: {
                 disabled={props.busy || account.status === "checking"}
                 onClick={() => void checkAccount()}
               >
-                {account.status === "checking" ? <Spinner size="xs" /> : null} Check account
+                {account.status === "checking" ? <Spinner size="xs" /> : null}
+                {t("settings.parallelConnections.checkAccount")}
               </Button>
             </div>
             <div className="space-y-1.5 text-sm">
@@ -310,7 +314,8 @@ export function EasDeviceHostEditor(props: {
               {t("settings.text.cancel")}
             </Button>
             <Button type="submit" disabled={props.busy || !valid}>
-              {props.busy ? <Spinner size="xs" /> : null} Save host
+              {props.busy ? <Spinner size="xs" /> : null}
+              {t("settings.parallelConnections.saveHost")}
             </Button>
           </DialogFooter>
         </form>

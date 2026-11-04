@@ -141,19 +141,28 @@ function ProviderSetupActions({
     installation === null
       ? t("settings.text.checkingTheAntigravityRuntime")
       : installation?.phase === "downloading"
-        ? `Downloading ${(installation.downloadedBytes / 1_000_000).toFixed(1)} MB${installation.totalBytes === null ? "" : ` of ${(installation.totalBytes / 1_000_000).toFixed(1)} MB`}.`
+        ? installation.totalBytes === null
+          ? t("settings.parallelProviders.downloadingSizeMb", {
+              size: (installation.downloadedBytes / 1_000_000).toFixed(1),
+            })
+          : t("settings.parallelProviders.downloadingSizeMbOfTotal", {
+              size: (installation.downloadedBytes / 1_000_000).toFixed(1),
+              total: (installation.totalBytes / 1_000_000).toFixed(1),
+            })
         : installation?.phase === "extracting"
           ? t("settings.text.extractingAntigravity")
           : installation?.phase === "verifying"
             ? t("settings.text.checkingTheDownloadedRuntime")
             : installed
-              ? "Installed."
+              ? t("settings.parallelProviders.installedDot")
               : usesCustomBinary
                 ? enabled
                   ? t("settings.text.theConfiguredAntigravityRuntimeIsUnavailable")
                   : t("settings.text.theConfiguredAntigravityRuntimeHasNot")
                 : installation?.totalBytes
-                  ? `${Math.ceil(installation.totalBytes / 1_000_000)} MB download.`
+                  ? t("settings.parallelProviders.sizeMbDownload", {
+                      size: Math.ceil(installation.totalBytes / 1_000_000),
+                    })
                   : t("settings.text.notInstalled2");
 
   async function runCommand<A, E>(
@@ -198,7 +207,9 @@ function ProviderSetupActions({
       {/* Keep the live region first so sibling divider rules do not add a divider after the last visible
        * row. */}
       <p className="sr-only" role="status">
-        {pendingLabel ? `${pendingLabel}.` : null}
+        {pendingLabel
+          ? t("settings.parallelProviders.pendingLabelDot", { label: pendingLabel })
+          : null}
       </p>
       <SettingsRow
         title={t("settings.text.runtime")}

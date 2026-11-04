@@ -131,7 +131,9 @@ export function useSnapShotShortcutRecorder({
         disabled={disabled}
         aria-label={
           displayShortcut
-            ? `Record snapshot shortcut, currently ${formatSnapShotShortcutLabel(displayShortcut)}`
+            ? t("settings.parallelA.snapShotRecordAria", {
+                shortcut: formatSnapShotShortcutLabel(displayShortcut),
+              })
             : t("settings.text.changeSnapshotShortcut")
         }
         aria-pressed={recording}

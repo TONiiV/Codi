@@ -109,25 +109,26 @@ import { environmentIdsKey } from "~/state/environmentAtomList";
 import { environmentSessionStatesAtom } from "~/state/session";
 import { canUpdateServer } from "../ServerUpdateAction";
 import { useUpdateEverythingRun } from "../sidebar/updateEverythingRun";
-import { awaitsTrackSwitch, channelSwitchLabel } from "../sidebar/updateEverything.logic";
+import { awaitsTrackSwitch } from "../sidebar/updateEverything.logic";
 import { isHostedByThisApp } from "../sidebar/useUpdateEverything";
 
+// i18n keys, resolved with `t` where shown.
 const RESPONSE_STREAMING_MODE_LABELS: Record<ResponseStreamingMode, string> = {
-  turn: "Wait for the full response",
-  paragraph: "Show finished paragraphs",
+  turn: "settings.parallelA.streamTurn",
+  paragraph: "settings.parallelA.streamParagraph",
 };
 
 const RESPONSE_STREAMING_MODE_DESCRIPTIONS: Record<ResponseStreamingMode, string> = {
-  turn: "Text appears once the agent finishes its turn.",
-  paragraph: "Each paragraph or code block appears as soon as it is complete.",
+  turn: "settings.parallelA.streamTurnDesc",
+  paragraph: "settings.parallelA.streamParagraphDesc",
 };
 
 const isSidebarProjectSortOrder = Schema.is(SidebarProjectSortOrder);
 const isAppLanguage = Schema.is(AppLanguage);
 
 const DIFF_LAYOUT_LABELS: Record<DiffLayout, string> = {
-  stacked: "Stacked",
-  split: "Split",
+  stacked: "settings.parallelA.diffLayoutStacked",
+  split: "settings.parallelA.diffLayoutSplit",
 };
 
 const DEFAULT_DRIVER_KIND = ProviderDriverKind.make("codex");
@@ -271,12 +272,15 @@ function AboutVersionSection() {
       ? !canCheckForUpdate(updateState)
       : isDesktopUpdateButtonDisabled(updateState);
 
-  const actionLabel: Record<string, string> = { download: "Download", install: "Install" };
+  const actionLabel: Record<string, string> = {
+    download: t("settings.parallelA.updateDownload"),
+    install: t("settings.text.install"),
+  };
   const statusLabel: Record<string, string> = {
-    checking: "Checking…",
-    downloading: "Downloading…",
+    checking: t("settings.text.checking"),
+    downloading: t("settings.parallelA.updateDownloading"),
     // Off its track, "up to date" only means no switch is pending; Review moves it.
-    ...(appOffTrack ? {} : { "up-to-date": "Up to Date" }),
+    ...(appOffTrack ? {} : { "up-to-date": t("settings.parallelA.updateUpToDate") }),
   };
   const buttonLabel =
     actionLabel[action] ??
@@ -318,11 +322,12 @@ function AboutVersionSection() {
           {...searchableSetting("update-track", t)}
           description={
             nightlyDeniedBy !== undefined ? (
-              `${managedUpdatesMessage(nightlyDeniedBy)} Nightly builds are not available${
+              t(
                 selectedUpdateChannel === "nightly"
-                  ? "; switch to Stable to keep getting updates."
-                  : "."
-              }`
+                  ? "settings.parallelA.nightlyUnavailableSwitch"
+                  : "settings.parallelA.nightlyUnavailable",
+                { message: managedUpdatesMessage(nightlyDeniedBy) },
+              )
             ) : unswitchedMachines > 0 ? (
               <>
                 {unswitchedMachines === 1
@@ -330,8 +335,12 @@ function AboutVersionSection() {
                   : t("settings.text.unswitchedmachinesMachinesStillRun", {
                       unswitchedMachines,
                     })}{" "}
-                {channelSwitchLabel(selectedUpdateChannel === "nightly" ? "latest" : "nightly")}.{" "}
-                {/* The dialog moves what it can and says why it skips the rest. */}
+                {t(
+                  selectedUpdateChannel === "nightly"
+                    ? "settings.text.stable"
+                    : "settings.text.nightly",
+                )}
+                . {/* The dialog moves what it can and says why it skips the rest. */}
                 <Button
                   size="xs"
                   variant="link"
@@ -361,7 +370,13 @@ function AboutVersionSection() {
                 aria-label={t("settings.text.updateTrack")}
                 disabled={switchChannel !== null || updateRun !== null}
               >
-                <SelectValue>{channelSwitchLabel(selectedUpdateChannel)}</SelectValue>
+                <SelectValue>
+                  {t(
+                    selectedUpdateChannel === "nightly"
+                      ? "settings.text.nightly"
+                      : "settings.text.stable",
+                  )}
+                </SelectValue>
               </SelectTrigger>
               <SelectPopup align="end" alignItemWithTrigger={false}>
                 <SelectItem hideIndicator value="latest">
@@ -515,7 +530,7 @@ export function useSettingsRestore(onRestored?: () => void) {
     DEFAULT_UNIFIED_SETTINGS.persistComposerContextStrip
       ? [t("settings.text.composerContext2")]
       : []),
-    ...getChangedTypographySettingLabels(settings),
+    ...getChangedTypographySettingLabels(settings, t),
     ...(settings.diffFilesCollapsed !== DEFAULT_UNIFIED_SETTINGS.diffFilesCollapsed
       ? [t("settings.text.defaultDiffFileState2")]
       : []),
@@ -538,7 +553,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       ? [t("settings.text.sendShortcut2")]
       : []),
     ...(settings.followUpBehavior !== DEFAULT_UNIFIED_SETTINGS.followUpBehavior
-      ? ["Follow-up behavior"]
+      ? [t("settings.text.followUpBehavior2")]
       : []),
     ...(settings.contextWindowMeterEnabled !== DEFAULT_UNIFIED_SETTINGS.contextWindowMeterEnabled
       ? [t("settings.text.contextWindowIndicator")]
@@ -580,7 +595,7 @@ export function useSettingsRestore(onRestored?: () => void) {
     ...(settings.threadTitleInstructions !== DEFAULT_UNIFIED_SETTINGS.threadTitleInstructions
       ? [t("settings.text.threadTitleInstructions2")]
       : []),
-    ...getChangedBrowserSettingLabels(settings),
+    ...getChangedBrowserSettingLabels(settings, t),
     ...(settings.enableAgentBrowserAccess !== DEFAULT_UNIFIED_SETTINGS.enableAgentBrowserAccess
       ? [t("settings.text.agentBrowserAccess")]
       : []),
@@ -590,9 +605,7 @@ export function useSettingsRestore(onRestored?: () => void) {
     if (changedSettingLabels.length === 0) return;
     const api = readLocalApi();
     const confirmed = await (api ?? ensureLocalApi()).dialogs.confirm(
-      ["Restore default settings?", `This will reset: ${changedSettingLabels.join(", ")}.`].join(
-        "\n",
-      ),
+      t("settings.parallelA.restoreDefaultsConfirm", { labels: changedSettingLabels.join(", ") }),
       { variant: "destructive" },
     );
     if (!confirmed) return;
@@ -1285,7 +1298,9 @@ export function ChatSettingsPanel() {
                   modifierLabel,
                   modifierLabel2: modifierLabel,
                 })
-              : `Press ${modifierLabel}${settings.sendShortcut === "mod-enter" ? " + Shift" : ""} + Enter to do the opposite for one message.`)
+              : t("settings.parallelA.followUpOpposite", {
+                  shortcut: `${modifierLabel}${settings.sendShortcut === "mod-enter" ? " + Shift" : ""}`,
+                }))
           }
           resetAction={
             settings.followUpBehavior !== DEFAULT_UNIFIED_SETTINGS.followUpBehavior ? (
@@ -1424,14 +1439,14 @@ export function DiffsSettingsPanel() {
                 className="w-full sm:w-40"
                 aria-label={t("settings.text.diffLayout2")}
               >
-                <SelectValue>{DIFF_LAYOUT_LABELS[settings.diffLayout]}</SelectValue>
+                <SelectValue>{t(DIFF_LAYOUT_LABELS[settings.diffLayout])}</SelectValue>
               </SelectTrigger>
               <SelectPopup align="end" alignItemWithTrigger={false}>
                 <SelectItem hideIndicator value="stacked">
-                  {DIFF_LAYOUT_LABELS.stacked}
+                  {t(DIFF_LAYOUT_LABELS.stacked)}
                 </SelectItem>
                 <SelectItem hideIndicator value="split">
-                  {DIFF_LAYOUT_LABELS.split}
+                  {t(DIFF_LAYOUT_LABELS.split)}
                 </SelectItem>
               </SelectPopup>
             </Select>
@@ -1589,7 +1604,7 @@ function ScopedCompactIdleThreadsRow() {
               {(value: string | null) =>
                 value === null
                   ? t("settings.text.mixed")
-                  : IDLE_COMPACTION_MODES.find((mode) => mode.value === value)?.label
+                  : t(`settings.parallelShared.idleCompaction_${value}`)
               }
             </SelectValue>
           </SelectTrigger>
@@ -1602,7 +1617,7 @@ function ScopedCompactIdleThreadsRow() {
                 // A server from before modes has only the on/off switch, so it cannot store "Never".
                 disabled={mode.value === "off" && !idleCompaction.neverAvailable}
               >
-                {mode.label}
+                {t(`settings.parallelShared.idleCompaction_${mode.value}`)}
               </SelectItem>
             ))}
           </SelectPopup>
@@ -1791,7 +1806,7 @@ export function ThreadsSettingsPanel() {
               settings.sidebarAutoSettleAfterDays !==
               DEFAULT_UNIFIED_SETTINGS.sidebarAutoSettleAfterDays ? (
                 <SettingResetButton
-                  label="auto-settle"
+                  label={t("settings.text.autoSettleInactiveThreads")}
                   onClick={() =>
                     updateSettings({
                       sidebarAutoSettleAfterDays:
@@ -1966,7 +1981,7 @@ export function ThreadsSettingsPanel() {
             description={
               mixedResponseStreamingMode
                 ? t("settings.text.theSelectedTargetsUseDifferentStreaming")
-                : RESPONSE_STREAMING_MODE_DESCRIPTIONS[settings.responseStreamingMode]
+                : t(RESPONSE_STREAMING_MODE_DESCRIPTIONS[settings.responseStreamingMode])
             }
             resetAction={
               settings.responseStreamingMode !== DEFAULT_UNIFIED_SETTINGS.responseStreamingMode ? (
@@ -1998,16 +2013,16 @@ export function ThreadsSettingsPanel() {
                     {(value: ResponseStreamingMode | null) =>
                       value === null
                         ? t("settings.text.mixed")
-                        : RESPONSE_STREAMING_MODE_LABELS[value]
+                        : t(RESPONSE_STREAMING_MODE_LABELS[value])
                     }
                   </SelectValue>
                 </SelectTrigger>
                 <SelectPopup align="end" alignItemWithTrigger={false}>
                   <SelectItem hideIndicator value="turn">
-                    {RESPONSE_STREAMING_MODE_LABELS.turn}
+                    {t(RESPONSE_STREAMING_MODE_LABELS.turn)}
                   </SelectItem>
                   <SelectItem hideIndicator value="paragraph">
-                    {RESPONSE_STREAMING_MODE_LABELS.paragraph}
+                    {t(RESPONSE_STREAMING_MODE_LABELS.paragraph)}
                   </SelectItem>
                 </SelectPopup>
               </Select>
@@ -2066,9 +2081,7 @@ export function MaintenanceSettingsPanel() {
           settingKeys={["continueThreadsAfterServerUpdate"]}
           description={t("settings.text.automaticallyResumeInterruptedThreadsAfterAn")}
           status={
-            !hasServerTargets
-              ? "All selected connected environments must support restart continuation."
-              : undefined
+            !hasServerTargets ? t("settings.parallelA.restartContinuationUnsupported") : undefined
           }
           resetAction={
             hasServerTargets &&

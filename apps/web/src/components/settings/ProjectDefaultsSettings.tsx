@@ -22,10 +22,14 @@ import {
 import { useEnvironmentProviders, useEnvironments } from "../../state/environments";
 import { firstManagedDenial } from "../../state/managedPolicy";
 import { EMPTY_SERVER_PROVIDERS } from "../../state/server";
-import { resolveEnvModeLabel, WORKTREE_SUBMODULES_LABELS } from "../BranchToolbar.logic";
+import {
+  envModeText,
+  mergeMethodText,
+  runtimeModeText,
+  worktreeSubmodulesText,
+} from "./SettingsPanels.enumLabels";
 import { ProviderModelPicker } from "../chat/ProviderModelPicker";
 import { runtimeModeConfig, runtimeModeOptions } from "../chat/runtimeModeConfig";
-import { PULL_REQUEST_MERGE_METHOD_LABELS } from "../pullRequest/pullRequestDetail.logic";
 import { TraitsPicker } from "../chat/TraitsPicker";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { toastManager } from "../ui/toast";
@@ -151,7 +155,11 @@ export function ProjectDefaultsSettings({ category }: { category: ProjectSetting
       }
       status={
         mixedModel
-          ? `${automaticModel ? "Automatic defaults differ." : "Defaults differ."} Select one environment or choose a shared model to edit effort.`
+          ? t(
+              automaticModel
+                ? "settings.parallelA.projectMixedModelAutomatic"
+                : "settings.parallelA.projectMixedModelDefaults",
+            )
           : effortDisabledReason
       }
       resetAction={
@@ -247,7 +255,7 @@ export function ProjectDefaultsSettings({ category }: { category: ProjectSetting
             <SelectValue>
               {(value: string | null) =>
                 value === "local" || value === "worktree"
-                  ? resolveEnvModeLabel(value)
+                  ? envModeText(value, t)
                   : unavailable
                     ? t("settings.text.unavailable")
                     : t("settings.text.mixed")
@@ -255,8 +263,8 @@ export function ProjectDefaultsSettings({ category }: { category: ProjectSetting
             </SelectValue>
           </SelectTrigger>
           <SelectPopup align="end" alignItemWithTrigger={false}>
-            <SelectItem value="local">{resolveEnvModeLabel("local")}</SelectItem>
-            <SelectItem value="worktree">{resolveEnvModeLabel("worktree")}</SelectItem>
+            <SelectItem value="local">{envModeText("local", t)}</SelectItem>
+            <SelectItem value="worktree">{envModeText("worktree", t)}</SelectItem>
           </SelectPopup>
         </Select>
       }
@@ -394,13 +402,13 @@ export function ProjectDefaultsSettings({ category }: { category: ProjectSetting
                   <SelectValue>
                     {mixedPermissions
                       ? t("settings.text.mixed")
-                      : runtimeModeConfig[settings.defaultRuntimeMode].label}
+                      : runtimeModeText(settings.defaultRuntimeMode, t).label}
                   </SelectValue>
                 </SelectTrigger>
                 <SelectPopup align="end" alignItemWithTrigger={false}>
                   {runtimeModeOptions.map((mode) => {
-                    const option = runtimeModeConfig[mode];
-                    const Icon = option.icon;
+                    const option = runtimeModeText(mode, t);
+                    const Icon = runtimeModeConfig[mode].icon;
                     const managedReason = firstManagedDenial(
                       connectedEnvironments.map(
                         (environment) => environment.serverConfig?.managedPolicy,
@@ -524,7 +532,7 @@ export function ProjectDefaultsSettings({ category }: { category: ProjectSetting
                   <SelectValue>
                     {(value: string | null) =>
                       value === "merge" || value === "squash" || value === "rebase"
-                        ? PULL_REQUEST_MERGE_METHOD_LABELS[value]
+                        ? mergeMethodText(value, t)
                         : value === "last"
                           ? t("settings.text.lastSelected")
                           : t("settings.text.mixed")
@@ -533,9 +541,9 @@ export function ProjectDefaultsSettings({ category }: { category: ProjectSetting
                 </SelectTrigger>
                 <SelectPopup align="end" alignItemWithTrigger={false}>
                   <SelectItem value="last">{t("settings.text.lastSelected")}</SelectItem>
-                  <SelectItem value="merge">{PULL_REQUEST_MERGE_METHOD_LABELS.merge}</SelectItem>
-                  <SelectItem value="squash">{PULL_REQUEST_MERGE_METHOD_LABELS.squash}</SelectItem>
-                  <SelectItem value="rebase">{PULL_REQUEST_MERGE_METHOD_LABELS.rebase}</SelectItem>
+                  <SelectItem value="merge">{mergeMethodText("merge", t)}</SelectItem>
+                  <SelectItem value="squash">{mergeMethodText("squash", t)}</SelectItem>
+                  <SelectItem value="rebase">{mergeMethodText("rebase", t)}</SelectItem>
                 </SelectPopup>
               </Select>
             }
@@ -588,7 +596,7 @@ export function WorktreeSubmodulesRow() {
             <SelectValue>
               {(value: string | null) =>
                 isWorktreeSubmodules(value)
-                  ? WORKTREE_SUBMODULES_LABELS[value]
+                  ? worktreeSubmodulesText(value, t)
                   : unavailable
                     ? t("settings.text.unavailable")
                     : t("settings.text.mixed")
@@ -598,7 +606,7 @@ export function WorktreeSubmodulesRow() {
           <SelectPopup align="end" alignItemWithTrigger={false}>
             {WORKTREE_SUBMODULES_OPTIONS.map((option) => (
               <SelectItem key={option} value={option}>
-                {WORKTREE_SUBMODULES_LABELS[option]}
+                {worktreeSubmodulesText(option, t)}
               </SelectItem>
             ))}
           </SelectPopup>

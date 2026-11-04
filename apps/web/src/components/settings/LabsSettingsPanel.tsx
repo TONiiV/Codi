@@ -13,7 +13,7 @@ import { LegacyFeaturesSection } from "./SettingsPanels";
 import { useScopedSettings, useUpdateScopedSettings } from "./useScopedSettings";
 import { useOptionalSettingsScope } from "./SettingsScopeContext";
 import { firstManagedDenial, usePrimaryManagedPolicy } from "~/state/managedPolicy";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 /** Features still settling in, and legacy behavior kept for people who rely on it. */
 export function LabsSettingsPanel() {
@@ -117,14 +117,12 @@ function GuestLinksRow() {
       // Turning guest links off still works without T3 Connect.
       managed={settings.guestSharingEnabled ? undefined : connectDenial}
       description={
-        <>
-          Share a thread with a guest who watches it live in their browser and sends messages you
-          approve. Needs T3 Connect: sign in and link this machine in{" "}
-          <Link to="/settings/access" className="underline underline-offset-2">
-            {t("settings.text.sharingAccess")}
-          </Link>
-          {t("settings.text.whileItIsOffEveryGuest")}
-        </>
+        <Trans
+          i18nKey="settings.parallelA.labsGuestLinksDesc"
+          components={{
+            link: <Link to="/settings/access" className="underline underline-offset-2" />,
+          }}
+        />
       }
       control={
         <ScopedSwitch
@@ -148,14 +146,12 @@ function LinkedEnvironmentsRow() {
       {...searchableSetting("linked-environments-beta", t)}
       settingKeys={["linkedEnvironmentsEnabled"]}
       description={
-        <>
-          Let agents here work on your other machines, and theirs here. Turn it on for each machine,
-          then link them in{" "}
-          <Link to="/settings/connections" className="underline underline-offset-2">
-            {t("settings.text.connections")}
-          </Link>
-          {t("settings.text.whileItIsOffNothingNew")}
-        </>
+        <Trans
+          i18nKey="settings.parallelA.labsLinkedEnvDesc"
+          components={{
+            link: <Link to="/settings/connections" className="underline underline-offset-2" />,
+          }}
+        />
       }
       control={
         <ScopedSwitch
@@ -181,22 +177,20 @@ function SimlockHostsRow() {
       {...searchableSetting("simlock-hosts", t)}
       settingKeys={["simlockDeviceHostsEnabled"]}
       description={
-        <>
-          Let the Device panel lease simulators and emulators from your own{" "}
-          <a
-            href="https://incubator.callstack.com/simlock/"
-            target="_blank"
-            rel="noreferrer"
-            className="underline underline-offset-2"
-          >
-            Simlock
-          </a>{" "}
-          pool, added in{" "}
-          <Link to="/settings/devices" className="underline underline-offset-2">
-            {t("settings.text.devices")}
-          </Link>
-          {t("settings.text.anAlphaThatMayChangeOr")}
-        </>
+        <Trans
+          i18nKey="settings.parallelA.labsSimlockDesc"
+          components={{
+            simlock: (
+              <a
+                href="https://incubator.callstack.com/simlock/"
+                target="_blank"
+                rel="noreferrer"
+                className="underline underline-offset-2"
+              />
+            ),
+            link: <Link to="/settings/devices" className="underline underline-offset-2" />,
+          }}
+        />
       }
       control={
         <ScopedSwitch

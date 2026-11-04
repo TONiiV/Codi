@@ -1,6 +1,10 @@
-import { describe, expect, it } from "vite-plus/test";
+import { describe, expect, it, vi } from "vite-plus/test";
+import i18n from "i18next";
 
-import { resolveLanguage } from "./index";
+import { englishT } from "./englishT";
+import { applyLanguage, resolveLanguage } from "./index";
+import en from "./locales/en.json";
+import zhCN from "./locales/zh-CN.json";
 
 describe("resolveLanguage", () => {
   it.each([
@@ -15,5 +19,26 @@ describe("resolveLanguage", () => {
     ["zh-CN", "en-US", "zh-CN"],
   ] as const)("%s with system %j resolves to %s", (preference, system, expected) => {
     expect(resolveLanguage(preference, system)).toBe(expected);
+  });
+});
+
+describe("i18n initialization", () => {
+  it("is ready synchronously and keeps the helper translator English across language changes", () => {
+    expect(i18n.isInitialized).toBe(true);
+    vi.stubGlobal("document", { documentElement: { lang: "" } });
+
+    try {
+      applyLanguage("zh-CN");
+      expect(document.documentElement.lang).toBe("zh-CN");
+      expect(i18n.t("common.search")).toBe(zhCN.common.search);
+      expect(englishT("common.search")).toBe(en.common.search);
+
+      applyLanguage("en");
+      expect(document.documentElement.lang).toBe("en");
+      expect(i18n.t("common.search")).toBe(en.common.search);
+      expect(englishT("common.search")).toBe(en.common.search);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });

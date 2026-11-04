@@ -69,6 +69,7 @@ import {
   endpointShareHint,
 } from "./ConnectionsSettings.logic";
 import { useTranslation } from "react-i18next";
+import { authScopeText } from "./SettingsPanels.enumLabels";
 
 function AccessScopeSummary({
   scopes,
@@ -78,7 +79,7 @@ function AccessScopeSummary({
   readonly label: string;
 }) {
   const { t } = useTranslation();
-  const scopeCountLabel = `${scopes.length} ${scopes.length === 1 ? "scope" : "scopes"}`;
+  const scopeCountLabel = t("settings.parallelConnections.scopeCount", { count: scopes.length });
 
   return (
     <Popover>
@@ -182,7 +183,7 @@ const PairingLinkListRow = memo(function PairingLinkListRow({
         preferenceKey: endpointDefaultPreferenceKey(endpoint),
         label: endpoint.label,
         url,
-        detail: endpointShareHint(endpoint, url),
+        detail: endpointShareHint(endpoint, url, t),
         qrShareable: isQrShareableEndpoint(endpoint),
       });
     }
@@ -281,7 +282,9 @@ const PairingLinkListRow = memo(function PairingLinkListRow({
         <div className="min-w-0 flex-1 space-y-1">
           <div className="flex min-h-5 items-center gap-1.5">
             <ConnectionStatusDot
-              tooltipText={`Link created at ${formatAccessTimestamp(pairingLink.createdAt)}`}
+              tooltipText={t("settings.parallelConnections.linkCreatedAt", {
+                time: formatAccessTimestamp(pairingLink.createdAt),
+              })}
               dotClassName="bg-warning"
             />
             <h3 className="text-sm font-medium text-foreground">{primaryLabel}</h3>
@@ -289,7 +292,7 @@ const PairingLinkListRow = memo(function PairingLinkListRow({
           <p className="text-xs text-muted-foreground">
             <Tooltip>
               <TooltipTrigger render={<span />}>
-                {formatExpiresInLabel(pairingLink.expiresAt, nowMs)}
+                {formatExpiresInLabel(pairingLink.expiresAt, nowMs, t)}
               </TooltipTrigger>
               <TooltipPopup side="top">{expiresAbsolute}</TooltipPopup>
             </Tooltip>
@@ -514,10 +517,14 @@ const ConnectedClientListRow = memo(function ConnectedClientListRow({
   const lastConnectedAt = clientSession.lastConnectedAt;
   const statusTooltip = isLive
     ? lastConnectedAt
-      ? `Connected for ${formatElapsedDurationLabel(lastConnectedAt, nowMs)}`
+      ? t("settings.parallelConnections.connectedFor", {
+          duration: formatElapsedDurationLabel(lastConnectedAt, nowMs, t),
+        })
       : t("settings.text.connected")
     : lastConnectedAt
-      ? `Last connected at ${formatAccessTimestamp(lastConnectedAt)}`
+      ? t("settings.parallelConnections.lastConnectedAt", {
+          time: formatAccessTimestamp(lastConnectedAt),
+        })
       : t("settings.text.notConnectedYet");
   const deviceInfoBits = [
     clientSession.client.deviceType !== "unknown"
@@ -751,25 +758,30 @@ export const AuthorizedClientsHeaderAction = memo(function AuthorizedClientsHead
               </div>
               <div className="divide-y divide-border/60 rounded-lg border border-input bg-muted/25">
                 {PAIRING_SCOPE_OPTIONS.filter(({ scope }) => delegatableScopes.includes(scope)).map(
-                  ({ scope, title, description }) => (
-                    <label
-                      key={scope}
-                      className="flex cursor-pointer items-start gap-3 px-3 py-2.5 transition-colors hover:bg-muted/40"
-                    >
-                      <Checkbox
-                        className="mt-0.5"
-                        checked={pairingScopes.includes(scope)}
-                        disabled={isCreatingPairingLink}
-                        onCheckedChange={(checked) => togglePairingScope(scope, checked === true)}
-                      />
-                      <span className="min-w-0">
-                        <span className="block text-xs font-medium text-foreground">{title}</span>
-                        <span className="block text-xs leading-snug text-muted-foreground">
-                          {description}
+                  ({ scope, title, description }) => {
+                    const text = authScopeText({ scope, title, description }, t);
+                    return (
+                      <label
+                        key={scope}
+                        className="flex cursor-pointer items-start gap-3 px-3 py-2.5 transition-colors hover:bg-muted/40"
+                      >
+                        <Checkbox
+                          className="mt-0.5"
+                          checked={pairingScopes.includes(scope)}
+                          disabled={isCreatingPairingLink}
+                          onCheckedChange={(checked) => togglePairingScope(scope, checked === true)}
+                        />
+                        <span className="min-w-0">
+                          <span className="block text-xs font-medium text-foreground">
+                            {text.title}
+                          </span>
+                          <span className="block text-xs leading-snug text-muted-foreground">
+                            {text.description}
+                          </span>
                         </span>
-                      </span>
-                    </label>
-                  ),
+                      </label>
+                    );
+                  },
                 )}
               </div>
               {selectedScopes.length === 0 ? (

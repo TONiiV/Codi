@@ -17,6 +17,7 @@ import { Input } from "../ui/input";
 import { Switch } from "../ui/switch";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { CustomModelEditor } from "./CustomModelEditor";
+import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 
 const CUSTOM_MODEL_PLACEHOLDER_BY_KIND: Partial<Record<ProviderDriverKind, string>> = {
@@ -41,6 +42,7 @@ function hasReasoningControl(model: ServerProviderModel): boolean {
 function describeModelCapabilities(
   model: ServerProviderModel,
   flagMissingReasoning: boolean,
+  t: TFunction,
 ): string[] {
   const descriptors = model.capabilities?.optionDescriptors ?? [];
   const labels: string[] = [];
@@ -51,7 +53,7 @@ function describeModelCapabilities(
         descriptor.type === "select" &&
         descriptor.options.some((option) => option.id === "fast" || option.label === "Fast")),
   );
-  if (hasFastMode) labels.push("Fast mode");
+  if (hasFastMode) labels.push(t("settings.parallelProviders.fastModeBadge"));
   if (
     flagMissingReasoning &&
     !model.isCustom &&
@@ -59,7 +61,7 @@ function describeModelCapabilities(
     !PROVIDER_ALIAS_SLUGS.has(model.slug) &&
     !hasReasoningControl(model)
   ) {
-    labels.push("No reasoning");
+    labels.push(t("settings.parallelProviders.noReasoningBadge"));
   }
   return labels;
 }
@@ -337,9 +339,9 @@ export function ProviderModelsSection({
             </Button>
           ) : null}
           <span className="text-xs text-muted-foreground">
-            {models.length} model{models.length === 1 ? "" : "s"}
+            {t("settings.parallelProviders.modelCount", { count: models.length })}
             {favoriteCount > 0
-              ? ` · ${favoriteCount} favorite${favoriteCount === 1 ? "" : "s"}`
+              ? ` · ${t("settings.parallelProviders.favoriteCount", { count: favoriteCount })}`
               : ""}
             {hiddenCount > 0 ? t("settings.text.hiddencountHidden", { hiddenCount }) : ""}
           </span>
@@ -383,7 +385,7 @@ export function ProviderModelsSection({
                 ? groupLabel(t("settings.text.favorites"), index === 0)
                 : null}
               {startsGroup && favoriteCount > 0 && group === "visible"
-                ? groupLabel("All", index === 0)
+                ? groupLabel(t("settings.parallelProviders.allGroup"), index === 0)
                 : null}
               {startsGroup && group === "hidden"
                 ? groupLabel(t("settings.text.hiddenFromPicker"), index === 0)
@@ -479,7 +481,7 @@ function ProviderModelRow({
   readonly onRemove: (slug: string) => void;
 }) {
   const { t } = useTranslation();
-  const capLabels = describeModelCapabilities(model, flagMissingReasoning);
+  const capLabels = describeModelCapabilities(model, flagMissingReasoning, t);
   const nameClassName = cn("text-xs", isHidden ? "text-muted-foreground" : "text-foreground/90");
   const pickerTooltip = model.isCustom
     ? t("settings.text.customModelsAreAlwaysShownIn")
@@ -503,9 +505,13 @@ function ProviderModelRow({
               variant="ghost-muted"
               disabled={!canWritePreferences}
               onClick={() => onToggleFavorite(model.slug)}
-              aria-label={`${isFavorite ? "Remove" : "Add"} ${model.name} ${
-                isFavorite ? "from" : "to"
-              } favorites`}
+              aria-label={
+                isFavorite
+                  ? t("settings.parallelProviders.removeNameFromFavorites", {
+                      name: model.name,
+                    })
+                  : t("settings.parallelProviders.addNameToFavorites", { name: model.name })
+              }
             />
           }
         >

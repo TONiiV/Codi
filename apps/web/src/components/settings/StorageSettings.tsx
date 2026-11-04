@@ -49,6 +49,8 @@ import {
 } from "./useScopedSettings";
 import { settingsScopeEnvironmentLabel } from "./settingsScopeAxis";
 import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
+import { englishT } from "~/i18n/englishT";
 
 export function WorktreesDirectoryRow() {
   const { t } = useTranslation();
@@ -173,21 +175,22 @@ function RetentionControl({
   );
 }
 
-const KEEP_WHEN_LABELS = {
-  "any-local-files": "Any local files",
-  "uncommitted-changes": "Uncommitted changes",
-  "tracked-changes": "Edited tracked files",
+const KEEP_WHEN_LABEL_KEYS = {
+  "any-local-files": "settings.text.anyLocalFiles",
+  "uncommitted-changes": "settings.text.uncommittedChanges",
+  "tracked-changes": "settings.text.editedTrackedFiles",
 } as const;
 
 function lastRunSummary(
   entries: readonly { readonly label: string; readonly counts: string }[],
   machineCount: number,
+  t: TFunction = englishT,
 ) {
   const first = entries[0];
   if (!first) return "";
   if (machineCount <= 1) return first.counts;
   if (entries.length === machineCount && entries.every((entry) => entry.counts === first.counts)) {
-    return `${first.counts} on every machine`;
+    return t("settings.text.countsOnEveryMachine", { counts: first.counts });
   }
   return entries.map((entry) => `${entry.label}: ${entry.counts}`).join(" · ");
 }
@@ -250,7 +253,10 @@ function CleanupResults({
                 <span className="text-xs text-muted-foreground">
                   {[
                     entry.kind !== "worktree" && entry.files !== null
-                      ? `${entry.files.toLocaleString()} ${entry.files === 1 ? "file" : "files"}`
+                      ? t("settings.parallelSystem.fileCount", {
+                          count: entry.files,
+                          formatted: entry.files.toLocaleString(),
+                        })
                       : null,
                     entry.bytes !== null ? formatBytes(entry.bytes) : null,
                   ]
@@ -264,7 +270,11 @@ function CleanupResults({
       })}
       {report.omittedCount > 0 && (
         <p className="px-3 py-2.5 text-xs text-muted-foreground sm:px-4">
-          {environmentLabel}: {report.omittedCount.toLocaleString()} more results.
+          {t("settings.parallelSystem.moreResults", {
+            count: report.omittedCount,
+            formatted: report.omittedCount.toLocaleString(),
+            environmentLabel,
+          })}
         </p>
       )}
       {report.entries.length === 0 && report.omittedCount === 0 && (
@@ -336,10 +346,16 @@ function CleanupSection() {
       report,
       label: settingsScopeEnvironmentLabel(environment, connectedEnvironments),
       counts: report
-        ? `${report.counts.removed} removed, ${report.counts.kept} kept${report.counts.failed > 0 ? `, ${report.counts.failed} failed` : ""}`
+        ? `${t("settings.parallelSystem.cleanupCounts", {
+            removed: report.counts.removed,
+            kept: report.counts.kept,
+          })}${report.counts.failed > 0 ? t("settings.parallelSystem.cleanupCountsFailed", { failed: report.counts.failed }) : ""}`
         : "",
       description: report
-        ? `Last run ${formatRelativeTimeLabel(report.finishedAt, nowMs)}. ${formatBytes(report.bytesFreed)} recovered.${report.counts.failed > 0 ? ` ${report.counts.failed} ${report.counts.failed === 1 ? "item" : "items"} couldn't be removed.` : ""}`
+        ? `${t("settings.parallelSystem.cleanupLastRun", {
+            relative: formatRelativeTimeLabel(report.finishedAt, nowMs, t),
+            size: formatBytes(report.bytesFreed),
+          })}${report.counts.failed > 0 ? ` ${t("settings.parallelSystem.itemsCouldNotBeRemoved", { count: report.counts.failed })}` : ""}`
         : query?.failed
           ? t("settings.text.couldNotLoadTheLastRun")
           : query?.loading
@@ -412,6 +428,7 @@ function CleanupSection() {
           summary={lastRunSummary(
             summaries.filter(({ report }) => report !== null),
             connectedEnvironments.length,
+            t,
           )}
         >
           {summaries.map(
@@ -630,7 +647,7 @@ export function WorktreeCleanupSection() {
                     status={[
                       ruleStatus("worktreeSettledAfterDays"),
                       environments.length > connectedEnvironments.length
-                        ? "Offline machines will not get this setting"
+                        ? t("settings.parallelSystem.offlineMachinesNotice")
                         : undefined,
                     ]
                       .filter(Boolean)
@@ -698,7 +715,7 @@ export function WorktreeCleanupSection() {
                         <SelectValue>
                           {ruleStatus("worktreeKeepWhen")
                             ? t("settings.text.mixed")
-                            : KEEP_WHEN_LABELS[settings.worktreeKeepWhen]}
+                            : t(KEEP_WHEN_LABEL_KEYS[settings.worktreeKeepWhen])}
                         </SelectValue>
                       </SelectTrigger>
                       <SelectPopup align="end" alignItemWithTrigger={false}>

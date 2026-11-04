@@ -196,13 +196,16 @@ export function AddEnvironmentDialog({
     if (savedBackendMode === "ssh") {
       let target: DesktopSshEnvironmentTarget;
       try {
-        target = parseManualDesktopSshTarget({
-          host: savedBackendSshHost,
-          username: savedBackendSshUsername,
-          port: savedBackendSshPort,
-        });
+        target = parseManualDesktopSshTarget(
+          {
+            host: savedBackendSshHost,
+            username: savedBackendSshUsername,
+            port: savedBackendSshPort,
+          },
+          t,
+        );
       } catch (error) {
-        onErrorChange(formatDesktopSshConnectionError(error));
+        onErrorChange(formatDesktopSshConnectionError(error, t));
         return;
       }
 
@@ -214,10 +217,13 @@ export function AddEnvironmentDialog({
     onErrorChange(null);
     let remotePairingInput: ReturnType<typeof parseRemotePairingFields>;
     try {
-      remotePairingInput = parseRemotePairingFields({
-        host: savedBackendHost,
-        pairingCode: savedBackendPairingCode,
-      });
+      remotePairingInput = parseRemotePairingFields(
+        {
+          host: savedBackendHost,
+          pairingCode: savedBackendPairingCode,
+        },
+        t,
+      );
     } catch (error) {
       const message =
         error instanceof Error ? error.message : t("settings.text.failedToAddBackend");
@@ -292,7 +298,7 @@ export function AddEnvironmentDialog({
       resolved = await desktopBridge.resolveSshHost(target.alias);
     } catch (error) {
       if (session === savedBackendSessionRef.current) {
-        onErrorChange(formatDesktopSshConnectionError(error));
+        onErrorChange(formatDesktopSshConnectionError(error, t));
       }
       setIsAddingSavedBackend(false);
       return;
@@ -574,7 +580,9 @@ export function AddEnvironmentDialog({
                   </AutocompleteList>
                 ) : (
                   <AutocompleteEmpty className="break-all">
-                    No hosts match "{savedBackendSshHost.trim()}".
+                    {t("settings.parallelConnections.noHostsMatch", {
+                      query: savedBackendSshHost.trim(),
+                    })}
                   </AutocompleteEmpty>
                 )}
               </AutocompletePopup>

@@ -14,7 +14,7 @@ import { Button, InlineButton } from "../ui/button";
 import { Input } from "../ui/input";
 import { SecretInput } from "./SecretInput";
 import { Label } from "../ui/label";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 export function SourceControlTokenSettings({
   environmentId,
@@ -73,12 +73,17 @@ export function SourceControlTokenSettings({
       {/* Locked while saving: a successful save clears the draft, which would drop edits made mid-request. */}
       <fieldset disabled={saving} className="contents">
         <p className="max-w-2xl text-xs leading-relaxed text-muted-foreground">
-          A token saved here is used before{" "}
-          <code className="rounded bg-muted px-1 py-px text-2xs">{credentials.tokenEnvVar}</code>{" "}
-          and the{" "}
-          <code className="rounded bg-muted px-1 py-px text-2xs">{credentials.cliName}</code> login,
-          so {definition.label} works without the {credentials.cliLabel}. Give it{" "}
-          {credentials.tokenAccess}.{" "}
+          <Trans
+            i18nKey="settings.parallelA.scTokenIntro"
+            values={{
+              envVar: credentials.tokenEnvVar,
+              cli: credentials.cliName,
+              label: definition.label,
+              cliLabel: credentials.cliLabel,
+              access: credentials.tokenAccess,
+            }}
+            components={{ code: <code className="rounded bg-muted px-1 py-px text-2xs" /> }}
+          />{" "}
           {normalizedHost || defaultHost ? (
             <InlineButton
               render={
@@ -128,7 +133,7 @@ export function SourceControlTokenSettings({
                   tokenEnvVar: credentials.tokenEnvVar,
                   cliName: credentials.cliName,
                 })
-              : `Saved for ${savedHosts.join(", ")}.`}
+              : t("settings.parallelA.scSavedFor", { hosts: savedHosts.join(", ") })}
           </p>
           <div className="flex shrink-0 gap-2">
             {isSaved ? (

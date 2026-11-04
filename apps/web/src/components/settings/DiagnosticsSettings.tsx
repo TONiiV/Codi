@@ -41,6 +41,8 @@ import { useAtomCommand } from "../../state/use-atom-command";
 import { useSettingsScope } from "./SettingsScopeContext";
 import { TelemetryExportSettings } from "./TelemetryExportSettings";
 import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
+import { englishT } from "~/i18n/englishT";
 
 const NUMBER_FORMAT = new Intl.NumberFormat();
 
@@ -244,10 +246,13 @@ function formatProcessName(command: string): string {
   return segments.at(-1) ?? normalized;
 }
 
-function formatProcessType(process: ServerProcessDiagnosticsEntry): string {
-  if (process.depth > 0) return "Subprocess";
-  if (/\b(codex|claude|opencode|cursor)\b/i.test(process.command)) return "Agent";
-  return "Process";
+function formatProcessType(
+  process: ServerProcessDiagnosticsEntry,
+  t: TFunction = englishT,
+): string {
+  if (process.depth > 0) return t("settings.text.subprocess");
+  if (/\b(codex|claude|opencode|cursor)\b/i.test(process.command)) return t("settings.text.agent");
+  return t("settings.text.process");
 }
 
 function ProcessNameCell({
@@ -415,7 +420,7 @@ function ProcessDiagnosticsTable({
                   {process.pid}
                 </td>
                 <td className="truncate px-3 py-2 align-middle text-muted-foreground">
-                  {formatProcessType(process)}
+                  {formatProcessType(process, t)}
                 </td>
                 <td className="p-2 align-middle sm:pr-4">
                   <ProcessSignalActions
@@ -495,6 +500,7 @@ function ProcessResourceHistoryChart({
     readonly maxCpuPercent: number;
   }>;
 }) {
+  const { t } = useTranslation();
   const maxCpuPercent = Math.max(1, ...buckets.map((bucket) => bucket.maxCpuPercent));
 
   return (
@@ -510,7 +516,10 @@ function ProcessResourceHistoryChart({
                   <div className="flex h-full min-w-1 flex-1 items-end">
                     <div
                       className="relative h-full w-full"
-                      aria-label={`Average CPU ${bucket.avgCpuPercent.toFixed(1)}%, peak CPU ${bucket.maxCpuPercent.toFixed(1)}%`}
+                      aria-label={t("settings.parallelSystem.averagePeakCpuAria", {
+                        average: bucket.avgCpuPercent.toFixed(1),
+                        peak: bucket.maxCpuPercent.toFixed(1),
+                      })}
                     >
                       <div
                         className="absolute inset-x-0 bottom-0 rounded-t-sm bg-foreground/15 transition-colors"
@@ -525,7 +534,10 @@ function ProcessResourceHistoryChart({
                 }
               />
               <TooltipPopup side="top">
-                Avg {bucket.avgCpuPercent.toFixed(1)}%, peak {bucket.maxCpuPercent.toFixed(1)}%
+                {t("settings.parallelSystem.averagePeakCpu", {
+                  average: bucket.avgCpuPercent.toFixed(1),
+                  peak: bucket.maxCpuPercent.toFixed(1),
+                })}
               </TooltipPopup>
             </Tooltip>
           );
@@ -687,7 +699,10 @@ function DiagnosticsLastChecked({ checkedAt }: { checkedAt: DateTime.Utc | null 
     <span className="text-2xs text-muted-foreground/60">
       {relative.suffix ? (
         <>
-          Checked <span className="font-mono tabular-nums">{relative.value}</span> {relative.suffix}
+          {t("settings.parallelSystem.checkedWithSuffix", {
+            value: relative.value,
+            suffix: relative.suffix,
+          })}
         </>
       ) : (
         <>{t("settings.text.checkedValue", { value: relative.value })}</>
@@ -1040,7 +1055,7 @@ function DiagnosticsSettingsBody() {
             value={
               resourceData
                 ? resourceData.sampleIntervalMs === 0
-                  ? "On demand"
+                  ? t("settings.parallelSystem.onDemand")
                   : formatDuration(resourceData.sampleIntervalMs)
                 : "..."
             }
@@ -1125,7 +1140,9 @@ function DiagnosticsSettingsBody() {
             value={data ? formatCount(data.slowSpanCount) : "..."}
             tooltip={
               data
-                ? `Spans with a duration of ${formatDuration(data.slowSpanThresholdMs)} or longer.`
+                ? t("settings.parallelSystem.slowSpansTooltip", {
+                    duration: formatDuration(data.slowSpanThresholdMs),
+                  })
                 : t("settings.text.spansAtOrAboveTheConfigured")
             }
             tone={data && data.slowSpanCount > 0 ? "warning" : "default"}

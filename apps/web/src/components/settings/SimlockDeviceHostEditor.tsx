@@ -28,7 +28,7 @@ import {
   type SimlockHostEnvironment,
   type SimlockTokenEntry,
 } from "./simlockDeviceHostsSettings.logic";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 const failureMessage = (cause: Cause.Cause<unknown>) => {
   const error = Cause.squash(cause);
@@ -85,7 +85,7 @@ export function SimlockDeviceHostEditor(props: {
     label: draft.label.trim(),
     gatewayUrl: gatewayUrl.trim(),
   };
-  const checkUrl = simlockDeviceHostProblem(next) === null ? next.gatewayUrl : null;
+  const checkUrl = simlockDeviceHostProblem(next, t) === null ? next.gatewayUrl : null;
   const plan = planSimlockDeviceHostSave(props.environments, next, tokens);
   const problem = "problem" in plan ? plan.problem : null;
   const several = props.environments.length > 1;
@@ -187,12 +187,15 @@ export function SimlockDeviceHostEditor(props: {
                 />
               ))}
               <p className="text-xs text-muted-foreground">
-                Leases, drives, and streams devices. Create one
-                {several ? t("settings.text.perEnvironment") : ""} with{" "}
-                <code>simlock --gateway token create --role agent</code>, or leave it blank to add
-                it later. A blank token uses the machine's{" "}
-                <code>AGENT_DEVICE_DAEMON_AUTH_TOKEN</code> when its{" "}
-                <code>AGENT_DEVICE_DAEMON_BASE_URL</code> is this gateway.
+                <Trans
+                  i18nKey="settings.parallelConnections.simlockTokenHelp"
+                  values={{
+                    perEnvironment: several
+                      ? t("settings.parallelConnections.simlockPerEnvironment")
+                      : "",
+                  }}
+                  components={{ code: <code /> }}
+                />
               </p>
             </div>
             <div className="grid grid-cols-2 gap-3 text-sm">
@@ -214,7 +217,8 @@ export function SimlockDeviceHostEditor(props: {
               {t("settings.text.cancel")}
             </Button>
             <Button type="submit" disabled={props.busy || problem !== null}>
-              {props.busy ? <Spinner size="xs" /> : null} Save host
+              {props.busy ? <Spinner size="xs" /> : null}
+              {t("settings.parallelConnections.saveHost")}
             </Button>
           </DialogFooter>
         </form>

@@ -297,7 +297,7 @@ export function CaptureShortcutConfig({
             ) : null}
           </div>
           <p>
-            Use your desktop's shortcut settings file.{" "}
+            {t("settings.parallelA.captureShortcutFileLead")}{" "}
             {niri
               ? t("settings.text.aCustomConfigOrNiriConfig")
               : t("settings.text.onOmarchyUseYourOwnBindings")}

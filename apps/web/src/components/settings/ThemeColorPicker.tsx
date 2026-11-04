@@ -357,7 +357,12 @@ export const ThemeColorField = memo(function ThemeColorField({
         <TooltipTrigger
           render={
             <button
-              aria-label={`${selected ? "Hide" : "Show"} ${label} usage`}
+              aria-label={t(
+                selected
+                  ? "settings.parallelA.themeHideUsageAria"
+                  : "settings.parallelA.themeShowUsageAria",
+                { label },
+              )}
               aria-pressed={selected}
               className="flex min-w-0 flex-1 cursor-pointer items-center rounded-md text-left text-sm text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
               onClick={() => onToggleSelected?.(role)}
@@ -367,7 +372,14 @@ export const ThemeColorField = memo(function ThemeColorField({
             </button>
           }
         />
-        <TooltipPopup side="top">{`${selected ? t("settings.text.hide") : t("settings.text.show")} where ${label} is used`}</TooltipPopup>
+        <TooltipPopup side="top">
+          {t(
+            selected
+              ? "settings.parallelA.themeHideWhereUsed"
+              : "settings.parallelA.themeShowWhereUsed",
+            { label },
+          )}
+        </TooltipPopup>
       </Tooltip>
       <div className="ml-auto flex shrink-0 items-center gap-2">
         <ThemeColorPicker

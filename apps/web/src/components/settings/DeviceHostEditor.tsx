@@ -93,7 +93,7 @@ function DeviceHostEditorForm({
     ? t("settings.text.checkingEnvironments")
     : results
       ? failed
-        ? `${failed} of ${targets.length} failed`
+        ? t("settings.parallelConnections.checksFailedOf", { failed, total: targets.length })
         : t("settings.text.connectionChecksPassed")
       : t("settings.text.checkAccessBeforeSaving");
   return (
@@ -110,7 +110,7 @@ function DeviceHostEditorForm({
         </DialogTitle>
         <DialogDescription>
           {targets.length === 1
-            ? `Connect from ${targets[0]?.label}.`
+            ? t("settings.parallelConnections.connectFromLabel", { label: targets[0]!.label })
             : t("settings.text.connectFromLengthSelectedEnvironments", {
                 length: targets.length,
               })}{" "}
@@ -228,7 +228,8 @@ function DeviceHostEditorForm({
                 if (Option.isSome(input)) void testConnection(input.value);
               }}
             >
-              {checking ? <Spinner size="xs" /> : null} Test connection
+              {checking ? <Spinner size="xs" /> : null}
+              {t("settings.text.testConnection")}
             </Button>
           </div>
           {results ? (
@@ -247,19 +248,20 @@ function DeviceHostEditorForm({
                       >
                         {result.status === "pending" ? (
                           <>
-                            <Spinner size="xs" /> Checking…
+                            <Spinner size="xs" /> {t("settings.text.checking")}
                           </>
                         ) : result.status === "local" ? (
                           <>
-                            <MonitorIcon className="size-3" /> Already available locally
+                            <MonitorIcon className="size-3" />{" "}
+                            {t("settings.parallelConnections.alreadyAvailableLocally")}
                           </>
                         ) : result.status === "failed" ? (
                           <>
-                            <XIcon className="size-3" /> Failed
+                            <XIcon className="size-3" /> {t("settings.text.failed")}
                           </>
                         ) : (
                           <>
-                            <CheckIcon className="size-3" /> Connected
+                            <CheckIcon className="size-3" /> {t("settings.text.connected")}
                           </>
                         )}
                       </span>
@@ -289,7 +291,8 @@ function DeviceHostEditorForm({
           {t("settings.text.cancel")}
         </Button>
         <Button type="submit" disabled={busy || checking || !valid || !draft.label.trim()}>
-          {busy ? <Spinner size="xs" /> : null} Save host
+          {busy ? <Spinner size="xs" /> : null}
+          {t("settings.parallelConnections.saveHost")}
         </Button>
       </DialogFooter>
     </form>

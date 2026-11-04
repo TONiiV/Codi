@@ -111,10 +111,7 @@ export function resolveSettingsScope(
         (candidate) => candidate.environmentId === checkout.environmentId,
       );
       if (!checkoutEnvironment) {
-        return unavailable(
-          "environment-missing",
-          "This checkout's environment is no longer available.",
-        );
+        return unavailable("environment-missing", t("settings.text.thisCheckoutSEnvironmentIsNo"));
       }
       const sharesEnvironment = group.memberProjects.some(
         (member) =>

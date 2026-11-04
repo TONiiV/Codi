@@ -30,6 +30,8 @@ import { InputGroup, InputGroupAddon, InputGroupInput } from "../ui/input-group"
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { Spinner } from "../ui/spinner";
 import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
+import { englishT } from "~/i18n/englishT";
 
 const DOWNLOAD_FORMAT = new Intl.NumberFormat(undefined, {
   notation: "compact",
@@ -97,6 +99,7 @@ export function createThemeSearch(
   view: ThemeSearchView,
   signal: AbortSignal,
   search: SearchThemes = searchOpenVsxThemes,
+  t: TFunction = englishT,
 ) {
   let query = "";
   let sortBy: OpenVsxThemeSort = "downloadCount";
@@ -135,7 +138,9 @@ export function createThemeSearch(
           if (controller.signal.aborted) return;
           view.setResults(null);
           shownKey = null;
-          view.setError(cause instanceof Error ? cause.message : "Open VSX search failed.");
+          view.setError(
+            cause instanceof Error ? cause.message : t("settings.text.openVsxSearchFailed"),
+          );
         },
       )
       .then(() => {
@@ -244,7 +249,7 @@ export function ThemeSearchSection({
   const [installingId, setInstallingId] = useState<string | null>(null);
   const [pendingUpdate, setPendingUpdate] = useState<OpenVsxThemeExtension | null>(null);
   const [themeSearch] = useState(() =>
-    createThemeSearch({ setResults, setError, setIsSearching }, signal),
+    createThemeSearch({ setResults, setError, setIsSearching }, signal, undefined, t),
   );
 
   const changeQuery = (nextQuery: string) => {
@@ -382,7 +387,12 @@ export function ThemeSearchSection({
         {isSearching
           ? t("settings.text.searchingThemes")
           : results
-            ? `${results.length} supported ${results.length === 1 ? "theme" : "themes"} found.`
+            ? t(
+                results.length === 1
+                  ? "settings.parallelA.themeResults1"
+                  : "settings.parallelA.themeResultsN",
+                { count: results.length },
+              )
             : ""}
       </div>
 
@@ -394,7 +404,7 @@ export function ThemeSearchSection({
 
       {isSearching && results === null ? (
         <div className="flex min-h-20 items-center justify-center gap-2 text-muted-foreground text-sm">
-          <Spinner /> Searching themes...
+          <Spinner /> {t("settings.text.searchingThemes")}
         </div>
       ) : null}
 

@@ -117,7 +117,10 @@ import { AdvancedSettings } from "./AdvancedSettings";
 import { useSettingsScope } from "./SettingsScopeContext";
 import { BrowserImportWizard, type WizardTarget } from "./BrowserImportWizard";
 import type { ImportOutcome } from "./browserImportWizard.logic";
+import i18n from "i18next";
 import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
+import { englishT } from "~/i18n/englishT";
 
 const FILL_VALUE = "fill";
 const RESPONSIVE_VALUE = "responsive";
@@ -137,11 +140,12 @@ export async function clearBrowserProfileData(
   environmentIds: ReadonlyArray<EnvironmentId>,
   profileId: string,
   server?: ServerProfileData,
+  t: TFunction = englishT,
 ): Promise<void> {
   const desktopEnvironmentIds = bridge === null ? [] : environmentIds;
   const serverEnvironmentIds = server?.environmentIds ?? [];
   if (desktopEnvironmentIds.length === 0 && serverEnvironmentIds.length === 0) {
-    throw new Error("Browser profile data is not available to clear.");
+    throw new Error(t("settings.text.browserProfileDataIsNotAvailable"));
   }
   await Promise.all([
     ...desktopEnvironmentIds.flatMap((environmentId) => [
@@ -165,10 +169,10 @@ const RESPONSIVE_SEED_SIZE = { width: 1280, height: 800 } as const;
 
 const NO_GROUPING: Intl.NumberFormatOptions = { useGrouping: false };
 
-const APPEARANCE_LABELS: Readonly<Record<PreviewAppearancePreference, string>> = {
-  system: "System",
-  light: "Light",
-  dark: "Dark",
+const APPEARANCE_LABEL_KEYS: Readonly<Record<PreviewAppearancePreference, string>> = {
+  system: "settings.text.system",
+  light: "settings.text.light",
+  dark: "settings.text.dark",
 };
 
 const zoomLabel = (zoomFactor: number) => `${Math.round(zoomFactor * 100)}%`;
@@ -177,7 +181,7 @@ const zoomLabel = (zoomFactor: number) => `${Math.round(zoomFactor * 100)}%`;
  * text. */
 class ProfileLimitReachedError extends Error {
   constructor() {
-    super("Browser profile limit reached.");
+    super(i18n.t("settings.text.browserProfileLimitReached"));
     this.name = "ProfileLimitReachedError";
   }
 }
@@ -207,6 +211,7 @@ async function importBrowserCookiesIntoTarget(
   source: BrowserImportSource,
   environmentId: EnvironmentId,
   input: { readonly sourceProfileDirectory: string; readonly target: WizardTarget },
+  t: TFunction = englishT,
 ): Promise<ImportOutcome> {
   try {
     const result = await bridge.importBrowserCookies({
@@ -255,12 +260,19 @@ async function importBrowserCookiesIntoTarget(
         } catch (cause) {
           // Clear the new target's partition on registration failure so imported cookies cannot outlive its
           // profile.
-          await clearBrowserProfileData(bridge, [environmentId], input.target.profileId).catch(
-            () => undefined,
-          );
+          await clearBrowserProfileData(
+            bridge,
+            [environmentId],
+            input.target.profileId,
+            undefined,
+            t,
+          ).catch(() => undefined);
           const reason =
             cause instanceof ProfileLimitReachedError ? "profileLimitReached" : "profileNotSaved";
-          throw new Error(`Importing cookies from ${source.id} failed: ${reason}.`, { cause });
+          throw new Error(
+            t("settings.text.importingCookiesFromIdFailedReason", { id: source.id, reason }),
+            { cause },
+          );
         }
       } else {
         targetName = source.name;
@@ -295,11 +307,14 @@ const viewportSelectValue = (viewport: PreviewViewportSetting): string => {
 };
 
 /** Inline options lack an items map; bare SelectValue would display the stored fill token. */
-const viewportSelectLabel = (viewport: PreviewViewportSetting): string => {
+const viewportSelectLabel = (viewport: PreviewViewportSetting, t: TFunction = englishT): string => {
   const value = viewportSelectValue(viewport);
-  if (value === FILL_VALUE) return "Fill panel";
-  if (value === RESPONSIVE_VALUE) return "Responsive";
-  return PREVIEW_VIEWPORT_PRESETS.find((preset) => preset.id === value)?.label ?? "Responsive";
+  if (value === FILL_VALUE) return t("settings.text.fillPanel");
+  if (value === RESPONSIVE_VALUE) return t("settings.text.responsive");
+  return (
+    PREVIEW_VIEWPORT_PRESETS.find((preset) => preset.id === value)?.label ??
+    t("settings.text.responsive")
+  );
 };
 
 const isValidDimension = (value: number) =>
@@ -386,7 +401,7 @@ function BrowserViewportSetting({ disabled }: { readonly disabled: boolean }) {
               className="w-full min-w-0 sm:w-44"
               aria-label={t("settings.text.defaultBrowserViewport2")}
             >
-              <SelectValue>{viewportSelectLabel(viewport)}</SelectValue>
+              <SelectValue>{viewportSelectLabel(viewport, t)}</SelectValue>
             </SelectTrigger>
             <SelectPopup align="end" alignItemWithTrigger={false}>
               <SelectItem value={FILL_VALUE}>{t("settings.text.fillPanel")}</SelectItem>
@@ -546,12 +561,12 @@ function BrowserAppearanceSetting({ disabled }: { readonly disabled: boolean }) 
             className="w-full sm:w-40"
             aria-label={t("settings.text.defaultBrowserAppearance2")}
           >
-            <SelectValue>{APPEARANCE_LABELS[appearance]}</SelectValue>
+            <SelectValue>{t(APPEARANCE_LABEL_KEYS[appearance])}</SelectValue>
           </SelectTrigger>
           <SelectPopup align="end" alignItemWithTrigger={false}>
-            {Object.entries(APPEARANCE_LABELS).map(([value, label]) => (
+            {Object.entries(APPEARANCE_LABEL_KEYS).map(([value, label]) => (
               <SelectItem hideIndicator key={value} value={value}>
-                {label}
+                {t(label)}
               </SelectItem>
             ))}
           </SelectPopup>
@@ -650,10 +665,10 @@ function BrowserRecordingFrameRateSetting({ disabled }: { readonly disabled: boo
   );
 }
 
-const LINK_TARGET_LABELS: Readonly<Record<BrowserLinkTarget, string>> = {
-  system: "Your default browser",
-  app: "Codi",
-};
+const LINK_TARGETS: ReadonlyArray<BrowserLinkTarget> = ["system", "app"];
+
+const linkTargetLabel = (target: BrowserLinkTarget, t: TFunction): string =>
+  target === "app" ? "Codi" : t("settings.parallelSystem.linkTargetSystem");
 
 function BrowserLinkTargetSetting({ disabled }: { readonly disabled: boolean }) {
   const { t } = useTranslation();
@@ -687,12 +702,12 @@ function BrowserLinkTargetSetting({ disabled }: { readonly disabled: boolean }) 
             className="w-full sm:w-40"
             aria-label={t("settings.text.openLinksIn")}
           >
-            <SelectValue>{LINK_TARGET_LABELS[linkTarget]}</SelectValue>
+            <SelectValue>{linkTargetLabel(linkTarget, t)}</SelectValue>
           </SelectTrigger>
           <SelectPopup align="end" alignItemWithTrigger={false}>
-            {(Object.keys(LINK_TARGET_LABELS) as ReadonlyArray<BrowserLinkTarget>).map((target) => (
+            {LINK_TARGETS.map((target) => (
               <SelectItem hideIndicator key={target} value={target}>
-                {LINK_TARGET_LABELS[target]}
+                {linkTargetLabel(target, t)}
               </SelectItem>
             ))}
           </SelectPopup>
@@ -702,15 +717,17 @@ function BrowserLinkTargetSetting({ disabled }: { readonly disabled: boolean }) 
   );
 }
 
-const SEARCH_ENGINE_LABELS: Readonly<Record<BrowserSearchEngine, string>> = {
+const SEARCH_ENGINE_LABELS: Readonly<Record<Exclude<BrowserSearchEngine, "custom">, string>> = {
   duckduckgo: "DuckDuckGo",
   google: "Google",
   bing: "Bing",
   brave: "Brave Search",
   kagi: "Kagi",
   ecosia: "Ecosia",
-  custom: "Custom",
 };
+
+const searchEngineLabel = (engine: BrowserSearchEngine, t: TFunction): string =>
+  engine === "custom" ? t("settings.text.custom3") : SEARCH_ENGINE_LABELS[engine];
 
 function BrowserSearchEngineSetting() {
   const { t } = useTranslation();
@@ -751,12 +768,12 @@ function BrowserSearchEngineSetting() {
               className="w-full sm:w-40"
               aria-label={t("settings.text.searchEngine2")}
             >
-              <SelectValue>{SEARCH_ENGINE_LABELS[engine]}</SelectValue>
+              <SelectValue>{searchEngineLabel(engine, t)}</SelectValue>
             </SelectTrigger>
             <SelectPopup align="end" alignItemWithTrigger={false}>
               {BrowserSearchEngine.literals.map((literal) => (
                 <SelectItem hideIndicator key={literal} value={literal}>
-                  {SEARCH_ENGINE_LABELS[literal]}
+                  {searchEngineLabel(literal, t)}
                 </SelectItem>
               ))}
             </SelectPopup>
@@ -770,7 +787,7 @@ function BrowserSearchEngineSetting() {
           status={
             isValidSearchUrlTemplate(customUrl)
               ? undefined
-              : "Enter an http or https URL containing %s. Searches use DuckDuckGo until then."
+              : t("settings.parallelSystem.customSearchUrlHint")
           }
           control={
             <DraftInput
@@ -903,7 +920,9 @@ function DeviceIntegrationControls({
       toastManager.add({
         type: "error",
         title: t("settings.text.deviceSettingsNotSavedOnAll"),
-        description: `Could not update ${failed.map((environment) => environment.label).join(", ")}.`,
+        description: t("settings.parallelSystem.couldNotUpdateEnvironments", {
+          labels: failed.map((environment) => environment.label).join(", "),
+        }),
       });
     }
   };
@@ -975,7 +994,7 @@ function DeviceIntegrationControls({
         settingKeys={["enableDeviceSupport"]}
         description={
           <>
-            Open simulators and emulators in the Device panel. Hub:{" "}
+            {t("settings.parallelSystem.deviceHubDescription")}{" "}
             <DeviceToolVersions
               action={versionActions("hub")}
               kind="hub"
@@ -1014,7 +1033,7 @@ function DeviceIntegrationControls({
         settingKeys={["enableAgentDeviceAccess"]}
         description={
           <>
-            New agent sessions can open and drive these devices. agent-device:{" "}
+            {t("settings.parallelSystem.agentDeviceAccessDescription")}{" "}
             <DeviceToolVersions
               action={versionActions("agent")}
               kind="agent"
@@ -1225,6 +1244,7 @@ function BrowserProfilesSetting({ disabled }: { readonly disabled: boolean }) {
       environments.map((environment) => environment.environmentId),
       id,
       serverProfileData,
+      t,
     )
       .then(() => {
         toastManager.add({
@@ -1254,6 +1274,7 @@ function BrowserProfilesSetting({ disabled }: { readonly disabled: boolean }) {
         environmentsReady ? environments.map((environment) => environment.environmentId) : [],
         id,
         serverProfileData,
+        t,
       );
     } catch {
       setProfileRemovalError(t("settings.text.profileDataCouldNotBeDeleted"));
@@ -1302,7 +1323,7 @@ function BrowserProfilesSetting({ disabled }: { readonly disabled: boolean }) {
     if (importInFlightRef.current) return { kind: "blocked", reason: "readFailed" };
     importInFlightRef.current = true;
     setImportInFlight(true);
-    return importBrowserCookiesIntoTarget(previewBridge, source, environmentId, input).finally(
+    return importBrowserCookiesIntoTarget(previewBridge, source, environmentId, input, t).finally(
       () => {
         importInFlightRef.current = false;
         setImportInFlight(false);

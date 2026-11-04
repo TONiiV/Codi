@@ -147,10 +147,11 @@ const BACKEND_VALUE_WSL_OFF = "backend:wsl-off";
 
 // Subscribes on its own so desktop download progress does not re-render the page.
 function LocalVersionStatusLabel() {
+  const { t } = useTranslation();
   const updateState = useDesktopUpdateState();
   return (
     <span className="text-xs text-muted-foreground">
-      {resolveLocalVersionStatusLabel(updateState)}
+      {resolveLocalVersionStatusLabel(updateState, t)}
     </span>
   );
 }
@@ -567,12 +568,16 @@ export function ConnectionsSettings({ view }: { readonly view: "environments" | 
       const message =
         error instanceof Error
           ? error.message
-          : `Failed to switch the backend ${enabled ? "on" : "off"}.`;
+          : enabled
+            ? t("settings.parallelConnections.failedToSwitchBackendOn")
+            : t("settings.parallelConnections.failedToSwitchBackendOff");
       setSavedBackendError(message);
       toastManager.add(
         stackedThreadToast({
           type: "error",
-          title: `Could not switch backend ${enabled ? "on" : "off"}`,
+          title: enabled
+            ? t("settings.parallelConnections.couldNotSwitchBackendOn")
+            : t("settings.parallelConnections.couldNotSwitchBackendOff"),
           description: message,
         }),
       );
@@ -838,7 +843,7 @@ export function ConnectionsSettings({ view }: { readonly view: "environments" | 
       : (desktopWslState.distro ?? defaultDistroName ?? BACKEND_VALUE_DEFAULT_WSL);
     const selectLabel =
       selectValue === BACKEND_VALUE_WSL_OFF
-        ? "Off"
+        ? t("settings.text.off")
         : selectValue === BACKEND_VALUE_DEFAULT_WSL
           ? t("settings.text.defaultDistro")
           : selectValue;
@@ -921,7 +926,7 @@ export function ConnectionsSettings({ view }: { readonly view: "environments" | 
           ? tailscaleHttpsEndpoint.status === "available"
             ? tailscaleHttpsEndpoint.httpBaseUrl
             : t("settings.text.useTailscaleServeToExposeThis")
-          : missingTailscaleEndpointDescription(desktopServerExposureState)
+          : missingTailscaleEndpointDescription(desktopServerExposureState, t)
       }
       control={
         tailscaleHttpsEndpoint ? (
@@ -1180,6 +1185,7 @@ export function ConnectionsSettings({ view }: { readonly view: "environments" | 
               summary={summarizeAuthorizedClients(
                 desktopClientSessions,
                 visibleDesktopPairingLinks,
+                t,
               )}
               control={
                 canWriteAccess ? (

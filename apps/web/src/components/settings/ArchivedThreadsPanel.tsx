@@ -245,7 +245,8 @@ export function ArchivedThreadsPanel() {
                 description={
                   <span className={hasMultipleEnvironments ? "block truncate" : undefined}>
                     {hasMultipleEnvironments ? `${thread.environmentLabel} · ` : null}
-                    Archived <RelativeTime timestamp={thread.archivedAt ?? thread.createdAt} />
+                    {t("settings.parallelA.archivedBadge")}{" "}
+                    <RelativeTime timestamp={thread.archivedAt ?? thread.createdAt} />
                     {t("settings.text.created")}
                     <RelativeTime timestamp={thread.createdAt} />
                   </span>

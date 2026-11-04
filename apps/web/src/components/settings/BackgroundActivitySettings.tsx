@@ -38,25 +38,23 @@ import { searchableSetting } from "./settingsSearch";
 import { useTranslation } from "react-i18next";
 
 const BACKGROUND_ACTIVITY_PROFILE_LABELS: Record<BackgroundActivityProfile, string> = {
-  balanced: "Balanced",
-  performance: "Performance",
-  "battery-saver": "Battery saver",
+  balanced: "settings.parallelA.bgBalanced",
+  performance: "settings.parallelA.bgPerformance",
+  "battery-saver": "settings.parallelA.bgBatterySaver",
 };
 
 type BackgroundActivityProfileOption = BackgroundActivityProfile | "advanced";
 
 const BACKGROUND_ACTIVITY_PROFILE_OPTION_LABELS: Record<BackgroundActivityProfileOption, string> = {
   ...BACKGROUND_ACTIVITY_PROFILE_LABELS,
-  advanced: "Advanced",
+  advanced: "settings.text.advanced",
 };
 
 const BACKGROUND_ACTIVITY_PROFILE_DESCRIPTIONS: Record<BackgroundActivityProfile, string> = {
-  balanced: "Pauses probes for idle clients, locked hosts, or low power mode.",
-  performance: "Allows scoped background probes while any subscribed client remains connected.",
-  "battery-saver": "Also pauses background probes when the host or client is on battery.",
+  balanced: "settings.parallelA.bgBalancedDesc",
+  performance: "settings.parallelA.bgPerformanceDesc",
+  "battery-saver": "settings.parallelA.bgBatterySaverDesc",
 };
-
-const ADVANCED_BACKGROUND_ACTIVITY_DESCRIPTION = "Uses custom intervals.";
 
 const BACKGROUND_ACTIVITY_BOOLEAN_OVERRIDES: ReadonlyArray<{
   readonly key:
@@ -152,17 +150,17 @@ function BackgroundActivityAdvancedDialog({
                   className="w-full sm:w-40"
                   aria-label={t("settings.text.sharedBackgroundPolicy")}
                 >
-                  <SelectValue>{BACKGROUND_ACTIVITY_PROFILE_LABELS[activeProfile]}</SelectValue>
+                  <SelectValue>{t(BACKGROUND_ACTIVITY_PROFILE_LABELS[activeProfile])}</SelectValue>
                 </SelectTrigger>
                 <SelectPopup align="end" alignItemWithTrigger={false}>
                   <SelectItem hideIndicator value="balanced">
-                    {BACKGROUND_ACTIVITY_PROFILE_LABELS.balanced}
+                    {t(BACKGROUND_ACTIVITY_PROFILE_LABELS.balanced)}
                   </SelectItem>
                   <SelectItem hideIndicator value="performance">
-                    {BACKGROUND_ACTIVITY_PROFILE_LABELS.performance}
+                    {t(BACKGROUND_ACTIVITY_PROFILE_LABELS.performance)}
                   </SelectItem>
                   <SelectItem hideIndicator value="battery-saver">
-                    {BACKGROUND_ACTIVITY_PROFILE_LABELS["battery-saver"]}
+                    {t(BACKGROUND_ACTIVITY_PROFILE_LABELS["battery-saver"])}
                   </SelectItem>
                 </SelectPopup>
               </Select>
@@ -340,10 +338,10 @@ export function BackgroundActivitySettingsRow() {
   const backgroundActivityProfileOption = resolveBackgroundActivityProfileOption(settings);
   const backgroundActivityDescription =
     backgroundActivityProfileOption === "advanced"
-      ? `${ADVANCED_BACKGROUND_ACTIVITY_DESCRIPTION} Shared policy: ${
-          BACKGROUND_ACTIVITY_PROFILE_LABELS[activeBackgroundActivityProfile]
-        }.`
-      : BACKGROUND_ACTIVITY_PROFILE_DESCRIPTIONS[resolvedBackgroundActivity.profile];
+      ? t("settings.parallelA.bgAdvancedDescShared", {
+          policy: t(BACKGROUND_ACTIVITY_PROFILE_LABELS[activeBackgroundActivityProfile]),
+        })
+      : t(BACKGROUND_ACTIVITY_PROFILE_DESCRIPTIONS[resolvedBackgroundActivity.profile]);
   const canResetBackgroundActivity = !Equal.equals(
     settings.backgroundActivity,
     DEFAULT_UNIFIED_SETTINGS.backgroundActivity,
@@ -392,25 +390,25 @@ export function BackgroundActivitySettingsRow() {
                 {(value: BackgroundActivityProfileOption | null) =>
                   value === null
                     ? t("settings.text.mixed")
-                    : BACKGROUND_ACTIVITY_PROFILE_OPTION_LABELS[value]
+                    : t(BACKGROUND_ACTIVITY_PROFILE_OPTION_LABELS[value])
                 }
               </SelectValue>
             </SelectTrigger>
             <SelectPopup align="end" alignItemWithTrigger={false}>
               <SelectItem hideIndicator value="balanced">
-                {BACKGROUND_ACTIVITY_PROFILE_LABELS.balanced}
+                {t(BACKGROUND_ACTIVITY_PROFILE_LABELS.balanced)}
               </SelectItem>
               <SelectItem hideIndicator value="performance">
-                {BACKGROUND_ACTIVITY_PROFILE_LABELS.performance}
+                {t(BACKGROUND_ACTIVITY_PROFILE_LABELS.performance)}
               </SelectItem>
               <SelectItem hideIndicator value="battery-saver">
-                {BACKGROUND_ACTIVITY_PROFILE_LABELS["battery-saver"]}
+                {t(BACKGROUND_ACTIVITY_PROFILE_LABELS["battery-saver"])}
               </SelectItem>
               <SelectItem hideIndicator value="advanced" disabled={!isEnvironmentScope}>
                 {isEnvironmentScope
-                  ? BACKGROUND_ACTIVITY_PROFILE_OPTION_LABELS.advanced
+                  ? t(BACKGROUND_ACTIVITY_PROFILE_OPTION_LABELS.advanced)
                   : t("settings.text.advancedOneEnvironment", {
-                      advanced: BACKGROUND_ACTIVITY_PROFILE_OPTION_LABELS.advanced,
+                      advanced: t(BACKGROUND_ACTIVITY_PROFILE_OPTION_LABELS.advanced),
                     })}
               </SelectItem>
             </SelectPopup>

@@ -146,7 +146,10 @@ function SwitchPlan({
                 ) {
                   reportError(
                     t("settings.text.couldNotInstallUpdate"),
-                    `This app downloaded ${downloadedVersion ?? "nothing"}, not ${release.version} or newer.`,
+                    t("settings.parallelSystem.trackSwitchDownloadedBuild", {
+                      downloaded: downloadedVersion ?? t("settings.parallelSystem.nothing"),
+                      version: release.version,
+                    }),
                   );
                   return false;
                 }

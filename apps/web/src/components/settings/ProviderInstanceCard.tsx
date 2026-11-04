@@ -77,7 +77,7 @@ import {
   getProviderSummary,
   getProviderVersionLabel,
 } from "./providerStatus";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 const ENVIRONMENT_VARIABLE_NAME_PATTERN = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
 
@@ -460,7 +460,9 @@ export function ProviderEnvironmentSection(props: {
                 disabled={variable.valueRedacted === true}
                 placeholder="VARIABLE_NAME"
                 spellCheck={false}
-                aria-label={`Environment variable name ${index + 1}`}
+                aria-label={t("settings.parallelProviders.environmentVariableName", {
+                  number: index + 1,
+                })}
               />
             );
             const removeButton = (
@@ -469,7 +471,9 @@ export function ProviderEnvironmentSection(props: {
                 size="icon-micro"
                 variant="ghost-destructive"
                 onClick={() => removeVariable(variable.id)}
-                aria-label={`Remove environment variable ${variable.name || index + 1}`}
+                aria-label={t("settings.parallelProviders.removeEnvironmentVariable", {
+                  name: variable.name || index + 1,
+                })}
               >
                 <XIcon className="size-3" />
               </Button>
@@ -494,7 +498,12 @@ export function ProviderEnvironmentSection(props: {
                           });
                         }}
                         aria-pressed={variable.sensitive}
-                        aria-label={`Mark environment variable ${variable.name || index + 1} as sensitive`}
+                        aria-label={t(
+                          "settings.parallelProviders.markEnvironmentVariableSensitive",
+                          {
+                            name: variable.name || index + 1,
+                          },
+                        )}
                       >
                         <MorphIcon
                           className="size-3"
@@ -532,10 +541,12 @@ export function ProviderEnvironmentSection(props: {
                     className="min-w-0 flex-1"
                     value={variable.valueRedacted ? "" : variable.value}
                     onCommit={(value) => updateVariable(variable.id, { value })}
-                    placeholder="value"
+                    placeholder={t("settings.text.value")}
                     configured={variable.valueRedacted === true}
                     spellCheck={false}
-                    aria-label={`Environment variable value ${index + 1}`}
+                    aria-label={t("settings.parallelProviders.environmentVariableValue", {
+                      number: index + 1,
+                    })}
                     sources={props.secretSources ?? []}
                     onSecretChange={(secret) => setVariableSecret(variable.id, secret)}
                   >
@@ -555,9 +566,11 @@ export function ProviderEnvironmentSection(props: {
                       }
                       onCommit={(value) => updateVariable(variable.id, { value })}
                       autoComplete="off"
-                      placeholder="value"
+                      placeholder={t("settings.text.value")}
                       spellCheck={false}
-                      aria-label={`Environment variable value ${index + 1}`}
+                      aria-label={t("settings.parallelProviders.environmentVariableValue", {
+                        number: index + 1,
+                      })}
                     />,
                   )
                 )}
@@ -740,7 +753,7 @@ export function ProviderInstanceCard({
   const statusStyle = PROVIDER_STATUS_STYLES[statusKey];
   const summary = enabled
     ? getProviderSummary(effectiveProvider, t)
-    : { headline: "Disabled", detail: null };
+    : { headline: t("settings.text.disabled"), detail: null };
   const authEmail = liveProvider?.auth.email?.trim();
   const isAuthenticated = enabled && liveProvider?.auth.status === "authenticated";
   const authLabel =
@@ -979,7 +992,9 @@ export function ProviderInstanceCard({
                   size={mode === "list" ? "icon-micro" : "icon-xs"}
                   variant="ghost-muted"
                   className={mode === "list" ? "pointer-events-auto relative shrink-0" : undefined}
-                  aria-label={`${updateProgress ? "Updating" : versionAdvisory.title}, view details`}
+                  aria-label={t("settings.parallelProviders.statusViewDetails", {
+                    status: updateProgress ? t("settings.text.updating2") : versionAdvisory.title,
+                  })}
                 >
                   {updateProgress ? (
                     <Spinner tone="muted" {...(mode === "list" ? { size: "sm" as const } : {})} />
@@ -1028,7 +1043,9 @@ export function ProviderInstanceCard({
               {isUpdating
                 ? t("settings.text.updating2")
                 : versionAdvisory.targetVersion
-                  ? `Install ${getProviderVersionLabel(versionAdvisory.targetVersion)}`
+                  ? t("settings.parallelProviders.installVersion", {
+                      version: getProviderVersionLabel(versionAdvisory.targetVersion),
+                    })
                   : t("settings.text.updateNow")}
             </Button>
           ) : null}
@@ -1247,10 +1264,11 @@ export function ProviderInstanceCard({
     <SettingsRow
       title={t("settings.text.driver")}
       description={
-        <span>
-          This instance uses <code className="text-foreground">{String(instance.driver)}</code>,
-          which is not available in this build. Its configuration is preserved.
-        </span>
+        <Trans
+          i18nKey="settings.parallelProviders.thisInstanceUsesDriverWhichIsNot"
+          values={{ driver: String(instance.driver) }}
+          components={{ code: <code className="text-foreground" /> }}
+        />
       }
     />
   );
@@ -1337,7 +1355,7 @@ export function ProviderInstanceCard({
             {runtime ?? runtimeFields}
           </FoldedSettingsSection>
         </div>
-      ) : !driverOption || deriveProviderSettingsFields(driverOption).length > 0 ? (
+      ) : !driverOption || deriveProviderSettingsFields(driverOption, undefined, t).length > 0 ? (
         <SettingsSection
           title={t("settings.text.runtime")}
           inert={readOnly}

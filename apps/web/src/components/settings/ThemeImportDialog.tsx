@@ -22,6 +22,7 @@ import { Alert } from "../ui/alert";
 import { Button } from "../ui/button";
 import { Dialog, DialogHeader, DialogPanel, DialogPopup, DialogTitle } from "../ui/dialog";
 import { ThemeSearchSection } from "./ThemeSearchSection";
+import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 
 /**
@@ -34,15 +35,18 @@ const MAX_THEME_FILE_BYTES = 256 * 1024;
 /** Highlighting rebuilds markup per keystroke; fall back to plain text for oversized pastes. */
 const MAX_HIGHLIGHTED_JSON_LENGTH = 20_000;
 
-function formatByteSize(bytes: number): string {
+function formatByteSize(bytes: number, t: TFunction): string {
   if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   if (bytes >= 1024) return `${Math.round(bytes / 1024)} KB`;
-  return `${bytes} bytes`;
+  return t("settings.parallelA.themeBytes", { count: bytes });
 }
 
-function describeOversizedThemeFile(bytes: number): string | null {
+function describeOversizedThemeFile(bytes: number, t: TFunction): string | null {
   if (bytes <= MAX_THEME_FILE_BYTES) return null;
-  return `That file is ${formatByteSize(bytes)}. Theme files are only a few KB, so this one was not read (limit ${formatByteSize(MAX_THEME_FILE_BYTES)}).`;
+  return t("settings.parallelA.themeFileTooLarge", {
+    size: formatByteSize(bytes, t),
+    limit: formatByteSize(MAX_THEME_FILE_BYTES, t),
+  });
 }
 
 function escapeJsonHtml(value: string): string {
@@ -218,7 +222,7 @@ function ThemeImportBody({
     requestId === importRequestRef.current && !signal.aborted;
 
   const readThemeFile = async (file: ImportableThemeFile) => {
-    const oversized = describeOversizedThemeFile(file.size);
+    const oversized = describeOversizedThemeFile(file.size, t);
     if (oversized) {
       setError(oversized);
       return;
@@ -253,7 +257,7 @@ function ThemeImportBody({
     const failures: string[] = [];
     const parsed: Array<{ theme: ThemeDefinition; sourceName: string }> = [];
     for (const file of files) {
-      const oversized = describeOversizedThemeFile(file.size);
+      const oversized = describeOversizedThemeFile(file.size, t);
       if (oversized) {
         failures.push(t("settings.text.nameTooLarge", { name: file.name }));
         continue;
@@ -383,7 +387,9 @@ function ThemeImportBody({
             : installCustomTheme(versionedCopy(theme, preferredName)),
         );
       } catch (cause) {
-        failures.push(`${theme.label}: ${cause instanceof Error ? cause.message : "failed"}`);
+        failures.push(
+          `${theme.label}: ${cause instanceof Error ? cause.message : t("settings.text.failed").toLowerCase()}`,
+        );
       }
     }
     if (resolved.length > 0) onImportedMany(resolved, { updated: mode === "update" });
@@ -393,7 +399,7 @@ function ThemeImportBody({
   };
 
   const handleSubmit = () => {
-    const oversized = describeOversizedThemeFile(json.length);
+    const oversized = describeOversizedThemeFile(json.length, t);
     if (oversized) {
       setError(oversized);
       return;

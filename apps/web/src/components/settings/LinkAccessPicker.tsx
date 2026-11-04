@@ -1,7 +1,7 @@
 import { AuthMcpClientAccess } from "@t3tools/contracts";
 import { useId } from "react";
 
-import { accessConfig } from "../auth/ConnectAgentSurface";
+import { accessConfig, accessText } from "../auth/ConnectAgentSurface";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { useTranslation } from "react-i18next";
 
@@ -18,6 +18,7 @@ export function LinkAccessPicker({
   const { t } = useTranslation();
   const labelId = useId();
   const selected = accessConfig[value];
+  const selectedText = accessText(value, t);
   return (
     <div className="space-y-1.5">
       <span id={labelId} className="block text-xs font-medium">
@@ -34,13 +35,14 @@ export function LinkAccessPicker({
           <SelectValue>
             <span className="flex items-center gap-2">
               <selected.icon aria-hidden className="size-4" />
-              {selected.label}
+              {selectedText.label}
             </span>
           </SelectValue>
         </SelectTrigger>
         <SelectPopup alignItemWithTrigger={false}>
           {AuthMcpClientAccess.literals.map((option) => {
-            const { label, description, icon: Icon } = accessConfig[option];
+            const { icon: Icon } = accessConfig[option];
+            const { label, description } = accessText(option, t);
             return (
               <SelectItem key={option} value={option} hideIndicator>
                 <span className="grid min-w-0 gap-0.5 py-0.5">
@@ -56,7 +58,9 @@ export function LinkAccessPicker({
         </SelectPopup>
       </Select>
       <p className="text-xs text-muted-foreground">
-        {t("settings.text.descriptionAnAgentNeverGetsMore", { description: selected.description })}
+        {t("settings.text.descriptionAnAgentNeverGetsMore", {
+          description: selectedText.description,
+        })}
       </p>
     </div>
   );

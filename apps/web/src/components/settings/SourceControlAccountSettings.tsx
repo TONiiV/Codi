@@ -15,7 +15,7 @@ import {
   type SourceControlHostCredentials,
 } from "@t3tools/client-runtime/source-control-clients";
 import { redactedPlaceholder } from "./RedactedSensitiveText";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 /** Sentinel select value for "follow the CLI's active login"; logins never contain spaces. */
 const ACTIVE_ACCOUNT = "active cli account";
@@ -86,9 +86,11 @@ export function SourceControlAccountSettings({
   if (groups.length === 0) {
     return (
       <p className="text-xs text-muted-foreground">
-        Sign in with{" "}
-        <code className="rounded bg-muted px-1 py-px text-2xs">{credentials.loginCommand}</code> on
-        the server host, then rescan to choose accounts here.
+        <Trans
+          i18nKey="settings.parallelA.scSignInHost"
+          values={{ command: credentials.loginCommand }}
+          components={{ code: <code className="rounded bg-muted px-1 py-px text-2xs" /> }}
+        />
       </p>
     );
   }
@@ -97,8 +99,11 @@ export function SourceControlAccountSettings({
     <div className="grid gap-4">
       <div className="flex items-center justify-between gap-3">
         <p className="max-w-2xl text-xs leading-relaxed text-muted-foreground">
-          Choose which <code className="rounded bg-muted px-1 py-px text-2xs">{cliName}</code> login
-          each {label} host uses, or turn a host off.
+          <Trans
+            i18nKey="settings.parallelA.scChooseLogin"
+            values={{ cli: cliName, label }}
+            components={{ code: <code className="rounded bg-muted px-1 py-px text-2xs" /> }}
+          />
         </p>
         <Button
           size="icon-xs"
@@ -198,7 +203,7 @@ export function SourceControlAccountSettings({
                           <RedactedLogin
                             revealed={revealed}
                             account={account}
-                            label={`Account ${index + 1}`}
+                            label={t("settings.parallelA.scAccountN", { index: index + 1 })}
                           />
                         </SelectItem>
                       ))}
@@ -229,8 +234,11 @@ export function SourceControlAccountSettings({
               >
                 <RedactedLogin revealed={revealed} account={entry.account} />
                 <span>
-                  can't be used:{" "}
-                  {entry.error ?? t("settings.text.clinameReportsThisLoginAsInvalid", { cliName })}
+                  {t("settings.parallelA.scCantBeUsed", {
+                    reason:
+                      entry.error ??
+                      t("settings.text.clinameReportsThisLoginAsInvalid", { cliName }),
+                  })}
                 </span>
               </p>
             ))}

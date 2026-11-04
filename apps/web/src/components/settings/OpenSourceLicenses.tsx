@@ -21,6 +21,7 @@ import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from "../ui/collaps
 import { InputGroup, InputGroupAddon, InputGroupInput } from "../ui/input-group";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { SettingsPageContainer, SettingsSection } from "./settingsLayout";
+import i18n from "i18next";
 import { useTranslation } from "react-i18next";
 
 class LicenseManifestLoadError extends Data.TaggedError("LicenseManifestLoadError")<{
@@ -44,7 +45,10 @@ const licenseManifestAtom = Atom.make(
       try: () => decodeThirdPartyLicenseManifest(body),
       catch: (error) =>
         new LicenseManifestLoadError({
-          message: error instanceof Error ? error.message : "The license manifest could not load.",
+          message:
+            error instanceof Error
+              ? error.message
+              : i18n.t("settings.text.theLicenseManifestCouldNotLoad"),
         }),
     });
   }).pipe(
@@ -56,7 +60,9 @@ const licenseManifestAtom = Atom.make(
       duration: "30 seconds",
       orElse: () =>
         Effect.fail(
-          new LicenseManifestLoadError({ message: "The license manifest took too long to load." }),
+          new LicenseManifestLoadError({
+            message: i18n.t("settings.text.theLicenseManifestTookTooLong"),
+          }),
         ),
     }),
     Effect.provide(FetchHttpClient.layer),
@@ -239,7 +245,7 @@ export function OpenSourceLicensesPanel() {
   const errorMessage =
     result._tag === "Failure" && !result.waiting
       ? Option.match(Cause.findErrorOption(result.cause), {
-          onNone: () => "The license manifest could not load.",
+          onNone: () => t("settings.parallelSystem.licenseManifestFailed"),
           onSome: (error) => error.message,
         })
       : null;

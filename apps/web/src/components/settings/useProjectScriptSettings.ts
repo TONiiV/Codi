@@ -35,14 +35,16 @@ import { useAtomCommand } from "../../state/use-atom-command";
 import type { NewProjectScriptInput } from "../projectScriptEditor";
 import { toastManager } from "../ui/toast";
 import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
+import { englishT } from "~/i18n/englishT";
 
-function reportScriptFailure(result: AtomCommandResult<unknown, unknown>) {
+function reportScriptFailure(result: AtomCommandResult<unknown, unknown>, t: TFunction = englishT) {
   if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
     const error = squashAtomCommandFailure(result);
     toastManager.add({
       type: "error",
-      title: "Failed to save project actions",
-      description: error instanceof Error ? error.message : "An error occurred.",
+      title: t("settings.text.failedToSaveProjectActions"),
+      description: error instanceof Error ? error.message : t("settings.text.anErrorOccurred"),
     });
   }
   return mapAtomCommandResult(result, () => undefined);
@@ -98,6 +100,7 @@ export function useProjectScriptSettings(
             }),
           ),
         ),
+        t,
       );
     }
     savingRef.current = true;
@@ -139,7 +142,7 @@ export function useProjectScriptSettings(
             : { defaultProjectScripts: nextScripts ?? [] },
         },
       });
-      if (result._tag === "Failure") return reportScriptFailure(result);
+      if (result._tag === "Failure") return reportScriptFailure(result, t);
       const changedIds = scriptId
         ? [scriptId]
         : current
@@ -179,7 +182,7 @@ export function useProjectScriptSettings(
           : previous && !retainedElsewhere
             ? await removeKeybinding({ environmentId, input: previous })
             : null;
-        if (bindingResult?._tag === "Failure") return reportScriptFailure(bindingResult);
+        if (bindingResult?._tag === "Failure") return reportScriptFailure(bindingResult, t);
       }
     }
     return AsyncResult.success(undefined);

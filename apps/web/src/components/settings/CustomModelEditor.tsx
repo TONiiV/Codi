@@ -103,9 +103,9 @@ export function CustomModelEditor({
     if (!preset) return;
     updateDescriptor(descriptor.key, {
       id: preset.id,
-      label: preset.label,
+      label: t(preset.labelKey),
       type: preset.type,
-      choices: (preset.choices ?? []).map(choiceFromPreset),
+      choices: (preset.choices ?? []).map((choice) => choiceFromPreset(choice, t)),
       currentBooleanValue: undefined,
       description: undefined,
     });
@@ -123,7 +123,7 @@ export function CustomModelEditor({
   };
 
   const handleSave = () => {
-    const problem = validateDraft(draft);
+    const problem = validateDraft(draft, t);
     if (problem) {
       setError(problem);
       return;
@@ -140,7 +140,7 @@ export function CustomModelEditor({
         size="compact"
         value={choice.id}
         onChange={(event) => updateChoice(descriptor.key, choice.key, { id: event.target.value })}
-        placeholder="value"
+        placeholder={t("settings.text.value")}
         font="mono"
         className="w-28"
         spellCheck={false}
@@ -188,7 +188,9 @@ export function CustomModelEditor({
       className="flex flex-col gap-2 rounded-md border border-border/60 bg-background/40 p-2.5"
     >
       <div className="flex flex-wrap items-center gap-2">
-        <span className="w-14 shrink-0 text-2xs text-muted-foreground">Option {index + 1}</span>
+        <span className="w-14 shrink-0 text-2xs text-muted-foreground">
+          {t("settings.parallelProviders.optionNumber", { number: index + 1 })}
+        </span>
         {presets.length > 0 ? (
           <Select
             value={idSelectValue(descriptor)}
@@ -206,7 +208,7 @@ export function CustomModelEditor({
                 <SelectItem key={preset.id} value={preset.id}>
                   <span className="flex items-baseline gap-2">
                     <code className="font-mono text-xs">{preset.id}</code>
-                    <span className="text-muted-foreground">{preset.label}</span>
+                    <span className="text-muted-foreground">{t(preset.labelKey)}</span>
                   </span>
                 </SelectItem>
               ))}
@@ -255,7 +257,7 @@ export function CustomModelEditor({
         <Button
           size="icon-micro"
           variant="ghost-muted"
-          aria-label={`Remove option ${index + 1}`}
+          aria-label={t("settings.parallelProviders.removeOptionNumber", { number: index + 1 })}
           onClick={() => removeDescriptor(descriptor.key)}
         >
           <XIcon className="size-3" />
@@ -351,10 +353,10 @@ export function CustomModelEditor({
                 size="xs"
                 variant="ghost-muted"
                 className={cn("-ml-2 first:ml-0")}
-                onClick={() => addDescriptor(descriptorFromPreset(preset))}
+                onClick={() => addDescriptor(descriptorFromPreset(preset, t))}
               >
                 <PlusIcon className="size-3" />
-                {preset.label}
+                {t(preset.labelKey)}
               </Button>
             ))}
           <Button

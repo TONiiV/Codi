@@ -7,6 +7,8 @@ import {
   runtimeModeConfig,
   runtimeModeOptions as runtimeModes,
 } from "./runtimeModeConfig";
+import { useTranslation } from "react-i18next";
+import { runtimeModeText } from "../settings/SettingsPanels.enumLabels";
 import { isLocalEnvironmentDisabled } from "../../localEnvironment";
 import { usePrimaryEnvironmentId } from "../../state/environments";
 import { useRightPanelStore } from "~/rightPanelStore";
@@ -505,6 +507,7 @@ const NO_PROVIDER_SKILLS: ServerProvider["skills"] = [];
 const NO_PROVIDER_SLASH_COMMANDS: ServerProvider["slashCommands"] = [];
 
 export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps) {
+  const { t } = useTranslation();
   const {
     composerDraftTarget,
     environmentId,
@@ -923,8 +926,9 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   const compatibleRuntimeModeOptions = runtimeModeOptions
     .filter((option) => compatibleRuntimeModes.includes(option.mode))
     .map((option) => {
+      const localized = { ...option, ...runtimeModeText(option.mode, t) };
       const disabledReason = managedRuntimeModeDenial(managedPolicy, option.mode);
-      return disabledReason === undefined ? option : { ...option, disabledReason };
+      return disabledReason === undefined ? localized : { ...localized, disabledReason };
     });
   // A thread or draft already above the ceiling would be refused; offer the broadest mode left.
   const runtimeModeCeilingDenial = managedRuntimeModeDenial(managedPolicy, compatibleRuntimeMode);

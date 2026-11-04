@@ -30,6 +30,8 @@ export type SettingsFormDefinition = Pick<ProviderClientDefinition, "settingsSch
 };
 import { SettingsRow } from "./settingsLayout";
 import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
+import { englishT } from "~/i18n/englishT";
 
 export interface ProviderSettingsFieldModel {
   readonly key: string;
@@ -93,6 +95,7 @@ function readFieldBooleanDefault(
 export function deriveProviderSettingsFields(
   definition: SettingsFormDefinition,
   value?: unknown,
+  t: TFunction = englishT,
 ): ReadonlyArray<ProviderSettingsFieldModel> {
   const isLocalAcp =
     definition.driverKind === "acpRegistry" &&
@@ -125,15 +128,15 @@ export function deriveProviderSettingsFields(
           control: formAnnotation.control ?? "text",
           label:
             isLocalAcp && key === "commandPath"
-              ? "Executable"
+              ? t("settings.text.executable")
               : (annotatedTitle ?? titleizeFieldKey(key)),
           ...(isLocalAcp && key === "commandPath"
-            ? { description: "Executable name or path on this environment." }
+            ? { description: t("settings.text.executableNameOrPathOnThis") }
             : annotatedDescription !== undefined
               ? { description: annotatedDescription }
               : {}),
           ...(isLocalAcp && key === "commandPath"
-            ? { placeholder: "e.g. dsh" }
+            ? { placeholder: t("settings.text.eGDsh") }
             : formAnnotation.placeholder !== undefined
               ? { placeholder: formAnnotation.placeholder }
               : {}),
@@ -263,7 +266,9 @@ function ProviderCommandArguments({
                       ),
                     )
                   }
-                  aria-label={`Argument ${index + 1}`}
+                  aria-label={t("settings.parallelProviders.argumentNumber", {
+                    number: index + 1,
+                  })}
                   spellCheck={false}
                 />
                 <Button
@@ -273,7 +278,9 @@ function ProviderCommandArguments({
                   onClick={() =>
                     updateArguments(rows.filter((current) => current.id !== argument.id))
                   }
-                  aria-label={`Remove argument ${index + 1}`}
+                  aria-label={t("settings.parallelProviders.removeArgumentNumber", {
+                    number: index + 1,
+                  })}
                 >
                   <XIcon />
                 </Button>
@@ -682,7 +689,8 @@ export function ProviderSettingsForm({
   managed,
   environmentId,
 }: ProviderSettingsFormProps) {
-  const fields = deriveProviderSettingsFields(definition, value);
+  const { t } = useTranslation();
+  const fields = deriveProviderSettingsFields(definition, value, t);
   const isLocalAcp =
     definition.driverKind === "acpRegistry" &&
     readProviderConfigString(value, "source") === "local";

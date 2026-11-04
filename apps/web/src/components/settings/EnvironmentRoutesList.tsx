@@ -20,7 +20,6 @@ import {
   type ConnectionRoute,
   connectionRouteAddress,
   connectionRouteId,
-  connectionRouteLabel,
   connectionRoutes,
   isLearned,
   pendingRouteOrder,
@@ -37,6 +36,7 @@ import { useAtomCommand } from "~/state/use-atom-command";
 import { Button } from "../ui/button";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { useTranslation } from "react-i18next";
+import { connectionRouteText } from "./connectionLabels";
 
 export function EnvironmentRoutesList({
   environment,
@@ -77,7 +77,10 @@ export function EnvironmentRoutesList({
   const confirmRemove = async (route: ConnectionRoute) => {
     const address = connectionRouteAddress(route);
     const confirmed = await requestConfirmDialog(
-      `Remove ${connectionRouteLabel(route)} route?${address === null ? "" : `\n${address}`}`,
+      t("settings.parallelConnections.removeRouteConfirm", {
+        route: connectionRouteText(route, t),
+        address: address === null ? "" : `\n${address}`,
+      }),
       { variant: "destructive" },
     );
     if (confirmed !== true) return;
@@ -152,7 +155,7 @@ function SortableRouteRow({
 }) {
   const { t } = useTranslation();
   const id = connectionRouteId(route.target);
-  const label = connectionRouteLabel(route);
+  const label = connectionRouteText(route, t);
   const address = connectionRouteAddress(route);
   const {
     attributes,

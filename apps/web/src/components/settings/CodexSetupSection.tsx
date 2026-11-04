@@ -608,13 +608,33 @@ function ManagedCodexSetup({
 
   const runtimeDescription =
     installation?.phase === "downloading"
-      ? `Downloading ${(installation.downloadedBytes / 1_000_000).toFixed(1)}${installation.totalBytes === null ? "" : ` of ${(installation.totalBytes / 1_000_000).toFixed(1)}`} MB.`
+      ? installation.totalBytes === null
+        ? t("settings.parallelProviders.downloadingSizeMb", {
+            size: (installation.downloadedBytes / 1_000_000).toFixed(1),
+          })
+        : t("settings.parallelProviders.downloadingSizeMbOfTotal", {
+            size: (installation.downloadedBytes / 1_000_000).toFixed(1),
+            total: (installation.totalBytes / 1_000_000).toFixed(1),
+          })
       : installation?.phase === "extracting"
         ? t("settings.text.installingCodex")
         : installation?.phase === "verifying"
           ? t("settings.text.checkingCodex")
           : installed
-            ? `${installation?.source === "local" ? t("settings.text.usingYourInstalledCodex") : t("settings.text.managedByCodi")}${installation?.installedVersion ? ` · v${installation.installedVersion}` : ""}.`
+            ? t(
+                installation?.installedVersion
+                  ? "settings.parallelProviders.codexRuntimeWithVersion"
+                  : "settings.parallelProviders.codexRuntimeSource",
+                {
+                  source:
+                    installation?.source === "local"
+                      ? t("settings.text.usingYourInstalledCodex")
+                      : t("settings.text.managedByCodi"),
+                  ...(installation?.installedVersion
+                    ? { version: installation.installedVersion }
+                    : {}),
+                },
+              )
             : (installation?.message ?? t("settings.text.codiDownloadsAndManagesCodexFor"));
   const accountDescription = finishingSignIn ? (
     t("settings.text.finishingSignIn")

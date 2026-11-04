@@ -135,7 +135,9 @@ describe("customModelEditor.logic", () => {
     expect(copied.capabilities?.optionDescriptors).toEqual([capabilities.optionDescriptors![1]]);
     const presets = definitionFromDraft(
       draft({
-        descriptors: (DESCRIPTOR_PRESETS_BY_KIND[claude] ?? []).map(descriptorFromPreset),
+        descriptors: (DESCRIPTOR_PRESETS_BY_KIND[claude] ?? []).map((preset) =>
+          descriptorFromPreset(preset),
+        ),
       }),
     );
     expect(

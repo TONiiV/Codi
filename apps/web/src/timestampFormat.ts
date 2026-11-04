@@ -1,4 +1,6 @@
 import { type TimestampFormat } from "@t3tools/contracts/settings";
+import type { TFunction } from "i18next";
+import { englishT } from "~/i18n/englishT";
 
 function getTimestampFormatOptions(
   timestampFormat: TimestampFormat,
@@ -228,66 +230,121 @@ export function msUntilRelativeTimeChange(
   return Math.min(nextChangeMs - nowMs, DAY_MS);
 }
 
-export function formatRelativeElapsed(elapsedMs: number): RelativeTimeParts {
+const DURATION_UNIT_SUFFIX = { seconds: "s", minutes: "m", hours: "h", days: "d" } as const;
+type DurationUnit = keyof typeof DURATION_UNIT_SUFFIX;
+
+function capitalize(value: string): string {
+  return `${value[0]!.toUpperCase()}${value.slice(1)}`;
+}
+
+function formatDurationUnit(value: number, unit: DurationUnit, t: TFunction): string {
+  return t(`settings.parallelShared.duration${capitalize(unit)}`, {
+    defaultValue: `{{value}}${DURATION_UNIT_SUFFIX[unit]}`,
+    value,
+  });
+}
+
+function formatRelativeUnit(
+  value: number,
+  unit: Exclude<DurationUnit, "seconds">,
+  t: TFunction,
+): string {
+  return t(`settings.parallelShared.relative${capitalize(unit)}`, {
+    defaultValue: `{{value}}${DURATION_UNIT_SUFFIX[unit]}`,
+    value,
+  });
+}
+
+function justNowLabel(t: TFunction): string {
+  return t("settings.parallelShared.justNow", { defaultValue: "just now" });
+}
+
+export function formatRelativeElapsed(
+  elapsedMs: number,
+  t: TFunction = englishT,
+): RelativeTimeParts {
   const seconds = Math.floor(elapsedMs / 1000);
-  if (seconds < 60) return { value: "just now", suffix: null };
+  if (seconds < 60) return { value: justNowLabel(t), suffix: null };
+  const ago = t("settings.parallelShared.relativeAgo", { defaultValue: "ago" });
   const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return { value: `${minutes}m`, suffix: "ago" };
+  if (minutes < 60) return { value: formatRelativeUnit(minutes, "minutes", t), suffix: ago };
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return { value: `${hours}h`, suffix: "ago" };
+  if (hours < 24) return { value: formatRelativeUnit(hours, "hours", t), suffix: ago };
   const days = Math.floor(hours / 24);
-  return { value: `${days}d`, suffix: "ago" };
+  return { value: formatRelativeUnit(days, "days", t), suffix: ago };
 }
 
 export function formatRelativeTime(
   isoDate: string,
   nowMs: number = Date.now(),
+  t: TFunction = englishT,
 ): RelativeTimeParts | null {
   const elapsedMs = relativeTimeElapsedMs(isoDate, nowMs);
-  return elapsedMs === null ? null : formatRelativeElapsed(elapsedMs);
+  return elapsedMs === null ? null : formatRelativeElapsed(elapsedMs, t);
 }
 
-export function formatRelativeTimeLabel(isoDate: string, nowMs: number = Date.now()) {
-  const relative = formatRelativeTime(isoDate, nowMs);
+export function formatRelativeTimeLabel(
+  isoDate: string,
+  nowMs: number = Date.now(),
+  t: TFunction = englishT,
+) {
+  const relative = formatRelativeTime(isoDate, nowMs, t);
   if (!relative) return "";
   return relative.suffix ? `${relative.value} ${relative.suffix}` : relative.value;
 }
 
-export function formatElapsedDurationLabel(isoDate: string, nowMs: number = Date.now()): string {
+export function formatElapsedDurationLabel(
+  isoDate: string,
+  nowMs: number = Date.now(),
+  t: TFunction = englishT,
+): string {
   const date = parseTimestampDate(isoDate);
   if (!date) return "";
   const diffMs = nowMs - date.getTime();
-  if (diffMs <= 0) return "just now";
+  if (diffMs <= 0) return justNowLabel(t);
 
   const seconds = Math.floor(diffMs / 1000);
-  if (seconds < 5) return "just now";
-  if (seconds < 60) return `${seconds}s`;
+  if (seconds < 5) return justNowLabel(t);
+  if (seconds < 60) return formatDurationUnit(seconds, "seconds", t);
 
   const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m`;
+  if (minutes < 60) return formatDurationUnit(minutes, "minutes", t);
 
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h`;
+  if (hours < 24) return formatDurationUnit(hours, "hours", t);
 
   const days = Math.floor(hours / 24);
-  return `${days}d`;
+  return formatDurationUnit(days, "days", t);
 }
 
 /** Pass nowMs to match a parent-driven render tick. */
-export function formatExpiresInLabel(isoDate: string, nowMs: number = Date.now()): string {
+export function formatExpiresInLabel(
+  isoDate: string,
+  nowMs: number = Date.now(),
+  t: TFunction = englishT,
+): string {
   const date = parseTimestampDate(isoDate);
   if (!date) return "";
   const diffMs = date.getTime() - nowMs;
-  if (diffMs <= 0) return "Expired";
+  if (diffMs <= 0) return t("settings.parallelShared.expiresExpired", { defaultValue: "Expired" });
+
+  const expiresIn = (duration: string) =>
+    t("settings.parallelShared.expiresIn", {
+      defaultValue: "Expires in {{duration}}",
+      duration,
+    });
 
   const totalSeconds = Math.floor(diffMs / 1000);
-  if (totalSeconds < 5) return "Expires in a moment";
-  if (totalSeconds < 60) return `Expires in ${totalSeconds}s`;
+  if (totalSeconds < 5)
+    return t("settings.parallelShared.expiresMoment", { defaultValue: "Expires in a moment" });
+  if (totalSeconds < 60) return expiresIn(formatDurationUnit(totalSeconds, "seconds", t));
 
   if (totalSeconds < 3600) {
     const minutes = Math.floor(totalSeconds / 60);
     const seconds = totalSeconds % 60;
-    return seconds === 0 ? `Expires in ${minutes}m` : `Expires in ${minutes}m ${seconds}s`;
+    const parts = [formatDurationUnit(minutes, "minutes", t)];
+    if (seconds > 0) parts.push(formatDurationUnit(seconds, "seconds", t));
+    return expiresIn(parts.join(" "));
   }
 
   if (totalSeconds < 86_400) {
@@ -295,22 +352,23 @@ export function formatExpiresInLabel(isoDate: string, nowMs: number = Date.now()
     const rem = totalSeconds % 3600;
     const minutes = Math.floor(rem / 60);
     const seconds = rem % 60;
-    const parts = [`${hours}h`];
-    if (minutes > 0) parts.push(`${minutes}m`);
-    if (seconds > 0) parts.push(`${seconds}s`);
-    return `Expires in ${parts.join(" ")}`;
+    const parts = [formatDurationUnit(hours, "hours", t)];
+    if (minutes > 0) parts.push(formatDurationUnit(minutes, "minutes", t));
+    if (seconds > 0) parts.push(formatDurationUnit(seconds, "seconds", t));
+    return expiresIn(parts.join(" "));
   }
 
   const days = Math.floor(totalSeconds / 86_400);
   const remAfterDays = totalSeconds % 86_400;
-  if (remAfterDays === 0) return `Expires in ${days}d`;
-  const hours = Math.floor(remAfterDays / 3600);
-  const rem = remAfterDays % 3600;
-  const minutes = Math.floor(rem / 60);
-  const seconds = rem % 60;
-  const tail: string[] = [];
-  if (hours > 0) tail.push(`${hours}h`);
-  if (minutes > 0) tail.push(`${minutes}m`);
-  if (seconds > 0) tail.push(`${seconds}s`);
-  return tail.length > 0 ? `Expires in ${days}d ${tail.join(" ")}` : `Expires in ${days}d`;
+  const parts = [formatDurationUnit(days, "days", t)];
+  if (remAfterDays > 0) {
+    const hours = Math.floor(remAfterDays / 3600);
+    const rem = remAfterDays % 3600;
+    const minutes = Math.floor(rem / 60);
+    const seconds = rem % 60;
+    if (hours > 0) parts.push(formatDurationUnit(hours, "hours", t));
+    if (minutes > 0) parts.push(formatDurationUnit(minutes, "minutes", t));
+    if (seconds > 0) parts.push(formatDurationUnit(seconds, "seconds", t));
+  }
+  return expiresIn(parts.join(" "));
 }

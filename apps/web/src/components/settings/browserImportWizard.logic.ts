@@ -1,3 +1,5 @@
+import type { TFunction } from "i18next";
+import { englishT } from "~/i18n/englishT";
 import type { BrowserImportFailureReason, BrowserImportSource } from "@t3tools/contracts";
 
 export interface WizardTargetProfile {
@@ -142,9 +144,33 @@ export function isRetryableReason(reason: BrowserImportFailureReason): boolean {
   }
 }
 
-export function formatSkippedDomains(domains: ReadonlyArray<string>): string {
+/** Falls back to the contract's English copy for a reason without a translation. */
+export function browserImportFailureText(
+  reason: BrowserImportFailureReason,
+  fallback: string,
+  t: TFunction,
+): string {
+  return t(`settings.parallelA.biFail${reason[0]!.toUpperCase()}${reason.slice(1)}`, {
+    defaultValue: fallback,
+  });
+}
+
+export function formatSkippedDomains(
+  domains: ReadonlyArray<string>,
+  t: TFunction = englishT,
+): string {
   if (domains.length === 0) return "";
   if (domains.length === 1) return domains[0]!;
-  if (domains.length <= 3) return `${domains.slice(0, -1).join(", ")} and ${domains.at(-1)}`;
-  return `${domains.slice(0, 3).join(", ")} and ${domains.length - 3} more`;
+  if (domains.length <= 3) {
+    return t("settings.parallelA.domainsAnd", {
+      list: domains.slice(0, -1).join(", "),
+      last: domains.at(-1),
+      defaultValue: `${domains.slice(0, -1).join(", ")} and ${domains.at(-1)}`,
+    });
+  }
+  return t("settings.parallelA.domainsAndMore", {
+    list: domains.slice(0, 3).join(", "),
+    count: domains.length - 3,
+    defaultValue: `${domains.slice(0, 3).join(", ")} and ${domains.length - 3} more`,
+  });
 }

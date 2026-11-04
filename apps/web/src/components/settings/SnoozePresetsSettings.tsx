@@ -16,7 +16,12 @@ import * as Schema from "effect/Schema";
 import { PlusIcon, XIcon } from "lucide-react";
 
 import { useNowMinute } from "../../hooks/useNowMinute";
-import { reconcileSnoozeDraft, sortSnoozeRows } from "./SnoozePresetsSettings.logic";
+import {
+  localizeSnoozeLabel,
+  localizeSnoozeWhen,
+  reconcileSnoozeDraft,
+  sortSnoozeRows,
+} from "./SnoozePresetsSettings.logic";
 import { formatShortTimestamp } from "../../timestampFormat";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
@@ -39,28 +44,29 @@ import { useTranslation } from "react-i18next";
 
 const UNIT_MINUTES = { minutes: 1, hours: 60, days: 24 * 60 } as const;
 type DurationUnit = keyof typeof UNIT_MINUTES;
-const UNIT_LABELS: Record<DurationUnit, string> = {
-  minutes: "minutes",
-  hours: "hours",
-  days: "days",
+// i18n keys, resolved with `t` where shown.
+const UNIT_LABEL_KEYS: Record<DurationUnit, string> = {
+  minutes: "settings.text.minutes",
+  hours: "settings.parallelA.snoozeUnitHours",
+  days: "settings.text.days",
 };
-const SINGULAR_UNIT_LABELS: Record<DurationUnit, string> = {
-  minutes: "minute",
-  hours: "hour",
-  days: "day",
+const SINGULAR_UNIT_LABEL_KEYS: Record<DurationUnit, string> = {
+  minutes: "settings.parallelA.snoozeUnitMinute",
+  hours: "settings.parallelA.snoozeUnitHour",
+  days: "settings.parallelA.snoozeUnitDay",
 };
 
-const WHEN_LABELS: Record<"after" | SnoozePresetDay, string> = {
-  after: "In",
-  today: "Today",
-  tomorrow: "Tomorrow",
-  monday: "Monday",
-  tuesday: "Tuesday",
-  wednesday: "Wednesday",
-  thursday: "Thursday",
-  friday: "Friday",
-  saturday: "Saturday",
-  sunday: "Sunday",
+const WHEN_LABEL_KEYS: Record<"after" | SnoozePresetDay, string> = {
+  after: "settings.parallelA.snoozeWhenAfter",
+  today: "settings.parallelA.snoozeToday",
+  tomorrow: "settings.parallelA.snoozeTomorrow",
+  monday: "settings.parallelA.snoozeMonday",
+  tuesday: "settings.parallelA.snoozeTuesday",
+  wednesday: "settings.parallelA.snoozeWednesday",
+  thursday: "settings.parallelA.snoozeThursday",
+  friday: "settings.parallelA.snoozeFriday",
+  saturday: "settings.parallelA.snoozeSaturday",
+  sunday: "settings.parallelA.snoozeSunday",
 };
 const WHEN_VALUES = ["after", ...SnoozePresetDay.literals] as const;
 
@@ -232,7 +238,7 @@ function SnoozePresetList(props: {
   onAdd: () => void;
   onSettle: () => void;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const nowMinute = useNowMinute();
   const now = new Date(`${nowMinute}Z`);
   const formatTime = (date: Date) =>
@@ -251,7 +257,11 @@ function SnoozePresetList(props: {
     }
     seenIds.add(resolved.id);
     seenWakes.add(resolved.snoozedUntil);
-    return { tone: "menu", label: resolved.label, when: resolved.whenLabel } as const;
+    return {
+      tone: "menu",
+      label: localizeSnoozeLabel(resolved.label, t),
+      when: localizeSnoozeWhen(resolved, formatTime, i18n.language),
+    } as const;
   });
 
   const menuPresets = resolveSnoozePresets(now, { presets: props.presets, formatTime });
@@ -260,9 +270,10 @@ function SnoozePresetList(props: {
       .map((preset) => preset.label)
       .filter((label, index, labels) => labels.indexOf(label) !== index),
   );
-  const menuOrder = menuPresets.map((preset) =>
-    repeatedLabels.has(preset.label) ? `${preset.label} ${preset.whenLabel}` : preset.label,
-  );
+  const menuOrder = menuPresets.map((preset) => {
+    const label = localizeSnoozeLabel(preset.label, t);
+    return repeatedLabels.has(preset.label) ? `${label} ${preset.whenLabel}` : label;
+  });
 
   return (
     <div
@@ -285,7 +296,7 @@ function SnoozePresetList(props: {
           <div
             key={props.keys[index]}
             role="group"
-            aria-label={`Snooze option ${index + 1}`}
+            aria-label={t("settings.parallelA.snoozeOptionAria", { index: index + 1 })}
             className="flex flex-wrap items-center gap-2"
           >
             <SnoozePresetFields preset={preset} onChange={(next) => props.onChange(index, next)} />
@@ -301,7 +312,7 @@ function SnoozePresetList(props: {
               <Button
                 variant="ghost-muted"
                 size="icon-sm"
-                aria-label={`Remove snooze option ${index + 1}`}
+                aria-label={t("settings.parallelA.snoozeRemoveOptionAria", { index: index + 1 })}
                 onClick={() => props.onRemove(index)}
               >
                 <XIcon />
@@ -313,7 +324,7 @@ function SnoozePresetList(props: {
       <p className="text-xs text-muted-foreground">
         {menuOrder.length === 0
           ? t("settings.text.menusOfferOnlyCustom")
-          : `Menu now: ${menuOrder.join(" · ")}`}
+          : t("settings.parallelA.snoozeMenuNow", { options: menuOrder.join(" · ") })}
       </p>
       <div>
         <Button
@@ -342,6 +353,9 @@ function SnoozePresetFields(props: {
   const { t } = useTranslation();
   const { preset, onChange } = props;
   const when = preset.kind === "after" ? "after" : preset.day;
+  const whenLabels = Object.fromEntries(
+    WHEN_VALUES.map((value) => [value, t(WHEN_LABEL_KEYS[value])]),
+  );
   // Switching between a duration and a set time keeps the other kind's last value, so a
   // misclick on "When" can be undone without retyping it.
   const [memory, setMemory] = useState<KindMemory>({ minutes: 60, time: "09:00" });
@@ -349,7 +363,7 @@ function SnoozePresetFields(props: {
     <div className="flex items-center gap-2">
       <Select
         value={when}
-        items={WHEN_LABELS}
+        items={whenLabels}
         onValueChange={(value) => {
           const next = value === null ? null : withWhen(preset, value, memory);
           if (!next) return;
@@ -369,7 +383,7 @@ function SnoozePresetFields(props: {
         <SelectPopup>
           {WHEN_VALUES.map((value) => (
             <SelectItem hideIndicator key={value} value={value}>
-              {WHEN_LABELS[value]}
+              {whenLabels[value]}
             </SelectItem>
           ))}
         </SelectPopup>
@@ -408,6 +422,10 @@ function DurationFields(props: { minutes: number; onChange: (minutes: number) =>
   const unit =
     props.minutes % UNIT_MINUTES[chosenUnit] === 0 ? chosenUnit : splitMinutes(props.minutes).unit;
   const amount = props.minutes / UNIT_MINUTES[unit];
+  const unitLabelKeys = amount === 1 ? SINGULAR_UNIT_LABEL_KEYS : UNIT_LABEL_KEYS;
+  const unitLabels = Object.fromEntries(
+    Object.entries(unitLabelKeys).map(([value, key]) => [value, t(key)]),
+  );
   const maxAmount = Math.floor(MAX_SNOOZE_PRESET_MINUTES / UNIT_MINUTES[unit]);
   // Typing stays local until the field commits (blur, Enter, or a step), so half-typed
   // values never reach the server.
@@ -454,7 +472,7 @@ function DurationFields(props: { minutes: number; onChange: (minutes: number) =>
       </NumberField>
       <Select
         value={unit}
-        items={amount === 1 ? SINGULAR_UNIT_LABELS : UNIT_LABELS}
+        items={unitLabels}
         onValueChange={(value) => {
           if (value === "minutes" || value === "hours" || value === "days") {
             setChosenUnit(value);
@@ -466,9 +484,9 @@ function DurationFields(props: { minutes: number; onChange: (minutes: number) =>
           <SelectValue />
         </SelectTrigger>
         <SelectPopup>
-          {(Object.keys(UNIT_LABELS) as DurationUnit[]).map((value) => (
+          {(Object.keys(UNIT_LABEL_KEYS) as DurationUnit[]).map((value) => (
             <SelectItem hideIndicator key={value} value={value}>
-              {(amount === 1 ? SINGULAR_UNIT_LABELS : UNIT_LABELS)[value]}
+              {unitLabels[value]}
             </SelectItem>
           ))}
         </SelectPopup>

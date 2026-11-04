@@ -1,8 +1,6 @@
 import { type EnvironmentId, sessionGrantsScope } from "@t3tools/contracts";
-import {
-  AUTH_SCOPE_OPTIONS,
-  sessionPermissionsUnavailableMessage,
-} from "@t3tools/shared/authScopeOptions";
+import { AUTH_SCOPE_OPTIONS } from "@t3tools/shared/authScopeOptions";
+import { authScopeText, sessionPermissionsUnavailableText } from "./SettingsPanels.enumLabels";
 import { useEnvironmentSessionState } from "~/state/session";
 import { useTranslation } from "react-i18next";
 
@@ -25,11 +23,11 @@ export function SessionPermissions({
           : t("settings.text.thesePermissionsApplyToThisClient")}
       </p>
       <ul className="grid gap-x-6 gap-y-2 sm:grid-cols-2">
-        {AUTH_SCOPE_OPTIONS.map(({ scope, title }) => (
-          <li key={scope} className="flex items-start justify-between gap-3">
-            <span>{title}</span>
+        {AUTH_SCOPE_OPTIONS.map((option) => (
+          <li key={option.scope} className="flex items-start justify-between gap-3">
+            <span>{authScopeText(option, t).title}</span>
             <span className="shrink-0 text-muted-foreground">
-              {sessionGrantsScope(session.data!, scope)
+              {sessionGrantsScope(session.data!, option.scope)
                 ? t("settings.text.allowed")
                 : t("settings.text.notGranted")}
             </span>
@@ -39,11 +37,15 @@ export function SessionPermissions({
     </div>
   ) : (
     <p className="py-3 text-xs text-muted-foreground">
-      {sessionPermissionsUnavailableMessage({
-        connected,
-        failed: session.hasError,
-        rejected: !session.hasError && !session.isPending && session.data?.authenticated === false,
-      })}
+      {sessionPermissionsUnavailableText(
+        {
+          connected,
+          failed: session.hasError,
+          rejected:
+            !session.hasError && !session.isPending && session.data?.authenticated === false,
+        },
+        t,
+      )}
     </p>
   );
 }

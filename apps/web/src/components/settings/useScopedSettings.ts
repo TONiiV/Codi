@@ -107,23 +107,26 @@ function useRunScopedPlan() {
 }
 
 export function useUpdateScopedSettings() {
+  const { t } = useTranslation();
   const { scope, environments } = useSettingsScope();
   const run = useRunScopedPlan();
   /** `onFailed` runs when any target rejects or drops the patch, so a draft can fall back. */
   return (patch: ScopedSettingsPatch, options?: { readonly onFailed?: () => void }) =>
-    run(planScopedSettingsPatch(scope, environments, patch), options?.onFailed);
+    run(planScopedSettingsPatch(scope, environments, patch, t), options?.onFailed);
 }
 
 export function useClearScopedSettings() {
+  const { t } = useTranslation();
   const context = useOptionalSettingsScope();
   const run = useRunScopedPlan();
   return (keys: readonly ProjectScopedServerSettingKey[]) => {
     if (context === null) return;
-    run(planScopedSettingsClear(context.scope, context.environments, keys));
+    run(planScopedSettingsClear(context.scope, context.environments, keys, t));
   };
 }
 
 export function useClearProjectOverrides() {
+  const { t } = useTranslation();
   const context = useOptionalSettingsScope();
   const run = useRunScopedPlan();
   return (
@@ -131,7 +134,7 @@ export function useClearProjectOverrides() {
     keys: readonly ProjectScopedServerSettingKey[],
   ) => {
     if (context === null) return;
-    run(planProjectOverridesClear(context.environments, entries, keys));
+    run(planProjectOverridesClear(context.environments, entries, keys, t));
   };
 }
 

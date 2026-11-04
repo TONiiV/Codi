@@ -28,11 +28,13 @@ import { ProviderDriverKind } from "@t3tools/contracts";
 import { ProviderInstanceIcon } from "../chat/ProviderInstanceIcon";
 import { providerClients } from "./providerDriverMeta";
 import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
+import { englishT } from "~/i18n/englishT";
 
-function errorMessage(error: unknown): string {
+function errorMessage(error: unknown, t: TFunction = englishT): string {
   return error instanceof Error && error.message.trim()
     ? error.message
-    : "The ACP could not be prepared.";
+    : t("settings.text.theAcpCouldNotBePrepared");
 }
 
 const ACP_REGISTRY_SEARCH_DEBOUNCE_MS = 300;
@@ -59,6 +61,7 @@ function applyAcpRegistryPrepareResult(
  * search is not kept subscribed.
  */
 export function useAcpRegistrySearch(environmentId: EnvironmentId, enabled: boolean) {
+  const { t } = useTranslation();
   const [input, setInput] = useState<{
     readonly text: string;
     readonly submitted: string;
@@ -113,7 +116,7 @@ export function useAcpRegistrySearch(environmentId: EnvironmentId, enabled: bool
         return;
       }
       if (!isAtomCommandInterrupted(result)) {
-        pipe(squashAtomCommandFailure(result), errorMessage, setPrepareError);
+        pipe(squashAtomCommandFailure(result), (error) => errorMessage(error, t), setPrepareError);
       }
     },
   };
@@ -206,7 +209,7 @@ export function AcpRegistrySearchStep({
           : isRefreshing
             ? t("settings.text.refreshingAcpRegistryResults")
             : results
-              ? `${resultCount} compatible ${resultCount === 1 ? "agent" : "agents"} found.`
+              ? t("settings.parallelProviders.compatibleAgentsFound", { count: resultCount })
               : ""}
       </div>
 
@@ -307,7 +310,7 @@ function AcpRegistryAgentRow({
             </Tooltip>
           ) : null}
           <Button
-            aria-label={`${alreadyAdded ? t("settings.text.alreadyAdded") : isPreparing ? progressLabel : "Add"} ${agent.name}`}
+            aria-label={`${alreadyAdded ? t("settings.text.alreadyAdded") : isPreparing ? progressLabel : t("settings.text.add")} ${agent.name}`}
             disabled={!canAdd || alreadyAdded}
             onClick={() => onAdd(agent)}
             size="xs"

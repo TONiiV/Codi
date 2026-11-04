@@ -49,6 +49,8 @@ import {
 } from "./simlockDeviceHostsSettings.logic";
 import { useHostConnectionChecks } from "./useHostConnectionChecks";
 import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
+import { englishT } from "~/i18n/englishT";
 
 const deviceHostStatesAtom = environmentAtomList("web-device-host-states", (environmentId) =>
   deviceEnvironment.state({ environmentId, input: {} }),
@@ -112,19 +114,24 @@ type Editing =
 function hostStatus(
   state: DeviceServiceState | undefined,
   hostId: string,
+  t: TFunction = englishT,
 ): SourceStatus | undefined {
-  if (!state) return { tone: "pending", label: "Loading" };
+  if (!state) return { tone: "pending", label: t("settings.text.loading") };
   const status = state.hostStatuses[hostId];
   switch (status?.status) {
     case "ready":
       return status.androidDiscoveryIncomplete
-        ? { tone: "warning", label: "Android list may be incomplete", detail: status.detail }
+        ? {
+            tone: "warning",
+            label: t("settings.text.androidListMayBeIncomplete"),
+            detail: status.detail,
+          }
         : undefined;
     case "installing":
     case "starting":
-      return { tone: "pending", label: "Starting", detail: status.detail };
+      return { tone: "pending", label: t("settings.text.starting"), detail: status.detail };
     case "failed":
-      return { tone: "error", label: "Failed", detail: status.detail };
+      return { tone: "error", label: t("settings.text.failed"), detail: status.detail };
     default:
       return undefined;
   }
@@ -188,7 +195,9 @@ export function DeviceSourcesSettings(props: {
       toastManager.add({
         type: "error",
         title: failedTitle,
-        description: `This connection cannot change settings on ${unwritable.map((patch) => name(patch.environmentId)).join(", ")}.`,
+        description: t("settings.parallelConnections.cannotChangeSettingsOn", {
+          environments: unwritable.map((patch) => name(patch.environmentId)).join(", "),
+        }),
       });
       return false;
     }
@@ -202,7 +211,12 @@ export function DeviceSourcesSettings(props: {
     const failed = patches.flatMap((patch, index) => {
       const outcome = outcomes[index];
       return outcome && outcome._tag === "Failure"
-        ? [`${name(patch.environmentId)}: ${failureMessage(outcome.cause)}`]
+        ? [
+            t("settings.parallelConnections.environmentFailure", {
+              label: name(patch.environmentId),
+              message: failureMessage(outcome.cause),
+            }),
+          ]
         : [];
     });
     if (failed.length === 0) return true;
@@ -228,6 +242,7 @@ export function DeviceSourcesSettings(props: {
                 host,
                 remove,
                 original,
+                t,
               ),
             },
           })),
@@ -326,7 +341,10 @@ export function DeviceSourcesSettings(props: {
         ? failed
             .map((target) => {
               const result = checked[target.environmentId];
-              return `${target.label}: ${result?.status === "failed" ? result.error : "failed"}`;
+              return t("settings.parallelConnections.environmentFailure", {
+                label: target.label,
+                message: result?.status === "failed" ? result.error : t("settings.text.failed"),
+              });
             })
             .join("\n")
         : t("settings.text.connectedOrAlreadyAvailableLocallyOn"),
@@ -376,7 +394,9 @@ export function DeviceSourcesSettings(props: {
         : t("settings.text.simulatorsAndEmulatorsInstalledOnThis"),
     environments: active.map((member) => {
       const local = member.state?.hosts.find((host) => host.kind === "local");
-      const status = local ? hostStatus(member.state, local.id) : hostStatus(member.state, "");
+      const status = local
+        ? hostStatus(member.state, local.id, t)
+        : hostStatus(member.state, "", t);
       return {
         environmentId: member.environmentId,
         label: member.label,
@@ -429,7 +449,7 @@ export function DeviceSourcesSettings(props: {
           return { environmentId: member.environmentId, label: member.label, added: false };
         const status = testing.has(host.id)
           ? ({ tone: "pending", label: t("settings.text.testingConnection") } as const)
-          : hostStatus(member.state, held.host.id);
+          : hostStatus(member.state, held.host.id, t);
         return {
           environmentId: member.environmentId,
           label: member.label,
@@ -476,7 +496,7 @@ export function DeviceSourcesSettings(props: {
         shared: true,
         title: host.label,
         kind: "EAS",
-        description: easSessionLimits(host),
+        description: easSessionLimits(host, t),
         environments: active.map((member) => {
           const added = (member.settings?.easDeviceHosts ?? []).some(
             (candidate) => candidate.id === host.id,
@@ -487,7 +507,7 @@ export function DeviceSourcesSettings(props: {
             added,
             ...(added
               ? {
-                  status: hostStatus(member.state, host.id),
+                  status: hostStatus(member.state, host.id, t),
                   platforms: hostPlatforms(member.state, host.id),
                 }
               : {}),
@@ -513,7 +533,7 @@ export function DeviceSourcesSettings(props: {
         shared: true,
         title: host.label,
         kind: "Simlock",
-        description: `${host.gatewayUrl.replace(/^https?:\/\//, "")} · ${simlockLeaseLimits(host)}`,
+        description: `${host.gatewayUrl.replace(/^https?:\/\//, "")} · ${simlockLeaseLimits(host, t)}`,
         environments: active.map((member) => {
           const held = (member.settings?.simlockDeviceHosts ?? []).find(
             (candidate) => candidate.id === host.id,
@@ -526,7 +546,7 @@ export function DeviceSourcesSettings(props: {
             added: true,
             platforms: hostPlatforms(member.state, host.id),
             // A blank token can still resolve to the machine's own, so the host's answer decides.
-            status: hostStatus(member.state, host.id),
+            status: hostStatus(member.state, host.id, t),
           };
         }),
         actions: rowActions(edit, () => removeSimlock(host)),
@@ -539,7 +559,7 @@ export function DeviceSourcesSettings(props: {
       <MenuTrigger
         render={<Button size="sm" variant="outline" disabled={disabled || editing !== null} />}
       >
-        <PlusIcon className="size-3.5" /> Add source
+        <PlusIcon className="size-3.5" /> {t("settings.parallelConnections.addSource")}
         <ChevronDownIcon className="size-3.5" />
       </MenuTrigger>
       <MenuPopup align="end">
@@ -676,7 +696,13 @@ function PlatformIcon(props: {
         render={
           <button
             type="button"
-            aria-label={`${props.row.title}: ${props.label} ${available ? "available" : "not available"}`}
+            aria-label={t("settings.parallelConnections.platformAvailabilityAria", {
+              title: props.row.title,
+              platform: props.label,
+              availability: available
+                ? t("settings.text.available")
+                : t("settings.text.notAvailable"),
+            })}
             className={cn(
               "relative grid size-6 shrink-0 place-items-center rounded-md outline-hidden hover:bg-accent focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
               available ? "text-foreground" : "text-muted-foreground/45",
@@ -698,7 +724,7 @@ function PlatformIcon(props: {
           {available
             ? partial
               ? t("settings.text.availableOnSome")
-              : "available"
+              : t("settings.text.available")
             : t("settings.text.notAvailable")}
         </p>
         {props.row.shared ? (
@@ -711,20 +737,20 @@ function PlatformIcon(props: {
                 {(
                   [
                     ...(uniform
-                      ? ([["Connected", connected]] as const)
+                      ? ([["connected", t("settings.text.connected"), connected]] as const)
                       : ([
-                          ["Available", availableOn],
-                          ["Not available", unavailableOn],
+                          ["available", t("settings.text.available"), availableOn],
+                          ["not-available", t("settings.text.notAvailable2"), unavailableOn],
                         ] as const)),
-                    ["Not added", notAdded],
+                    ["not-added", t("settings.parallelConnections.notAdded"), notAdded] as const,
                   ] as const
-                ).map(([heading, environments]) =>
+                ).map(([heading, label, environments]) =>
                   environments.length > 0 ? (
                     <div key={heading}>
-                      <dt className="text-muted-foreground">{heading}</dt>
+                      <dt className="text-muted-foreground">{label}</dt>
                       {environments.map((environment) => {
                         const reason =
-                          heading === "Not available"
+                          heading === "not-available"
                             ? availability(environment)?.reason
                             : undefined;
                         return (

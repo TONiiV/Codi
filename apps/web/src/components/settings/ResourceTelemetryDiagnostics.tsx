@@ -15,6 +15,7 @@ import { ChevronDown, ChevronRight } from "lucide";
 import type {
   BackgroundBooleanState,
   EnvironmentId,
+  HostPowerThermalState,
   ResourceAttributionEntry,
   ResourceTelemetryAggregate,
   ResourceTelemetryHistoryBucket,
@@ -61,6 +62,8 @@ import {
 } from "./ResourceTelemetryDiagnostics.logic";
 import { SettingsSection } from "./settingsLayout";
 import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
+import { englishT } from "~/i18n/englishT";
 
 const HISTORY_WINDOWS = [
   { label: "5m", windowMs: 5 * 60_000, bucketMs: 15_000 },
@@ -87,12 +90,13 @@ function formatDurationMicros(value: number): string {
   return `${(value / 1_000_000).toFixed(2).replace(/\.0+$/, "")} s`;
 }
 
-function formatSampleInterval(valueMs: number): string {
+function formatSampleInterval(valueMs: number, t: TFunction = englishT): string {
   if (valueMs < 1_000) return `${Math.max(0, Math.round(valueMs))} ms`;
   const seconds = valueMs / 1_000;
-  return `${seconds.toLocaleString(undefined, { maximumFractionDigits: 1 })} ${
-    seconds === 1 ? "second" : "seconds"
-  }`;
+  return `${seconds.toLocaleString(undefined, { maximumFractionDigits: 1 })} ${t(
+    "settings.parallelSystem.secondsUnit",
+    { count: seconds },
+  )}`;
 }
 
 function formatProcessName(process: Pick<ResourceTelemetryProcess, "command" | "name">): string {
@@ -102,28 +106,31 @@ function formatProcessName(process: Pick<ResourceTelemetryProcess, "command" | "
   return normalized.split(/[\\/]/).findLast((segment) => segment.length > 0) ?? normalized;
 }
 
-function categoryLabel(category: ResourceTelemetryProcessCategory): string {
+function categoryLabel(
+  category: ResourceTelemetryProcessCategory,
+  t: TFunction = englishT,
+): string {
   switch (category) {
     case "server":
-      return "Server";
+      return t("settings.parallelSystem.categoryServer");
     case "server-child":
-      return "Backend child";
+      return t("settings.parallelSystem.categoryBackendChild");
     case "provider-root":
-      return "Provider";
+      return t("settings.text.provider");
     case "terminal-root":
-      return "Terminal";
+      return t("settings.parallelSystem.categoryTerminal");
     case "electron-main":
-      return "Electron main";
+      return t("settings.parallelSystem.categoryElectronMain");
     case "electron-renderer":
-      return "Renderer";
+      return t("settings.parallelSystem.categoryRenderer");
     case "electron-gpu":
-      return "GPU";
+      return t("settings.parallelSystem.categoryGpu");
     case "electron-utility":
-      return "Electron utility";
+      return t("settings.parallelSystem.categoryElectronUtility");
     case "resource-monitor":
-      return "Monitor";
+      return t("settings.parallelSystem.categoryMonitor");
     case "unknown-t3":
-      return "T3 process";
+      return t("settings.parallelSystem.categoryT3Process");
   }
 }
 
@@ -134,32 +141,52 @@ function categoryDotClass(category: ResourceTelemetryProcessCategory): string {
   return "bg-success";
 }
 
-function ioSemanticsLabel(semantics: ResourceTelemetryIoSemantics): string {
+function ioSemanticsLabel(
+  semantics: ResourceTelemetryIoSemantics,
+  t: TFunction = englishT,
+): string {
   switch (semantics) {
     case "storage":
-      return "Storage bytes";
+      return t("settings.parallelSystem.ioStorageBytes");
     case "logical":
-      return "Logical bytes";
+      return t("settings.parallelSystem.ioLogicalBytes");
     case "all-io":
-      return "All I/O bytes";
+      return t("settings.parallelSystem.ioAllIoBytes");
     case "unavailable":
-      return "Unavailable";
+      return t("settings.text.unavailable");
   }
 }
 
 function booleanStateLabel(
   value: BackgroundBooleanState,
   labels: { readonly true: string; readonly false: string },
+  t: TFunction = englishT,
 ): string {
   if (value === "true") return labels.true;
   if (value === "false") return labels.false;
-  return "Unknown";
+  return t("settings.text.unknown");
 }
 
 function sourceStatusTone(status: ResourceTelemetrySourceStatus): "default" | "warning" | "danger" {
   if (status === "healthy") return "default";
   if (status === "starting" || status === "degraded") return "warning";
   return "danger";
+}
+
+function sourceStatusLabel(status: ResourceTelemetrySourceStatus, t: TFunction = englishT): string {
+  if (status === "healthy") return t("settings.parallelSystem.sourceHealthy");
+  if (status === "starting") return t("settings.text.starting");
+  if (status === "degraded") return t("settings.parallelSystem.sourceDegraded");
+  if (status === "unavailable") return t("settings.text.unavailable");
+  return t("settings.parallelSystem.sourceStopped");
+}
+
+function thermalStateLabel(state: HostPowerThermalState, t: TFunction = englishT): string {
+  if (state === "nominal") return t("settings.parallelSystem.thermalNominal");
+  if (state === "fair") return t("settings.parallelSystem.thermalFair");
+  if (state === "serious") return t("settings.parallelSystem.thermalSerious");
+  if (state === "critical") return t("settings.parallelSystem.thermalCritical");
+  return t("settings.text.unknown");
 }
 
 function SourceStatusBadge({
@@ -176,6 +203,7 @@ function SourceStatusBadge({
       }
     | undefined;
 }) {
+  const { t } = useTranslation();
   const tone = presentation?.tone ?? sourceStatusTone(status);
   return (
     <span
@@ -196,7 +224,7 @@ function SourceStatusBadge({
           tone === "danger" && "bg-destructive",
         )}
       />
-      {label} {presentation?.label ?? status}
+      {label} {presentation?.label ?? sourceStatusLabel(status, t)}
     </span>
   );
 }
@@ -213,7 +241,8 @@ function LastSampleLabel({ sampledAt }: { sampledAt: DateTime.Utc | null }) {
   }
   return (
     <span className="text-2xs text-muted-foreground/60">
-      Updated <span className="font-mono tabular-nums">{relative.value}</span>
+      {t("settings.parallelSystem.updatedPrefix")}{" "}
+      <span className="font-mono tabular-nums">{relative.value}</span>
       {relative.suffix ? ` ${relative.suffix}` : ""}
     </span>
   );
@@ -274,7 +303,12 @@ function AggregateCard({
           {label}
         </div>
         <div className="rounded-md bg-muted/55 px-1.5 py-0.5 font-mono text-3xs tabular-nums text-muted-foreground/70">
-          {aggregate.processCount} {aggregate.processCount === 1 ? "process" : "processes"}
+          {t(
+            aggregate.processCount === 1
+              ? "settings.parallelShared.processCountOne"
+              : "settings.parallelShared.processCountOther",
+            { count: aggregate.processCount },
+          )}
         </div>
       </div>
       <div className="mt-3.5 grid grid-cols-2 gap-x-4 gap-y-2.5">
@@ -322,7 +356,7 @@ function HealthSource({ label, health }: { label: string; health: ResourceTeleme
           {expectedInBrowser
             ? t("settings.text.availableWhenThisPageRunsInside")
             : Option.match(health.lastError, {
-                onNone: () => "No reported errors",
+                onNone: () => t("settings.parallelSystem.noReportedErrors"),
                 onSome: (error) => error,
               })}
         </div>
@@ -399,6 +433,7 @@ function ResourceHistoryChart({
 }: {
   buckets: ReadonlyArray<ResourceTelemetryHistoryBucket>;
 }) {
+  const { t } = useTranslation();
   const maxCpu = resourceHistoryCpuScaleMax(buckets);
   const maxIo = Math.max(1, ...buckets.map((bucket) => bucket.ioReadBytes + bucket.ioWriteBytes));
 
@@ -406,13 +441,16 @@ function ResourceHistoryChart({
     <div className="border-t border-border/60 px-4 py-4 sm:px-5">
       <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-3xs text-muted-foreground/65">
         <span className="inline-flex items-center gap-1.5">
-          <span className="h-1.5 w-3 rounded-full bg-foreground/70" /> CPU average
+          <span className="h-1.5 w-3 rounded-full bg-foreground/70" />{" "}
+          {t("settings.parallelShared.cpuAverageLegend")}
         </span>
         <span className="inline-flex items-center gap-1.5">
-          <span className="h-1.5 w-3 rounded-full bg-info/70" /> I/O reads
+          <span className="h-1.5 w-3 rounded-full bg-info/70" />{" "}
+          {t("settings.parallelShared.ioReadsLegend")}
         </span>
         <span className="inline-flex items-center gap-1.5">
-          <span className="h-1.5 w-3 rounded-full bg-warning/80" /> I/O writes
+          <span className="h-1.5 w-3 rounded-full bg-warning/80" />{" "}
+          {t("settings.parallelShared.ioWritesLegend")}
         </span>
       </div>
       <div className="flex h-32 items-end gap-1 overflow-hidden rounded-lg border border-border/40 bg-muted/8 px-2 pt-3 pb-2">
@@ -454,10 +492,26 @@ function ResourceHistoryChart({
               />
               <TooltipPopup side="top" className="text-left">
                 <div className="space-y-0.5">
-                  <div>CPU avg {bucket.avgCpuPercent.toFixed(1)}%</div>
-                  <div>CPU peak {bucket.maxCpuPercent.toFixed(1)}%</div>
-                  <div>Read {formatBytes(bucket.ioReadBytes)}</div>
-                  <div>Write {formatBytes(bucket.ioWriteBytes)}</div>
+                  <div>
+                    {t("settings.parallelSystem.cpuAverage", {
+                      value: bucket.avgCpuPercent.toFixed(1),
+                    })}
+                  </div>
+                  <div>
+                    {t("settings.parallelSystem.cpuPeak", {
+                      value: bucket.maxCpuPercent.toFixed(1),
+                    })}
+                  </div>
+                  <div>
+                    {t("settings.parallelSystem.readValue", {
+                      value: formatBytes(bucket.ioReadBytes),
+                    })}
+                  </div>
+                  <div>
+                    {t("settings.parallelSystem.writeValue", {
+                      value: formatBytes(bucket.ioWriteBytes),
+                    })}
+                  </div>
                 </div>
               </TooltipPopup>
             </Tooltip>
@@ -631,7 +685,7 @@ function ProcessTable({
                   />
                 </td>
                 <td className="truncate px-3 py-2 text-2xs text-muted-foreground">
-                  {categoryLabel(process.category)}
+                  {categoryLabel(process.category, t)}
                 </td>
                 <td className="px-3 py-2 text-right font-mono tabular-nums">
                   {process.cpuPercent.toFixed(1)}%
@@ -654,7 +708,9 @@ function ProcessTable({
                 <td className="px-3 py-2 text-right font-mono tabular-nums text-muted-foreground">
                   <Tooltip>
                     <TooltipTrigger render={<span>{formatBytes(process.ioWriteBytes)}</span>} />
-                    <TooltipPopup side="top">{ioSemanticsLabel(process.ioSemantics)}</TooltipPopup>
+                    <TooltipPopup side="top">
+                      {ioSemanticsLabel(process.ioSemantics, t)}
+                    </TooltipPopup>
                   </Tooltip>
                 </td>
                 <td className="px-3 py-2 text-right font-mono tabular-nums text-muted-foreground">
@@ -741,7 +797,7 @@ function HistoryProcessTable({
                   </Tooltip>
                 </td>
                 <td className="truncate px-3 py-2 text-2xs text-muted-foreground">
-                  {categoryLabel(process.category)}
+                  {categoryLabel(process.category, t)}
                 </td>
                 <td className="px-3 py-2 text-right font-mono tabular-nums">
                   {formatCpuTime(process.cpuTimeMs)}
@@ -936,9 +992,11 @@ function ResourceTelemetryDiagnosticsBody({
         toastManager.add({
           type: "error",
           title: t("settings.text.couldNotSendSignal", { signal }),
-          description: Option.getOrElse(
-            result.value.message,
-            () => `Failed to send ${signal} to process ${process.identity.pid}.`,
+          description: Option.getOrElse(result.value.message, () =>
+            t("settings.parallelSystem.failedToSendToProcess", {
+              signal,
+              pid: process.identity.pid,
+            }),
           ),
         });
       })
@@ -1050,7 +1108,9 @@ function ResourceTelemetryDiagnosticsBody({
             </div>
             <div className="flex items-center gap-2 text-3xs text-muted-foreground/65">
               <span className="size-1.5 rounded-full bg-success" />
-              Sampling every {snapshot ? formatSampleInterval(snapshot.sampleIntervalMs) : "..."}
+              {t("settings.parallelSystem.samplingEvery", {
+                interval: snapshot ? formatSampleInterval(snapshot.sampleIntervalMs, t) : "...",
+              })}
             </div>
           </div>
           <div className="grid grid-cols-2 divide-x divide-y divide-border/55 md:grid-cols-3">
@@ -1058,14 +1118,24 @@ function ResourceTelemetryDiagnosticsBody({
               icon={<CpuIcon className="size-3.5" />}
               label={t("settings.text.currentCpu")}
               value={allT3 ? `${allT3.currentCpuPercent.toFixed(1)}%` : "..."}
-              detail={allT3 ? `${formatCpuTime(allT3.cpuTimeMs)} observed CPU time` : undefined}
+              detail={
+                allT3
+                  ? t("settings.parallelSystem.observedCpuTime", {
+                      value: formatCpuTime(allT3.cpuTimeMs),
+                    })
+                  : undefined
+              }
             />
             <IconStat
               icon={<MemoryStickIcon className="size-3.5" />}
               label={t("settings.text.residentMemory")}
               value={allT3 ? formatBytes(allT3.currentRssBytes) : "..."}
               detail={
-                allT3 ? `${formatBytes(allT3.peakRssBytes)} combined process peaks` : undefined
+                allT3
+                  ? t("settings.parallelSystem.combinedProcessPeaks", {
+                      value: formatBytes(allT3.peakRssBytes),
+                    })
+                  : undefined
               }
             />
             <IconStat
@@ -1085,13 +1155,25 @@ function ResourceTelemetryDiagnosticsBody({
               icon={<HardDriveIcon className="size-3.5" />}
               label={t("settings.text.readThroughput")}
               value={allT3 ? formatRate(allT3.ioReadBytesPerSecond) : "..."}
-              detail={allT3 ? `${formatBytes(allT3.ioReadBytes)} observed` : undefined}
+              detail={
+                allT3
+                  ? t("settings.parallelSystem.observedBytes", {
+                      value: formatBytes(allT3.ioReadBytes),
+                    })
+                  : undefined
+              }
             />
             <IconStat
               icon={<DatabaseIcon className="size-3.5" />}
               label={t("settings.text.writeThroughput")}
               value={allT3 ? formatRate(allT3.ioWriteBytesPerSecond) : "..."}
-              detail={allT3 ? `${formatBytes(allT3.ioWriteBytes)} observed` : undefined}
+              detail={
+                allT3
+                  ? t("settings.parallelSystem.observedBytes", {
+                      value: formatBytes(allT3.ioWriteBytes),
+                    })
+                  : undefined
+              }
               tone={
                 allT3 && allT3.ioWriteBytesPerSecond >= 10 * 1_024 * 1_024
                   ? "danger"
@@ -1104,7 +1186,11 @@ function ResourceTelemetryDiagnosticsBody({
               icon={<GaugeIcon className="size-3.5" />}
               label={t("settings.text.cpuSpeedLimit")}
               value={
-                snapshot ? (speedLimit === null ? "Unknown" : `${speedLimit.toFixed(0)}%`) : "..."
+                snapshot
+                  ? speedLimit === null
+                    ? t("settings.text.unknown")
+                    : `${speedLimit.toFixed(0)}%`
+                  : "..."
               }
               detail={
                 snapshot
@@ -1168,24 +1254,36 @@ function ResourceTelemetryDiagnosticsBody({
               <>
                 <DetailRow
                   label={t("settings.text.powerSource")}
-                  value={booleanStateLabel(snapshot.power.onBattery, {
-                    true: "Battery",
-                    false: "External power",
-                  })}
+                  value={booleanStateLabel(
+                    snapshot.power.onBattery,
+                    {
+                      true: t("settings.parallelSystem.stateBattery"),
+                      false: t("settings.parallelSystem.stateExternalPower"),
+                    },
+                    t,
+                  )}
                 />
                 <DetailRow
                   label={t("settings.text.lowPowerMode")}
-                  value={booleanStateLabel(snapshot.power.lowPowerMode, {
-                    true: "Enabled",
-                    false: "Disabled",
-                  })}
+                  value={booleanStateLabel(
+                    snapshot.power.lowPowerMode,
+                    {
+                      true: t("settings.text.enabled"),
+                      false: t("settings.text.disabled"),
+                    },
+                    t,
+                  )}
                 />
                 <DetailRow
                   label={t("settings.text.idle")}
-                  value={`${booleanStateLabel(snapshot.power.idle, {
-                    true: "Idle",
-                    false: "Active",
-                  })}${
+                  value={`${booleanStateLabel(
+                    snapshot.power.idle,
+                    {
+                      true: t("settings.text.idle"),
+                      false: t("settings.parallelSystem.stateActive"),
+                    },
+                    t,
+                  )}${
                     snapshot.power.idleSeconds === null
                       ? ""
                       : ` · ${Math.round(snapshot.power.idleSeconds)}s`
@@ -1195,16 +1293,20 @@ function ResourceTelemetryDiagnosticsBody({
                   label={t("settings.text.session")}
                   value={
                     snapshot.power.suspended
-                      ? "Suspended"
-                      : booleanStateLabel(snapshot.power.locked, {
-                          true: "Locked",
-                          false: "Unlocked",
-                        })
+                      ? t("settings.parallelSystem.stateSuspended")
+                      : booleanStateLabel(
+                          snapshot.power.locked,
+                          {
+                            true: t("settings.parallelSystem.stateLocked"),
+                            false: t("settings.parallelSystem.stateUnlocked"),
+                          },
+                          t,
+                        )
                   }
                 />
                 <DetailRow
                   label={t("settings.text.thermal")}
-                  value={snapshot.power.thermalState}
+                  value={thermalStateLabel(snapshot.power.thermalState, t)}
                   valueClassName={
                     snapshot.power.thermalState === "serious" ||
                     snapshot.power.thermalState === "critical"
@@ -1247,7 +1349,10 @@ function ResourceTelemetryDiagnosticsBody({
                 />
                 <DetailRow
                   label={t("settings.text.processScan")}
-                  value={`${snapshot.health.retainedProcessCount}/${snapshot.health.scannedProcessCount} retained`}
+                  value={t("settings.parallelSystem.processScanRetained", {
+                    retained: snapshot.health.retainedProcessCount,
+                    scanned: snapshot.health.scannedProcessCount,
+                  })}
                 />
                 <DetailRow
                   label={t("settings.text.inaccessible")}
@@ -1261,7 +1366,7 @@ function ResourceTelemetryDiagnosticsBody({
                 <DetailRow
                   label={t("settings.text.sidecar")}
                   value={Option.match(snapshot.health.sidecarVersion, {
-                    onNone: () => "Unavailable",
+                    onNone: () => t("settings.text.unavailable"),
                     onSome: (version) =>
                       `${version}${Option.match(snapshot.health.sidecarPid, {
                         onNone: () => "",

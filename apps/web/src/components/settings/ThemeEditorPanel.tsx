@@ -42,6 +42,7 @@ import {
   type ThemeElementInspection,
 } from "./themeInspector";
 import type { TFunction } from "i18next";
+import { themeModeWord } from "./ThemePreviewCircles";
 import { useTranslation } from "react-i18next";
 
 const THEME_EDITOR_SIMPLE_ROLES: ReadonlyArray<ThemeColorRole> = ["canvas", "accent"];
@@ -437,13 +438,13 @@ export function ThemeEditorPanel({
     if (editableAppearances && !editableAppearances.includes(appearance)) {
       return t("settings.text.labelHasNoAppearancePaletteCreate", {
         label: editingTheme?.label,
-        appearance,
+        appearance: themeModeWord(appearance, t),
       });
     }
     if (!isEditing && takenAppearances.includes(appearance)) {
       return t("settings.text.labelAlreadyHasAAppearancePalette", {
         label: mergeTarget?.label,
-        appearance,
+        appearance: themeModeWord(appearance, t),
       });
     }
     return null;

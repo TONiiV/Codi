@@ -15,9 +15,9 @@ import {
 import { useTranslation } from "react-i18next";
 
 const MODES = {
-  static: "Static prefix",
-  semantic: "Semantic prefix",
-  custom: "Custom instructions",
+  static: "settings.parallelA.branchModeStatic",
+  semantic: "settings.parallelA.branchModeSemantic",
+  custom: "settings.manual.scwMode.custom.label",
 } satisfies Record<BranchNamingMode, string>;
 
 export function BranchNamingSettings() {
@@ -41,7 +41,7 @@ export function BranchNamingSettings() {
         description={t("settings.text.chooseHowNewWorktreeBranchesAre")}
         status={
           !modeMixed && settings.branchNamingMode === "semantic"
-            ? "The model chooses a prefix that describes the work, such as feat/add-search, fix/login-timeout, or refactor/auth."
+            ? t("settings.parallelA.branchSemanticStatus")
             : undefined
         }
         resetAction={
@@ -66,14 +66,14 @@ export function BranchNamingSettings() {
             <SelectTrigger size="sm" aria-label={t("settings.text.worktreeBranchNaming")}>
               <SelectValue>
                 {(value: BranchNamingMode | null) =>
-                  value === null ? t("settings.text.mixed") : MODES[value]
+                  value === null ? t("settings.text.mixed") : t(MODES[value])
                 }
               </SelectValue>
             </SelectTrigger>
             <SelectPopup align="end" alignItemWithTrigger={false}>
               {BranchNamingMode.literals.map((mode) => (
                 <SelectItem key={mode} value={mode}>
-                  {MODES[mode]}
+                  {t(MODES[mode])}
                 </SelectItem>
               ))}
             </SelectPopup>

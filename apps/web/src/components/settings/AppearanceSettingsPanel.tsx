@@ -43,12 +43,15 @@ import { TypographySection } from "./TypographySettings";
 import { ThreadDetailsItemsRow } from "./ThreadDetailsItemsRow";
 import { useTranslation } from "react-i18next";
 
+const P = "settings.parallelA.";
+
+// i18n keys, resolved with `t` where shown.
 const ENVIRONMENT_IDENTIFICATION_LABELS: Record<EnvironmentIdentificationMode, string> = {
-  artwork: "Artwork",
-  "nightly-artwork": "Nightly artwork",
-  "dev-artwork": "Dev artwork",
-  pill: "Version pill",
-  none: "None",
+  artwork: P + "envArtwork",
+  "nightly-artwork": P + "envNightlyArtwork",
+  "dev-artwork": P + "envDevArtwork",
+  pill: P + "envVersionPill",
+  none: "settings.text.none",
 };
 
 // The default "artwork" follows the running channel, so it is labeled as that channel's art,
@@ -58,36 +61,36 @@ function environmentIdentificationOptions(
 ): ReadonlyArray<readonly [EnvironmentIdentificationMode, string]> {
   if (stageVariant === "dev") {
     return [
-      ["artwork", "Dev artwork"],
-      ["nightly-artwork", "Nightly artwork"],
-      ["pill", "Version pill"],
-      ["none", "None"],
+      ["artwork", P + "envDevArtwork"],
+      ["nightly-artwork", P + "envNightlyArtwork"],
+      ["pill", P + "envVersionPill"],
+      ["none", "settings.text.none"],
     ];
   }
   if (stageVariant === "nightly") {
     return [
-      ["artwork", "Nightly artwork"],
-      ["dev-artwork", "Dev artwork"],
-      ["pill", "Version pill"],
-      ["none", "None"],
+      ["artwork", P + "envNightlyArtwork"],
+      ["dev-artwork", P + "envDevArtwork"],
+      ["pill", P + "envVersionPill"],
+      ["none", "settings.text.none"],
     ];
   }
   return [
-    ["artwork", "None"],
-    ["nightly-artwork", "Nightly artwork"],
-    ["dev-artwork", "Dev artwork"],
+    ["artwork", "settings.text.none"],
+    ["nightly-artwork", P + "envNightlyArtwork"],
+    ["dev-artwork", P + "envDevArtwork"],
   ];
 }
 
 const CHAT_WIDTH_LABELS: Record<ChatWidth, string> = {
-  comfortable: "Comfortable",
-  wide: "Wide",
-  full: "Full",
+  comfortable: P + "chatWidthComfortable",
+  wide: "settings.text.wide",
+  full: "settings.text.full",
 };
 
 const EFFORT_DISPLAY_LABELS: Record<EffortDisplay, string> = {
-  label: "Word",
-  bars: "Bars",
+  label: P + "effortDisplayWord",
+  bars: "settings.text.bars",
 };
 
 export function AppearanceSettingsPanel() {
@@ -116,6 +119,7 @@ export function AppearanceSettingsPanel() {
     environmentIdentificationOptionList.find(
       ([value]) => value === settings.environmentIdentificationMode,
     )?.[1] ?? ENVIRONMENT_IDENTIFICATION_LABELS[settings.environmentIdentificationMode];
+  const environmentIdentificationLabelText = t(environmentIdentificationLabel);
   const effectiveEnvironmentIdentificationMode = useEnvironmentIdentificationMode();
   const themeHidesEnvironmentArtwork =
     effectiveEnvironmentIdentificationMode === "pill" &&
@@ -201,7 +205,7 @@ export function AppearanceSettingsPanel() {
           resetAction={
             settings.appearanceContrast !== DEFAULT_UNIFIED_SETTINGS.appearanceContrast ? (
               <SettingResetButton
-                label="contrast"
+                label={t("settings.text.contrast")}
                 onClick={() =>
                   updateSettings({
                     appearanceContrast: DEFAULT_UNIFIED_SETTINGS.appearanceContrast,
@@ -314,7 +318,7 @@ export function AppearanceSettingsPanel() {
                   className="w-full min-w-0"
                   aria-label={t("settings.text.chatWidth2")}
                 >
-                  <SelectValue>{CHAT_WIDTH_LABELS[settings.chatWidth]}</SelectValue>
+                  <SelectValue>{t(CHAT_WIDTH_LABELS[settings.chatWidth])}</SelectValue>
                 </SelectTrigger>
                 <SelectPopup align="end" alignItemWithTrigger={false}>
                   <SelectItem value="comfortable">
@@ -355,7 +359,7 @@ export function AppearanceSettingsPanel() {
                   className="w-full min-w-0"
                   aria-label={t("settings.text.effortDisplay2")}
                 >
-                  <SelectValue>{EFFORT_DISPLAY_LABELS[settings.effortDisplay]}</SelectValue>
+                  <SelectValue>{t(EFFORT_DISPLAY_LABELS[settings.effortDisplay])}</SelectValue>
                 </SelectTrigger>
                 <SelectPopup align="end" alignItemWithTrigger={false}>
                   <SelectItem value="label">{t("settings.text.wordDefault")}</SelectItem>
@@ -480,12 +484,12 @@ export function AppearanceSettingsPanel() {
                   className="w-full sm:w-40"
                   aria-label={t("settings.text.environmentIdentification2")}
                 >
-                  <SelectValue>{environmentIdentificationLabel}</SelectValue>
+                  <SelectValue>{environmentIdentificationLabelText}</SelectValue>
                 </SelectTrigger>
                 <SelectPopup align="end" alignItemWithTrigger={false}>
                   {environmentIdentificationOptionList.map(([value, label]) => (
                     <SelectItem hideIndicator key={value} value={value}>
-                      {label}
+                      {t(label)}
                     </SelectItem>
                   ))}
                 </SelectPopup>

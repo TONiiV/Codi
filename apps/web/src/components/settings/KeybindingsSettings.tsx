@@ -251,8 +251,8 @@ function UnknownWhenVariableWarning({
   if (identifiers.length === 0) return null;
   const label =
     identifiers.length === 1
-      ? `Unknown condition: ${identifiers[0]}`
-      : `Unknown conditions: ${identifiers.join(", ")}`;
+      ? t("settings.parallelA.kbUnknownCondition1", { conditions: identifiers[0] })
+      : t("settings.parallelA.kbUnknownConditionN", { conditions: identifiers.join(", ") });
 
   return (
     <WarningTooltipIcon label={label} focusable={focusable} className="size-4.5">
@@ -266,8 +266,15 @@ function KeybindingConflictWarning({ labels }: { labels: ReadonlyArray<string> }
   if (labels.length === 0) return null;
   const description =
     labels.length === 1
-      ? `Conflicts with ${labels[0]}.`
-      : `Conflicts with ${labels.slice(0, 3).join(", ")}${labels.length > 3 ? t("settings.text.andMore") : ""}.`;
+      ? t("settings.parallelA.kbConflicts", { labels: labels[0] })
+      : t(
+          labels.length > 3
+            ? "settings.parallelA.kbConflictsMore"
+            : "settings.parallelA.kbConflicts",
+          {
+            labels: labels.slice(0, 3).join(", "),
+          },
+        );
 
   return (
     <WarningTooltipIcon label={description}>
@@ -1099,7 +1106,7 @@ function useNewKeybindingDraft({
   );
   const commandLabelText = commandDraft
     ? commandLabel(commandDraft, t)
-    : t("settings.text.newKeybinding");
+    : t("settings.text.newKeybindingLabel");
   const canSave = Boolean(commandDraft) && keyDraft.trim().length > 0 && isWhenDraftValid;
 
   const save = () => {

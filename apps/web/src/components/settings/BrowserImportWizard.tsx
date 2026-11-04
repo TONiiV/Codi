@@ -25,6 +25,7 @@ import {
   canCloseWizard,
   isRetryableReason,
   formatSkippedDomains,
+  browserImportFailureText,
   fullDiskAccessRecheckStep,
   outcomeToStep,
   refreshedSourceProfileDirectory,
@@ -36,6 +37,7 @@ import {
   type WizardTargetSelection,
   type WizardStep,
 } from "./browserImportWizard.logic";
+import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 
 export type { WizardTarget } from "./browserImportWizard.logic";
@@ -210,14 +212,16 @@ function QuitStep({
   );
 }
 
-function cookieCountLabel(count: number | undefined): string | undefined {
-  if (count === undefined) return undefined;
-  if (count === 0) return "no cookies";
-  return `${count.toLocaleString()} ${count === 1 ? "cookie" : "cookies"}`;
+function cookieResultCount(count: number, t: TFunction): string {
+  return t(count === 1 ? "settings.parallelA.cookies1" : "settings.parallelA.cookiesN", {
+    count: count.toLocaleString(),
+  });
 }
 
-function cookieResultCount(count: number): string {
-  return `${count.toLocaleString()} ${count === 1 ? "cookie" : "cookies"}`;
+function cookieCountLabel(count: number | undefined, t: TFunction): string | undefined {
+  if (count === undefined) return undefined;
+  if (count === 0) return t("settings.parallelA.cookiesNone");
+  return cookieResultCount(count, t);
 }
 
 type ConfigureStepProps = {
@@ -365,7 +369,7 @@ function ConfigureStep({
                 key={profile.directory}
                 selected={sourceProfileDirectory === profile.directory}
                 title={profile.name}
-                subtitle={cookieCountLabel(profile.cookieCount)}
+                subtitle={cookieCountLabel(profile.cookieCount, t)}
                 onSelect={() => onSourceProfileChange(profile.directory)}
               />
             ))}
@@ -532,14 +536,25 @@ function DoneStep({
       <DialogHeader>
         <DialogTitle>
           {imported > 0
-            ? `Imported ${cookieResultCount(imported)}`
+            ? t("settings.parallelA.cookiesImported", { count: cookieResultCount(imported, t) })
             : skipped > 0
-              ? `Skipped ${cookieResultCount(skipped)}`
+              ? t("settings.parallelA.cookiesSkippedTitle", {
+                  count: cookieResultCount(skipped, t),
+                })
               : t("settings.text.noCookiesFound")}
         </DialogTitle>
         <DialogDescription>
           {imported > 0
-            ? `Added to ${targetName} for ${destinationEnvironmentName}.${skipped > 0 ? ` ${cookieResultCount(skipped)} skipped.` : ""}`
+            ? t(
+                skipped > 0
+                  ? "settings.parallelA.cookiesAddedToSkipped"
+                  : "settings.parallelA.cookiesAddedTo",
+                {
+                  target: targetName,
+                  environment: destinationEnvironmentName,
+                  skipped: cookieResultCount(skipped, t),
+                },
+              )
             : skipped > 0
               ? t("settings.text.noCookiesWereImportedForDestinationenvironmentna", {
                   destinationEnvironmentName,
@@ -552,7 +567,7 @@ function DoneStep({
           <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
             {t("settings.text.skipped")}
           </p>
-          <p className="mt-1 text-sm text-foreground">{formatSkippedDomains(skippedDomains)}</p>
+          <p className="mt-1 text-sm text-foreground">{formatSkippedDomains(skippedDomains, t)}</p>
         </DialogPanel>
       ) : null}
       <DialogFooter>
@@ -582,7 +597,9 @@ function BlockedStep({
     <>
       <DialogHeader>
         <DialogTitle>{t("settings.text.couldnTImportFromName", { name: source.name })}</DialogTitle>
-        <DialogDescription>{message ?? BROWSER_IMPORT_FAILURE_COPY[reason]}</DialogDescription>
+        <DialogDescription>
+          {message ?? browserImportFailureText(reason, BROWSER_IMPORT_FAILURE_COPY[reason], t)}
+        </DialogDescription>
       </DialogHeader>
       <DialogFooter>
         <Button variant="outline" onClick={onClose}>

@@ -42,6 +42,7 @@ export function useHostConnectionChecks(targets: ReadonlyArray<DeviceHostCheckTa
           [key]: { ...current[key], [environmentId]: result },
         }));
       },
+      t,
     ).finally(() => running.current.delete(key));
     return results;
   };

@@ -23,5 +23,6 @@ void i18n.use(initReactI18next).init({
   resources: { en: { translation: en }, "zh-CN": { translation: zhCN } },
   lng: resolveLanguage("system"),
   fallbackLng: "en",
+  initAsync: false,
   interpolation: { escapeValue: false },
 });

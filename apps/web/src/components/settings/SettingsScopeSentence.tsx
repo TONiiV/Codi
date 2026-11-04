@@ -84,7 +84,11 @@ export function SettingsScopeSentence() {
       </span>
       <span className="flex min-w-0 items-center gap-1.5">
         <span className="shrink-0">
-          {scope.search.machine || scope.scope.kind === "checkout" ? "on" : "across"}
+          {t(
+            scope.search.machine || scope.scope.kind === "checkout"
+              ? "settings.parallelA.scopeOn"
+              : "settings.parallelA.scopeAcross",
+          )}
         </span>
         <EnvironmentScopeMenu {...props} />
       </span>
@@ -344,7 +348,9 @@ function ProjectScopeMenu({ value, groups, environments, onChange }: SettingsSco
         return {
           value: group.projectKey,
           label: group.displayName,
-          secondary: group.archived ? ["Archived", location].filter(Boolean).join(" · ") : location,
+          secondary: group.archived
+            ? [t("settings.parallelA.archivedBadge"), location].filter(Boolean).join(" · ")
+            : location,
           icon: <ProjectFavicon project={group} className="size-3.5 shrink-0" />,
         };
       })}

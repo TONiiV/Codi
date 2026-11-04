@@ -159,22 +159,29 @@ export function scheduleDraftErrors(draft: DraftState, t: TFunction = englishT) 
   return errors;
 }
 
-export function webhookDeliveryLabel(delivery: {
-  readonly outcome: string;
-  readonly pendingWindow?: boolean | undefined;
-}) {
-  if (delivery.outcome === "accepted") return delivery.pendingWindow ? "Opened window" : "Ran";
-  const labels: Record<string, string> = {
-    dispatch_failed: "Run failed",
-    duplicate: "Duplicate",
-    coalesced: "Coalesced",
-    filtered: "Filtered",
-    rejected_signature: "Bad signature",
-    disabled: "Task paused",
-    rate_limited: "Rate limited",
-    expired: "Too old",
+export function webhookDeliveryLabel(
+  delivery: {
+    readonly outcome: string;
+    readonly pendingWindow?: boolean | undefined;
+  },
+  t: TFunction = englishT,
+) {
+  if (delivery.outcome === "accepted")
+    return delivery.pendingWindow
+      ? t("settings.text.openedWindow")
+      : t("settings.parallelSystem.ran");
+  const labelKeys: Record<string, string> = {
+    dispatch_failed: "settings.parallelSystem.runFailed",
+    duplicate: "settings.parallelSystem.duplicate",
+    coalesced: "settings.parallelSystem.coalesced",
+    filtered: "settings.parallelSystem.filtered",
+    rejected_signature: "settings.parallelSystem.badSignature",
+    disabled: "settings.parallelSystem.taskPaused",
+    rate_limited: "settings.parallelSystem.rateLimited",
+    expired: "settings.parallelSystem.tooOld",
   };
-  return labels[delivery.outcome] ?? delivery.outcome.replaceAll("_", " ");
+  const labelKey = labelKeys[delivery.outcome];
+  return labelKey ? t(labelKey) : delivery.outcome.replaceAll("_", " ");
 }
 
 export function scheduleFromDraft(draft: DraftState): ScheduledTaskUpsertSchedule | null {

@@ -9,7 +9,7 @@ import {
 
 import { useUpdateEnvironmentSettings } from "../../hooks/useSettings";
 import { useEnvironmentScope } from "../../state/session";
-import { ENVIRONMENT_MACHINE_KIND_LABELS, EnvironmentMachineIcon } from "../EnvironmentMachineIcon";
+import { EnvironmentMachineIcon, environmentMachineKindLabel } from "../EnvironmentMachineIcon";
 import {
   MenuItem,
   MenuRadioGroup,
@@ -20,16 +20,21 @@ import {
   MenuSubTrigger,
 } from "../ui/menu";
 import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
+import { englishT } from "~/i18n/englishT";
 
-export function resolveEnvironmentIconPickerLock(input: {
-  readonly serverConfig: Pick<ServerConfig, "environment"> | null;
-  readonly operateAccess: "granted" | "denied" | "pending";
-}): string | null {
+export function resolveEnvironmentIconPickerLock(
+  input: {
+    readonly serverConfig: Pick<ServerConfig, "environment"> | null;
+    readonly operateAccess: "granted" | "denied" | "pending";
+  },
+  t: TFunction = englishT,
+): string | null {
   if (input.serverConfig === null) {
-    return "Connect to this environment to change its icon.";
+    return t("settings.text.connectToThisEnvironmentToChange");
   }
   if (input.operateAccess !== "granted") {
-    return "Your session on this environment cannot change its settings.";
+    return t("settings.text.yourSessionOnThisEnvironmentCannot");
   }
   return null;
 }
@@ -46,7 +51,7 @@ export function EnvironmentIconMenu({
   const operateAccess = useEnvironmentScope(environmentId, AuthSettingsWriteScope)
     ? "granted"
     : "denied";
-  const lock = resolveEnvironmentIconPickerLock({ serverConfig, operateAccess });
+  const lock = resolveEnvironmentIconPickerLock({ serverConfig, operateAccess }, t);
   const detected = serverConfig?.environment.platform.machine ?? "server";
   const resolved = resolveEnvironmentMachineKind(serverConfig);
 
@@ -77,11 +82,13 @@ export function EnvironmentIconMenu({
               <span className="flex min-w-0 items-center gap-2">
                 <EnvironmentMachineIcon kind={kind} className="size-3.5 shrink-0" />
                 <span className="min-w-0 flex-1 truncate">
-                  {ENVIRONMENT_MACHINE_KIND_LABELS[kind]}
+                  {environmentMachineKindLabel(kind, t)}
                 </span>
                 {kind === detected ? (
                   <span className="shrink-0 text-xs text-muted-foreground">
-                    {serverConfig?.environment.platform.machine ? "detected" : "default"}
+                    {serverConfig?.environment.platform.machine
+                      ? t("settings.parallelConnections.detected")
+                      : t("settings.text.default")}
                   </span>
                 ) : null}
               </span>
