@@ -1,6 +1,6 @@
-// PROTOTYPE, wipe me. Floating Lighthouse / Code switch at the top centre of the app. It rests as a
-// faint capsule and morphs into a two-icon switch when the pointer comes near. Pure CSS hover, so
-// nothing animates while the pointer is elsewhere.
+// PROTOTYPE, wipe me. Floating Telescope / Microscope switch at the top centre of the app (the
+// Lighthouse and Code modes). It rests as a faint capsule and morphs into a two-icon switch when
+// the pointer comes near. Pure CSS hover, so nothing animates while the pointer is elsewhere.
 import { useNavigate } from "@tanstack/react-router";
 import type { SVGProps } from "react";
 
@@ -10,100 +10,118 @@ import { useLighthouseSearch } from "./lighthouseLocation";
 // Hover animations are scoped to each segment's own group, so they run only while that segment is
 // under the pointer (or keyboard focus) and stop the moment it leaves.
 
-// Monochrome silhouette after the reference: twin beams, lantern, tapered tower with a light slit,
-// stepped base on a rock.
-function LighthouseGlyph({ live, ...props }: SVGProps<SVGSVGElement> & { live?: boolean }) {
-  const pivot = { transformBox: "view-box", transformOrigin: "12px 6.2px" } as const;
+const TUBE = { transformBox: "view-box", transformOrigin: "10px 12.5px" } as const;
+const LENS = { transformBox: "view-box", transformOrigin: "21.5px 12.5px" } as const;
+
+// Monochrome telescope on a tripod. Live, the tube dips low, sweeps up high and the lens flares.
+function TelescopeGlyph({ live, ...props }: SVGProps<SVGSVGElement> & { live?: boolean }) {
   return (
     <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" {...props}>
-      <g
-        style={pivot}
-        className={cn(
-          "opacity-55",
-          live &&
-            "motion-safe:group-hover/lh:animate-lighthouse-beam motion-safe:group-focus-visible/lh:animate-lighthouse-beam",
-        )}
-      >
-        <path d="M9.7 5.3v1.9L2.2 8.9V3.6z" />
-        <path d="M14.3 5.3v1.9l7.5 1.7V3.6z" />
+      <g transform="rotate(-20 10 12.5)">
+        <g
+          style={TUBE}
+          className={cn(
+            live &&
+              "motion-safe:group-hover/tele:animate-telescope-sweep motion-safe:group-focus-visible/tele:animate-telescope-sweep",
+          )}
+        >
+          <path d="M1.6 11.6h1.6v1.8H1.6z" />
+          <path d="m3.2 11.2 15.4-1.1v4.8l-15.4-1.1z" />
+          <path d="M18.6 9.6h2.9v5.8h-2.9z" />
+          <path d="M6.8 9.4h4v1.1h-4z" />
+          {live ? (
+            <circle
+              cx="21.5"
+              cy="12.5"
+              r="1.2"
+              style={LENS}
+              className="opacity-0 motion-safe:group-hover/tele:animate-telescope-glint motion-safe:group-focus-visible/tele:animate-telescope-glint"
+            />
+          ) : null}
+        </g>
       </g>
-      <path d="M11.75 2h.5v.9h-.5z" />
-      <path d="M10.3 4.5a1.7 1.7 0 0 1 3.4 0z" />
-      <path fillRule="evenodd" d="M10.2 4.5h3.6v3.3h-3.6zm.7.7v1.9h2.2V5.2z" />
-      <path d="M9.5 7.8h5v.9h-5z" />
-      <path fillRule="evenodd" d="M10.3 8.7h3.4l1.1 8.9H9.2zm2.2.8.5 7.3h.6l-.6-7.3z" />
-      <path d="M8.4 17.6h7.2v1H8.4zM7.6 18.6h8.8v.9H7.6z" />
-      <path d="M6.6 19.5h10.8l3.4 2.2h-6.3l-.9.8H3.6z" />
-      {live ? (
-        <circle
-          cx="12"
-          cy="6.2"
-          r="1.1"
-          style={pivot}
-          className="opacity-0 motion-safe:group-hover/lh:animate-lighthouse-lamp motion-safe:group-focus-visible/lh:animate-lighthouse-lamp"
-        />
-      ) : null}
+      <path d="M9.1 13.4h1.8v2.2H9.1z" />
+      <path
+        d="M10 15.2 5.3 22M10 15.2l4.7 6.8M10 15.2V22"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={1.3}
+        strokeLinecap="round"
+      />
     </svg>
   );
 }
 
-// The beam reaching the "camera". Drawn outside the island so the island's clipping does not cut it
-// to the segment; anchored on the lamp, which sits a fixed distance left of the island's centre.
-const FLARE_RUN = "motion-safe:group-has-[[data-lh]:hover]/island:opacity-100";
-function LighthouseFlare() {
+// The glare reaching the "camera" at the top of the sweep. Drawn outside the island so the
+// island's clipping does not cut it; anchored where the lens is at that moment.
+const FLARE_RUN = "motion-safe:group-has-[[data-tele]:hover]/island:opacity-100";
+function TelescopeFlare() {
   return (
     <span
       aria-hidden="true"
       className={cn(
-        "pointer-events-none absolute top-1/2 left-1/2 -mt-1 -ms-26 size-0 opacity-0",
+        "pointer-events-none absolute top-1/2 left-1/2 -mt-2 -ms-23.5 size-0 opacity-0",
         FLARE_RUN,
-        "motion-safe:group-has-[[data-lh]:focus-visible]/island:opacity-100",
+        "motion-safe:group-has-[[data-tele]:focus-visible]/island:opacity-100",
       )}
     >
-      <span className="absolute size-24 -translate-1/2 rounded-full bg-radial from-zinc-25 from-0% via-muted-foreground/35 via-30% to-transparent to-65% opacity-0 motion-safe:group-has-[[data-lh]:hover]/island:animate-lighthouse-bloom motion-safe:group-has-[[data-lh]:focus-visible]/island:animate-lighthouse-bloom" />
-      <span className="absolute h-0.5 w-28 -translate-1/2 rounded-full bg-linear-to-r from-transparent via-zinc-25 to-transparent opacity-0 drop-shadow-sm motion-safe:group-has-[[data-lh]:hover]/island:animate-lighthouse-streak motion-safe:group-has-[[data-lh]:focus-visible]/island:animate-lighthouse-streak" />
-      <span className="absolute left-26 size-5 -translate-1/2 rounded-full border border-muted-foreground/40 bg-zinc-25/20 opacity-0 motion-safe:group-has-[[data-lh]:hover]/island:animate-lighthouse-ghost motion-safe:group-has-[[data-lh]:focus-visible]/island:animate-lighthouse-ghost" />
-      <span className="absolute left-36 size-2.5 -translate-1/2 rounded-full bg-muted-foreground/30 opacity-0 motion-safe:group-has-[[data-lh]:hover]/island:animate-lighthouse-ghost motion-safe:group-has-[[data-lh]:focus-visible]/island:animate-lighthouse-ghost" />
-      <span className="absolute left-46 size-6 -translate-1/2 rounded-full bg-radial from-transparent from-50% via-muted-foreground/30 via-65% to-transparent to-75% opacity-0 motion-safe:group-has-[[data-lh]:hover]/island:animate-lighthouse-ghost motion-safe:group-has-[[data-lh]:focus-visible]/island:animate-lighthouse-ghost" />
+      <span className="absolute size-24 -translate-1/2 rounded-full bg-radial from-zinc-25 from-0% via-muted-foreground/35 via-30% to-transparent to-65% opacity-0 motion-safe:group-has-[[data-tele]:hover]/island:animate-telescope-bloom motion-safe:group-has-[[data-tele]:focus-visible]/island:animate-telescope-bloom" />
+      <span className="absolute h-0.5 w-28 -translate-1/2 rounded-full bg-linear-to-r from-transparent via-zinc-25 to-transparent opacity-0 drop-shadow-sm motion-safe:group-has-[[data-tele]:hover]/island:animate-telescope-streak motion-safe:group-has-[[data-tele]:focus-visible]/island:animate-telescope-streak" />
+      <span className="absolute left-26 size-5 -translate-1/2 rounded-full border border-muted-foreground/40 bg-zinc-25/20 opacity-0 motion-safe:group-has-[[data-tele]:hover]/island:animate-telescope-ghost motion-safe:group-has-[[data-tele]:focus-visible]/island:animate-telescope-ghost" />
+      <span className="absolute left-36 size-2.5 -translate-1/2 rounded-full bg-muted-foreground/30 opacity-0 motion-safe:group-has-[[data-tele]:hover]/island:animate-telescope-ghost motion-safe:group-has-[[data-tele]:focus-visible]/island:animate-telescope-ghost" />
+      <span className="absolute left-46 size-6 -translate-1/2 rounded-full bg-radial from-transparent from-50% via-muted-foreground/30 via-65% to-transparent to-75% opacity-0 motion-safe:group-has-[[data-tele]:hover]/island:animate-telescope-ghost motion-safe:group-has-[[data-tele]:focus-visible]/island:animate-telescope-ghost" />
     </span>
   );
 }
 
-function CodeGlyph({ live, ...props }: SVGProps<SVGSVGElement> & { live?: boolean }) {
-  const pivot = { transformBox: "view-box", transformOrigin: "12px 12px" } as const;
+const SPECIMEN = { transformBox: "view-box", transformOrigin: "9.5px 15px" } as const;
+
+// Monochrome microscope. Live, the objective drops onto the slide, a focus ring zooms into the
+// detail, then shrinks back and the icon comes to rest.
+function MicroscopeGlyph({
+  live,
+  className,
+  ...props
+}: SVGProps<SVGSVGElement> & { live?: boolean }) {
   return (
     <svg
       viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={1.75}
-      strokeLinecap="round"
-      strokeLinejoin="round"
+      fill="currentColor"
       aria-hidden="true"
+      className={cn("overflow-visible", className)}
       {...props}
     >
-      <path
-        d="m8 7-5 5 5 5"
+      <g
         className={cn(
           live &&
-            "motion-safe:group-hover/code:animate-code-left motion-safe:group-focus-visible/code:animate-code-left",
+            "motion-safe:group-hover/micro:animate-microscope-tube motion-safe:group-focus-visible/micro:animate-microscope-tube",
         )}
-      />
+      >
+        <path d="M7.9 1.8h3.2v1.6H7.9z" />
+        <path d="M8.4 3.4h2.2V10H8.4z" />
+        <path d="M8.9 10h1.2v2.2H8.9z" />
+      </g>
+      <path d="M10.6 6.6H13v1.6h-2.4z" />
       <path
-        d="m16 7 5 5-5 5"
-        className={cn(
-          live &&
-            "motion-safe:group-hover/code:animate-code-right motion-safe:group-focus-visible/code:animate-code-right",
-        )}
+        d="M15.2 20.2v-6.4c0-2.6-1-4.6-2.6-5.8"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={1.9}
+        strokeLinecap="round"
       />
-      <path
-        d="m13.5 4.5-3 15"
-        style={pivot}
-        className={cn(
-          live &&
-            "motion-safe:group-hover/code:animate-code-slash motion-safe:group-focus-visible/code:animate-code-slash",
-        )}
-      />
+      <path d="M5.5 15.6h9.5v1.1H5.5z" />
+      <rect x="5" y="20" width="14" height="2" rx="1" />
+      {live ? (
+        <g
+          style={SPECIMEN}
+          className="opacity-0 motion-safe:group-hover/micro:animate-microscope-focus motion-safe:group-focus-visible/micro:animate-microscope-focus"
+        >
+          <circle cx="9.5" cy="15" r="2.2" fill="none" stroke="currentColor" strokeWidth={0.35} />
+          <circle cx="8.8" cy="14.6" r="0.35" />
+          <circle cx="10.1" cy="15.4" r="0.25" />
+          <circle cx="9.9" cy="14.3" r="0.2" />
+        </g>
+      ) : null}
     </svg>
   );
 }
@@ -111,11 +129,11 @@ function CodeGlyph({ live, ...props }: SVGProps<SVGSVGElement> & { live?: boolea
 export function LighthouseIsland() {
   const navigate = useNavigate();
   const onWork = useLighthouseSearch() !== null;
-  const Current = onWork ? LighthouseGlyph : CodeGlyph;
+  const Current = onWork ? TelescopeGlyph : MicroscopeGlyph;
   const modes = [
     {
       id: "work",
-      label: "Lighthouse",
+      label: "Telescope",
       active: onWork,
       go: () =>
         void navigate({
@@ -125,7 +143,7 @@ export function LighthouseIsland() {
     },
     {
       id: "code",
-      label: "Code",
+      label: "Microscope",
       active: !onWork,
       go: () => void navigate({ to: "/" }),
     },
@@ -137,7 +155,7 @@ export function LighthouseIsland() {
     <div className="group/island fixed top-(--workspace-controls-top) left-1/2 z-50 flex h-(--workspace-topbar-height) w-80 -translate-x-1/2 items-center justify-center [-webkit-app-region:no-drag]">
       <div
         role="group"
-        aria-label="Lighthouse or Code"
+        aria-label="Telescope or Microscope"
         className={cn(
           "relative flex h-6 w-14 items-center justify-center overflow-hidden rounded-full border border-transparent bg-foreground/85 opacity-45 shadow-sm",
           "transition-[width,height,border-radius,background-color,opacity,box-shadow] duration-300 ease-out motion-reduce:transition-none",
@@ -169,28 +187,28 @@ export function LighthouseIsland() {
             <button
               key={m.id}
               type="button"
-              data-lh={m.id === "work" ? "" : undefined}
+              data-tele={m.id === "work" ? "" : undefined}
               aria-pressed={m.active}
               onClick={m.active ? undefined : m.go}
               className={cn(
                 "relative z-10 flex items-center justify-center gap-2 rounded-xl text-sm font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
-                m.id === "work" ? "group/lh" : "group/code",
+                m.id === "work" ? "group/tele" : "group/micro",
                 m.active
                   ? "cursor-default text-background"
                   : "cursor-pointer text-muted-foreground hover:text-foreground",
               )}
             >
               {m.id === "work" ? (
-                <LighthouseGlyph className="relative size-4.5" live />
+                <TelescopeGlyph className="relative size-4.5" live />
               ) : (
-                <CodeGlyph className="relative size-4.5" live />
+                <MicroscopeGlyph className="relative size-4.5" live />
               )}
               {m.label}
             </button>
           ))}
         </div>
       </div>
-      <LighthouseFlare />
+      <TelescopeFlare />
     </div>
   );
 }

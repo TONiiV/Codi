@@ -1,5 +1,5 @@
 // PROTOTYPE, wipe me. Bottom-left account row, after Claude Code: avatar, name · workspace and a
-// menu to switch workspace (and, on Lighthouse, members and the viewer); settings sits on the right.
+// menu to switch workspace (企业 or 个人; on Telescope also members and the viewer); settings on the right.
 import { useNavigate } from "@tanstack/react-router";
 import { ChevronsUpDownIcon, SettingsIcon, UsersIcon } from "lucide-react";
 
@@ -17,7 +17,7 @@ import {
   MenuTrigger,
 } from "../ui/menu";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
-import { VIEWERS, WORKSPACES, type LighthouseViewer } from "./lighthouseData";
+import { VIEWERS, WORKSPACES, WORKSPACE_KIND, type LighthouseViewer } from "./lighthouseData";
 import { normalizeLighthouseSearch, useLighthouseSearch } from "./lighthouseLocation";
 import { setWorkspace, useWorkspaceId } from "./workspaceStore";
 
@@ -52,7 +52,10 @@ export function WorkspaceUserMenu({ compact }: { compact?: boolean }) {
           <>
             <span className="min-w-0 truncate">
               <span className="font-medium">{viewer.name}</span>
-              <span className="text-muted-foreground"> · {workspace.name}</span>
+              <span className="text-muted-foreground">
+                {" "}
+                · {workspace.name} · {WORKSPACE_KIND[workspace.kind]}
+              </span>
             </span>
             <ChevronsUpDownIcon className="size-3.5 shrink-0 text-muted-foreground" />
           </>
@@ -70,7 +73,10 @@ export function WorkspaceUserMenu({ compact }: { compact?: boolean }) {
           >
             {WORKSPACES.map((w) => (
               <MenuRadioItem key={w.id} value={w.id}>
-                {w.name}
+                <span className="flex flex-1 items-center justify-between gap-3">
+                  {w.name}
+                  <span className="text-xs text-muted-foreground">{WORKSPACE_KIND[w.kind]}</span>
+                </span>
               </MenuRadioItem>
             ))}
           </MenuRadioGroup>

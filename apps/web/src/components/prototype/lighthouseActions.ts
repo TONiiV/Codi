@@ -6,12 +6,17 @@ import { useSyncExternalStore } from "react";
 import {
   BOTS,
   CHIEF_NAMES,
+  COMPANY_AGENTS,
+  CUSTOM_AGENTS,
+  NO_CHIEF,
   PROJECT_COS,
   TASKS,
   VIEWERS,
   chiefName,
-  projectsIn,
+  chiefProjects,
+  customAgent,
   registerProject,
+  type CompanyAgent,
   type LighthouseBot,
   type LighthouseTask,
   type LighthouseViewer,
@@ -128,10 +133,10 @@ export function findTask(id: string): LighthouseTask | undefined {
   return t ? withChanges(store, t) : undefined;
 }
 
-/** The agent that owns a task: its project Chief Agent, or the desk for desk tasks. */
+/** The agent that owns a task: the viewer's Chief Agent in its project, or 主代理 for its own. */
 export function taskAgent(task: LighthouseTask, viewer: LighthouseViewer, workspace: string) {
-  if (task.assignees.some((a) => a.kind === "bot" && a.name === "公司主 Agent")) return "desk";
-  return projectsIn(workspace, viewer).open.includes(task.project) ? task.project : "mine";
+  if (task.assignees.some((a) => a.kind === "bot" && a.name === "主代理")) return "desk";
+  return chiefProjects(workspace, viewer).includes(task.project) ? task.project : "mine";
 }
 
 export function openTaskInSideChat(chat: string, task: string, kickoff?: Kickoff) {
@@ -225,7 +230,7 @@ function defaultCos(viewer: LighthouseViewer, project: string | null, _version: 
   return {
     name: project ? chiefName(viewer, project) : VIEWERS[viewer].cos.name,
     harness: "Codi 滚动线程 / Sonnet",
-    powers: project ? ["ticket", "worker", "answer"] : ["answer"],
+    powers: project && !customAgent(project) ? ["ticket", "worker", "answer"] : ["answer"],
     report: "daily",
     board: true,
     dispatchable: true,
@@ -273,6 +278,33 @@ export function saveCos(viewer: LighthouseViewer, project: string | null, setup:
   if (project) CHIEF_NAMES[`${viewer}:${project}`] = setup.name;
   else VIEWERS[viewer].cos = { name: setup.name };
   update({ cos: { ...store.cos, [cosKey(viewer, project)]: setup }, version: store.version + 1 });
+}
+
+/** The viewer adds their own Chief Agent to a project they are in. */
+export function addChiefAgent(viewer: LighthouseViewer, project: string, setup: CosSetup) {
+  NO_CHIEF.delete(`${viewer}:${project}`);
+  saveCos(viewer, project, setup);
+}
+
+/** A custom agent is personal: it belongs to the viewer in one workspace. */
+export function addCustomAgent(
+  viewer: LighthouseViewer,
+  workspace: string,
+  skills: ReadonlyArray<string>,
+  setup: CosSetup,
+) {
+  const id = `custom-${CUSTOM_AGENTS.length + 1}`;
+  CUSTOM_AGENTS.push({ id, viewer, workspace, skills });
+  saveCos(viewer, id, setup);
+  return id;
+}
+
+/** Only a company admin changes a company agent; the UI checks, the real server would too. */
+export function saveCompanyAgent(id: string, patch: Pick<CompanyAgent, "name" | "owner" | "can">) {
+  const i = COMPANY_AGENTS.findIndex((a) => a.id === id);
+  if (i < 0) return;
+  COMPANY_AGENTS[i] = { ...COMPANY_AGENTS[i]!, ...patch };
+  update({ version: store.version + 1 });
 }
 
 /** Turns a Code project into a Lighthouse project led by the viewer, with their Chief Agent. */

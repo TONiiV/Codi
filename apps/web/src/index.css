@@ -230,16 +230,15 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(t3-mobil
   --animate-stash-pulse-row: stash-pulse-row 1400ms;
   --animate-stash-pulse-row-alt: stash-pulse-row-alt 1400ms;
   --animate-stash-pulse-count: stash-pulse-count 1400ms step-start;
-  /* PROTOTYPE, wipe me: Lighthouse island hover animations. Each plays once when a segment is
-     hovered; leaving and coming back replays it. */
-  --animate-lighthouse-beam: lighthouse-beam 1.4s ease-in-out;
-  --animate-lighthouse-lamp: lighthouse-lamp 1.4s ease-in-out;
-  --animate-lighthouse-bloom: lighthouse-bloom 1.4s ease-out;
-  --animate-lighthouse-streak: lighthouse-streak 1.4s ease-out;
-  --animate-lighthouse-ghost: lighthouse-ghost 1.4s ease-out;
-  --animate-code-left: code-left 0.9s ease-in-out;
-  --animate-code-right: code-right 0.9s ease-in-out;
-  --animate-code-slash: code-slash 0.9s ease-in-out;
+  /* PROTOTYPE, wipe me: Telescope / Microscope island hover animations. Each plays once when a
+     segment is hovered; leaving and coming back replays it. */
+  --animate-telescope-sweep: telescope-sweep 1.4s ease-in-out;
+  --animate-telescope-glint: telescope-glint 1.4s ease-in-out;
+  --animate-telescope-bloom: telescope-bloom 1.4s ease-out;
+  --animate-telescope-streak: telescope-streak 1.4s ease-out;
+  --animate-telescope-ghost: telescope-ghost 1.4s ease-out;
+  --animate-microscope-tube: microscope-tube 1.6s ease-in-out;
+  --animate-microscope-focus: microscope-focus 1.6s ease-in-out;
   --color-warning-foreground: var(--warning-foreground);
   --color-warning: var(--warning);
   --color-warning-surface: var(--warning-surface);
@@ -354,20 +353,21 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(t3-mobil
       opacity: 1;
     }
   }
-  @keyframes lighthouse-beam {
-    /* The twin beams turn toward the viewer (scaleX shrinks to an edge), flash, and turn away. */
+  @keyframes telescope-sweep {
+    /* The tube dips low, then sweeps up high; the flare peaks at the top (50%). */
     0%,
     100% {
-      scale: 1 1;
-      opacity: 0.55;
+      rotate: 0deg;
     }
-    45%,
-    55% {
-      scale: 0.05 1;
-      opacity: 1;
+    22% {
+      rotate: 12deg;
+    }
+    50%,
+    62% {
+      rotate: -16deg;
     }
   }
-  @keyframes lighthouse-lamp {
+  @keyframes telescope-glint {
     0%,
     30%,
     80%,
@@ -380,8 +380,8 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(t3-mobil
       scale: 1.5;
     }
   }
-  @keyframes lighthouse-bloom {
-    /* Glare on the lamp as the beam crosses the lens. */
+  @keyframes telescope-bloom {
+    /* Glare on the lens as the sweep crosses the viewer. */
     0%,
     30% {
       opacity: 0;
@@ -397,8 +397,8 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(t3-mobil
       scale: 1.25;
     }
   }
-  @keyframes lighthouse-streak {
-    /* A short anamorphic streak through the lamp. */
+  @keyframes telescope-streak {
+    /* A short anamorphic streak through the lens. */
     0%,
     32% {
       opacity: 0;
@@ -414,7 +414,7 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(t3-mobil
       scale: 1.1 1;
     }
   }
-  @keyframes lighthouse-ghost {
+  @keyframes telescope-ghost {
     /* Lens ghosts drift along the flare axis while the glare peaks. */
     0%,
     34% {
@@ -430,33 +430,39 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(t3-mobil
       translate: 8px 0;
     }
   }
-  @keyframes code-left {
+  @keyframes microscope-tube {
+    /* The objective drops onto the slide, holds while the ring zooms, then rises back. */
     0%,
     100% {
       translate: 0 0;
     }
-    40% {
-      translate: -2px 0;
+    30%,
+    72% {
+      translate: 0 2.2px;
     }
   }
-  @keyframes code-right {
+  @keyframes microscope-focus {
+    /* A focus ring opens on the slide, zooms into the detail, then shrinks back to nothing. */
     0%,
+    28% {
+      opacity: 0;
+      scale: 0.3;
+    }
+    42% {
+      opacity: 1;
+      scale: 1;
+    }
+    60% {
+      opacity: 1;
+      scale: 3.4;
+    }
+    84% {
+      opacity: 0.8;
+      scale: 0.5;
+    }
     100% {
-      translate: 0 0;
-    }
-    40% {
-      translate: 2px 0;
-    }
-  }
-  @keyframes code-slash {
-    /* A slash turned half a circle reads as the same slash, so the spin lands cleanly. */
-    0%,
-    20% {
-      rotate: 0deg;
-    }
-    75%,
-    100% {
-      rotate: 180deg;
+      opacity: 0;
+      scale: 0;
     }
   }
   @keyframes status-ping {

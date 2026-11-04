@@ -141,7 +141,7 @@ const METRICS = [
     better: "up",
     of: (ts: Ticket[]) => ts.filter((t) => t.stage === "merged").length,
     rows: (t: Ticket) => t.stage === "merged",
-    how: "GitHub / GitLab 的 PR 合并事件，按合并时间落在近 7 天计。只算 Lighthouse 派出的工单。",
+    how: "GitHub / GitLab 的 PR 合并事件，按合并时间落在近 7 天计。只算 Telescope 派出的工单。",
   },
   {
     id: "stuck",

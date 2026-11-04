@@ -2,15 +2,23 @@
 export type LighthouseViewer = "admin" | "lead" | "member";
 export type LighthouseChatId = string;
 
+/** Only an enterprise workspace has company agents (主代理 and department agents). */
 export interface LighthouseWorkspace {
   id: string;
   name: string;
+  kind: "enterprise" | "personal";
 }
 
 export const WORKSPACES: ReadonlyArray<LighthouseWorkspace> = [
-  { id: "toniiv", name: "TONiiV" },
-  { id: "dimx", name: "DimensionX" },
+  { id: "toniiv", name: "TONiiV", kind: "personal" },
+  { id: "dimx", name: "DimensionX", kind: "enterprise" },
 ];
+
+export const WORKSPACE_KIND = { enterprise: "企业", personal: "个人" } as const;
+
+export function isEnterprise(workspace: string): boolean {
+  return WORKSPACES.find((w) => w.id === workspace)?.kind === "enterprise";
+}
 
 export const PROJECTS: Record<
   string,
@@ -88,7 +96,7 @@ export const VIEWERS: Record<
     title: string;
     projects: ReadonlyArray<string>;
     docs: ReadonlyArray<string>;
-    /** The viewer's Chief of Staff (总幕僚长), over every project Chief Agent they can see. */
+    /** The viewer's 个人助理 (Chief of Staff), over every project Chief Agent they can see. */
     cos: { name: string };
   }
 > = {
@@ -154,6 +162,36 @@ export function chiefName(viewer: LighthouseViewer, project: string): string {
   return CHIEF_NAMES[`${viewer}:${project}`] ?? PROJECT_COS[project]?.name ?? project;
 }
 
+/** A member adds their own Chief Agent to a project; these seeds have not yet. */
+export const NO_CHIEF = new Set(["admin:ops", "lead:gripper"]);
+
+export function hasChief(viewer: LighthouseViewer, project: string): boolean {
+  return !NO_CHIEF.has(`${viewer}:${project}`);
+}
+
+/** Open projects where the viewer has their own Chief Agent. */
+export function chiefProjects(workspace: string, viewer: LighthouseViewer) {
+  return projectsIn(workspace, viewer).open.filter((id) => hasChief(viewer, id));
+}
+
+/** A personal agent the viewer set up themselves, outside any one project. */
+interface CustomAgent {
+  id: string;
+  viewer: LighthouseViewer;
+  workspace: string;
+  skills: ReadonlyArray<string>;
+}
+
+export const CUSTOM_AGENTS: Array<CustomAgent> = [];
+
+export function customAgent(id: string): CustomAgent | undefined {
+  return CUSTOM_AGENTS.find((a) => a.id === id);
+}
+
+export function customAgentsIn(workspace: string, viewer: LighthouseViewer) {
+  return CUSTOM_AGENTS.filter((a) => a.workspace === workspace && a.viewer === viewer);
+}
+
 /** A member's role in a project caps what their own Chief Agent may do. */
 export function roleIn(viewer: LighthouseViewer, project: string): "lead" | "member" {
   return PROJECTS[project]?.lead === VIEWERS[viewer].name ? "lead" : "member";
@@ -168,24 +206,27 @@ export interface CompanyAgent {
   last: string;
 }
 
-/** Company agents belong to the company, not to a member. "desk" is the router and desk in one. */
-export const COMPANY_AGENTS: ReadonlyArray<CompanyAgent> = [
+/**
+ * Company agents belong to the DimensionX enterprise workspace, not to a member, and only a
+ * company admin configures them. "desk" is 主代理: the router and desk in one.
+ */
+export const COMPANY_AGENTS: Array<CompanyAgent> = [
   {
     id: "desk",
-    name: "公司主 Agent",
+    name: "主代理",
     dept: "路由 + 总台",
     owner: "Tonic · 管理员",
     can: [
       "把 IM、邮件、Webhook 进来的消息分给对的人和 agent",
       "按你的权限回答公司里的问题",
-      "你允许时，给你的 Chief of Staff 派活",
-      "读任务板，出周报",
+      "你允许时，给你的个人助理派活",
+      "读任务板，出周报；冲突修不了时找负责人",
     ],
     last: "本周周报已整理。",
   },
   {
     id: "hr",
-    name: "人事 Agent",
+    name: "人事代理",
     dept: "人事 HR",
     owner: "人事部 · Lin",
     can: ["入职和离职清单", "请假、考勤问题", "按职级讲薪酬政策，不给具体数字"],
@@ -193,7 +234,7 @@ export const COMPANY_AGENTS: ReadonlyArray<CompanyAgent> = [
   },
   {
     id: "finance",
-    name: "财务 Agent",
+    name: "财务代理",
     dept: "财务",
     owner: "财务部 · Zhou",
     can: ["检查报销单", "发票抬头和税号", "查你项目的预算余额"],
@@ -201,7 +242,7 @@ export const COMPANY_AGENTS: ReadonlyArray<CompanyAgent> = [
   },
   {
     id: "legal",
-    name: "法务 Agent",
+    name: "法务代理",
     dept: "法务",
     owner: "法务部 · Wen",
     can: ["合同模板和条款比对", "开源许可检查", "NDA 流程"],
@@ -209,7 +250,7 @@ export const COMPANY_AGENTS: ReadonlyArray<CompanyAgent> = [
   },
   {
     id: "it",
-    name: "IT Agent",
+    name: "IT 代理",
     dept: "IT",
     owner: "IT · Tonic",
     can: ["账号和权限申请", "设备、VPN", "公司服务器和沙箱配额"],
@@ -217,7 +258,7 @@ export const COMPANY_AGENTS: ReadonlyArray<CompanyAgent> = [
   },
   {
     id: "office",
-    name: "行政 Agent",
+    name: "行政代理",
     dept: "行政",
     owner: "行政部 · Su",
     can: ["会议室和差旅", "快递、办公用品"],
@@ -225,8 +266,14 @@ export const COMPANY_AGENTS: ReadonlyArray<CompanyAgent> = [
   },
 ];
 
+const COMPANY_WORKSPACE = "dimx";
+
 export function companyAgent(id: string): CompanyAgent | undefined {
   return COMPANY_AGENTS.find((a) => a.id === id);
+}
+
+export function companyAgentsIn(workspace: string): ReadonlyArray<CompanyAgent> {
+  return workspace === COMPANY_WORKSPACE ? COMPANY_AGENTS : [];
 }
 
 export interface LighthouseAsk {
@@ -366,6 +413,7 @@ export interface LighthouseChat {
   online: boolean;
   readOnly?: boolean;
   company?: boolean;
+  custom?: boolean;
 }
 
 const LAST_LINE: Record<string, { last: string; time: string; unread: number }> = {
@@ -415,14 +463,26 @@ export function chatsFor(
     unread: asks.length,
     online: true,
   };
-  const projects = open.map((id) => ({
-    id,
-    name: chiefName(viewer, id),
-    tone: PROJECT_COS[id]!.tone,
+  const projects = open
+    .filter((id) => hasChief(viewer, id))
+    .map((id) => ({
+      id,
+      name: chiefName(viewer, id),
+      tone: PROJECT_COS[id]!.tone,
+      online: true,
+      ...LAST_LINE[id]!,
+    }));
+  const custom = customAgentsIn(workspace, viewer).map((a): LighthouseChat => ({
+    id: a.id,
+    name: chiefName(viewer, a.id),
+    tone: "bg-primary",
+    last: "刚建好，等你第一句话。",
+    time: "刚刚",
+    unread: 0,
     online: true,
-    ...LAST_LINE[id]!,
+    custom: true,
   }));
-  const company = COMPANY_AGENTS.map((a): LighthouseChat => ({
+  const company = companyAgentsIn(workspace).map((a): LighthouseChat => ({
     id: a.id,
     name: a.name,
     tone: "bg-muted-foreground",
@@ -433,7 +493,7 @@ export function chatsFor(
     company: true,
     ...(a.id === "desk" ? { readOnly: true } : {}),
   }));
-  return [mine, ...projects, ...company];
+  return [mine, ...projects, ...custom, ...company];
 }
 
 export type LighthouseView =
@@ -558,16 +618,16 @@ const TONIIV_TASKS: ReadonlyArray<LighthouseTask> = [
   },
   {
     id: "T-09",
-    title: "企微 Bot 接入公司主 Agent",
+    title: "Telegram Bot 接入个人助理",
     project: "codi",
     status: "todo",
     assignees: [B("Codi Chief Agent", "bg-primary")],
     due: "2026-11-12",
     priority: "medium",
     type: "feature",
-    description: "企微消息先查重，归入已有话题，再决定开不开工单。",
+    description: "Telegram 账号先绑定到人，消息交给这个人的个人助理。",
     tickets: [
-      { id: "codi#5", title: "WeCom 回调接入", state: "open" },
+      { id: "codi#5", title: "Telegram 回调接入", state: "open" },
       { id: "codi#36", title: "消息去重并归入已有话题", state: "open" },
     ],
   },
@@ -626,7 +686,7 @@ const TONIIV_TASKS: ReadonlyArray<LighthouseTask> = [
     title: "周报模板",
     project: "codi",
     status: "doing",
-    assignees: [B("公司主 Agent", "bg-muted-foreground")],
+    assignees: [B("Codi Chief Agent", "bg-primary")],
     priority: "low",
     type: "polish",
     tickets: [],
@@ -644,6 +704,17 @@ const DIMX_TASKS: ReadonlyArray<LighthouseTask> = [
     type: "feature",
     description: "DimensionX 机器人方向第一版 Demo。",
     tickets: [{ id: "gripper#1", title: "PoC 范围", state: "open" }],
+  },
+  {
+    id: "D-08",
+    title: "DimensionX 周报和冲突巡检",
+    project: "gripper",
+    status: "doing",
+    assignees: [B("主代理", "bg-muted-foreground")],
+    priority: "low",
+    type: "polish",
+    description: "每周汇总任务板；合并冲突按级别处理，修不了的找负责人。",
+    tickets: [],
   },
   {
     id: "D-02",
@@ -727,7 +798,7 @@ export interface LighthouseBot {
 export const BOTS: ReadonlyArray<LighthouseBot> = [
   {
     id: "desk",
-    name: "公司主 Agent",
+    name: "主代理",
     kind: "desk",
     tone: "bg-muted-foreground",
     harness: "Codi 常驻线程 / Sonnet",

@@ -1,6 +1,6 @@
-// PROTOTYPE, wipe me. Lighthouse projects are Code projects: the same title, workspace root,
+// PROTOTYPE, wipe me. Telescope projects are Microscope (Code) projects: the same title, root,
 // repository and machine. Adding one goes through Code's own add-project flow. Every member
-// has their own Chief Agent in each project; here the viewer sets up theirs.
+// adds and sets up their own Chief Agent in each project.
 import { FolderGit2Icon, LockIcon, PencilIcon, PlusIcon, Settings2Icon } from "lucide-react";
 import { useState } from "react";
 
@@ -9,6 +9,7 @@ import { useProjects } from "../../state/entities";
 import { BotAvatar } from "./LighthouseChatList";
 import { AgentDialog, CLOUD, freshSetup, powerSummary } from "./LighthouseTeams";
 import {
+  addChiefAgent,
   linkProject,
   saveCos,
   renameChiefOfStaff,
@@ -17,12 +18,16 @@ import {
   useViewer,
 } from "./lighthouseActions";
 import {
+  PROJECT_COS,
   PROJECT_SOURCE,
   PROJECTS,
+  hasChief,
+  isEnterprise,
   projectsIn,
   roleIn,
   type LighthouseViewer,
 } from "./lighthouseData";
+import { cn } from "../../lib/utils";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
@@ -36,7 +41,7 @@ interface Source {
 
 const sourceLine = (s: Source) => `${s.title} · ${s.root} · ${s.repo} · 代码在 ${s.machine}`;
 
-/** Your own Chief of Staff (总幕僚长): only you can rename it. */
+/** Your own 个人助理 (Chief of Staff): only you can rename it. */
 function ChiefOfStaffCard({ viewer, name }: { viewer: LighthouseViewer; name: string }) {
   const [draft, setDraft] = useState<string | null>(null);
   return (
@@ -58,7 +63,7 @@ function ChiefOfStaffCard({ viewer, name }: { viewer: LighthouseViewer; name: st
               nativeInput
               size="sm"
               autoFocus
-              aria-label="Chief of Staff 名字"
+              aria-label="个人助理名字"
               value={draft}
               onChange={(e) => setDraft(e.currentTarget.value)}
             />
@@ -68,7 +73,7 @@ function ChiefOfStaffCard({ viewer, name }: { viewer: LighthouseViewer; name: st
           </form>
         )}
         <div className="text-xs text-muted-foreground">
-          你的 Chief of Staff（总幕僚长），管你在各个项目里的 Chief Agent · 运行在 {CLOUD}
+          你的个人助理（Chief of Staff），管你在各个项目里的 Chief Agent · 运行在 {CLOUD}
         </div>
       </div>
       {draft === null ? (
@@ -83,10 +88,13 @@ function ChiefOfStaffCard({ viewer, name }: { viewer: LighthouseViewer; name: st
 function ProjectRow({
   viewer,
   id,
+  has,
   onEdit,
 }: {
   viewer: LighthouseViewer;
   id: string;
+  /** Whether the viewer has added their own Chief Agent here yet. */
+  has: boolean;
   onEdit: () => void;
 }) {
   const setup = useCosSetup(viewer, id);
@@ -106,7 +114,12 @@ function ProjectRow({
         {source?.machine}
       </td>
       <td className="px-3 py-2.5">
-        <span className="flex items-center gap-2">
+        {has ? null : (
+          <span className="text-xs text-muted-foreground">
+            你是{roleIn(viewer, id) === "lead" ? "负责人" : "成员"} · 还没有你的 Chief Agent
+          </span>
+        )}
+        <span className={cn("flex items-center gap-2", !has && "hidden")}>
           <BotAvatar seed={setup.name} size="sm" />
           <span className="flex flex-col">
             <span className="whitespace-nowrap">{setup.name}</span>
@@ -119,9 +132,15 @@ function ProjectRow({
       </td>
 
       <td className="px-3 py-2.5 text-end">
-        <Button size="xs" variant="ghost-muted" onClick={onEdit}>
-          <Settings2Icon /> 设定
-        </Button>
+        {has ? (
+          <Button size="xs" variant="ghost-muted" onClick={onEdit}>
+            <Settings2Icon /> 设定
+          </Button>
+        ) : (
+          <Button size="xs" variant="outline" onClick={onEdit}>
+            <PlusIcon /> 添加 Chief Agent
+          </Button>
+        )}
       </td>
     </tr>
   );
@@ -133,6 +152,7 @@ const HEADS = ["项目", "仓库", "代码所在机器", "你的 Chief Agent（�
 const visible = (workspace: string, viewer: LighthouseViewer, _version: number) =>
   projectsIn(workspace, viewer);
 const rootsOf = (_version: number) => new Set(Object.values(PROJECT_SOURCE).map((s) => s.root));
+const chiefIn = (viewer: LighthouseViewer, id: string, _version: number) => hasChief(viewer, id);
 
 export function ProjectsPage({
   viewer,
@@ -148,9 +168,13 @@ export function ProjectsPage({
   const linkedRoots = rootsOf(version);
   const unlinked = code.filter((p) => !linkedRoots.has(p.workspaceRoot));
   const [editing, setEditing] = useState<
-    { kind: "edit"; id: string } | { kind: "link"; source: Source } | null
+    | { kind: "edit"; id: string }
+    | { kind: "add"; id: string }
+    | { kind: "link"; source: Source }
+    | null
   >(null);
   const editingSetup = useCosSetup(viewer, editing?.kind === "edit" ? editing.id : "");
+  const enterprise = isEnterprise(workspace);
 
   return (
     <div className="flex flex-col gap-8">
@@ -158,8 +182,8 @@ export function ProjectsPage({
         <div>
           <h1 className="text-2xl font-semibold">项目</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            和 Code 里是同一个项目：名字、目录、仓库、机器都一样。每个成员在项目里有自己的 Chief
-            Agent，大家靠同一块任务板对齐。
+            和 Microscope 里是同一个项目：名字、目录、仓库、机器都一样。每个成员在项目里添加自己的
+            Chief Agent，大家靠同一块任务板对齐。
           </p>
         </div>
         <Button size="sm" onClick={() => openCommandPalette({ open: "add-project" })}>
@@ -170,7 +194,7 @@ export function ProjectsPage({
       <ChiefOfStaffCard viewer={viewer} name={me.cos.name} />
 
       <section className="flex flex-col gap-3">
-        <h2 className="text-sm font-medium">在 Lighthouse 里</h2>
+        <h2 className="text-sm font-medium">在 Telescope 里</h2>
         <div className="overflow-x-auto rounded-lg border bg-card">
           <table className="w-full text-sm">
             <thead>
@@ -188,7 +212,10 @@ export function ProjectsPage({
                   key={id}
                   viewer={viewer}
                   id={id}
-                  onEdit={() => setEditing({ kind: "edit", id })}
+                  has={chiefIn(viewer, id, version)}
+                  onEdit={() =>
+                    setEditing({ kind: chiefIn(viewer, id, version) ? "edit" : "add", id })
+                  }
                 />
               ))}
             </tbody>
@@ -207,14 +234,15 @@ export function ProjectsPage({
 
       <section className="flex flex-col gap-3">
         <div className="flex items-baseline justify-between gap-2">
-          <h2 className="text-sm font-medium">Code 里还没接入的项目</h2>
+          <h2 className="text-sm font-medium">Microscope 里还没接入的项目</h2>
           <span className="text-xs text-muted-foreground">
             接入后，Chief Agent 会出现在左侧聊天列表
           </span>
         </div>
         {unlinked.length === 0 ? (
           <div className="flex flex-col items-start gap-2 rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-            Code 里的项目都已接入。新项目用「添加项目」，和 Code 侧边栏的添加项目是同一个流程。
+            Microscope 里的项目都已接入。新项目用「添加项目」，和 Microscope
+            侧边栏的添加项目是同一个流程。
           </div>
         ) : (
           <ul className="divide-y rounded-lg border bg-card text-sm">
@@ -260,10 +288,25 @@ export function ProjectsPage({
             ...(PROJECT_SOURCE[editing.id] ?? { root: "", repo: "", machine: "" }),
           })}
           role={roleIn(viewer, editing.id)}
+          enterprise={enterprise}
           initial={editingSetup}
           onClose={() => setEditing(null)}
           onSave={(setup) => {
             saveCos(viewer, editing.id, setup);
+            setEditing(null);
+          }}
+        />
+      ) : null}
+      {editing?.kind === "add" ? (
+        <AgentDialog
+          title="添加你的 Chief Agent"
+          subtitle={`${PROJECTS[editing.id]?.name ?? editing.id}：只属于你，靠任务板和其他成员的 Chief Agent 对齐。`}
+          role={roleIn(viewer, editing.id)}
+          enterprise={enterprise}
+          initial={freshSetup(PROJECT_COS[editing.id]?.name ?? "Chief Agent")}
+          onClose={() => setEditing(null)}
+          onSave={(setup) => {
+            addChiefAgent(viewer, editing.id, setup);
             setEditing(null);
           }}
         />
@@ -273,6 +316,7 @@ export function ProjectsPage({
           title={`接入 ${editing.source.title}`}
           subtitle={`${sourceLine(editing.source)}。你是负责人；其他成员加入后各有自己的 Chief Agent。`}
           role="lead"
+          enterprise={enterprise}
           initial={freshSetup(`${editing.source.title} Chief Agent`)}
           onClose={() => setEditing(null)}
           onSave={(setup) => {

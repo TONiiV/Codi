@@ -7,6 +7,7 @@ import {
   PROJECTS,
   VIEWERS,
   projectsIn,
+  isEnterprise,
   type LighthouseView,
   type LighthouseViewer,
 } from "./lighthouseData";
@@ -41,10 +42,12 @@ const TEAMS_TABS = [
 ] as const;
 
 function TeamsSubList() {
-  const tab = useTeamsTab();
+  const enterprise = isEnterprise(useWorkspaceId());
+  const picked = useTeamsTab();
+  const tab = picked === "company" && !enterprise ? "mine" : picked;
   return (
     <div className="flex flex-col gap-0.5 px-2 pt-1">
-      {TEAMS_TABS.map((t) => (
+      {TEAMS_TABS.filter((t) => enterprise || t.id !== "company").map((t) => (
         <Button
           key={t.id}
           size="sm"

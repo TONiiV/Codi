@@ -1,7 +1,7 @@
-// PROTOTYPE, wipe me. The Lighthouse mode inside the real Codi shell at /prototype/lighthouse.
+// PROTOTYPE, wipe me. The Telescope mode inside the real Codi shell at /prototype/lighthouse.
 // Everything is scoped to the current workspace and filtered by the viewer's permissions. The
-// user talks only to their Chief of Staff (总幕僚长) or a project Chief Agent; Workers,
-// tickets and PRs are links. Mock data only.
+// user talks to their own agents (个人助理, Chief Agents, custom agents) or, in an enterprise
+// workspace, to company agents; Workers, tickets and PRs are links. Mock data only.
 import { LockIcon, MessageSquareIcon } from "lucide-react";
 import { useState, type ReactNode } from "react";
 
@@ -15,8 +15,10 @@ import {
   VIEWERS,
   WORKERS,
   WORKSPACES,
+  chatsFor,
   chiefName,
   companyAgent,
+  customAgent,
   projectsIn,
   type LighthouseViewer,
 } from "./lighthouseData";
@@ -33,6 +35,9 @@ import { useWorkspaceId } from "./workspaceStore";
 // Names can change at runtime; the version argument keeps the compiler honest.
 const agentName = (viewer: LighthouseViewer, chat: string, _version: number) =>
   companyAgent(chat)?.name ?? chiefName(viewer, chat);
+
+const chatIds = (viewer: LighthouseViewer, workspace: string, _version: number) =>
+  chatsFor(viewer, workspace).map((c) => c.id);
 import { PullRequestGlyph } from "../pullRequest/pullRequestIcons";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
@@ -112,7 +117,7 @@ function Inbox({ asks }: { asks: ReturnType<typeof asksFor> }) {
                     {a.kind === "merge" ? "合并" : "回答"}
                   </Button>
                   <Button size="xs" variant="outline">
-                    {a.kind === "merge" ? "先看 diff" : "让 Chief of Staff 定"}
+                    {a.kind === "merge" ? "先看 diff" : "让个人助理定"}
                   </Button>
                 </>
               )}
@@ -201,6 +206,17 @@ function conversation(
 ): ReadonlyArray<ChatMessage> {
   const v = useViewer(viewer);
   const { open, locked } = projectsIn(workspace, viewer);
+  const custom = customAgent(chat);
+  if (custom) {
+    return [
+      {
+        id: "a1",
+        role: "assistant",
+        author: chiefName(viewer, chat),
+        body: "我是你的自定义 agent，只听你的。我用你给我的 skills 做事，没勾的权限会先问你。",
+      },
+    ];
+  }
   const company = companyAgent(chat);
   if (company) {
     return [
@@ -211,7 +227,7 @@ function conversation(
         body: (
           <div className="flex flex-col gap-2">
             <span>
-              我是公司的{company.dept} agent，归 {company.owner}。我按你的权限回答，能帮你：
+              我是公司的{company.dept}代理，归 {company.owner}。我按你的权限回答，能帮你：
             </span>
             <ul className="list-disc ps-5">
               {company.can.map((c) => (
@@ -350,14 +366,8 @@ export function LighthousePrototypePage({ background }: { background?: boolean }
   const { as: viewer, view } = search;
   const v = useViewer(viewer);
   const version = useRegistryVersion();
-  const openProjects = projectsIn(workspace, viewer).open;
-  // A project chat from another workspace falls back to the viewer's Chief of Staff (总幕僚长).
-  const chat =
-    search.chat === "mine" ||
-    companyAgent(search.chat) !== undefined ||
-    openProjects.includes(search.chat)
-      ? search.chat
-      : "mine";
+  // A chat this workspace does not have falls back to the viewer's 个人助理.
+  const chat = chatIds(viewer, workspace, version).includes(search.chat) ? search.chat : "mine";
   const chatName = chat === "mine" ? v.cos.name : agentName(viewer, chat, version);
   const viewLabel =
     view === "members" ? "成员与授权" : (RAIL_ITEMS.find((r) => r.id === view)?.label ?? view);
@@ -372,7 +382,7 @@ export function LighthousePrototypePage({ background }: { background?: boolean }
         mainChat={view === "chats" ? chat : null}
       >
         <header className="flex h-(--workspace-topbar-height) min-h-(--workspace-topbar-height) shrink-0 items-center pl-(--workspace-gutter-start) pr-(--workspace-gutter-end)">
-          <WorkspaceBreadcrumb ariaLabel="Lighthouse breadcrumb" className="min-w-0">
+          <WorkspaceBreadcrumb ariaLabel="Telescope breadcrumb" className="min-w-0">
             <WorkspaceBreadcrumbItem>
               <span>{workspaceName}</span>
             </WorkspaceBreadcrumbItem>

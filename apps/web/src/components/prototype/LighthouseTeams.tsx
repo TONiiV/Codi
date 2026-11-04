@@ -1,13 +1,17 @@
-// PROTOTYPE, wipe me. My Teams: the viewer's own agents (their Chief of Staff and their own Chief
-// Agent in each project), the company's agents they may call on, and the skills both use.
-// Company agents and personal agents are separate sets; only your own are yours to change.
+// PROTOTYPE, wipe me. My Teams: the viewer's own agents (个人助理, their Chief Agents and custom
+// agents), the company's agents in an enterprise workspace, and the skills both use. Company
+// agents and personal agents are separate sets; only a company admin configures company agents.
 import { useNavigate } from "@tanstack/react-router";
-import { LockIcon, MessageSquareIcon, Settings2Icon } from "lucide-react";
+import { LockIcon, MessageSquareIcon, PlusIcon, Settings2Icon } from "lucide-react";
 import { useId, useState, type ReactNode } from "react";
 
+import { cn } from "../../lib/utils";
 import { BotAvatar } from "./LighthouseChatList";
 import { AGENT_STATES, Bloub, type AgentState } from "./LighthouseBloub";
 import {
+  addChiefAgent,
+  addCustomAgent,
+  saveCompanyAgent,
   saveCos,
   setTeamsTab,
   useAllBots,
@@ -19,11 +23,18 @@ import {
   type CosSetup,
 } from "./lighthouseActions";
 import {
-  COMPANY_AGENTS,
+  PROJECT_COS,
   PROJECTS,
   chiefName,
+  chiefProjects,
+  companyAgentsIn,
+  customAgent,
+  customAgentsIn,
+  hasChief,
+  isEnterprise,
   projectsIn,
   roleIn,
+  type CompanyAgent,
   type LighthouseViewer,
 } from "./lighthouseData";
 import { Badge } from "../ui/badge";
@@ -42,6 +53,7 @@ import { Input } from "../ui/input";
 import { Label } from "../ui/label";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { Switch } from "../ui/switch";
+import { Textarea } from "../ui/textarea";
 import { Toggle, ToggleGroup } from "../ui/toggle-group";
 
 const POWERS: ReadonlyArray<{ id: CosPower; label: string; hint: string; lead?: true }> = [
@@ -109,16 +121,23 @@ export function AgentDialog({
   title,
   subtitle,
   role,
+  enterprise,
+  capReason = "你在这个项目是成员，合并 PR 只有负责人的 agent 能做",
   initial,
   onSave,
   onClose,
+  children,
 }: {
   title: string;
   subtitle: string;
   role: "lead" | "member" | null;
+  /** Only an enterprise workspace has 主代理, so only there can it dispatch work. */
+  enterprise: boolean;
+  capReason?: string;
   initial: CosSetup;
   onSave: (setup: CosSetup) => void;
   onClose: () => void;
+  children?: ReactNode;
 }) {
   const id = useId();
   const [setup, setSetup] = useState(initial);
@@ -147,6 +166,7 @@ export function AgentDialog({
           </DialogHeader>
           <DialogPanel>
             <div className="flex flex-col gap-4">
+              {children}
               <div className="flex items-center gap-3">
                 <BotAvatar seed={setup.name} size="lg" />
                 <Label className="flex flex-1 flex-col items-stretch" htmlFor={`${id}-name`}>
@@ -216,39 +236,46 @@ export function AgentDialog({
                         <span className="flex flex-col">
                           <span>{p.label}</span>
                           <span className="text-xs text-muted-foreground">
-                            {capped
-                              ? "你在这个项目是成员，合并 PR 只有负责人的 agent 能做"
-                              : p.hint}
+                            {capped ? capReason : p.hint}
                           </span>
                         </span>
                       </label>
                     );
                   })}
                   <p className="text-xs text-muted-foreground">
-                    上限是你在这个项目的角色（{role === "lead" ? "负责人" : "成员"}
+                    上限是你的角色（{role === "lead" ? "负责人" : "成员"}
                     ）。没勾的事它先问你；每次动手都用提问人的权限执行并记审计。
                   </p>
                 </fieldset>
               ) : null}
               <fieldset className="flex flex-col gap-2">
-                <legend className="mb-1 text-sm font-medium">任务板和公司</legend>
+                <legend className="mb-1 text-sm font-medium">
+                  {enterprise ? "任务板和主代理" : "任务板"}
+                </legend>
                 <Toggled
                   label="和任务板同步"
                   hint="开工前在板上领租约，完工后写回结果、产物和决定"
                   checked={setup.board}
                   onChange={(on) => set("board", on)}
                 />
-                <Toggled
-                  label="可被公司主 Agent 调度"
-                  hint="关掉后只有你能给它派活"
-                  checked={setup.dispatchable}
-                  onChange={(on) => set("dispatchable", on)}
-                />
-                <div className="flex items-center justify-between gap-3 rounded-md border px-3 py-2 text-sm">
+                {enterprise ? (
+                  <Toggled
+                    label="可被主代理调度"
+                    hint="关掉后只有你能给它派活"
+                    checked={setup.dispatchable}
+                    onChange={(on) => set("dispatchable", on)}
+                  />
+                ) : null}
+                <div
+                  className={cn(
+                    "flex items-center justify-between gap-3 rounded-md border px-3 py-2 text-sm",
+                    !enterprise && "hidden",
+                  )}
+                >
                   <span className="flex flex-col">
                     <span>被派活时</span>
                     <span className="text-xs text-muted-foreground">
-                      {setup.dispatchable ? "公司主 Agent 派来的活怎么处理" : "已关闭调度"}
+                      {setup.dispatchable ? "主代理派来的活怎么处理" : "已关闭调度"}
                     </span>
                   </span>
                   <ToggleGroup
@@ -283,33 +310,53 @@ export function AgentDialog({
 }
 
 function dispatchLine(setup: CosSetup) {
-  if (!setup.dispatchable) return "不接公司派活";
-  return setup.onDispatch === "start" ? "公司可派活 · 直接开工" : "公司可派活 · 先进收件箱";
+  if (!setup.dispatchable) return "不接主代理派活";
+  return setup.onDispatch === "start" ? "主代理可派活 · 直接开工" : "主代理可派活 · 先进收件箱";
 }
+
+/** What kind of personal agent a chat id is, and how to describe it in a row. */
+function agentKind(viewer: LighthouseViewer, id: string | null) {
+  if (id === null)
+    return { kind: "assistant" as const, line: "个人助理 · 管你在所有项目里的 Chief Agent" };
+  const custom = customAgent(id);
+  if (custom) {
+    return {
+      kind: "custom" as const,
+      line: `自定义 agent · skills：${custom.skills.map(skillName).join("、") || "无"}`,
+    };
+  }
+  const role = roleIn(viewer, id);
+  return {
+    kind: "chief" as const,
+    line: `${PROJECTS[id]?.name} Chief Agent · 你是${role === "lead" ? "负责人" : "成员"}`,
+  };
+}
+
+/** Custom agents have no project, so their cap is the viewer's company role. */
+const customRole = (viewer: LighthouseViewer) => (viewer === "admin" ? "lead" : "member");
+const CUSTOM_CAP = "你不是管理员，自定义 agent 不能合并 PR";
 
 function AgentRow({
   viewer,
   project,
+  enterprise,
   onEdit,
 }: {
   viewer: LighthouseViewer;
   project: string | null;
+  enterprise: boolean;
   onEdit: () => void;
 }) {
   const setup = useCosSetup(viewer, project);
   const workers = useAllBots().filter((b) => b.kind === "worker" && b.project === project);
-  const role = project ? roleIn(viewer, project) : null;
+  const { line } = agentKind(viewer, project);
   return (
     <li className="flex items-start gap-3 px-4 py-3">
       <BotAvatar seed={setup.name} size="lg" />
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-baseline gap-x-2">
           <span className="font-medium">{setup.name}</span>
-          <span className="text-xs text-muted-foreground">
-            {project
-              ? `${PROJECTS[project]?.name} · 你是${role === "lead" ? "负责人" : "成员"}`
-              : "Chief of Staff · 总幕僚长，管你在所有项目里的 Chief Agent"}
-          </span>
+          <span className="text-xs text-muted-foreground">{line}</span>
         </div>
         <div className="mt-1 flex flex-wrap gap-1.5">
           <Badge variant="outline">{setup.harness}</Badge>
@@ -319,7 +366,7 @@ function AgentRow({
           <Badge variant={setup.board ? "info" : "outline"}>
             {setup.board ? "任务板同步" : "不同步任务板"}
           </Badge>
-          <Badge variant="outline">{dispatchLine(setup)}</Badge>
+          {enterprise ? <Badge variant="outline">{dispatchLine(setup)}</Badge> : null}
         </div>
         {workers.length > 0 ? (
           <div className="mt-1 text-xs text-muted-foreground">
@@ -337,22 +384,37 @@ function AgentRow({
 function EditAgent({
   viewer,
   project,
+  enterprise,
   onClose,
 }: {
   viewer: LighthouseViewer;
   project: string | null;
+  enterprise: boolean;
   onClose: () => void;
 }) {
   const setup = useCosSetup(viewer, project);
+  const { kind } = agentKind(viewer, project);
   return (
     <AgentDialog
-      title={project ? "设定你的 Chief Agent" : "设定你的 Chief of Staff"}
-      subtitle={
-        project
-          ? `${PROJECTS[project]?.name}：项目里每人有自己的 Chief Agent，大家靠同一块任务板对齐。改的只是你的这位。`
-          : "你的总幕僚长，管你在所有项目里的 Chief Agent。"
+      title={
+        kind === "assistant"
+          ? "设定你的个人助理"
+          : kind === "custom"
+            ? "设定你的自定义 agent"
+            : "设定你的 Chief Agent"
       }
-      role={project ? roleIn(viewer, project) : null}
+      subtitle={
+        kind === "assistant"
+          ? "个人助理（Chief of Staff），管你在所有项目里的 Chief Agent。"
+          : kind === "custom"
+            ? "只属于你，不挂在某个项目下。"
+            : `${PROJECTS[project ?? ""]?.name}：项目里每人有自己的 Chief Agent，大家靠同一块任务板对齐。改的只是你的这位。`
+      }
+      role={
+        project === null ? null : kind === "custom" ? customRole(viewer) : roleIn(viewer, project)
+      }
+      {...(kind === "custom" ? { capReason: CUSTOM_CAP } : {})}
+      enterprise={enterprise}
       initial={setup}
       onClose={onClose}
       onSave={(next) => {
@@ -370,7 +432,8 @@ const agentsOf = (
   _version: number,
 ) => [
   { key: "cos", name: cosName },
-  ...projectsIn(workspace, viewer).open.map((id) => ({ key: id, name: chiefName(viewer, id) })),
+  ...chiefProjects(workspace, viewer).map((id) => ({ key: id, name: chiefName(viewer, id) })),
+  ...customAgentsIn(workspace, viewer).map((a) => ({ key: a.id, name: chiefName(viewer, a.id) })),
 ];
 
 function AvatarShowcase({ names }: { names: ReadonlyArray<string> }) {
@@ -406,51 +469,280 @@ function AvatarShowcase({ names }: { names: ReadonlyArray<string> }) {
   );
 }
 
-const openIn = (workspace: string, viewer: LighthouseViewer, _version: number) =>
-  projectsIn(workspace, viewer).open;
+/** My agents in the order the user expects: 个人助理, project Chief Agents, then custom ones. */
+const myAgentIds = (workspace: string, viewer: LighthouseViewer, _version: number) => ({
+  chiefs: chiefProjects(workspace, viewer),
+  custom: customAgentsIn(workspace, viewer).map((a) => a.id),
+  addable: projectsIn(workspace, viewer).open.filter((id) => !hasChief(viewer, id)),
+});
+
+/**
+ * Adds one of the viewer's own agents: their Chief Agent in a project they are in that has
+ * none yet, or a custom agent with its own skills and powers.
+ */
+export function AddAgentDialog({
+  viewer,
+  workspace,
+  onClose,
+  onAdded,
+}: {
+  viewer: LighthouseViewer;
+  workspace: string;
+  onClose: () => void;
+  onAdded: (chat: string) => void;
+}) {
+  const enterprise = isEnterprise(workspace);
+  const { addable } = myAgentIds(workspace, viewer, useRegistryVersion());
+  const [kind, setKind] = useState<"chief" | "custom">(addable.length > 0 ? "chief" : "custom");
+  const [project, setProject] = useState(addable[0] ?? "");
+  const [skills, setSkills] = useState<ReadonlyArray<string>>([]);
+  const skillChoices = [...(enterprise ? COMPANY_SKILLS : []), ...MY_SKILLS];
+  const initial =
+    kind === "chief"
+      ? freshSetup(PROJECT_COS[project]?.name ?? "Chief Agent")
+      : { ...freshSetup("新 agent"), powers: ["answer" as const] };
+  return (
+    <AgentDialog
+      key={kind + project}
+      title="添加 agent"
+      subtitle="新 agent 只属于你，出现在对话列表的「我的 Agents」里。"
+      role={kind === "chief" ? roleIn(viewer, project) : customRole(viewer)}
+      {...(kind === "custom" ? { capReason: CUSTOM_CAP } : {})}
+      enterprise={enterprise}
+      initial={initial}
+      onClose={onClose}
+      onSave={(setup) => {
+        if (kind === "chief") {
+          if (!project) return;
+          addChiefAgent(viewer, project, setup);
+          onAdded(project);
+        } else {
+          onAdded(addCustomAgent(viewer, workspace, skills, setup));
+        }
+      }}
+    >
+      <div className="flex flex-col gap-3 rounded-md border p-3">
+        <ToggleGroup
+          aria-label="agent 类型"
+          variant="segmented"
+          value={[kind]}
+          onValueChange={(next) => {
+            const v = next[0];
+            if (v === "chief" || v === "custom") setKind(v);
+          }}
+        >
+          <Toggle value="chief" disabled={addable.length === 0}>
+            项目 Chief Agent
+          </Toggle>
+          <Toggle value="custom">自定义 agent</Toggle>
+        </ToggleGroup>
+        {kind === "chief" ? (
+          <Label className="flex flex-col items-stretch">
+            项目
+            <Select
+              value={project}
+              items={Object.fromEntries(addable.map((id) => [id, PROJECTS[id]?.name ?? id]))}
+              onValueChange={(v) => v && setProject(v)}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectPopup>
+                {addable.map((id) => (
+                  <SelectItem key={id} value={id}>
+                    {PROJECTS[id]?.name}
+                  </SelectItem>
+                ))}
+              </SelectPopup>
+            </Select>
+            <span className="text-xs font-normal text-muted-foreground">
+              只列你参与、但还没有你的 Chief Agent 的项目。
+            </span>
+          </Label>
+        ) : (
+          <fieldset className="flex flex-col gap-1.5">
+            <legend className="mb-1 text-sm font-medium">用哪些 skills</legend>
+            {skillChoices.map((sk) => (
+              <label key={sk.id} className="flex cursor-pointer items-center gap-2 text-sm">
+                <Checkbox
+                  checked={skills.includes(sk.id)}
+                  onCheckedChange={(on) =>
+                    setSkills(on ? [...skills, sk.id] : skills.filter((x) => x !== sk.id))
+                  }
+                />
+                {sk.name}
+                <span className="font-mono text-xs text-muted-foreground">v{sk.version}</span>
+              </label>
+            ))}
+          </fieldset>
+        )}
+      </div>
+    </AgentDialog>
+  );
+}
 
 function MyAgents({ viewer, workspace }: { viewer: LighthouseViewer; workspace: string }) {
+  const navigate = useNavigate();
   const version = useRegistryVersion();
   const me = useViewer(viewer);
-  const open = openIn(workspace, viewer, version);
+  const enterprise = isEnterprise(workspace);
+  const { chiefs, custom } = myAgentIds(workspace, viewer, version);
   const names = agentsOf(viewer, workspace, me.cos.name, version).map((a) => a.name);
-  // undefined: closed; null: the Chief of Staff; a string: that project's Chief Agent.
+  // undefined: closed; null: 个人助理; a string: that project's Chief Agent or a custom agent.
   const [editing, setEditing] = useState<string | null | undefined>(undefined);
+  const [adding, setAdding] = useState(false);
   return (
     <section className="flex flex-col gap-3">
-      <p className="text-sm text-muted-foreground">
-        这些 agent 归你：一个 Chief of Staff，加你参与的每个项目里一个你自己的 Chief Agent。
-        它们都跑在 {CLOUD}，只听你的，彼此靠任务板对齐。
-      </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <p className="max-w-2xl text-sm text-muted-foreground">
+          这些 agent 归你：最上面是个人助理，然后是你在项目里的 Chief Agent，以及你自己配的自定义
+          agent。它们都跑在 {CLOUD}，只听你的，彼此靠任务板对齐。
+        </p>
+        <Button size="sm" onClick={() => setAdding(true)}>
+          <PlusIcon /> 添加 agent
+        </Button>
+      </div>
       <ul className="divide-y rounded-lg border bg-card">
-        <AgentRow viewer={viewer} project={null} onEdit={() => setEditing(null)} />
-        {open.map((id) => (
-          <AgentRow key={id} viewer={viewer} project={id} onEdit={() => setEditing(id)} />
+        <AgentRow
+          viewer={viewer}
+          project={null}
+          enterprise={enterprise}
+          onEdit={() => setEditing(null)}
+        />
+        {[...chiefs, ...custom].map((id) => (
+          <AgentRow
+            key={id}
+            viewer={viewer}
+            project={id}
+            enterprise={enterprise}
+            onEdit={() => setEditing(id)}
+          />
         ))}
       </ul>
       <AvatarShowcase names={names.slice(0, 6)} />
       {editing !== undefined ? (
-        <EditAgent viewer={viewer} project={editing} onClose={() => setEditing(undefined)} />
+        <EditAgent
+          viewer={viewer}
+          project={editing}
+          enterprise={enterprise}
+          onClose={() => setEditing(undefined)}
+        />
+      ) : null}
+      {adding ? (
+        <AddAgentDialog
+          viewer={viewer}
+          workspace={workspace}
+          onClose={() => setAdding(false)}
+          onAdded={(chat) => {
+            setAdding(false);
+            void navigate({
+              to: "/prototype/lighthouse",
+              search: { as: viewer, chat, view: "teams" },
+            });
+          }}
+        />
       ) : null}
     </section>
   );
 }
 
-function CompanyAgents({ viewer }: { viewer: LighthouseViewer }) {
+function CompanyAgentDialog({ agent, onClose }: { agent: CompanyAgent; onClose: () => void }) {
+  const id = useId();
+  const [name, setName] = useState(agent.name);
+  const [owner, setOwner] = useState(agent.owner);
+  const [can, setCan] = useState(agent.can.join("\n"));
+  return (
+    <Dialog
+      open
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+    >
+      <DialogPopup className="sm:max-w-lg">
+        <form
+          className="flex min-h-0 flex-col"
+          onSubmit={(event) => {
+            event.preventDefault();
+            saveCompanyAgent(agent.id, {
+              name: name.trim(),
+              owner: owner.trim(),
+              can: can
+                .split("\n")
+                .map((l) => l.trim())
+                .filter(Boolean),
+            });
+            onClose();
+          }}
+        >
+          <DialogHeader>
+            <DialogTitle>设定公司 agent</DialogTitle>
+            <DialogDescription>
+              {agent.dept}。只有公司管理员能改；改动对全公司生效，并记审计。
+            </DialogDescription>
+          </DialogHeader>
+          <DialogPanel>
+            <div className="flex flex-col gap-4">
+              <Label className="flex flex-col items-stretch" htmlFor={`${id}-name`}>
+                名字
+                <Input
+                  nativeInput
+                  id={`${id}-name`}
+                  value={name}
+                  onChange={(e) => setName(e.currentTarget.value)}
+                />
+              </Label>
+              <Label className="flex flex-col items-stretch" htmlFor={`${id}-owner`}>
+                负责人
+                <Input
+                  nativeInput
+                  id={`${id}-owner`}
+                  value={owner}
+                  onChange={(e) => setOwner(e.currentTarget.value)}
+                />
+              </Label>
+              <Label className="flex flex-col items-stretch" htmlFor={`${id}-can`}>
+                能做什么（一行一条）
+                <Textarea
+                  id={`${id}-can`}
+                  value={can}
+                  onChange={(e) => setCan(e.currentTarget.value)}
+                />
+              </Label>
+            </div>
+          </DialogPanel>
+          <DialogFooter>
+            <Button type="button" variant="ghost-muted" onClick={onClose}>
+              取消
+            </Button>
+            <Button type="submit" disabled={name.trim().length === 0}>
+              保存
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogPopup>
+    </Dialog>
+  );
+}
+
+const companyAt = (workspace: string, _version: number) => companyAgentsIn(workspace);
+
+function CompanyAgents({ viewer, workspace }: { viewer: LighthouseViewer; workspace: string }) {
   const navigate = useNavigate();
+  const agents = companyAt(workspace, useRegistryVersion());
+  const admin = viewer === "admin";
+  const [editing, setEditing] = useState<CompanyAgent | null>(null);
   return (
     <section className="flex flex-col gap-3">
       <div className="flex items-start gap-2 rounded-lg border border-dashed p-3 text-sm text-muted-foreground">
         <LockIcon className="mt-0.5 size-4 shrink-0" />
         <span>
           公司 agents 和你的 agents 是两套。公司 agents
-          归公司，你只能找它们办事，不能改；它们按你的权限回答。 公司主 Agent
-          只有在你打开「可被公司主 Agent 调度」时，才能给你的 agents 派活。
-          {viewer === "admin" ? " 你是管理员，可以在设置里管理公司 agents。" : ""}
+          归公司，按你的权限回答。主代理只有在你打开「可被主代理调度」时，才能给你的 agents 派活。
+          {admin ? " 你是公司管理员，可以设定它们。" : " 只有公司管理员能配置它们。"}
         </span>
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
-        {COMPANY_AGENTS.map((a) => (
+        {agents.map((a) => (
           <article key={a.id} className="flex flex-col gap-2 rounded-lg border bg-card p-4">
             <div className="flex items-center gap-3">
               <BotAvatar seed={a.name} size="lg" />
@@ -469,7 +761,16 @@ function CompanyAgents({ viewer }: { viewer: LighthouseViewer }) {
                 <li key={c}>{c}</li>
               ))}
             </ul>
-            <div className="mt-auto flex justify-end">
+            <div className="mt-auto flex items-center justify-end gap-2">
+              {admin ? (
+                <Button size="xs" variant="ghost-muted" onClick={() => setEditing(a)}>
+                  <Settings2Icon /> 设定
+                </Button>
+              ) : (
+                <span className="me-auto inline-flex items-center gap-1 text-xs text-muted-foreground">
+                  <LockIcon className="size-3" /> 只有公司管理员能配置
+                </span>
+              )}
               <Button
                 size="xs"
                 variant="outline"
@@ -486,6 +787,7 @@ function CompanyAgents({ viewer }: { viewer: LighthouseViewer }) {
           </article>
         ))}
       </div>
+      {editing ? <CompanyAgentDialog agent={editing} onClose={() => setEditing(null)} /> : null}
     </section>
   );
 }
@@ -496,6 +798,10 @@ interface Skill {
   version: string;
   owner: string;
   summary: string;
+}
+
+function skillName(id: string): string {
+  return [...COMPANY_SKILLS, ...MY_SKILLS].find((s) => s.id === id)?.name ?? id;
 }
 
 const COMPANY_SKILLS: ReadonlyArray<Skill> = [
@@ -576,6 +882,7 @@ function SkillRow({
 
 function Skills({ viewer, workspace }: { viewer: LighthouseViewer; workspace: string }) {
   const me = useViewer(viewer);
+  const enterprise = isEnterprise(workspace);
   const agents = agentsOf(viewer, workspace, me.cos.name, useRegistryVersion());
   const [overrides, setOverrides] = useState<Readonly<Record<string, boolean>>>({});
   const [submitted, setSubmitted] = useState<ReadonlySet<string>>(new Set());
@@ -588,7 +895,7 @@ function Skills({ viewer, workspace }: { viewer: LighthouseViewer; workspace: st
       <p className="text-sm text-muted-foreground">
         Skill 是 agent 做某件事的方法。点 agent 名字，决定你的哪个 agent 用它。
       </p>
-      <div className="flex flex-col gap-2">
+      <div className={cn("flex flex-col gap-2", !enterprise && "hidden")}>
         <h2 className="text-sm font-medium">公司 skills</h2>
         <ul className="divide-y rounded-lg border bg-card">
           {COMPANY_SKILLS.map((s) => (
@@ -618,7 +925,7 @@ function Skills({ viewer, workspace }: { viewer: LighthouseViewer; workspace: st
               uses={uses(s.id, false)}
               onToggle={flip(s.id, false)}
               action={
-                submitted.has(s.id) ? (
+                !enterprise ? null : submitted.has(s.id) ? (
                   <Badge variant="warning">等公司审核</Badge>
                 ) : (
                   <Button
@@ -639,14 +946,18 @@ function Skills({ viewer, workspace }: { viewer: LighthouseViewer; workspace: st
 }
 
 export function TeamsPage({ viewer, workspace }: { viewer: LighthouseViewer; workspace: string }) {
-  const tab = useTeamsTab();
+  const enterprise = isEnterprise(workspace);
+  const picked = useTeamsTab();
+  const tab = picked === "company" && !enterprise ? "mine" : picked;
   return (
     <div className="flex flex-col gap-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold">My Teams</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            配你自己的 agent 队伍，看公司有哪些 agent 能找。
+            {enterprise
+              ? "配你自己的 agent 队伍，看公司有哪些 agent 能找。"
+              : "配你自己的 agent 队伍。个人工作区没有公司 agents。"}
           </p>
         </div>
         <ToggleGroup
@@ -659,12 +970,12 @@ export function TeamsPage({ viewer, workspace }: { viewer: LighthouseViewer; wor
           }}
         >
           <Toggle value="mine">我的 agents</Toggle>
-          <Toggle value="company">公司 agents</Toggle>
+          {enterprise ? <Toggle value="company">公司 agents</Toggle> : null}
           <Toggle value="skills">Skills</Toggle>
         </ToggleGroup>
       </div>
       {tab === "mine" ? <MyAgents viewer={viewer} workspace={workspace} /> : null}
-      {tab === "company" ? <CompanyAgents viewer={viewer} /> : null}
+      {tab === "company" ? <CompanyAgents viewer={viewer} workspace={workspace} /> : null}
       {tab === "skills" ? <Skills viewer={viewer} workspace={workspace} /> : null}
     </div>
   );
