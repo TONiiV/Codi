@@ -1,5 +1,5 @@
 // PROTOTYPE, wipe me. Small pieces shared by the non-chat views of Lighthouse.
-import { GitBranchIcon, MessageSquareIcon, SparklesIcon } from "lucide-react";
+import { GitBranchIcon, MessageSquareIcon, PlusIcon, SparklesIcon, XIcon } from "lucide-react";
 import { useState } from "react";
 
 import { cn } from "../../lib/utils";
@@ -12,6 +12,7 @@ import {
   type LighthouseViewer,
 } from "./lighthouseData";
 import { setTeamsTab, useTeamsTab } from "./lighthouseActions";
+import { addCanvas, removeCanvas, switchCanvas, useCanvases } from "./LighthouseIdeas";
 import { normalizeLighthouseSearch, useLighthouseSearch } from "./lighthouseLocation";
 import { useWorkspaceId } from "./workspaceStore";
 import { useNavigate } from "@tanstack/react-router";
@@ -65,6 +66,45 @@ function TeamsSubList() {
   );
 }
 
+function CanvasSubList() {
+  const { canvases, current } = useCanvases();
+  return (
+    <div className="flex flex-col gap-0.5 px-2 pt-1">
+      <div className="flex items-center justify-between ps-2 pb-1 text-xs text-muted-foreground">
+        画布
+        <Button size="icon-xs" variant="ghost-muted" aria-label="新建画布" onClick={addCanvas}>
+          <PlusIcon />
+        </Button>
+      </div>
+      {canvases.map((c) => (
+        <div key={c.id} className="group/canvas flex items-center gap-0.5">
+          <Button
+            size="sm"
+            variant={c.id === current ? "secondary" : "ghost-muted"}
+            className="min-w-0 flex-1 justify-start"
+            onClick={() => switchCanvas(c.id)}
+          >
+            <SparklesIcon />
+            <span className="truncate">{c.name}</span>
+          </Button>
+          {canvases.length > 1 ? (
+            <span className="opacity-0 group-hover/canvas:opacity-100 has-focus-visible:opacity-100">
+              <Button
+                size="icon-xs"
+                variant="ghost-muted"
+                aria-label={`删除画布 ${c.name}`}
+                onClick={() => removeCanvas(c.id)}
+              >
+                <XIcon />
+              </Button>
+            </span>
+          ) : null}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // 决定 is pinned on top of the 任务 list; the rows under it filter the task board.
 function TasksSubList({ view, viewer }: { view: LighthouseView; viewer: LighthouseViewer }) {
   const navigate = useNavigate();
@@ -106,15 +146,7 @@ function TasksSubList({ view, viewer }: { view: LighthouseView; viewer: Lighthou
 export function WorkSubList({ view, viewer }: { view: LighthouseView; viewer: LighthouseViewer }) {
   if (view === "teams") return <TeamsSubList />;
   if (view === "tasks" || view === "decisions") return <TasksSubList view={view} viewer={viewer} />;
-  if (view === "ideas")
-    return (
-      <div className="flex flex-col gap-0.5 px-2 pt-1">
-        <Button size="sm" variant="secondary" className="justify-start">
-          <SparklesIcon />
-          我的画布
-        </Button>
-      </div>
-    );
+  if (view === "ideas") return <CanvasSubList />;
   return <PlainSubList view={view} viewer={viewer} />;
 }
 

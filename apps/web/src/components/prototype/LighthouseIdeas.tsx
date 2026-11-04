@@ -60,10 +60,17 @@ interface Card {
   y: number;
 }
 
-interface IdeasState {
+interface Board {
   ideas: ReadonlyArray<Idea>;
   cards: ReadonlyArray<Card>;
   list: { x: number; y: number };
+}
+
+/** The open canvas's board is spread on the state; the other canvases wait in `parked`. */
+interface IdeasState extends Board {
+  canvases: ReadonlyArray<{ id: string; name: string }>;
+  current: string;
+  parked: Readonly<Record<string, Board>>;
   seq: number;
 }
 
@@ -104,6 +111,9 @@ let state: IdeasState = {
     },
   ],
   list: { x: 48, y: 72 },
+  canvases: [{ id: "k1", name: "我的画布" }],
+  current: "k1",
+  parked: {},
   seq: 10,
 };
 const listeners = new Set<() => void>();
@@ -116,6 +126,41 @@ const subscribe = (cb: () => void) => {
   return () => listeners.delete(cb);
 };
 const useIdeas = () => useSyncExternalStore(subscribe, () => state);
+
+export function useCanvases() {
+  const { canvases, current } = useIdeas();
+  return { canvases, current };
+}
+
+const EMPTY: Board = { ideas: [], cards: [], list: { x: 48, y: 72 } };
+const board = (s: IdeasState): Board => ({ ideas: s.ideas, cards: s.cards, list: s.list });
+
+export function switchCanvas(id: string) {
+  if (id === state.current) return;
+  const parked = { ...state.parked, [state.current]: board(state) };
+  const next = parked[id] ?? EMPTY;
+  delete parked[id];
+  commit({ ...next, parked, current: id });
+}
+
+export function addCanvas() {
+  const id = `k${state.seq + 1}`;
+  commit({
+    seq: state.seq + 1,
+    canvases: [...state.canvases, { id, name: `画布 ${state.canvases.length + 1}` }],
+  });
+  switchCanvas(id);
+}
+
+export function removeCanvas(id: string) {
+  if (state.canvases.length < 2) return;
+  const gone = id === state.current ? board(state) : state.parked[id];
+  for (const c of gone?.cards ?? []) if (c.url?.startsWith("blob:")) URL.revokeObjectURL(c.url);
+  const canvases = state.canvases.filter((c) => c.id !== id);
+  if (id === state.current) switchCanvas(canvases[0]!.id);
+  const { [id]: _dropped, ...parked } = state.parked;
+  commit({ canvases, parked });
+}
 
 const snap = (v: number, max: number) => Math.min(max, Math.max(0, Math.round(v / GRID) * GRID));
 const nextId = (prefix: string) => {
@@ -565,7 +610,7 @@ function Links() {
 const isEditable = (t: EventTarget | null) =>
   t instanceof HTMLElement && (t.isContentEditable || t.closest("input,textarea") !== null);
 
-export function IdeasPage() {
+function IdeasBoard() {
   const { cards, ideas } = useIdeas();
   const [linking, setLinking] = useState<string | null>(null);
   const scroller = useRef<HTMLDivElement>(null);
@@ -665,4 +710,9 @@ export function IdeasPage() {
       </div>
     </div>
   );
+}
+
+export function IdeasPage() {
+  const { current } = useCanvases();
+  return <IdeasBoard key={current} />;
 }
