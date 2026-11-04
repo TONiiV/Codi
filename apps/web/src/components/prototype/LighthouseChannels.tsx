@@ -25,6 +25,7 @@ import {
   type ChannelOwner,
   type ChannelSet,
 } from "./channelStore";
+import { companyAgent } from "./lighthouseData";
 
 const ICONS = {
   codi: MessageSquareIcon,
@@ -323,4 +324,73 @@ export function ContextGauge({ load }: { load: ContextLoad }) {
       </PopoverPopup>
     </Popover>
   );
+}
+
+export function contextFor(chat: string): ContextLoad {
+  if (chat === "mine") {
+    return {
+      used: 18_400,
+      total: 200_000,
+      memories: 42,
+      parts: [
+        { label: "固定记忆", detail: "你的角色、偏好、常用项目", tokens: 1_600, budget: 0.01 },
+        { label: "当前线程", detail: "最近几轮原文 + 较早部分的摘要", tokens: 6_200, budget: 0.05 },
+        { label: "任务板", detail: "夹爪 Demo · 7 张卡、2 个租约", tokens: 3_400, budget: 0.02 },
+        {
+          label: "检索到的记忆和日记",
+          detail: "舵机供应商、夹爪 BOM、昨天的日记",
+          tokens: 4_100,
+          budget: 0.03,
+        },
+        { label: "本次对话", detail: "Codi、Telegram、微信、邮箱共 9 条", tokens: 3_100 },
+      ],
+    };
+  }
+  if (companyAgent(chat)) {
+    return {
+      used: 9_800,
+      total: 200_000,
+      memories: 17,
+      parts: [
+        { label: "固定记忆", detail: "部门规则和流程", tokens: 1_900, budget: 0.01 },
+        {
+          label: "检索到的记忆和日记",
+          detail: "入职清单、考勤规则、你的记录（按你的权限过滤）",
+          tokens: 3_300,
+          budget: 0.03,
+        },
+        { label: "本次对话", detail: "邮箱和 Codi 共 5 条", tokens: 4_600 },
+      ],
+    };
+  }
+  if (chat === "codi") {
+    return {
+      used: 152_000,
+      total: 200_000,
+      memories: 31,
+      parts: [
+        { label: "固定记忆", detail: "项目约定、你的偏好", tokens: 1_800, budget: 0.01 },
+        { label: "当前线程", detail: "和 W7 来回 40 多轮", tokens: 9_600, budget: 0.05 },
+        { label: "任务板", detail: "codi#23 和相关工单", tokens: 3_900, budget: 0.02 },
+        {
+          label: "检索到的记忆和日记",
+          detail: "上周的评审结论、#23 的决定",
+          tokens: 5_700,
+          budget: 0.03,
+        },
+        { label: "本次对话", detail: "大段日志和 diff 还留在上下文里", tokens: 131_000 },
+      ],
+    };
+  }
+  return {
+    used: 12_600,
+    total: 200_000,
+    memories: 23,
+    parts: [
+      { label: "固定记忆", detail: "项目约定、你的偏好", tokens: 1_400, budget: 0.01 },
+      { label: "当前线程", detail: "这个项目最近 3 段对话", tokens: 3_800, budget: 0.05 },
+      { label: "任务板", detail: "这个项目的卡、租约和决定", tokens: 3_600, budget: 0.02 },
+      { label: "本次对话", detail: "3 条", tokens: 3_800 },
+    ],
+  };
 }

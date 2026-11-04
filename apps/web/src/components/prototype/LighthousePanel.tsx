@@ -28,6 +28,7 @@ import {
   useSideChatRequest,
   type Kickoff,
 } from "./lighthouseActions";
+import { ContextGauge, contextFor } from "./LighthouseChannels";
 import { BotAvatar } from "./LighthouseChatList";
 import {
   PROJECTS,
@@ -473,7 +474,10 @@ function SideChatSurface({
             ))}
           </div>
         ) : null}
-        <ChatComposerCard placeholder={`对 ${current.name} 说`} />
+        <ChatComposerCard
+          placeholder={`对 ${current.name} 说`}
+          gauge={<ContextGauge load={contextFor(current.id)} />}
+        />
       </div>
     </div>
   );
