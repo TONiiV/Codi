@@ -84,6 +84,7 @@ const OPENING_LINE: Record<LighthouseView, string> = {
   dashboard: "要我解释哪个数字？",
   tasks: "改状态、加工单、改派 Worker，说一句就行。",
   decisions: "要追溯哪个决定？",
+  ideas: "要把哪条想法展开，或者交给哪个 agent？",
   members: "要给谁加权限？",
 };
 

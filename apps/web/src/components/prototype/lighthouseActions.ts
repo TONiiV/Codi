@@ -209,13 +209,19 @@ export function createWorker(task: LighthouseTask, ticket: Ticket): LighthouseBo
 }
 
 export function createTask(from: LighthouseTask, title: string): LighthouseTask {
-  const cos = PROJECT_COS[from.project];
+  return createTaskIn(from.project, title);
+}
+
+/** A new to-do task on a project's board, held by that project's Chief Agent. */
+export function createTaskIn(project: string, title: string, description?: string): LighthouseTask {
+  const cos = PROJECT_COS[project];
   const task: LighthouseTask = {
     id: `T-${31 + store.tasks.length}`,
     title,
-    project: from.project,
+    project,
     status: "todo",
     assignees: cos ? [{ kind: "bot", name: cos.name, tone: cos.tone }] : [],
+    ...(description ? { description } : {}),
     tickets: [],
   };
   update({ tasks: [...store.tasks, task] });

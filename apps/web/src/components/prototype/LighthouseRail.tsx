@@ -1,13 +1,14 @@
-// PROTOTYPE, wipe me. Teams-style vertical rail on the Work tab: chats, projects, My Teams, dashboard, tasks, decisions.
+// PROTOTYPE, wipe me. Teams-style vertical rail on the Work tab: chats, projects, My Teams,
+// dashboard, tasks (decisions live inside), ideas.
 import { useNavigate } from "@tanstack/react-router";
 import {
   BotIcon,
   UsersRoundIcon,
   FolderGit2Icon,
-  GitBranchIcon,
   LayoutDashboardIcon,
   ListChecksIcon,
   MessagesSquareIcon,
+  SparklesIcon,
 } from "lucide-react";
 
 import { cn } from "../../lib/utils";
@@ -28,8 +29,11 @@ export const RAIL_ITEMS: ReadonlyArray<{
   { id: "teams", label: "My Teams", icon: UsersRoundIcon },
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboardIcon },
   { id: "tasks", label: "任务", icon: ListChecksIcon, badge: 2 },
-  { id: "decisions", label: "决定", icon: GitBranchIcon },
+  { id: "ideas", label: "Ideas", icon: SparklesIcon },
 ];
+
+/** 决定 is a page inside the 任务 tab, so the rail lights 任务 for it. */
+const railView = (view: LighthouseView): LighthouseView => (view === "decisions" ? "tasks" : view);
 
 export function LighthouseRail({ collapsed }: { collapsed?: boolean }) {
   const navigate = useNavigate();
@@ -51,7 +55,7 @@ export function LighthouseRail({ collapsed }: { collapsed?: boolean }) {
               <Button
                 aria-label={item.label}
                 size="icon"
-                variant={view === item.id ? "secondary" : "ghost-muted"}
+                variant={railView(view) === item.id ? "secondary" : "ghost-muted"}
                 className="relative"
                 onClick={() =>
                   void navigate({

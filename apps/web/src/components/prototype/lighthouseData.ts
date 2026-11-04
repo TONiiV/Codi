@@ -538,6 +538,7 @@ export type LighthouseView =
   | "dashboard"
   | "tasks"
   | "decisions"
+  | "ideas"
   | "members";
 
 export type TaskStatus = "todo" | "doing" | "review" | "done";

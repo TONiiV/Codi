@@ -38,6 +38,7 @@ import { TasksPage } from "./LighthouseTasks";
 import { DashboardPage } from "./LighthouseDashboard";
 import { TeamsPage } from "./LighthouseTeams";
 import { DecisionsPage } from "./LighthouseDecisions";
+import { IdeasPage } from "./LighthouseIdeas";
 import { ProjectsPage } from "./LighthouseProjects";
 import { InviteChatPage } from "./WorkspaceInviteChat";
 import { INVITES_CHAT, usePendingInvites, useWorkspaceId } from "./workspaceStore";
@@ -518,7 +519,11 @@ export function LighthousePrototypePage({ background }: { background?: boolean }
       ? v.cos.name
       : agentName(viewer, chat, version);
   const viewLabel =
-    view === "members" ? "成员与授权" : (RAIL_ITEMS.find((r) => r.id === view)?.label ?? view);
+    view === "members"
+      ? "成员与授权"
+      : view === "decisions"
+        ? "任务 · 决定"
+        : (RAIL_ITEMS.find((r) => r.id === view)?.label ?? view);
 
   return (
     <SidebarInset className="h-dvh min-h-0 overflow-hidden overscroll-y-none" inert={background}>
@@ -557,7 +562,8 @@ export function LighthousePrototypePage({ background }: { background?: boolean }
               chat={chat}
             />
           ) : null}
-          {view !== "chats" ? (
+          {view === "ideas" ? <IdeasPage /> : null}
+          {view !== "chats" && view !== "ideas" ? (
             <div className="flex min-h-0 flex-1">
               <div className="min-h-0 flex-1 overflow-y-auto scrollbar-gutter-both">
                 <div

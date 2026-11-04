@@ -1,5 +1,5 @@
 // PROTOTYPE, wipe me. Small pieces shared by the non-chat views of Lighthouse.
-import { MessageSquareIcon } from "lucide-react";
+import { GitBranchIcon, MessageSquareIcon, SparklesIcon } from "lucide-react";
 import { useState } from "react";
 
 import { cn } from "../../lib/utils";
@@ -12,7 +12,10 @@ import {
   type LighthouseViewer,
 } from "./lighthouseData";
 import { setTeamsTab, useTeamsTab } from "./lighthouseActions";
+import { normalizeLighthouseSearch, useLighthouseSearch } from "./lighthouseLocation";
 import { useWorkspaceId } from "./workspaceStore";
+import { useNavigate } from "@tanstack/react-router";
+
 import { Button } from "../ui/button";
 
 export function projectName(id: string): string {
@@ -62,20 +65,63 @@ function TeamsSubList() {
   );
 }
 
+// 决定 is pinned on top of the 任务 list; the rows under it filter the task board.
+function TasksSubList({ view, viewer }: { view: LighthouseView; viewer: LighthouseViewer }) {
+  const navigate = useNavigate();
+  const search = useLighthouseSearch() ?? normalizeLighthouseSearch({});
+  const open = projectsIn(useWorkspaceId(), viewer).open;
+  const [active, setActive] = useState(0);
+  const go = (to: LighthouseView) =>
+    void navigate({ to: "/prototype/lighthouse", search: { ...search, view: to } });
+  return (
+    <div className="flex flex-col gap-0.5 px-2 pt-1">
+      <Button
+        size="sm"
+        variant={view === "decisions" ? "secondary" : "ghost-muted"}
+        className="justify-start"
+        onClick={() => go("decisions")}
+      >
+        <GitBranchIcon />
+        决定
+      </Button>
+      <div role="separator" className="mx-2 my-1 border-t" />
+      {["全部任务", ...open.map(projectName)].map((label, i) => (
+        <Button
+          key={label}
+          size="sm"
+          variant={view === "tasks" && active === i ? "secondary" : "ghost-muted"}
+          className="justify-start"
+          onClick={() => {
+            setActive(i);
+            if (view !== "tasks") go("tasks");
+          }}
+        >
+          {label}
+        </Button>
+      ))}
+    </div>
+  );
+}
+
 export function WorkSubList({ view, viewer }: { view: LighthouseView; viewer: LighthouseViewer }) {
   if (view === "teams") return <TeamsSubList />;
+  if (view === "tasks" || view === "decisions") return <TasksSubList view={view} viewer={viewer} />;
+  if (view === "ideas")
+    return (
+      <div className="flex flex-col gap-0.5 px-2 pt-1">
+        <Button size="sm" variant="secondary" className="justify-start">
+          <SparklesIcon />
+          我的画布
+        </Button>
+      </div>
+    );
   return <PlainSubList view={view} viewer={viewer} />;
 }
 
 function PlainSubList({ view, viewer }: { view: LighthouseView; viewer: LighthouseViewer }) {
   const workspace = useWorkspaceId();
   const open = projectsIn(workspace, viewer).open;
-  const items =
-    view === "tasks"
-      ? ["全部任务", ...open.map(projectName)]
-      : view === "members"
-        ? [VIEWERS[viewer].title]
-        : ["全部", ...open.map(projectName)];
+  const items = view === "members" ? [VIEWERS[viewer].title] : ["全部", ...open.map(projectName)];
   const [active, setActive] = useState(0);
   return (
     <div className="flex flex-col gap-0.5 px-2 pt-1">
