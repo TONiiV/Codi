@@ -13,6 +13,7 @@ import { useRegistryVersion } from "./lighthouseActions";
 import { AddAgentDialog } from "./LighthouseTeams";
 import { chatsFor, type LighthouseChat, type LighthouseViewer } from "./lighthouseData";
 import { Bloub, type AgentState } from "./LighthouseBloub";
+import { ChannelIcon } from "./LighthouseChannels";
 import { normalizeLighthouseSearch, useLighthouseSearch } from "./lighthouseLocation";
 import { useWorkspaceId } from "./workspaceStore";
 
@@ -153,9 +154,12 @@ export function LighthouseChatList() {
                           </span>
                         </span>
                         <span className="mt-0.5 flex items-center justify-between gap-2">
-                          <span className="truncate text-xs text-sidebar-muted-foreground">
-                            {roleTag(c) ? `${roleTag(c)} · ` : ""}
-                            {c.last}
+                          <span className="flex min-w-0 items-center gap-1 text-xs text-sidebar-muted-foreground">
+                            {c.channel ? <ChannelIcon id={c.channel} /> : null}
+                            <span className="truncate">
+                              {roleTag(c) ? `${roleTag(c)} · ` : ""}
+                              {c.last}
+                            </span>
                           </span>
                           {c.unread > 0 ? (
                             <Badge size="sm" className="shrink-0">

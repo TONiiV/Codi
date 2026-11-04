@@ -5,12 +5,23 @@ import type { ReactNode } from "react";
 
 import { ComposerSurface } from "../chat/ComposerSurface";
 import { Button } from "../ui/button";
+import { ChannelTag } from "./LighthouseChannels";
+import type { ChannelId } from "./channelStore";
 
 export interface ChatMessage {
   id: string;
   role: "user" | "assistant";
   author?: string;
   body: ReactNode;
+  /** Where the message came in or goes out; absent means the Codi app. */
+  channel?: ChannelId;
+  via?: string;
+}
+
+function Via({ m }: { m: ChatMessage }) {
+  return m.channel && m.channel !== "codi" ? (
+    <ChannelTag id={m.channel} {...(m.via ? { detail: m.via } : {})} />
+  ) : null;
 }
 
 export function ChatTimeline({ messages }: { messages: ReadonlyArray<ChatMessage> }) {
@@ -19,14 +30,18 @@ export function ChatTimeline({ messages }: { messages: ReadonlyArray<ChatMessage
       {messages.map((m) =>
         m.role === "user" ? (
           <div key={m.id} className="flex flex-col items-end gap-1 pb-4">
+            <Via m={m} />
             <div className="max-w-[80%] min-w-0 rounded-2xl bg-message p-3 text-sm leading-relaxed text-message-foreground">
               {m.body}
             </div>
           </div>
         ) : (
           <div key={m.id} className="relative min-w-0 px-1 py-0.5 pb-4">
-            {m.author ? (
-              <div className="mb-1 text-xs font-medium text-muted-foreground">{m.author}</div>
+            {m.author || m.channel ? (
+              <div className="mb-1 flex items-center gap-2 text-xs font-medium text-muted-foreground">
+                {m.author}
+                <Via m={m} />
+              </div>
             ) : null}
             <div className="text-sm leading-relaxed">{m.body}</div>
           </div>

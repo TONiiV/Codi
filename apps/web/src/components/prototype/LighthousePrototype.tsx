@@ -10,6 +10,15 @@ import { BotAvatar } from "./LighthouseChatList";
 import { LighthousePanel } from "./LighthousePanel";
 import { ChatComposerCard, ChatTimeline, type ChatMessage } from "./LighthouseChat";
 import {
+  ChannelFilter,
+  ContextMeter,
+  DraftReply,
+  EmailCard,
+  type ChannelFilterValue,
+  type ContextLoad,
+} from "./LighthouseChannels";
+import { defaultHandle, type ChannelId } from "./channelStore";
+import {
   ASKS,
   PROJECTS,
   VIEWERS,
@@ -257,6 +266,7 @@ function conversation(
   }
   const company = companyAgent(chat);
   if (company) {
+    const extra: ReadonlyArray<ChatMessage> = chat === "hr" ? HR_MAIL : [];
     return [
       {
         id: "a1",
@@ -275,6 +285,7 @@ function conversation(
           </div>
         ),
       },
+      ...extra,
     ];
   }
   if (chat !== "mine") {
@@ -323,7 +334,164 @@ function conversation(
         </div>
       ),
     },
+    ...assistantChannels(
+      v.cos.name,
+      defaultHandle({ kind: "personal", viewer, workspace, agent: "cos" }, "email"),
+    ),
   ];
+}
+
+const QUOTE = {
+  from: "李工 <li@servo-sz.com>",
+  subject: "报价单 · 夹爪舵机 200 套",
+  lines: [
+    "您好，附件是 200 套改型舵机的报价：单价 ¥86，含税，交期 3 周。",
+    "500 套以上可以再谈 8% 的折扣。报价有效期到 11 月 15 日。",
+    "麻烦在 11 月 8 日前确认数量。",
+  ],
+};
+
+/** The 个人助理 hears from the same person on several channels; all of it lands in one chat. */
+function assistantChannels(name: string, mail: string): ReadonlyArray<ChatMessage> {
+  return [
+    {
+      id: "u2",
+      role: "user",
+      channel: "telegram",
+      via: "09:20",
+      body: "到公司了，今天的会帮我看一下",
+    },
+    {
+      id: "a3",
+      role: "assistant",
+      author: name,
+      channel: "telegram",
+      via: "09:20",
+      body: "今天 2 个会：10:30 夹爪评审，15:00 和舵机供应商。供应商的报价单刚到邮箱，放在下面了。",
+    },
+    {
+      id: "a4",
+      role: "assistant",
+      author: name,
+      channel: "email",
+      via: `收到 · ${mail}`,
+      body: (
+        <div className="flex flex-col gap-2">
+          <EmailCard from={QUOTE.from} to={mail} subject={QUOTE.subject} lines={QUOTE.lines} />
+          <span>我把「确认舵机数量」放进了需要你定。回信我写成了草稿，你点发送才会发出。</span>
+        </div>
+      ),
+    },
+    {
+      id: "a5",
+      role: "assistant",
+      author: name,
+      channel: "email",
+      via: "草稿",
+      body: (
+        <DraftReply
+          to="李工"
+          subject={`Re: ${QUOTE.subject}`}
+          text={"李工您好，报价收到，谢谢。\n我们这周内确认数量，届时再回复您。"}
+        />
+      ),
+    },
+    { id: "u3", role: "user", channel: "wechat", via: "10:05", body: "下午 3 点的会推到 4 点" },
+    {
+      id: "a6",
+      role: "assistant",
+      author: name,
+      channel: "wechat",
+      via: "10:05",
+      body: "已在「Codi」日历里改好。对方那边的会议邀请也要改，这算对外发消息，你点确认后我再发。",
+    },
+  ];
+}
+
+const HR_MAIL: ReadonlyArray<ChatMessage> = [
+  {
+    id: "a2",
+    role: "assistant",
+    author: "人事代理",
+    channel: "email",
+    via: "收到 · hr@dimx.ai",
+    body: (
+      <div className="flex flex-col gap-2">
+        <EmailCard
+          from="Chen Yu <chenyu.new@gmail.com>"
+          to="hr@dimx.ai"
+          subject="入职材料补交"
+          lines={[
+            "您好，我是下周一入职的 Chen Yu。附件是身份证和银行卡信息。",
+            "学历证明还在学校办理，预计周三拿到，可以晚几天补吗？",
+          ]}
+        />
+        <span>我按入职清单核对了：只缺学历证明扫描件。回信写成了草稿，由人事部发送。</span>
+      </div>
+    ),
+  },
+  {
+    id: "a3",
+    role: "assistant",
+    author: "人事代理",
+    channel: "email",
+    via: "草稿",
+    body: (
+      <DraftReply
+        to="Chen Yu"
+        subject="Re: 入职材料补交"
+        text={"Chen Yu 你好，材料已收到。学历证明可以在入职后一周内补交。\n欢迎加入 DimensionX。"}
+      />
+    ),
+  },
+  { id: "u1", role: "user", body: "11 月我有几天考勤异常？" },
+  {
+    id: "a4",
+    role: "assistant",
+    author: "人事代理",
+    body: "按你的权限，我只看你自己的记录：11 月 0 天异常。别人的考勤我不会告诉你。",
+  },
+];
+
+/** A static mock: how much this chat's agent has loaded, and from where. */
+function contextFor(chat: string): ContextLoad {
+  if (chat === "mine") {
+    return {
+      used: 18_400,
+      total: 200_000,
+      memories: 42,
+      parts: [
+        { label: "固定记忆", detail: "你的角色、偏好、常用项目", tokens: 1_200 },
+        { label: "最近摘要", detail: "昨天和今天的 4 段对话，已压成摘要", tokens: 3_400 },
+        { label: "检索到的 3 条", detail: "舵机供应商、夹爪 BOM、上次报价", tokens: 2_100 },
+        { label: "当前任务板", detail: "夹爪 Demo · 7 张卡、2 个租约", tokens: 4_800 },
+        { label: "本次对话", detail: "Codi、Telegram、微信、邮箱共 9 条", tokens: 6_900 },
+      ],
+    };
+  }
+  if (companyAgent(chat)) {
+    return {
+      used: 9_800,
+      total: 200_000,
+      memories: 17,
+      parts: [
+        { label: "固定记忆", detail: "部门规则和流程，按你的权限过滤", tokens: 2_600 },
+        { label: "检索到的 3 条", detail: "入职清单、考勤规则、你的记录", tokens: 1_900 },
+        { label: "本次对话", detail: "邮箱和 Codi 共 5 条", tokens: 5_300 },
+      ],
+    };
+  }
+  return {
+    used: 12_600,
+    total: 200_000,
+    memories: 23,
+    parts: [
+      { label: "固定记忆", detail: "项目约定、你的偏好", tokens: 1_000 },
+      { label: "最近摘要", detail: "这个项目最近 3 段对话", tokens: 2_800 },
+      { label: "当前任务板", detail: "这个项目的卡、租约和决定", tokens: 5_200 },
+      { label: "本次对话", detail: "3 条", tokens: 3_600 },
+    ],
+  };
 }
 
 function ChatPage({
@@ -342,6 +510,12 @@ function ChatPage({
   const inviteAsks = chat === "mine" ? invites : [];
   const count = asks.length + inviteAsks.length;
   const cosName = chat === "mine" ? v.cos.name : agentName(viewer, chat, version);
+  const [filter, setFilter] = useState<ChannelFilterValue>("all");
+  const messages = conversation(viewer, v, workspace, chat);
+  const counts: Partial<Record<ChannelId, number>> = {};
+  for (const m of messages) counts[m.channel ?? "codi"] = (counts[m.channel ?? "codi"] ?? 0) + 1;
+  const shown =
+    filter === "all" ? messages : messages.filter((m) => (m.channel ?? "codi") === filter);
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="min-h-0 flex-1 overflow-y-auto scrollbar-gutter-both">
@@ -356,7 +530,12 @@ function ChatPage({
               <Inbox asks={asks} />
             </div>
           ) : null}
-          <ChatTimeline messages={conversation(viewer, v, workspace, chat)} />
+          {Object.keys(counts).length > 1 ? (
+            <div className="mb-4 flex justify-center">
+              <ChannelFilter counts={counts} value={filter} onChange={setFilter} />
+            </div>
+          ) : null}
+          <ChatTimeline messages={shown} />
         </div>
       </div>
       <div className="mx-auto w-full max-w-(--chat-content-max-width) px-5 pb-4">
@@ -433,6 +612,11 @@ export function LighthousePrototypePage({ background }: { background?: boolean }
               <h1>{view === "chats" ? chatName : viewLabel}</h1>
             </WorkspaceBreadcrumbItem>
           </WorkspaceBreadcrumb>
+          {view === "chats" ? (
+            <div className="ms-auto">
+              <ContextMeter load={contextFor(chat)} />
+            </div>
+          ) : null}
         </header>
         <div className="flex min-h-0 flex-1 flex-col">
           {view === "chats" && chat === "desk" ? (

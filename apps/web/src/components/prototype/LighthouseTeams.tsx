@@ -8,6 +8,14 @@ import { useId, useState, type ReactNode } from "react";
 import { cn } from "../../lib/utils";
 import { BotAvatar } from "./LighthouseChatList";
 import { AGENT_STATES, Bloub, type AgentState } from "./LighthouseBloub";
+import { ChannelBadges, ChannelSettings } from "./LighthouseChannels";
+import {
+  saveChannels,
+  useChannels,
+  useWechatHolder,
+  type ChannelOwner,
+  type ChannelSet,
+} from "./channelStore";
 import {
   addChiefAgent,
   addCustomAgent,
@@ -128,6 +136,7 @@ export function AgentDialog({
   onSave,
   onClose,
   children,
+  channels,
 }: {
   title: string;
   subtitle: string;
@@ -139,9 +148,12 @@ export function AgentDialog({
   onSave: (setup: CosSetup) => void;
   onClose: () => void;
   children?: ReactNode;
+  /** The agent's channels; saved together with the rest of the dialog. */
+  channels?: { owner: ChannelOwner; initial: ChannelSet; wechatHolder: string | null };
 }) {
   const id = useId();
   const [setup, setSetup] = useState(initial);
+  const [channelDraft, setChannelDraft] = useState(channels?.initial ?? {});
   const set = <K extends keyof CosSetup>(key: K, value: CosSetup[K]) =>
     setSetup({ ...setup, [key]: value });
   const toggle = (power: CosPower, on: boolean) =>
@@ -158,6 +170,7 @@ export function AgentDialog({
           className="flex min-h-0 flex-col"
           onSubmit={(event) => {
             event.preventDefault();
+            if (channels) saveChannels(channels.owner, channelDraft);
             onSave({ ...setup, name: setup.name.trim() });
           }}
         >
@@ -294,6 +307,14 @@ export function AgentDialog({
                   </ToggleGroup>
                 </div>
               </fieldset>
+              {channels ? (
+                <ChannelSettings
+                  owner={channels.owner}
+                  value={channelDraft}
+                  onChange={setChannelDraft}
+                  wechatHolder={channels.wechatHolder}
+                />
+              ) : null}
             </div>
           </DialogPanel>
           <DialogFooter>
@@ -337,18 +358,27 @@ function agentKind(viewer: LighthouseViewer, id: string | null) {
 const customRole = (viewer: LighthouseViewer) => (viewer === "admin" ? "lead" : "member");
 const CUSTOM_CAP = "你不是管理员，自定义 agent 不能合并 PR";
 
+const personalOwner = (
+  viewer: LighthouseViewer,
+  workspace: string,
+  project: string | null,
+): ChannelOwner => ({ kind: "personal", viewer, workspace, agent: project ?? "cos" });
+
 function AgentRow({
   viewer,
+  workspace,
   project,
   enterprise,
   onEdit,
 }: {
   viewer: LighthouseViewer;
+  workspace: string;
   project: string | null;
   enterprise: boolean;
   onEdit: () => void;
 }) {
   const setup = useCosSetup(viewer, project);
+  const channels = useChannels(personalOwner(viewer, workspace, project));
   const workers = useAllBots().filter((b) => b.kind === "worker" && b.project === project);
   const { line } = agentKind(viewer, project);
   return (
@@ -368,6 +398,7 @@ function AgentRow({
             {setup.board ? "任务板同步" : "不同步任务板"}
           </Badge>
           {enterprise ? <Badge variant="outline">{dispatchLine(setup)}</Badge> : null}
+          <ChannelBadges value={channels} />
         </div>
         {workers.length > 0 ? (
           <div className="mt-1 text-xs text-muted-foreground">
@@ -384,17 +415,29 @@ function AgentRow({
 
 function EditAgent({
   viewer,
+  workspace,
   project,
   enterprise,
   onClose,
 }: {
   viewer: LighthouseViewer;
+  workspace: string;
   project: string | null;
   enterprise: boolean;
   onClose: () => void;
 }) {
   const setup = useCosSetup(viewer, project);
   const { kind } = agentKind(viewer, project);
+  const owner = personalOwner(viewer, workspace, project);
+  const channels = useChannels(owner);
+  const holder = useWechatHolder(viewer);
+  const cosName = useViewer(viewer).cos.name;
+  const holderName =
+    holder === null || holder === owner.agent
+      ? null
+      : holder === "cos"
+        ? cosName
+        : chiefName(viewer, holder);
   return (
     <AgentDialog
       title={
@@ -417,6 +460,7 @@ function EditAgent({
       {...(kind === "custom" ? { capReason: CUSTOM_CAP } : {})}
       enterprise={enterprise}
       initial={setup}
+      channels={{ owner, initial: channels, wechatHolder: holderName }}
       onClose={onClose}
       onSave={(next) => {
         saveCos(viewer, project, next);
@@ -606,6 +650,7 @@ function MyAgents({ viewer, workspace }: { viewer: LighthouseViewer; workspace: 
       <ul className="divide-y rounded-lg border bg-card">
         <AgentRow
           viewer={viewer}
+          workspace={workspace}
           project={null}
           enterprise={enterprise}
           onEdit={() => setEditing(null)}
@@ -614,6 +659,7 @@ function MyAgents({ viewer, workspace }: { viewer: LighthouseViewer; workspace: 
           <AgentRow
             key={id}
             viewer={viewer}
+            workspace={workspace}
             project={id}
             enterprise={enterprise}
             onEdit={() => setEditing(id)}
@@ -624,6 +670,7 @@ function MyAgents({ viewer, workspace }: { viewer: LighthouseViewer; workspace: 
       {editing !== undefined ? (
         <EditAgent
           viewer={viewer}
+          workspace={workspace}
           project={editing}
           enterprise={enterprise}
           onClose={() => setEditing(undefined)}
@@ -647,8 +694,19 @@ function MyAgents({ viewer, workspace }: { viewer: LighthouseViewer; workspace: 
   );
 }
 
-function CompanyAgentDialog({ agent, onClose }: { agent: CompanyAgent; onClose: () => void }) {
+function CompanyAgentDialog({
+  agent,
+  workspace,
+  onClose,
+}: {
+  agent: CompanyAgent;
+  workspace: string;
+  onClose: () => void;
+}) {
   const id = useId();
+  const channelOwner: ChannelOwner = { kind: "company", agent: agent.id, workspace };
+  const saved = useChannels(channelOwner);
+  const [channels, setChannels] = useState(saved);
   const [name, setName] = useState(agent.name);
   const [owner, setOwner] = useState(agent.owner);
   const [can, setCan] = useState(agent.can.join("\n"));
@@ -664,6 +722,7 @@ function CompanyAgentDialog({ agent, onClose }: { agent: CompanyAgent; onClose: 
           className="flex min-h-0 flex-col"
           onSubmit={(event) => {
             event.preventDefault();
+            saveChannels(channelOwner, channels);
             saveCompanyAgent(agent.id, {
               name: name.trim(),
               owner: owner.trim(),
@@ -709,6 +768,12 @@ function CompanyAgentDialog({ agent, onClose }: { agent: CompanyAgent; onClose: 
                   onChange={(e) => setCan(e.currentTarget.value)}
                 />
               </Label>
+              <ChannelSettings
+                owner={channelOwner}
+                value={channels}
+                onChange={setChannels}
+                wechatHolder={null}
+              />
             </div>
           </DialogPanel>
           <DialogFooter>
@@ -726,6 +791,16 @@ function CompanyAgentDialog({ agent, onClose }: { agent: CompanyAgent; onClose: 
 }
 
 const companyAt = (workspace: string, _version: number) => companyAgentsIn(workspace);
+
+function CompanyChannels({ agent, workspace }: { agent: string; workspace: string }) {
+  const channels = useChannels({ kind: "company", agent, workspace });
+  return (
+    <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+      信道：Codi
+      <ChannelBadges value={channels} withHandle />
+    </div>
+  );
+}
 
 function CompanyAgents({ viewer, workspace }: { viewer: LighthouseViewer; workspace: string }) {
   const navigate = useNavigate();
@@ -762,6 +837,7 @@ function CompanyAgents({ viewer, workspace }: { viewer: LighthouseViewer; worksp
                 <li key={c}>{c}</li>
               ))}
             </ul>
+            <CompanyChannels agent={a.id} workspace={workspace} />
             <div className="mt-auto flex items-center justify-end gap-2">
               {admin ? (
                 <Button size="xs" variant="ghost-muted" onClick={() => setEditing(a)}>
@@ -788,7 +864,13 @@ function CompanyAgents({ viewer, workspace }: { viewer: LighthouseViewer; worksp
           </article>
         ))}
       </div>
-      {editing ? <CompanyAgentDialog agent={editing} onClose={() => setEditing(null)} /> : null}
+      {editing ? (
+        <CompanyAgentDialog
+          agent={editing}
+          workspace={workspace}
+          onClose={() => setEditing(null)}
+        />
+      ) : null}
     </section>
   );
 }

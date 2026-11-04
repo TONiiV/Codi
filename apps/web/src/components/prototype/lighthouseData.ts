@@ -1,4 +1,6 @@
 // PROTOTYPE, wipe me. Shared mock data for the Lighthouse Work tab prototype.
+import type { ChannelId } from "./channelStore";
+
 export type LighthouseViewer = "admin" | "lead" | "member";
 export type LighthouseChatId = string;
 
@@ -443,6 +445,8 @@ export interface LighthouseChat {
   readOnly?: boolean;
   company?: boolean;
   custom?: boolean;
+  /** The channel the last message came through, when it was not the Codi app. */
+  channel?: ChannelId;
 }
 
 const LAST_LINE: Record<string, { last: string; time: string; unread: number }> = {
@@ -487,10 +491,11 @@ export function chatsFor(
     id: "mine",
     name: v.cos.name,
     tone: "bg-foreground",
-    last: asks[0]?.text ?? "今天没有要你定的事。",
-    time: "09:05",
+    last: "下午 3 点的会推到 4 点",
+    time: "10:05",
     unread: asks.length,
     online: true,
+    channel: "wechat",
   };
   const projects = open
     .filter((id) => hasChief(viewer, id))
@@ -516,10 +521,11 @@ export function chatsFor(
     name: a.name,
     tone: "bg-muted-foreground",
     last: a.last,
-    time: a.id === "desk" ? "09:00" : "昨天",
+    time: a.id === "desk" ? "09:00" : a.id === "hr" ? "10:20" : "昨天",
     unread: 0,
     online: true,
     company: true,
+    ...(a.id === "hr" ? { last: "入职材料补交 · hr@ 收到", channel: "email" as const } : {}),
     ...(a.id === "desk" ? { readOnly: true } : {}),
   }));
   return [mine, ...projects, ...custom, ...company];
