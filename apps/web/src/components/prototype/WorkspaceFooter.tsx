@@ -1,17 +1,8 @@
 // PROTOTYPE, wipe me. Bottom-left account row, after Claude Code: avatar, name over workspace and a
-// menu to answer invites, switch, create or join a workspace (on Telescope also members and the
-// viewer); settings on the right.
+// menu to switch or create a workspace (on Telescope also members and the viewer); settings on the
+// right. Invites are answered in their pinned chat, not here.
 import { useNavigate } from "@tanstack/react-router";
-import {
-  CheckIcon,
-  ChevronsUpDownIcon,
-  LogInIcon,
-  PlusIcon,
-  SettingsIcon,
-  Undo2Icon,
-  UsersIcon,
-  XIcon,
-} from "lucide-react";
+import { ChevronsUpDownIcon, PlusIcon, SettingsIcon, UsersIcon } from "lucide-react";
 import { useState } from "react";
 
 import { cn } from "../../lib/utils";
@@ -31,16 +22,8 @@ import {
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { VIEWERS, WORKSPACE_KIND, type LighthouseViewer } from "./lighthouseData";
 import { normalizeLighthouseSearch, useLighthouseSearch } from "./lighthouseLocation";
-import { CreateWorkspaceDialog, JoinWorkspaceDialog } from "./WorkspaceDialogs";
-import {
-  acceptInvite,
-  declineInvite,
-  restoreInvite,
-  setWorkspace,
-  useInvites,
-  useWorkspaceId,
-  useWorkspaces,
-} from "./workspaceStore";
+import { CreateWorkspaceDialog } from "./WorkspaceDialogs";
+import { setWorkspace, useWorkspaceId, useWorkspaces } from "./workspaceStore";
 
 export function WorkspaceUserMenu({ compact }: { compact?: boolean }) {
   const navigate = useNavigate();
@@ -50,20 +33,18 @@ export function WorkspaceUserMenu({ compact }: { compact?: boolean }) {
   const workspaceId = useWorkspaceId();
   const workspaces = useWorkspaces();
   const workspace = workspaces.find((w) => w.id === workspaceId) ?? workspaces[0]!;
-  const invites = useInvites(search.as);
-  const [dialog, setDialog] = useState<"create" | "join" | null>(null);
+  const [creating, setCreating] = useState(false);
   const go = (patch: Partial<typeof search>) =>
     void navigate({ to: "/prototype/lighthouse", search: { ...search, ...patch } });
   const toMine = () => {
     if (lighthouse) go({ chat: "mine" });
   };
-  const inviteNote = invites.pending.length > 0 ? `，${invites.pending.length} 个工作区邀请` : "";
 
   return (
     <>
       <Menu>
         <MenuTrigger
-          aria-label={`账号与工作区：${viewer.name} · ${workspace.name}（${WORKSPACE_KIND[workspace.kind]}）${inviteNote}`}
+          aria-label={`账号与工作区：${viewer.name} · ${workspace.name}（${WORKSPACE_KIND[workspace.kind]}）`}
           render={
             <button
               type="button"
@@ -74,13 +55,8 @@ export function WorkspaceUserMenu({ compact }: { compact?: boolean }) {
             />
           }
         >
-          <span className="relative shrink-0">
-            <span className="inline-flex size-7 items-center justify-center rounded-full bg-primary text-xs font-medium text-primary-foreground">
-              {viewer.name[0]}
-            </span>
-            {invites.pending.length > 0 ? (
-              <span className="absolute -end-0.5 -top-0.5 size-2.5 rounded-full bg-destructive ring-2 ring-sidebar" />
-            ) : null}
+          <span className="inline-flex size-7 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-medium text-primary-foreground">
+            {viewer.name[0]}
           </span>
           {compact ? null : (
             <>
@@ -98,28 +74,6 @@ export function WorkspaceUserMenu({ compact }: { compact?: boolean }) {
           )}
         </MenuTrigger>
         <MenuPopup align="start" side="top" sideOffset={6}>
-          {invites.pending.map((invite) => (
-            <MenuGroup key={invite.code}>
-              <MenuGroupLabel>
-                {invite.from} 邀请你加入 {invite.workspace.name}（
-                {WORKSPACE_KIND[invite.workspace.kind]} · {invite.role}）
-              </MenuGroupLabel>
-              <MenuItem
-                onClick={() => {
-                  acceptInvite(invite);
-                  toMine();
-                }}
-              >
-                <CheckIcon className="size-3.5" />
-                接受并进入
-              </MenuItem>
-              <MenuItem onClick={() => declineInvite(invite)}>
-                <XIcon className="size-3.5" />
-                拒绝
-              </MenuItem>
-              <MenuSeparator />
-            </MenuGroup>
-          ))}
           <MenuGroup>
             <MenuGroupLabel>工作区</MenuGroupLabel>
             <MenuRadioGroup
@@ -138,29 +92,11 @@ export function WorkspaceUserMenu({ compact }: { compact?: boolean }) {
                 </MenuRadioItem>
               ))}
             </MenuRadioGroup>
-            <MenuItem onClick={() => setDialog("create")}>
+            <MenuItem onClick={() => setCreating(true)}>
               <PlusIcon className="size-3.5" />
               新建工作区
             </MenuItem>
-            <MenuItem onClick={() => setDialog("join")}>
-              <LogInIcon className="size-3.5" />
-              加入工作区
-            </MenuItem>
           </MenuGroup>
-          {invites.declined.length > 0 ? (
-            <>
-              <MenuSeparator />
-              <MenuGroup>
-                <MenuGroupLabel>已拒绝的邀请</MenuGroupLabel>
-                {invites.declined.map((invite) => (
-                  <MenuItem key={invite.code} onClick={() => restoreInvite(invite)}>
-                    <Undo2Icon className="size-3.5" />
-                    恢复 {invite.workspace.name} 的邀请
-                  </MenuItem>
-                ))}
-              </MenuGroup>
-            </>
-          ) : null}
           {lighthouse ? (
             <>
               <MenuSeparator />
@@ -186,21 +122,12 @@ export function WorkspaceUserMenu({ compact }: { compact?: boolean }) {
           ) : null}
         </MenuPopup>
       </Menu>
-      {dialog === "create" ? (
+      {creating ? (
         <CreateWorkspaceDialog
           viewer={search.as}
-          onClose={() => setDialog(null)}
+          onClose={() => setCreating(false)}
           onDone={() => {
-            setDialog(null);
-            toMine();
-          }}
-        />
-      ) : null}
-      {dialog === "join" ? (
-        <JoinWorkspaceDialog
-          onClose={() => setDialog(null)}
-          onDone={() => {
-            setDialog(null);
+            setCreating(false);
             toMine();
           }}
         />

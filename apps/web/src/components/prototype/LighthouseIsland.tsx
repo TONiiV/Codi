@@ -2,7 +2,7 @@
 // Lighthouse and Code modes). It rests as a faint capsule and morphs into a two-icon switch when
 // the pointer comes near. Pure CSS hover, so nothing animates while the pointer is elsewhere.
 import { useNavigate } from "@tanstack/react-router";
-import type { SVGProps } from "react";
+import { useId, type SVGProps } from "react";
 
 import { cn } from "../../lib/utils";
 import { useLighthouseSearch } from "./lighthouseLocation";
@@ -74,15 +74,16 @@ function TelescopeFlare() {
   );
 }
 
-const SPECIMEN = { transformBox: "view-box", transformOrigin: "9.5px 15px" } as const;
+const LENS_VIEW = { transformBox: "view-box", transformOrigin: "12px 12.5px" } as const;
 
-// Monochrome microscope. Live, the objective drops onto the slide, a focus ring zooms into the
-// detail, then shrinks back and the icon comes to rest.
+// Monochrome microscope. Live, the objective drops onto the slide, then a magnified lens view
+// opens on top of the whole icon with a dark vignette around it, holds about 0.8s and shrinks back.
 function MicroscopeGlyph({
   live,
   className,
   ...props
 }: SVGProps<SVGSVGElement> & { live?: boolean }) {
+  const id = useId();
   return (
     <svg
       viewBox="0 0 24 24"
@@ -94,32 +95,73 @@ function MicroscopeGlyph({
       <g
         className={cn(
           live &&
-            "motion-safe:group-hover/micro:animate-microscope-tube motion-safe:group-focus-visible/micro:animate-microscope-tube",
+            "motion-safe:group-hover/micro:animate-microscope-hide motion-safe:group-focus-visible/micro:animate-microscope-hide",
         )}
       >
-        <path d="M7.9 1.8h3.2v1.6H7.9z" />
-        <path d="M8.4 3.4h2.2V10H8.4z" />
-        <path d="M8.9 10h1.2v2.2H8.9z" />
+        <g
+          className={cn(
+            live &&
+              "motion-safe:group-hover/micro:animate-microscope-tube motion-safe:group-focus-visible/micro:animate-microscope-tube",
+          )}
+        >
+          <path d="M7.9 1.8h3.2v1.6H7.9z" />
+          <path d="M8.4 3.4h2.2V10H8.4z" />
+          <path d="M8.9 10h1.2v2.2H8.9z" />
+        </g>
+        <path d="M10.6 6.6H13v1.6h-2.4z" />
+        <path
+          d="M15.2 20.2v-6.4c0-2.6-1-4.6-2.6-5.8"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={1.9}
+          strokeLinecap="round"
+        />
+        <path d="M5.5 15.6h9.5v1.1H5.5z" />
+        <rect x="5" y="20" width="14" height="2" rx="1" />
       </g>
-      <path d="M10.6 6.6H13v1.6h-2.4z" />
-      <path
-        d="M15.2 20.2v-6.4c0-2.6-1-4.6-2.6-5.8"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth={1.9}
-        strokeLinecap="round"
-      />
-      <path d="M5.5 15.6h9.5v1.1H5.5z" />
-      <rect x="5" y="20" width="14" height="2" rx="1" />
       {live ? (
         <g
-          style={SPECIMEN}
-          className="opacity-0 motion-safe:group-hover/micro:animate-microscope-focus motion-safe:group-focus-visible/micro:animate-microscope-focus"
+          style={LENS_VIEW}
+          className={cn(
+            "opacity-0",
+            "motion-safe:group-hover/micro:animate-microscope-lens motion-safe:group-focus-visible/micro:animate-microscope-lens",
+          )}
         >
-          <circle cx="9.5" cy="15" r="2.2" fill="none" stroke="currentColor" strokeWidth={0.35} />
-          <circle cx="8.8" cy="14.6" r="0.35" />
-          <circle cx="10.1" cy="15.4" r="0.25" />
-          <circle cx="9.9" cy="14.3" r="0.2" />
+          <defs>
+            <radialGradient id={`${id}-vignette`}>
+              <stop offset="0.42" stopOpacity={0} />
+              <stop offset="0.5" stopOpacity={0.72} />
+              <stop offset="0.78" stopOpacity={0.4} />
+              <stop offset="1" stopOpacity={0} />
+            </radialGradient>
+            <radialGradient id={`${id}-rim`}>
+              <stop offset="0.6" stopOpacity={0} />
+              <stop offset="1" stopOpacity={0.45} />
+            </radialGradient>
+            <clipPath id={`${id}-lens`}>
+              <circle cx="12" cy="12.5" r="16" />
+            </clipPath>
+          </defs>
+          <circle cx="12" cy="12.5" r="34" fill={`url(#${id}-vignette)`} />
+          <g clipPath={`url(#${id}-lens)`}>
+            <circle cx="12" cy="12.5" r="16" fillOpacity={0.12} />
+            <g
+              style={LENS_VIEW}
+              className="motion-safe:group-hover/micro:animate-microscope-detail motion-safe:group-focus-visible/micro:animate-microscope-detail"
+            >
+              <circle cx="7" cy="9" r="5" fill="none" stroke="currentColor" strokeWidth={0.8} />
+              <circle cx="7.6" cy="9.4" r="1.6" />
+              <circle cx="17.5" cy="11" r="4" fill="none" stroke="currentColor" strokeWidth={0.8} />
+              <circle cx="17" cy="11.6" r="1.2" />
+              <circle cx="11" cy="19" r="4.6" fill="none" stroke="currentColor" strokeWidth={0.8} />
+              <circle cx="10.4" cy="18.4" r="1.4" />
+              <circle cx="13.4" cy="5" r="1" fillOpacity={0.6} />
+              <circle cx="20" cy="18" r="0.8" fillOpacity={0.6} />
+              <circle cx="3.6" cy="16" r="0.9" fillOpacity={0.6} />
+            </g>
+            <circle cx="12" cy="12.5" r="16" fill={`url(#${id}-rim)`} />
+          </g>
+          <circle cx="12" cy="12.5" r="16" fill="none" stroke="currentColor" strokeWidth={1.4} />
         </g>
       ) : null}
     </svg>

@@ -1,5 +1,5 @@
 // PROTOTYPE, wipe me. The current workspace, shared by Code and Lighthouse and kept per browser,
-// plus workspaces created or joined in this tab and pending workspace invites.
+// plus workspaces created in this tab and invites, which are the only way to join one.
 // A Code project belongs to a workspace by a name rule here; one that matches no rule is unbound
 // and shows in Code under every workspace.
 import { useSyncExternalStore } from "react";
@@ -20,8 +20,11 @@ export interface WorkspaceInvite {
   workspace: LighthouseWorkspace;
   from: string;
   role: string;
-  /** The viewer it was sent to; null for a code shared by link only. */
-  to: LighthouseViewer | null;
+  to: LighthouseViewer;
+  at: string;
+  note: string;
+  /** People and agents already in the workspace. */
+  members: ReadonlyArray<string>;
 }
 
 const INVITES: ReadonlyArray<WorkspaceInvite> = [
@@ -31,13 +34,19 @@ const INVITES: ReadonlyArray<WorkspaceInvite> = [
     from: "Max",
     role: "成员",
     to: "admin",
+    at: "10:41",
+    note: "夹爪第二版要开工了，想请你一起看软件这块。任务板已经建好。",
+    members: ["Max · 管理员", "Keting Chen · 成员", "主代理"],
   },
   {
     code: "NOVA-3K8D",
     workspace: { id: "nova", name: "Nova Studio", kind: "enterprise" },
     from: "Keting Chen",
-    role: "成员",
-    to: null,
+    role: "项目负责人",
+    to: "admin",
+    at: "昨天",
+    note: "Nova 的官网改版想交给你带，先拉你进来。",
+    members: ["Keting Chen · 管理员", "主代理", "设计代理"],
   },
 ];
 
@@ -90,24 +99,22 @@ export function useWorkspaces(): ReadonlyArray<LighthouseWorkspace> {
   return useSnapshot().workspaces;
 }
 
-/** Pending and declined invites addressed to the viewer. */
-export function useInvites(viewer: LighthouseViewer) {
+const INVITE_CHAT = "invite-";
+
+export const inviteChatId = (invite: WorkspaceInvite) => INVITE_CHAT + invite.code;
+
+/** Invites addressed to the viewer that are not answered yet. */
+export function usePendingInvites(viewer: LighthouseViewer): ReadonlyArray<WorkspaceInvite> {
   const { decided } = useSnapshot();
-  const mine = INVITES.filter((i) => i.to === viewer);
-  return {
-    pending: mine.filter((i) => decided[i.code] === undefined),
-    declined: mine.filter((i) => decided[i.code] === "declined"),
-  };
+  return INVITES.filter((i) => i.to === viewer && decided[i.code] === undefined);
 }
 
-/** Finds an invite by its code, alone or inside a join link. */
-export function findInvite(text: string): WorkspaceInvite | undefined {
-  const code = /[A-Z0-9]{4}-[A-Z0-9]{4}/i.exec(text.trim())?.[0]?.toUpperCase();
-  return code ? INVITES.find((i) => i.code === code) : undefined;
-}
-
-export function isMemberOf(workspace: string): boolean {
-  return WORKSPACES.some((w) => w.id === workspace);
+/** The pending invite a chat id points at, if any. */
+export function usePendingInvite(
+  viewer: LighthouseViewer,
+  chat: string,
+): WorkspaceInvite | undefined {
+  return usePendingInvites(viewer).find((i) => inviteChatId(i) === chat);
 }
 
 export function acceptInvite(invite: WorkspaceInvite) {

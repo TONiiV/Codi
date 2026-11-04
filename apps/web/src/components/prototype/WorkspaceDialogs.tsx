@@ -1,7 +1,6 @@
-// PROTOTYPE, wipe me. Create a workspace, or join one from an invite link or code.
+// PROTOTYPE, wipe me. Create a workspace. Joining one happens only by accepting an invite.
 import { useId, useState, type ReactNode } from "react";
 
-import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import {
   Dialog,
@@ -15,15 +14,8 @@ import {
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
 import { Toggle, ToggleGroup } from "../ui/toggle-group";
-import { WORKSPACE_KIND, type LighthouseViewer, type LighthouseWorkspace } from "./lighthouseData";
-import {
-  acceptInvite,
-  createWorkspace,
-  findInvite,
-  isMemberOf,
-  setWorkspace,
-  type WorkspaceInvite,
-} from "./workspaceStore";
+import type { LighthouseViewer, LighthouseWorkspace } from "./lighthouseData";
+import { createWorkspace } from "./workspaceStore";
 
 const KIND_HINT: Record<LighthouseWorkspace["kind"], string> = {
   enterprise: "你是公司管理员。工作区自带主代理；人事、财务等部门代理以后由管理员添加。",
@@ -133,77 +125,6 @@ export function CreateWorkspaceDialog({
         </ToggleGroup>
         <p className="text-xs text-muted-foreground">{KIND_HINT[kind]}</p>
       </div>
-    </DialogShell>
-  );
-}
-
-function InvitePreview({ invite }: { invite: WorkspaceInvite }) {
-  return (
-    <div className="flex flex-col gap-1 rounded-md border p-3 text-sm">
-      <span className="flex items-center gap-2 font-medium">
-        {invite.workspace.name}
-        <Badge variant="outline" size="sm">
-          {WORKSPACE_KIND[invite.workspace.kind]}
-        </Badge>
-      </span>
-      <span className="text-muted-foreground">
-        {invite.from} 邀请你，以「{invite.role}」身份加入。
-      </span>
-    </div>
-  );
-}
-
-export function JoinWorkspaceDialog({
-  onClose,
-  onDone,
-}: {
-  onClose: () => void;
-  onDone: () => void;
-}) {
-  const id = useId();
-  const [text, setText] = useState("");
-  const invite = findInvite(text);
-  const member = invite ? isMemberOf(invite.workspace.id) : false;
-  return (
-    <DialogShell
-      title="加入工作区"
-      description="粘贴别人发给你的邀请链接或邀请码。"
-      onClose={onClose}
-      submitLabel={member ? "切换过去" : "加入"}
-      canSubmit={invite !== undefined}
-      onSubmit={() => {
-        if (!invite) return;
-        if (member) setWorkspace(invite.workspace.id);
-        else acceptInvite(invite);
-        onDone();
-      }}
-    >
-      <Label className="flex flex-col items-stretch" htmlFor={`${id}-code`}>
-        邀请链接或邀请码
-        <Input
-          nativeInput
-          id={`${id}-code`}
-          autoFocus
-          placeholder="codi.app/join/NOVA-3K8D"
-          value={text}
-          onChange={(e) => setText(e.currentTarget.value)}
-        />
-      </Label>
-      {invite ? (
-        <>
-          <InvitePreview invite={invite} />
-          {member ? <p className="text-xs text-muted-foreground">你已经在这个工作区里。</p> : null}
-        </>
-      ) : text.trim() ? (
-        <p className="text-xs text-muted-foreground">
-          找不到这个邀请。它可能已过期，或者已被撤回。
-        </p>
-      ) : (
-        <p className="text-xs text-muted-foreground">
-          原型里可以试 <span className="font-mono">NOVA-3K8D</span> 或{" "}
-          <span className="font-mono">GRIP-7Q2K</span>。
-        </p>
-      )}
     </DialogShell>
   );
 }

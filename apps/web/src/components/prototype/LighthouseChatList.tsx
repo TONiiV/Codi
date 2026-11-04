@@ -1,6 +1,6 @@
-// PROTOTYPE, wipe me. On the Telescope tab the real sidebar body becomes a list of chats in two
-// collapsible groups: 我的 Agents (个人助理, the viewer's Chief Agents, custom agents) and, in an
-// enterprise workspace only, 公司 agents (主代理 plus department agents), a separate set.
+// PROTOTYPE, wipe me. On the Telescope tab the real sidebar body becomes a list of chats: pending
+// workspace invites pinned on top, then two collapsible groups: 我的 Agents (个人助理, the viewer's
+// Chief Agents, custom agents) and, in an enterprise workspace only, 公司 agents.
 import { useNavigate } from "@tanstack/react-router";
 import { ChevronRightIcon, PlusIcon } from "lucide-react";
 import { useState } from "react";
@@ -15,7 +15,8 @@ import { chatsFor, type LighthouseChat, type LighthouseViewer } from "./lighthou
 import { Bloub, type AgentState } from "./LighthouseBloub";
 import { ChannelIcon } from "./LighthouseChannels";
 import { normalizeLighthouseSearch, useLighthouseSearch } from "./lighthouseLocation";
-import { useWorkspaceId } from "./workspaceStore";
+import { PersonAvatar } from "./WorkspaceInviteChat";
+import { inviteChatId, usePendingInvites, useWorkspaceId } from "./workspaceStore";
 
 export function BotAvatar({
   seed,
@@ -80,6 +81,7 @@ export function LighthouseChatList() {
   const current = search.chat;
   const workspace = useWorkspaceId();
   const chats = chatsWith(viewer, workspace, useRegistryVersion());
+  const invites = usePendingInvites(viewer);
   const [folded, setFolded] = useState(readFolded);
   const [adding, setAdding] = useState(false);
   const toggle = (id: GroupId) => {
@@ -91,6 +93,40 @@ export function LighthouseChatList() {
     void navigate({ to: "/prototype/lighthouse", search: { as: viewer, chat, view: "chats" } });
   return (
     <SidebarGroup className="flex-1" role="presentation">
+      {invites.length > 0 ? (
+        <SidebarMenu aria-label="工作区邀请" className="mb-2">
+          {invites.map((invite) => (
+            <SidebarMenuItem key={invite.code}>
+              <SidebarMenuButton
+                isActive={inviteChatId(invite) === current}
+                size="lg"
+                className="h-auto items-start"
+                onClick={() => open(inviteChatId(invite))}
+              >
+                <PersonAvatar name={invite.from} />
+                <span className="min-w-0 flex-1">
+                  <span className="flex items-baseline justify-between gap-2">
+                    <span className="truncate text-sm font-medium">{invite.workspace.name}</span>
+                    <span className="shrink-0 text-2xs text-sidebar-muted-foreground tabular-nums">
+                      {invite.at}
+                    </span>
+                  </span>
+                  <span className="mt-0.5 flex items-center justify-between gap-2">
+                    <span className="truncate text-xs text-sidebar-muted-foreground">
+                      工作区邀请 · {invite.from} 邀请你以{invite.role}身份加入
+                    </span>
+                    <span
+                      role="img"
+                      aria-label="未读"
+                      className="size-2 shrink-0 rounded-full bg-primary"
+                    />
+                  </span>
+                </span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          ))}
+        </SidebarMenu>
+      ) : null}
       {GROUPS.map((group) => {
         const rows = chats.filter(group.has);
         if (rows.length === 0) return null;

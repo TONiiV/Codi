@@ -237,8 +237,10 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(t3-mobil
   --animate-telescope-bloom: telescope-bloom 1.4s ease-out;
   --animate-telescope-streak: telescope-streak 1.4s ease-out;
   --animate-telescope-ghost: telescope-ghost 1.4s ease-out;
-  --animate-microscope-tube: microscope-tube 1.6s ease-in-out;
-  --animate-microscope-focus: microscope-focus 1.6s ease-in-out;
+  --animate-microscope-tube: microscope-tube 2.2s ease-in-out;
+  --animate-microscope-hide: microscope-hide 2.2s ease-in-out;
+  --animate-microscope-lens: microscope-lens 2.2s ease-in-out;
+  --animate-microscope-detail: microscope-detail 2.2s ease-out;
   --color-warning-foreground: var(--warning-foreground);
   --color-warning: var(--warning);
   --color-warning-surface: var(--warning-surface);
@@ -431,38 +433,59 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(t3-mobil
     }
   }
   @keyframes microscope-tube {
-    /* The objective drops onto the slide, holds while the ring zooms, then rises back. */
+    /* The objective drops onto the slide before the lens opens and rises once it has closed. */
     0%,
     100% {
       translate: 0 0;
     }
-    30%,
-    72% {
+    14%,
+    86% {
       translate: 0 2.2px;
     }
   }
-  @keyframes microscope-focus {
-    /* A focus ring opens on the slide, zooms into the detail, then shrinks back to nothing. */
+  @keyframes microscope-hide {
+    /* The icon fades under the lens view while it is open (22%..58% is the ~0.8s hold). */
     0%,
-    28% {
-      opacity: 0;
-      scale: 0.3;
+    16%,
+    84%,
+    100% {
+      opacity: 1;
     }
-    42% {
+    24%,
+    74% {
+      opacity: 0;
+    }
+  }
+  @keyframes microscope-lens {
+    /* The lens opens over the icon, holds about 0.8s, then shrinks back to nothing. */
+    0%,
+    12% {
+      opacity: 0;
+      scale: 0.15;
+    }
+    24%,
+    58% {
       opacity: 1;
       scale: 1;
     }
-    60% {
-      opacity: 1;
-      scale: 3.4;
-    }
-    84% {
-      opacity: 0.8;
-      scale: 0.5;
-    }
+    80%,
     100% {
       opacity: 0;
-      scale: 0;
+      scale: 0.15;
+    }
+  }
+  @keyframes microscope-detail {
+    /* Inside the lens the specimen comes into focus from a wider field and drifts in slightly. */
+    0%,
+    12% {
+      scale: 2;
+    }
+    24% {
+      scale: 1;
+    }
+    58%,
+    100% {
+      scale: 1.12;
     }
   }
   @keyframes status-ping {
