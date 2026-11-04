@@ -242,6 +242,15 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(t3-mobil
   --animate-microscope-lens: microscope-lens 2.2s ease-in-out;
   --animate-microscope-detail: microscope-detail 2.2s ease-out;
   --animate-microscope-token: microscope-token 0.14s ease-out both;
+  /* PROTOTYPE, wipe me: focus mode. All one-shot; the 5-minute burst replays by remounting. */
+  --animate-focus-fidget: focus-fidget 1.3s linear;
+  --animate-focus-shock: focus-shock 1.2s ease-out both;
+  --animate-focus-ray: focus-ray 1s ease-out 0.1s both;
+  --animate-focus-pop: focus-pop 2.4s ease-out both;
+  --animate-focus-flash: focus-flash 1s ease-out;
+  --animate-focus-pop-in: focus-pop-in 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  --animate-focus-unlock: focus-unlock 0.9s cubic-bezier(0.34, 1.56, 0.64, 1);
+  --animate-focus-shine: focus-shine 1.1s ease-in-out 0.4s both;
   --color-warning-foreground: var(--warning-foreground);
   --color-warning: var(--warning);
   --color-warning-surface: var(--warning-surface);
@@ -501,6 +510,127 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(t3-mobil
     100% {
       opacity: 1;
       scale: 1 1;
+    }
+  }
+  @keyframes focus-fidget {
+    /* Restless jumps along per-letter paths (--a..--d), then everything snaps into line. */
+    0%,
+    86%,
+    100% {
+      translate: 0 0;
+      rotate: 0deg;
+    }
+    12% {
+      translate: calc(var(--ax) * 1.7) calc(var(--ay) * 1.7);
+      rotate: calc(var(--ar) * 1.5);
+    }
+    28% {
+      translate: calc(var(--bx) * 1.7) calc(var(--by) * 1.7);
+      rotate: calc(var(--br) * 1.5);
+    }
+    44% {
+      translate: calc(var(--cx) * 1.7) calc(var(--cy) * 1.7);
+      rotate: calc(var(--cr) * 1.5);
+    }
+    60% {
+      translate: calc(var(--dx) * 1.7) calc(var(--dy) * 1.7);
+      rotate: calc(var(--dr) * 1.5);
+    }
+    74% {
+      translate: 0 -1px;
+      rotate: 0deg;
+    }
+  }
+  @keyframes focus-shock {
+    0% {
+      opacity: 0.9;
+      scale: 0.9;
+    }
+    100% {
+      opacity: 0;
+      scale: 1.3;
+    }
+  }
+  @keyframes focus-ray {
+    0% {
+      opacity: 0;
+      translate: -16px 0;
+      scale: 0.3 1;
+    }
+    30% {
+      opacity: 1;
+      scale: 1 1;
+    }
+    100% {
+      opacity: 0;
+      translate: 28px 0;
+      scale: 0.4 1;
+    }
+  }
+  @keyframes focus-pop {
+    0% {
+      opacity: 0;
+      translate: -50% 12px;
+      scale: 0.6;
+    }
+    14% {
+      opacity: 1;
+      translate: -50% -6px;
+      scale: 1.06;
+    }
+    22%,
+    78% {
+      opacity: 1;
+      translate: -50% -8px;
+      scale: 1;
+    }
+    100% {
+      opacity: 0;
+      translate: -50% -24px;
+      scale: 1;
+    }
+  }
+  @keyframes focus-flash {
+    0% {
+      color: var(--primary);
+      scale: 1.12;
+    }
+    100% {
+      scale: 1;
+    }
+  }
+  @keyframes focus-pop-in {
+    0% {
+      opacity: 0;
+      scale: 0.85;
+      translate: 0 12px;
+    }
+    100% {
+      opacity: 1;
+      scale: 1;
+      translate: 0 0;
+    }
+  }
+  @keyframes focus-unlock {
+    0% {
+      scale: 0.3;
+      rotate: -40deg;
+    }
+    60% {
+      scale: 1.2;
+      rotate: 8deg;
+    }
+    100% {
+      scale: 1;
+      rotate: 0deg;
+    }
+  }
+  @keyframes focus-shine {
+    0% {
+      translate: 0 0;
+    }
+    100% {
+      translate: 400% 0;
     }
   }
   @keyframes status-ping {

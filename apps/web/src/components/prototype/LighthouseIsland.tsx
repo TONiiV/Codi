@@ -1,10 +1,12 @@
-// PROTOTYPE, wipe me. Floating Telescope / Microscope switch at the top centre of the app (the
-// Lighthouse and Code modes). It rests as a faint capsule and morphs into a two-icon switch when
+// PROTOTYPE, wipe me. Floating Telescope / Focus / Microscope switch at the top centre of the app
+// (the Lighthouse and Code modes, with focus mode between them). It rests as a faint capsule and morphs into a two-icon switch when
 // the pointer comes near. Pure CSS hover, so nothing animates while the pointer is elsewhere.
 import { useNavigate } from "@tanstack/react-router";
-import { useId, type SVGProps } from "react";
+import { useId, type CSSProperties, type SVGProps } from "react";
 
 import { cn } from "../../lib/utils";
+import { FocusMode } from "./FocusMode";
+import { openFocusPicker } from "./focusStore";
 import { useLighthouseSearch } from "./lighthouseLocation";
 
 // Hover animations are scoped to each segment's own group, so they run only while that segment is
@@ -60,7 +62,7 @@ function TelescopeFlare() {
     <span
       aria-hidden="true"
       className={cn(
-        "pointer-events-none absolute top-1/2 left-1/2 -mt-2 -ms-23.5 size-0 opacity-0",
+        "pointer-events-none absolute top-1/2 left-1/2 -mt-2 -ms-39.25 size-0 opacity-0",
         FLARE_RUN,
         "motion-safe:group-has-[[data-tele]:focus-visible]/island:opacity-100",
       )}
@@ -154,9 +156,9 @@ function MicroscopeGlyph({
         >
           <defs>
             <radialGradient id={`${id}-vignette`}>
-              <stop offset="0.42" stopOpacity={0} />
-              <stop offset="0.5" stopOpacity={0.72} />
-              <stop offset="0.78" stopOpacity={0.4} />
+              <stop offset="0.6" stopOpacity={0} />
+              <stop offset="0.68" stopOpacity={0.92} />
+              <stop offset="0.84" stopOpacity={0.6} />
               <stop offset="1" stopOpacity={0} />
             </radialGradient>
             <radialGradient id={`${id}-rim`}>
@@ -167,7 +169,7 @@ function MicroscopeGlyph({
               <circle cx="12" cy="12.5" r="16" />
             </clipPath>
           </defs>
-          <circle cx="12" cy="12.5" r="34" fill={`url(#${id}-vignette)`} />
+          <circle cx="12" cy="12.5" r="24" fill={`url(#${id}-vignette)`} />
           <g clipPath={`url(#${id}-lens)`}>
             <circle cx="12" cy="12.5" r="16" fillOpacity={0.12} />
             <g
@@ -201,6 +203,72 @@ function MicroscopeGlyph({
   );
 }
 
+// Each letter of "Focus" (and the target's dot) fidgets along its own path, then settles in line:
+// restless first, focused at the end. One shot per hover.
+const FIDGET = [
+  ["-1px", "-3px", "-12deg", "2px", "1px", "9deg", "-2px", "2px", "-6deg", "1px", "-2px", "8deg"],
+  ["2px", "2px", "10deg", "-1px", "-3px", "-8deg", "2px", "-1px", "12deg", "-2px", "1px", "-5deg"],
+  ["-2px", "1px", "-8deg", "1px", "3px", "14deg", "-1px", "-2px", "-10deg", "2px", "2px", "6deg"],
+  ["1px", "-2px", "14deg", "-2px", "2px", "-6deg", "2px", "3px", "8deg", "-1px", "-3px", "-12deg"],
+  ["-1px", "3px", "-6deg", "2px", "-2px", "12deg", "-2px", "1px", "-14deg", "1px", "-1px", "9deg"],
+];
+const fidget = (i: number, delay: number) => {
+  const v = FIDGET[i % FIDGET.length]!;
+  return {
+    "--ax": v[0],
+    "--ay": v[1],
+    "--ar": v[2],
+    "--bx": v[3],
+    "--by": v[4],
+    "--br": v[5],
+    "--cx": v[6],
+    "--cy": v[7],
+    "--cr": v[8],
+    "--dx": v[9],
+    "--dy": v[10],
+    "--dr": v[11],
+    animationDelay: `${delay}ms`,
+  } as CSSProperties;
+};
+const FIDGET_RUN =
+  "motion-safe:group-hover/focus:animate-focus-fidget motion-safe:group-focus-visible/focus:animate-focus-fidget";
+
+function FocusGlyph(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true" {...props}>
+      <circle cx="12" cy="12" r="8.5" strokeWidth={1.8} />
+      <path d="M12 1.5v3.5M12 19v3.5M1.5 12H5M19 12h3.5" strokeWidth={1.8} strokeLinecap="round" />
+      <circle
+        cx="12"
+        cy="12"
+        r="2.6"
+        fill="currentColor"
+        stroke="none"
+        style={{ ...fidget(3, 0), transformBox: "fill-box", transformOrigin: "center" }}
+        className={FIDGET_RUN}
+      />
+    </svg>
+  );
+}
+
+const FOCUS_LETTERS = [..."Focus"].map((ch, i) => ({
+  ch,
+  id: `${ch}${i}`,
+  style: fidget(i, i * 25),
+}));
+
+function FidgetLabel() {
+  return (
+    <span aria-label="Focus" className="inline-flex">
+      {FOCUS_LETTERS.map(({ ch, id, style }) => (
+        <span key={id} aria-hidden="true" style={style} className={cn("inline-block", FIDGET_RUN)}>
+          {ch}
+        </span>
+      ))}
+    </span>
+  );
+}
+
 export function LighthouseIsland() {
   const navigate = useNavigate();
   const onWork = useLighthouseSearch() !== null;
@@ -217,6 +285,12 @@ export function LighthouseIsland() {
         }),
     },
     {
+      id: "focus",
+      label: "Focus",
+      active: false,
+      go: openFocusPicker,
+    },
+    {
       id: "code",
       label: "Microscope",
       active: !onWork,
@@ -225,65 +299,71 @@ export function LighthouseIsland() {
   ];
 
   return (
-    // The wrapper is the "near" zone: larger than the resting capsule, so the island opens
-    // before the pointer is on it.
-    <div className="group/island fixed top-(--workspace-controls-top) left-1/2 z-50 flex h-(--workspace-topbar-height) w-80 -translate-x-1/2 items-center justify-center [-webkit-app-region:no-drag]">
-      <div
-        role="group"
-        aria-label="Telescope or Microscope"
-        className={cn(
-          "relative flex h-6 w-14 items-center justify-center overflow-hidden rounded-full border border-transparent bg-foreground/85 opacity-45 shadow-sm",
-          "transition-[width,height,border-radius,background-color,opacity,box-shadow] duration-300 ease-out motion-reduce:transition-none",
-          "group-hover/island:h-11 group-hover/island:w-64 group-hover/island:rounded-2xl group-hover/island:border-border group-hover/island:bg-popover/90 group-hover/island:opacity-100 group-hover/island:shadow-xl group-hover/island:backdrop-blur-xl",
-          "group-has-[:focus-visible]/island:h-11 group-has-[:focus-visible]/island:w-64 group-has-[:focus-visible]/island:rounded-2xl group-has-[:focus-visible]/island:border-border group-has-[:focus-visible]/island:bg-popover/90 group-has-[:focus-visible]/island:opacity-100 group-has-[:focus-visible]/island:shadow-xl",
-        )}
-      >
-        <Current
-          className={cn(
-            "absolute size-3.5 text-background transition-[opacity,scale] duration-200 motion-reduce:transition-none",
-            "group-hover/island:scale-50 group-hover/island:opacity-0 group-has-[:focus-visible]/island:scale-50 group-has-[:focus-visible]/island:opacity-0",
-          )}
-        />
+    <>
+      {/* Outside the island: its translate would make the full-screen page relative to it. */}
+      <FocusMode />
+      {/* The wrapper is the "near" zone: larger than the resting capsule, so the island opens
+    before the pointer is on it. */}
+      <div className="group/island fixed top-(--workspace-controls-top) left-1/2 z-50 flex h-(--workspace-topbar-height) w-104 -translate-x-1/2 items-center justify-center [-webkit-app-region:no-drag]">
         <div
+          role="group"
+          aria-label="Telescope, Focus or Microscope"
           className={cn(
-            "relative grid h-9 w-62 shrink-0 scale-75 grid-cols-2 p-0 opacity-0 transition-[opacity,scale] duration-300 ease-out motion-reduce:transition-none",
-            "pointer-events-none group-hover/island:pointer-events-auto group-hover/island:scale-100 group-hover/island:opacity-100",
-            "group-has-[:focus-visible]/island:pointer-events-auto group-has-[:focus-visible]/island:scale-100 group-has-[:focus-visible]/island:opacity-100",
+            "relative flex h-6 w-14 items-center justify-center overflow-hidden rounded-full border border-transparent bg-foreground/85 opacity-45 shadow-sm",
+            "transition-[width,height,border-radius,background-color,opacity,box-shadow] duration-300 ease-out motion-reduce:transition-none",
+            "group-hover/island:h-11 group-hover/island:w-96 group-hover/island:rounded-2xl group-hover/island:border-border group-hover/island:bg-popover/90 group-hover/island:opacity-100 group-hover/island:shadow-xl group-hover/island:backdrop-blur-xl",
+            "group-has-[:focus-visible]/island:h-11 group-has-[:focus-visible]/island:w-96 group-has-[:focus-visible]/island:rounded-2xl group-has-[:focus-visible]/island:border-border group-has-[:focus-visible]/island:bg-popover/90 group-has-[:focus-visible]/island:opacity-100 group-has-[:focus-visible]/island:shadow-xl",
           )}
         >
-          <span
-            aria-hidden="true"
+          <Current
             className={cn(
-              "absolute inset-y-0 left-0 w-1/2 rounded-xl bg-foreground shadow-sm transition-transform duration-300 ease-out motion-reduce:transition-none",
-              onWork ? "translate-x-0" : "translate-x-full",
+              "absolute size-3.5 text-background transition-[opacity,scale] duration-200 motion-reduce:transition-none",
+              "group-hover/island:scale-50 group-hover/island:opacity-0 group-has-[:focus-visible]/island:scale-50 group-has-[:focus-visible]/island:opacity-0",
             )}
           />
-          {modes.map((m) => (
-            <button
-              key={m.id}
-              type="button"
-              data-tele={m.id === "work" ? "" : undefined}
-              aria-pressed={m.active}
-              onClick={m.active ? undefined : m.go}
+          <div
+            className={cn(
+              "relative grid h-9 w-94 shrink-0 scale-75 grid-cols-3 p-0 opacity-0 transition-[opacity,scale] duration-300 ease-out motion-reduce:transition-none",
+              "pointer-events-none group-hover/island:pointer-events-auto group-hover/island:scale-100 group-hover/island:opacity-100",
+              "group-has-[:focus-visible]/island:pointer-events-auto group-has-[:focus-visible]/island:scale-100 group-has-[:focus-visible]/island:opacity-100",
+            )}
+          >
+            <span
+              aria-hidden="true"
               className={cn(
-                "relative z-10 flex items-center justify-center gap-2 rounded-xl text-sm font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
-                m.id === "work" ? "group/tele" : "group/micro",
-                m.active
-                  ? "cursor-default text-background"
-                  : "cursor-pointer text-muted-foreground hover:text-foreground",
+                "absolute inset-y-0 left-0 w-1/3 rounded-xl bg-foreground shadow-sm transition-transform duration-300 ease-out motion-reduce:transition-none",
+                onWork ? "translate-x-0" : "translate-x-[200%]",
               )}
-            >
-              {m.id === "work" ? (
-                <TelescopeGlyph className="relative size-4.5" live />
-              ) : (
-                <MicroscopeGlyph className="relative size-4.5" live />
-              )}
-              {m.label}
-            </button>
-          ))}
+            />
+            {modes.map((m) => (
+              <button
+                key={m.id}
+                type="button"
+                data-tele={m.id === "work" ? "" : undefined}
+                aria-pressed={m.id === "focus" ? undefined : m.active}
+                onClick={m.active ? undefined : m.go}
+                className={cn(
+                  "relative z-10 flex items-center justify-center gap-2 rounded-xl text-sm font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
+                  m.id === "work" ? "group/tele" : m.id === "focus" ? "group/focus" : "group/micro",
+                  m.active
+                    ? "cursor-default text-background"
+                    : "cursor-pointer text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {m.id === "work" ? (
+                  <TelescopeGlyph className="relative size-4.5" live />
+                ) : m.id === "focus" ? (
+                  <FocusGlyph className="relative size-4.5" />
+                ) : (
+                  <MicroscopeGlyph className="relative size-4.5" live />
+                )}
+                {m.id === "focus" ? <FidgetLabel /> : m.label}
+              </button>
+            ))}
+          </div>
         </div>
+        <TelescopeFlare />
       </div>
-      <TelescopeFlare />
-    </div>
+    </>
   );
 }
