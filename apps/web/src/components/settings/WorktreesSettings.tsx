@@ -24,7 +24,7 @@ function StartFromRemoteRow() {
     <SettingsRow
       serverScoped
       settingKeys={["newWorktreesStartFromOrigin"]}
-      {...searchableSetting("start-from-origin")}
+      {...searchableSetting("start-from-origin", t)}
       description={t("settings.text.usesTheLatestCommitOfThe")}
       resetAction={
         settings.newWorktreesStartFromOrigin !==
@@ -63,7 +63,7 @@ export function WorktreesSettingsPanel() {
       <SettingsSection id="worktree-creation" title={t("settings.text.creation")}>
         {!isProjectScope && <WorktreesDirectoryRow />}
         <StartFromRemoteRow />
-        <AdvancedSettings targetIds={[searchableSetting("worktree-submodules").id]}>
+        <AdvancedSettings targetIds={[searchableSetting("worktree-submodules", t).id]}>
           <WorktreeSubmodulesRow />
         </AdvancedSettings>
       </SettingsSection>

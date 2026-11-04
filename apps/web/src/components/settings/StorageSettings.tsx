@@ -69,7 +69,7 @@ export function WorktreesDirectoryRow() {
 
   return (
     <SettingsRow
-      {...searchableSetting("storage-worktrees-location")}
+      {...searchableSetting("storage-worktrees-location", t)}
       description={t("settings.text.folderWhereNewWorktreesAreCreated")}
       serverScoped
       settingKeys={["worktreesDirectory"]}
@@ -379,7 +379,7 @@ function CleanupSection() {
     <SettingsSection id="storage-cleanup" title={t("settings.text.cleanup")} variant="plain">
       <SettingsGroup>
         <SettingsRow
-          {...searchableSetting("storage-delete-now")}
+          {...searchableSetting("storage-delete-now", t)}
           description={
             <span>
               {!hasRules
@@ -613,7 +613,10 @@ export function WorktreeCleanupSection() {
             />
             <AdvancedSettings
               // The keep-when search result lands on this section, not its row.
-              targetIds={["storage-worktrees", searchableSetting("storage-worktree-keep-when").id]}
+              targetIds={[
+                "storage-worktrees",
+                searchableSetting("storage-worktree-keep-when", t).id,
+              ]}
             >
               {connectedEnvironments.length > 0 &&
                 connectedEnvironments.every(
@@ -665,7 +668,7 @@ export function WorktreeCleanupSection() {
                   environment.serverConfig?.environment.capabilities.storageCleanupRun === true,
               ) && (
                 <SettingsRow
-                  {...searchableSetting("storage-worktree-keep-when")}
+                  {...searchableSetting("storage-worktree-keep-when", t)}
                   status={ruleStatus("worktreeKeepWhen")}
                   managedPaths={lockablePath("worktreeKeepWhen")}
                   description={

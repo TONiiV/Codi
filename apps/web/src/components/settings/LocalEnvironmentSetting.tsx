@@ -43,7 +43,7 @@ export function LocalEnvironmentSetting() {
   return (
     <>
       <SettingsRow
-        {...searchableSetting("local-environment")}
+        {...searchableSetting("local-environment", t)}
         description={
           enabled
             ? t("settings.text.runAgentsOnThisComputerTurn")

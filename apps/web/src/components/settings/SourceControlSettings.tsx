@@ -349,7 +349,7 @@ function EmptySourceControlDiscovery({
 
   return (
     <SettingsSection
-      id={searchableSetting("source-control").id}
+      id={searchableSetting("source-control", t).id}
       title={t("settings.text.serverEnvironment")}
     >
       <Empty>
@@ -481,7 +481,7 @@ export function SourceControlSettingsPanel() {
       <ProjectDefaultsSettings category="source-control" />
       {environmentId === null ? (
         <SettingsSection
-          id={searchableSetting("source-control").id}
+          id={searchableSetting("source-control", t).id}
           title={t("settings.text.serverEnvironment")}
         >
           <p className="px-4 py-3 text-sm text-muted-foreground">
@@ -500,7 +500,7 @@ export function SourceControlSettingsPanel() {
         <>
           {hasVersionControlSystems ? (
             <SettingsSection
-              id={searchableSetting("source-control").id}
+              id={searchableSetting("source-control", t).id}
               title={t("settings.text.versionControlEnvironmentsuffix", { environmentSuffix })}
               headerAction={scanButton}
             >
@@ -512,7 +512,7 @@ export function SourceControlSettingsPanel() {
 
           {result.sourceControlProviders.length > 0 ? (
             <SettingsSection
-              id={hasVersionControlSystems ? undefined : searchableSetting("source-control").id}
+              id={hasVersionControlSystems ? undefined : searchableSetting("source-control", t).id}
               title={
                 hasVersionControlSystems
                   ? t("settings.text.sourceControlProviders")

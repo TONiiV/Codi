@@ -39,7 +39,7 @@ function BoringSidebarRow() {
   const updateSettings = useUpdateScopedSettings();
   return (
     <SettingsRow
-      {...searchableSetting("boring-sidebar")}
+      {...searchableSetting("boring-sidebar", t)}
       description={t("settings.text.groupSidebarThreadsIntoProjectFolders")}
       control={
         <Switch
@@ -61,7 +61,7 @@ function BoringSidebarMultilineRow() {
   const updateSettings = useUpdateScopedSettings();
   return (
     <SettingsRow
-      {...searchableSetting("boring-sidebar-multiline")}
+      {...searchableSetting("boring-sidebar-multiline", t)}
       description={t("settings.text.inTheBoringSidebarShowFolder")}
       control={
         <Switch
@@ -85,7 +85,7 @@ function GuestLinksRowWithSignIn() {
   if (isSignedIn !== false) return <GuestLinksRow />;
   return (
     <SettingsRow
-      {...searchableSetting("guest-links")}
+      {...searchableSetting("guest-links", t)}
       description={t("settings.text.shareAThreadWithAGuest")}
       control={
         <Button size="sm" variant="outline" onClick={openAuthPrompt}>
@@ -112,7 +112,7 @@ function GuestLinksRow() {
   return (
     <SettingsRow
       serverScoped
-      {...searchableSetting("guest-links")}
+      {...searchableSetting("guest-links", t)}
       settingKeys={["guestSharingEnabled"]}
       // Turning guest links off still works without T3 Connect.
       managed={settings.guestSharingEnabled ? undefined : connectDenial}
@@ -145,7 +145,7 @@ function LinkedEnvironmentsRow() {
   return (
     <SettingsRow
       serverScoped
-      {...searchableSetting("linked-environments-beta")}
+      {...searchableSetting("linked-environments-beta", t)}
       settingKeys={["linkedEnvironmentsEnabled"]}
       description={
         <>
@@ -178,7 +178,7 @@ function SimlockHostsRow() {
   return (
     <SettingsRow
       serverScoped
-      {...searchableSetting("simlock-hosts")}
+      {...searchableSetting("simlock-hosts", t)}
       settingKeys={["simlockDeviceHostsEnabled"]}
       description={
         <>

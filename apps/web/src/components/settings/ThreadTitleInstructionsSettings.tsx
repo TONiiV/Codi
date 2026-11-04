@@ -24,7 +24,7 @@ export function ThreadTitleInstructionsSettings() {
     <SettingsRow
       serverScoped
       settingKeys={["threadTitleInstructions"]}
-      {...searchableSetting("thread-title-instructions")}
+      {...searchableSetting("thread-title-instructions", t)}
       description={t("settings.text.appendedToThePromptForNew")}
       resetAction={
         mixed || settings.threadTitleInstructions !== "" ? (

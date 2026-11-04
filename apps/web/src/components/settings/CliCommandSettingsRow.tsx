@@ -56,7 +56,7 @@ export function CliCommandSettingsRow() {
 
   return (
     <SettingsRow
-      {...searchableSetting("cli-command")}
+      {...searchableSetting("cli-command", t)}
       description={description}
       control={
         <Button

@@ -212,8 +212,9 @@ function ProviderSettingsPlaceholder({
   readonly description: string;
   readonly children?: ReactNode;
 }) {
+  const { t } = useTranslation();
   return (
-    <SettingsSection {...searchableSetting("providers")} variant="plain">
+    <SettingsSection {...searchableSetting("providers", t)} variant="plain">
       {deviceTabs ? (
         <div className="flex min-h-11 min-w-0 items-center px-3 sm:px-4">{deviceTabs}</div>
       ) : null}
@@ -346,7 +347,7 @@ function ProviderSettingsPanelContent(target: ProviderSettingsTarget) {
   {
     if (
       !target.scoped &&
-      searchTargetId === searchableSetting("cursor-keychain-usage").id &&
+      searchTargetId === searchableSetting("cursor-keychain-usage", t).id &&
       (!selectedEnvironmentCanRenderSettings ||
         selectedEnvironment?.serverConfig?.environment.platform.os !== "darwin") &&
       searchableCursorEnvironmentId !== undefined
@@ -354,8 +355,8 @@ function ProviderSettingsPanelContent(target: ProviderSettingsTarget) {
       searchRedirectEnvironmentId = searchableCursorEnvironmentId;
     } else if (
       !target.scoped &&
-      (searchTargetId === searchableSetting("provider-health-check-interval").id ||
-        searchTargetId === searchableSetting("usage-providers").id) &&
+      (searchTargetId === searchableSetting("provider-health-check-interval", t).id ||
+        searchTargetId === searchableSetting("usage-providers", t).id) &&
       !selectedEnvironmentCanRenderSettings &&
       searchableEnvironmentId !== undefined
     ) {
@@ -970,7 +971,7 @@ export function EnvironmentProviderSettings({
   return (
     <>
       <SettingsSection
-        {...searchableSetting("providers")}
+        {...searchableSetting("providers", t)}
         variant="plain"
         titleAction={
           canAddProvider ? (
@@ -1094,10 +1095,10 @@ export function EnvironmentProviderSettings({
 
       <SettingsSection title={t("settings.text.advanced")}>
         <SettingsRow
-          id={searchableSetting("provider-health-check-interval").id}
+          id={searchableSetting("provider-health-check-interval", t).id}
           title={
             <span className="inline-flex items-center gap-1.5">
-              {searchableSetting("provider-health-check-interval").title}
+              {searchableSetting("provider-health-check-interval", t).title}
               <PolicyTooltip>{t("settings.text.thisIntervalIsConfiguredHereThen")}</PolicyTooltip>
             </span>
           }

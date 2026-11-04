@@ -364,7 +364,7 @@ function BrowserViewportSetting({ disabled }: { readonly disabled: boolean }) {
 
   return (
     <SettingsRow
-      {...searchableSetting("browser-default-viewport")}
+      {...searchableSetting("browser-default-viewport", t)}
       description={t("settings.text.tabSizeForYouAndAgents")}
       resetAction={
         !disabled && viewport._tag !== DEFAULT_BROWSER_VIEWPORT._tag ? (
@@ -473,7 +473,7 @@ function BrowserZoomSetting({ disabled }: { readonly disabled: boolean }) {
 
   return (
     <SettingsRow
-      {...searchableSetting("browser-default-zoom")}
+      {...searchableSetting("browser-default-zoom", t)}
       description={t("settings.text.pageZoomAppliedToNewBrowser")}
       resetAction={
         !disabled && zoomFactor !== DEFAULT_PREVIEW_ZOOM_FACTOR ? (
@@ -521,7 +521,7 @@ function BrowserAppearanceSetting({ disabled }: { readonly disabled: boolean }) 
 
   return (
     <SettingsRow
-      {...searchableSetting("browser-default-appearance")}
+      {...searchableSetting("browser-default-appearance", t)}
       description={t("settings.text.theColorSchemePagesAreTold")}
       resetAction={
         !disabled && appearance !== DEFAULT_PREVIEW_APPEARANCE ? (
@@ -569,7 +569,7 @@ function BrowserRecordingInputSettings({ disabled }: { readonly disabled: boolea
   return (
     <>
       <SettingsRow
-        {...searchableSetting("browser-recording-key-presses")}
+        {...searchableSetting("browser-recording-key-presses", t)}
         description={t("settings.text.showPressedKeysAndShortcutsIn")}
         control={
           <Switch
@@ -583,7 +583,7 @@ function BrowserRecordingInputSettings({ disabled }: { readonly disabled: boolea
         }
       />
       <SettingsRow
-        {...searchableSetting("browser-recording-mouse-presses")}
+        {...searchableSetting("browser-recording-mouse-presses", t)}
         description={t("settings.text.highlightMousePressesAndHeldButtons")}
         control={
           <Switch
@@ -607,7 +607,7 @@ function BrowserRecordingFrameRateSetting({ disabled }: { readonly disabled: boo
 
   return (
     <SettingsRow
-      {...searchableSetting("browser-recording-frame-rate")}
+      {...searchableSetting("browser-recording-frame-rate", t)}
       description={t("settings.text.maximumRecordingRate30FpsSaves")}
       resetAction={
         !disabled && frameRate !== DEFAULT_BROWSER_RECORDING_FRAME_RATE ? (
@@ -662,7 +662,7 @@ function BrowserLinkTargetSetting({ disabled }: { readonly disabled: boolean }) 
 
   return (
     <SettingsRow
-      {...searchableSetting("browser-link-target")}
+      {...searchableSetting("browser-link-target", t)}
       description={t("settings.text.whereLinksInTheChatAnd")}
       resetAction={
         !disabled && linkTarget !== DEFAULT_BROWSER_LINK_TARGET ? (
@@ -721,7 +721,7 @@ function BrowserSearchEngineSetting() {
   return (
     <>
       <SettingsRow
-        {...searchableSetting("browser-search-engine")}
+        {...searchableSetting("browser-search-engine", t)}
         description={t("settings.text.whatTheAddressBarSearchesWhen")}
         resetAction={
           engine !== DEFAULT_BROWSER_SEARCH_ENGINE || customUrl !== "" ? (
@@ -799,7 +799,7 @@ export function PullRequestLinksOpenInAppSetting() {
 
   return (
     <SettingsRow
-      {...searchableSetting("pull-request-links-open-in-app")}
+      {...searchableSetting("pull-request-links-open-in-app", t)}
       description={t("settings.text.clickingAPullRequestLinkOpens")}
       resetAction={
         openInApp ? null : (
@@ -970,7 +970,7 @@ function DeviceIntegrationControls({
   return (
     <>
       <SettingsRow
-        {...searchableSetting("device-hub")}
+        {...searchableSetting("device-hub", t)}
         serverScoped
         settingKeys={["enableDeviceSupport"]}
         description={
@@ -1009,7 +1009,7 @@ function DeviceIntegrationControls({
         }
       />
       <SettingsRow
-        {...searchableSetting("agent-device-access")}
+        {...searchableSetting("agent-device-access", t)}
         serverScoped
         settingKeys={["enableAgentDeviceAccess"]}
         description={
@@ -1065,7 +1065,7 @@ function AgentBrowserAccessSetting() {
     <SettingsRow
       serverScoped
       settingKeys={["enableAgentBrowserAccess"]}
-      {...searchableSetting("agent-browser-access")}
+      {...searchableSetting("agent-browser-access", t)}
       description={
         isProjectScope
           ? t("settings.text.allowAgentsInThisProjectTo")
@@ -1102,7 +1102,7 @@ function BrowserAutoShowFloatingPreviewSetting({ disabled }: { readonly disabled
 
   return (
     <SettingsRow
-      {...searchableSetting("browser-auto-show-floating-preview")}
+      {...searchableSetting("browser-auto-show-floating-preview", t)}
       description={t("settings.text.showTheFloatingPreviewWhenAn")}
       resetAction={
         !disabled && autoShow !== DEFAULT_BROWSER_AUTO_SHOW_FLOATING_PREVIEW ? (
@@ -1327,7 +1327,7 @@ function BrowserProfilesSetting({ disabled }: { readonly disabled: boolean }) {
 
   return (
     <SettingsRow
-      {...searchableSetting("browser-profiles")}
+      {...searchableSetting("browser-profiles", t)}
       description={t("settings.text.profilesSeparateCookiesAndLoginsIncognito")}
       control={
         <Menu onOpenChange={(open) => open && loadSources()}>
@@ -1635,9 +1635,9 @@ export function BrowserSettingsPanel() {
         <BrowserSearchEngineSetting />
         <AdvancedSettings
           targetIds={[
-            searchableSetting("browser-default-viewport").id,
-            searchableSetting("browser-default-zoom").id,
-            searchableSetting("browser-default-appearance").id,
+            searchableSetting("browser-default-viewport", t).id,
+            searchableSetting("browser-default-zoom", t).id,
+            searchableSetting("browser-default-appearance", t).id,
           ]}
         >
           <SettingsUnavailableGroup message={desktopOnlyMessage}>

@@ -37,7 +37,7 @@ export function BranchNamingSettings() {
       <SettingsRow
         serverScoped
         settingKeys={["branchNamingMode"]}
-        {...searchableSetting("worktree-branch-naming")}
+        {...searchableSetting("worktree-branch-naming", t)}
         description={t("settings.text.chooseHowNewWorktreeBranchesAre")}
         status={
           !modeMixed && settings.branchNamingMode === "semantic"

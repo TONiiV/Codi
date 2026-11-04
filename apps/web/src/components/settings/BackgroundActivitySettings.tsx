@@ -171,7 +171,7 @@ function BackgroundActivityAdvancedDialog({
             <div className="flex flex-col gap-3 border-b px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="min-w-0 space-y-1">
                 <div className="text-sm font-medium">
-                  {searchableSetting("git-fetch-interval").title}
+                  {searchableSetting("git-fetch-interval", t).title}
                 </div>
                 <p className="text-xs leading-relaxed text-muted-foreground">
                   {t("settings.text.refreshRemoteBranchStatusInThe")}
@@ -353,10 +353,10 @@ export function BackgroundActivitySettingsRow() {
     <SettingsRow
       serverScoped
       settingKeys={["backgroundActivity"]}
-      id={searchableSetting("background-activity").id}
+      id={searchableSetting("background-activity", t).id}
       title={
         <span className="inline-flex items-center gap-1.5">
-          {searchableSetting("background-activity").title}
+          {searchableSetting("background-activity", t).title}
           <PolicyTooltip>{t("settings.text.thisSharedPolicyGatesBackgroundWork")}</PolicyTooltip>
         </span>
       }

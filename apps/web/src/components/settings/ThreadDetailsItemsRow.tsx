@@ -20,7 +20,7 @@ export function ThreadDetailsItemsRow() {
   const enabled = THREAD_DETAILS_ITEMS.filter((item) => visibility[item.id]).length;
   return (
     <SettingsRow
-      {...searchableSetting("thread-details-items")}
+      {...searchableSetting("thread-details-items", t)}
       description={t("settings.text.chooseWhatTheThreadDetailsCard")}
       resetAction={
         isDefaultThreadDetailsVisibility(visibility) ? null : (

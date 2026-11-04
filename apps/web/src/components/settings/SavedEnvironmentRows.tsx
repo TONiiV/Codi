@@ -693,7 +693,7 @@ function ConfiguredCloudLinkRow({ canManageRelay }: { readonly canManageRelay: b
     <>
       {isElectron ? (
         <SettingsRow
-          title={searchableSetting("t3-connect").title}
+          title={searchableSetting("t3-connect", t).title}
           description={
             connectDenial !== undefined && !managedTunnelActive
               ? connectDenial
@@ -732,13 +732,13 @@ function ConfiguredCloudLinkRow({ canManageRelay }: { readonly canManageRelay: b
         </SettingsRow>
       ) : linkRevoked ? (
         <SettingsRow
-          title={searchableSetting("t3-connect").title}
+          title={searchableSetting("t3-connect", t).title}
           description={t("settings.text.thisEnvironmentWasRemovedFromT32")}
         />
       ) : null}
       {signedOut && isElectron ? null : (
         <SettingsRow
-          title={searchableSetting("publish-agent-activity").title}
+          title={searchableSetting("publish-agent-activity", t).title}
           description={
             signedOut
               ? t("settings.text.signInToSendActivityTo")
@@ -762,7 +762,7 @@ function ConfiguredCloudLinkRow({ canManageRelay }: { readonly canManageRelay: b
       )}
       {managedTunnelActive && !signedOut ? (
         <SettingsRow
-          title={searchableSetting("hold-webhooks-while-offline").title}
+          title={searchableSetting("hold-webhooks-while-offline", t).title}
           description={t("settings.text.keepWebhookRequestsForUpTo")}
           managed={connectDenial}
           control={

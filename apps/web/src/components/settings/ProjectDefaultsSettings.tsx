@@ -220,7 +220,7 @@ export function ProjectDefaultsSettings({ category }: { category: ProjectSetting
       serverScoped
       settingKeys={["defaultThreadEnvMode"]}
       mixed={mixedWorkspace}
-      id={searchableSetting("new-threads").id}
+      id={searchableSetting("new-threads", t).id}
       title={t("settings.text.workspace")}
       description={
         isProjectScope
@@ -268,7 +268,7 @@ export function ProjectDefaultsSettings({ category }: { category: ProjectSetting
       serverScoped
       settingKeys={["fallbackModelSelection"]}
       mixed={mixedFallback}
-      {...searchableSetting("fallback-model")}
+      {...searchableSetting("fallback-model", t)}
       description={t("settings.text.usedForNewThreadsWhenThe")}
       resetAction={
         mixedFallback || settings.fallbackModelSelection !== null ? (
@@ -362,7 +362,7 @@ export function ProjectDefaultsSettings({ category }: { category: ProjectSetting
             serverScoped
             settingKeys={["defaultRuntimeMode"]}
             mixed={mixedPermissions}
-            {...searchableSetting("default-permissions")}
+            {...searchableSetting("default-permissions", t)}
             description={
               isProjectScope
                 ? t("settings.text.permissionsForNewThreadsInThis")
@@ -467,7 +467,7 @@ export function ProjectDefaultsSettings({ category }: { category: ProjectSetting
             serverScoped
             settingKeys={["removeAgentCreditsOnMerge"]}
             mixed={mixedAgentCredits}
-            {...searchableSetting("remove-agent-credits-on-merge")}
+            {...searchableSetting("remove-agent-credits-on-merge", t)}
             description={t("settings.text.removeRecognizedAgentCreditLinesFrom")}
             resetAction={
               settings.removeAgentCreditsOnMerge ? (
@@ -493,7 +493,7 @@ export function ProjectDefaultsSettings({ category }: { category: ProjectSetting
             serverScoped
             settingKeys={["pullRequestMergeMethod"]}
             mixed={mixedMergeMethod}
-            {...searchableSetting("pull-request-merge-method")}
+            {...searchableSetting("pull-request-merge-method", t)}
             description={
               isProjectScope
                 ? t("settings.text.pullRequestsInThisProjectStart")
@@ -563,7 +563,7 @@ export function WorktreeSubmodulesRow() {
       serverScoped
       settingKeys={["worktreeSubmodules"]}
       mixed={mixedSubmodules}
-      {...searchableSetting("worktree-submodules")}
+      {...searchableSetting("worktree-submodules", t)}
       description={
         isProjectScope
           ? t("settings.text.howNewWorktreesInThisProject")

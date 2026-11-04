@@ -291,7 +291,7 @@ function AboutVersionSection() {
   return (
     <>
       <SettingsRow
-        id={searchableSetting("app-version").id}
+        id={searchableSetting("app-version", t).id}
         title={<AboutVersionTitle />}
         description={description}
         managed={updatesDenial}
@@ -315,7 +315,7 @@ function AboutVersionSection() {
       />
       {hasDesktopBridge ? (
         <SettingsRow
-          {...searchableSetting("update-track")}
+          {...searchableSetting("update-track", t)}
           description={
             nightlyDeniedBy !== undefined ? (
               `${managedUpdatesMessage(nightlyDeniedBy)} Nightly builds are not available${
@@ -380,7 +380,7 @@ function AboutVersionSection() {
         />
       ) : selectedHostedAppChannel ? (
         <SettingsRow
-          {...searchableSetting("update-track")}
+          {...searchableSetting("update-track", t)}
           description={t("settings.text.switchesTheHostedAppReleaseChannel")}
           control={
             <Select
@@ -766,7 +766,7 @@ export function LegacyFeaturesSection() {
   return (
     <SettingsSection id="legacy-features" title={t("settings.text.legacy")}>
       <SettingsRow
-        {...searchableSetting("legacy-plan-mode")}
+        {...searchableSetting("legacy-plan-mode", t)}
         description={t("settings.text.restoreBuildPlanPlanDefaultAnd")}
         control={
           <Switch
@@ -779,7 +779,7 @@ export function LegacyFeaturesSection() {
         }
       />
       <SettingsRow
-        {...searchableSetting("legacy-context-window-indicator")}
+        {...searchableSetting("legacy-context-window-indicator", t)}
         description={t("settings.text.showsContextWindowUsageAsA")}
         control={
           <Switch
@@ -1175,7 +1175,7 @@ export function ChatSettingsPanel() {
     <SettingsPageContainer>
       <SettingsSection id="composer" title={t("settings.text.composer")}>
         <SettingsRow
-          {...searchableSetting("composer-rich-text")}
+          {...searchableSetting("composer-rich-text", t)}
           description={t("settings.text.showFormattedMarkdownAsYouType")}
           resetAction={
             settings.composerRichTextEnabled !==
@@ -1201,7 +1201,7 @@ export function ChatSettingsPanel() {
           }
         />
         <SettingsRow
-          {...searchableSetting("send-shortcut")}
+          {...searchableSetting("send-shortcut", t)}
           description={t("settings.text.chooseWhenEnterSendsAPrompt")}
           resetAction={
             settings.sendShortcut !== DEFAULT_UNIFIED_SETTINGS.sendShortcut ? (
@@ -1246,9 +1246,9 @@ export function ChatSettingsPanel() {
             </Select>
           }
         />
-        <AdvancedSettings targetIds={[searchableSetting("skills-in-slash-menu").id]}>
+        <AdvancedSettings targetIds={[searchableSetting("skills-in-slash-menu", t).id]}>
           <SettingsRow
-            {...searchableSetting("skills-in-slash-menu")}
+            {...searchableSetting("skills-in-slash-menu", t)}
             description={t("settings.text.alsoIncludeSkillsInTheCommand")}
             resetAction={
               settings.showSkillsInSlashMenu !== DEFAULT_UNIFIED_SETTINGS.showSkillsInSlashMenu ? (
@@ -1277,7 +1277,7 @@ export function ChatSettingsPanel() {
 
       <SettingsSection id="follow-ups" title={t("settings.text.followUps")}>
         <SettingsRow
-          {...searchableSetting("follow-up-behavior")}
+          {...searchableSetting("follow-up-behavior", t)}
           description={
             t("settings.text.queueFollowUpsWhileTheAgent") +
             (settings.sendShortcut === "mod-enter-multiline"
@@ -1337,7 +1337,7 @@ function DiffColorsSettingsRow() {
   const updateSettings = useUpdateScopedSettings();
   return (
     <SettingsRow
-      {...searchableSetting("diff-color-scheme")}
+      {...searchableSetting("diff-color-scheme", t)}
       description={t("settings.text.chooseColorsForAdditionsAndDeletions")}
       resetAction={
         settings.diffColorScheme !== DEFAULT_UNIFIED_SETTINGS.diffColorScheme ? (
@@ -1400,7 +1400,7 @@ export function DiffsSettingsPanel() {
     <SettingsPageContainer>
       <SettingsSection id="diffs" title={t("settings.text.diffs")}>
         <SettingsRow
-          {...searchableSetting("diff-layout")}
+          {...searchableSetting("diff-layout", t)}
           description={t("settings.text.showDiffsStackedOrSideBy")}
           resetAction={
             settings.diffLayout !== DEFAULT_UNIFIED_SETTINGS.diffLayout ? (
@@ -1438,7 +1438,7 @@ export function DiffsSettingsPanel() {
           }
         />
         <SettingsRow
-          {...searchableSetting("hide-whitespace-changes")}
+          {...searchableSetting("hide-whitespace-changes", t)}
           description={t("settings.text.setWhetherTheDiffPanelIgnores")}
           resetAction={
             settings.diffIgnoreWhitespace !== DEFAULT_UNIFIED_SETTINGS.diffIgnoreWhitespace ? (
@@ -1463,7 +1463,7 @@ export function DiffsSettingsPanel() {
           }
         />
         <SettingsRow
-          {...searchableSetting("default-diff-file-state")}
+          {...searchableSetting("default-diff-file-state", t)}
           description={t("settings.text.startWithFilesExpandedOrCollapsed")}
           resetAction={
             settings.diffFilesCollapsed !== DEFAULT_UNIFIED_SETTINGS.diffFilesCollapsed ? (
@@ -1513,7 +1513,7 @@ export function DiffsSettingsPanel() {
 
       <SettingsSection id="pull-requests" title={t("settings.text.pullRequests")}>
         <SettingsRow
-          {...searchableSetting("proactive-panels")}
+          {...searchableSetting("proactive-panels", t)}
           description={t("settings.text.openLinkedPullRequestsFirstOtherwise")}
           resetAction={
             settings.proactivePanelsEnabled !== DEFAULT_UNIFIED_SETTINGS.proactivePanelsEnabled ? (
@@ -1560,7 +1560,7 @@ function ScopedCompactIdleThreadsRow() {
       serverScoped
       settingKeys={["idleCompaction", "compactIdleThreads"]}
       mixed={idleCompaction.mixed}
-      {...searchableSetting("compact-idle-threads")}
+      {...searchableSetting("compact-idle-threads", t)}
       description={t("settings.text.whenToCompactAnIdleClaude")}
       resetAction={
         globalIdleCompaction(settings) !== globalIdleCompaction(DEFAULT_UNIFIED_SETTINGS) ? (
@@ -1677,7 +1677,7 @@ export function ThreadsSettingsPanel() {
         <SettingsRow
           serverScoped
           settingKeys={["addProjectBaseDirectory"]}
-          {...searchableSetting("add-project-starts-in")}
+          {...searchableSetting("add-project-starts-in", t)}
           description={t("settings.text.leaveEmptyToUseWhenThe")}
           resetAction={
             settings.addProjectBaseDirectory !==
@@ -1718,7 +1718,7 @@ export function ThreadsSettingsPanel() {
       <SettingsSection id="usage-limits" title={t("settings.text.usageLimits")}>
         <SettingsRow
           serverScoped
-          {...searchableSetting("auto-resume-limited-threads")}
+          {...searchableSetting("auto-resume-limited-threads", t)}
           description={t("settings.text.automaticallyResumeThreadsWhenTheirUsage")}
           settingKeys={["autoResumeLimitedThreads"]}
           control={
@@ -1734,7 +1734,7 @@ export function ThreadsSettingsPanel() {
         />
         <SettingsRow
           serverScoped
-          {...searchableSetting("snooze-limited-threads")}
+          {...searchableSetting("snooze-limited-threads", t)}
           description={t("settings.text.snoozeThreadsUntilTheirUsageLimits")}
           settingKeys={["snoozeLimitedThreads"]}
           control={
@@ -1755,7 +1755,7 @@ export function ThreadsSettingsPanel() {
           <SettingsRow
             serverScoped
             settingKeys={["sidebarAutoSettleOnMerge"]}
-            {...searchableSetting("auto-settle-merged-threads")}
+            {...searchableSetting("auto-settle-merged-threads", t)}
             description={t("settings.text.settleAThreadWhenItsPull")}
             resetAction={
               settings.sidebarAutoSettleOnMerge !==
@@ -1785,7 +1785,7 @@ export function ThreadsSettingsPanel() {
           <SettingsRow
             serverScoped
             settingKeys={["sidebarAutoSettleAfterDays"]}
-            {...searchableSetting("auto-settle-inactive-threads")}
+            {...searchableSetting("auto-settle-inactive-threads", t)}
             description={t("settings.text.sidebarThreadsWithNoActivityFor")}
             resetAction={
               settings.sidebarAutoSettleAfterDays !==
@@ -1818,7 +1818,7 @@ export function ThreadsSettingsPanel() {
             <SettingsRow
               serverScoped
               settingKeys={["sidebarAutoSettleAfterDays"]}
-              title={searchableSetting("days-before-auto-settle").title}
+              title={searchableSetting("days-before-auto-settle", t).title}
               description={t("settings.text.anyNewActivityUnSettlesA")}
               control={
                 <AutoSettleDaysInput
@@ -1853,7 +1853,7 @@ export function ThreadsSettingsPanel() {
         <SettingsRow
           serverScoped
           settingKeys={["textGenerationModelSelection"]}
-          {...searchableSetting("text-generation-model")}
+          {...searchableSetting("text-generation-model", t)}
           description={t("settings.text.usedForThreadTitlesAndOther")}
           resetAction={
             hasServerTargets && isTextGenerationModelDirty ? (
@@ -1954,15 +1954,15 @@ export function ThreadsSettingsPanel() {
         />
         <AdvancedSettings
           targetIds={[
-            searchableSetting("thread-title-instructions").id,
-            searchableSetting("response-streaming").id,
+            searchableSetting("thread-title-instructions", t).id,
+            searchableSetting("response-streaming", t).id,
           ]}
         >
           <ThreadTitleInstructionsSettings />
           <SettingsRow
             serverScoped
             settingKeys={["responseStreamingMode"]}
-            {...searchableSetting("response-streaming")}
+            {...searchableSetting("response-streaming", t)}
             description={
               mixedResponseStreamingMode
                 ? t("settings.text.theSelectedTargetsUseDifferentStreaming")
@@ -2034,7 +2034,7 @@ export function MaintenanceSettingsPanel() {
         <SettingsRow
           serverScoped
           settingKeys={["enableProviderUpdateChecks"]}
-          {...searchableSetting("provider-update-checks")}
+          {...searchableSetting("provider-update-checks", t)}
           description={t("settings.text.checkInstalledProviderClisForNewer")}
           resetAction={
             settings.enableProviderUpdateChecks !==
@@ -2061,7 +2061,7 @@ export function MaintenanceSettingsPanel() {
           }
         />
         <SettingsRow
-          {...searchableSetting("continue-threads-after-server-update")}
+          {...searchableSetting("continue-threads-after-server-update", t)}
           serverScoped
           settingKeys={["continueThreadsAfterServerUpdate"]}
           description={t("settings.text.automaticallyResumeInterruptedThreadsAfterAn")}
@@ -2107,7 +2107,7 @@ export function MaintenanceSettingsPanel() {
 
       <SettingsSection id="diagnostics-section" title={t("settings.text.diagnostics")}>
         <SettingsRow
-          {...searchableSetting("diagnostics")}
+          {...searchableSetting("diagnostics", t)}
           description={
             isEnvironmentScope
               ? t("settings.text.inspectProcessesResourceUseAndLogs")
@@ -2163,7 +2163,7 @@ export function AboutSettingsPanel() {
         ) : (
           <>
             <SettingsRow
-              id={searchableSetting("app-version").id}
+              id={searchableSetting("app-version", t).id}
               title={<AboutVersionTitle />}
               description={t("settings.text.currentVersionOfTheApplication")}
             />
@@ -2174,7 +2174,7 @@ export function AboutSettingsPanel() {
 
       <SettingsSection id="legal" title={t("settings.text.legal")}>
         <SettingsRow
-          {...searchableSetting("privacy-policy")}
+          {...searchableSetting("privacy-policy", t)}
           description={
             telemetryOff === undefined
               ? t("settings.text.howWeHandleYourDataIncluding")
@@ -2191,7 +2191,7 @@ export function AboutSettingsPanel() {
           }
         />
         <SettingsRow
-          {...searchableSetting("open-source-licenses")}
+          {...searchableSetting("open-source-licenses", t)}
           description={t("settings.text.noticesForDependenciesAssetsAndOptional")}
           control={
             <Button

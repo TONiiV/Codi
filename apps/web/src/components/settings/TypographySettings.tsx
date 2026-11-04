@@ -65,7 +65,7 @@ function InterfaceFontRow({ preview }: { preview?: ReactNode }) {
   const defaults = useFontDefaultFamilies();
   return (
     <FontFamilySettingsRow
-      {...searchableSetting("interface-font")}
+      {...searchableSetting("interface-font", t)}
       description={t("settings.text.everythingOutsideCodeBlocksAndThe")}
       defaultFamily={defaults.sans}
       defaultValue={DEFAULT_UNIFIED_SETTINGS.fontFamilySans}
@@ -97,7 +97,7 @@ function PromptFontRow() {
   const defaults = useFontDefaultFamilies();
   return (
     <FontFamilySettingsRow
-      {...searchableSetting("prompt-font")}
+      {...searchableSetting("prompt-font", t)}
       description={t("settings.text.onlyTheBoxYouWritePrompts")}
       defaultFamily={defaults.interfaceFamily}
       defaultValue={DEFAULT_UNIFIED_SETTINGS.fontFamilyComposer}
@@ -138,7 +138,7 @@ function CodeFontRow({
   const defaults = useFontDefaultFamilies();
   return (
     <FontFamilySettingsRow
-      {...searchableSetting("code-font")}
+      {...searchableSetting("code-font", t)}
       {...(title !== undefined ? { title } : {})}
       description={description}
       defaultFamily={defaults.code}
@@ -172,7 +172,7 @@ function TerminalFontRow() {
   const defaults = useFontDefaultFamilies();
   return (
     <FontFamilySettingsRow
-      {...searchableSetting("terminal-font")}
+      {...searchableSetting("terminal-font", t)}
       description={t("settings.text.terminalOutputIndependentFromCodeBlocks")}
       defaultFamily={defaults.code}
       defaultValue={DEFAULT_UNIFIED_SETTINGS.fontFamilyTerminal}
@@ -214,7 +214,7 @@ function FontSmoothingRow() {
   if (!isMacPlatform(navigator.platform)) return null;
   return (
     <SettingsRow
-      {...searchableSetting("font-smoothing")}
+      {...searchableSetting("font-smoothing", t)}
       description={t("settings.text.useThinnerGrayscaleTextSmoothingInstead")}
       resetAction={
         settings.fontSmoothing !== DEFAULT_UNIFIED_SETTINGS.fontSmoothing ? (
@@ -243,7 +243,7 @@ function WordWrapRow() {
   const updateSettings = useUpdateScopedSettings();
   return (
     <SettingsRow
-      {...searchableSetting("word-wrap")}
+      {...searchableSetting("word-wrap", t)}
       description={t("settings.text.wrapLongLinesInCodeBlocks")}
       resetAction={
         settings.wordWrap !== DEFAULT_UNIFIED_SETTINGS.wordWrap ? (
@@ -285,7 +285,7 @@ function SeparateFontsRow({
   const { t } = useTranslation();
   return (
     <SettingsRow
-      {...searchableSetting("separate-fonts")}
+      {...searchableSetting("separate-fonts", t)}
       description={t("settings.text.setThePromptCodeAndTerminal")}
       control={
         <Switch
@@ -351,7 +351,10 @@ export function TypographySection() {
       {showAdvanced ? <FontSettingsGroup /> : <SimpleFontRows />}
       <WordWrapRow />
       <AdvancedSettings
-        targetIds={[searchableSetting("separate-fonts").id, searchableSetting("font-smoothing").id]}
+        targetIds={[
+          searchableSetting("separate-fonts", t).id,
+          searchableSetting("font-smoothing", t).id,
+        ]}
       >
         <SeparateFontsRow checked={showAdvanced} onCheckedChange={setAdvanced} />
         <FontSmoothingRow />

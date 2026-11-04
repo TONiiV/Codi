@@ -13,6 +13,9 @@ import {
   US_SHIFTED_TO_UNSHIFTED_KEYS,
 } from "@t3tools/shared/keybindings";
 
+import type { TFunction } from "i18next";
+
+import { englishT } from "~/i18n/englishT";
 import { shortcutConflictKey, shortcutKeyFromEvent } from "../../keybindings";
 import { isMacPlatform } from "../../lib/utils";
 import { METRIC_OPTIONS, WINDOW_OPTIONS } from "../usage/usageShortcuts";
@@ -102,12 +105,16 @@ export function whenAstToExpression(node: KeybindingWhenNode | undefined): strin
   }
 }
 
-export function whenNodeRemoveLabel(node: KeybindingWhenNode, depth: number): string {
-  if (depth === 0) return "Clear all conditions";
+export function whenNodeRemoveLabel(
+  node: KeybindingWhenNode,
+  depth: number,
+  t: TFunction = englishT,
+): string {
+  if (depth === 0) return t("settings.manual.keybindings.clearAll");
   if (node.type === "identifier" || (node.type === "not" && node.node.type === "identifier")) {
-    return "Remove condition";
+    return t("settings.manual.keybindings.removeCondition");
   }
-  return "Remove group and its conditions";
+  return t("settings.manual.keybindings.removeGroup");
 }
 
 function wrapWhenExpression(node: KeybindingWhenNode): string {
@@ -117,6 +124,7 @@ function wrapWhenExpression(node: KeybindingWhenNode): string {
 
 export function parseWhenExpressionDraft(
   expression: string,
+  t: TFunction = englishT,
 ): { ok: true; value: KeybindingWhenNode | undefined } | { ok: false; message: string } {
   const trimmed = expression.trim();
   if (trimmed.length === 0) return { ok: true, value: undefined };
@@ -125,7 +133,7 @@ export function parseWhenExpressionDraft(
   if (!ast) {
     return {
       ok: false,
-      message: "Use variables with !, &&, ||, and parentheses.",
+      message: t("settings.manual.keybindings.whenSyntax"),
     };
   }
 
@@ -182,6 +190,7 @@ export function keybindingConflictLabels(
   rows: ReadonlyArray<KeybindingRow>,
   input: { readonly rowId: string; readonly key: string; readonly when: string },
   platform = navigator.platform,
+  t: TFunction = englishT,
 ): ReadonlyArray<string> {
   if (input.key.trim().length === 0) return [];
   const shortcut = parseKeybindingShortcut(input.key);
@@ -195,7 +204,7 @@ export function keybindingConflictLabels(
       shortcutConflictKey(candidate.binding.shortcut, platform) === conflictKey &&
       conflictsWithWhen(candidate.when, input.when)
     ) {
-      conflicts.push(commandLabel(candidate.command));
+      conflicts.push(commandLabel(candidate.command, t));
     }
   }
   return [...new Set(conflicts)].toSorted();
@@ -210,17 +219,36 @@ export interface KeybindingGroup {
 const KEYBINDING_GROUPS = [
   {
     id: "navigation",
-    title: "Navigation",
+    title: "settings.manual.keybindings.group.navigation",
     prefixes: ["sidebar", "rightPanel", "commandPalette", "filePicker", "projectSearch", "editor"],
   },
-  { id: "threads", title: "Threads", prefixes: ["thread", "chat", "pullRequest"] },
-  { id: "composer", title: "Composer", prefixes: ["composer", "modelPicker"] },
-  { id: "terminal", title: "Terminal", prefixes: ["terminal"] },
-  { id: "preview", title: "Preview & diff", prefixes: ["preview", "diff"] },
-  { id: "appearance", title: "Appearance", prefixes: ["theme", "appearance", "themeEditor"] },
-  { id: "scripts", title: "Project scripts", prefixes: ["script"] },
+  {
+    id: "threads",
+    title: "settings.manual.keybindings.group.threads",
+    prefixes: ["thread", "chat", "pullRequest"],
+  },
+  {
+    id: "composer",
+    title: "settings.manual.keybindings.group.composer",
+    prefixes: ["composer", "modelPicker"],
+  },
+  { id: "terminal", title: "settings.manual.keybindings.group.terminal", prefixes: ["terminal"] },
+  {
+    id: "preview",
+    title: "settings.manual.keybindings.group.previewDiff",
+    prefixes: ["preview", "diff"],
+  },
+  {
+    id: "appearance",
+    title: "settings.manual.keybindings.group.appearance",
+    prefixes: ["theme", "appearance", "themeEditor"],
+  },
+  { id: "scripts", title: "settings.manual.keybindings.group.scripts", prefixes: ["script"] },
 ] as const;
-const OTHER_KEYBINDING_GROUP = { id: "other", title: "Other" } as const;
+const OTHER_KEYBINDING_GROUP = {
+  id: "other",
+  title: "settings.manual.keybindings.group.other",
+} as const;
 
 function keybindingGroupFor(command: KeybindingCommand): { id: string; title: string } {
   const prefix = String(command).split(".")[0] ?? "";
@@ -297,6 +325,7 @@ export function buildKeybindingRows(
 export function filterKeybindingRows(
   rows: ReadonlyArray<KeybindingRow>,
   query: string,
+  t: TFunction = englishT,
 ): ReadonlyArray<KeybindingRow> {
   const normalizedQuery = query.trim().toLowerCase();
   if (normalizedQuery.length === 0) return rows;
@@ -304,6 +333,7 @@ export function filterKeybindingRows(
     return (
       row.command.toLowerCase().includes(normalizedQuery) ||
       commandLabel(row.command).toLowerCase().includes(normalizedQuery) ||
+      commandLabel(row.command, t).toLowerCase().includes(normalizedQuery) ||
       row.key.toLowerCase().includes(normalizedQuery) ||
       row.when.toLowerCase().includes(normalizedQuery) ||
       row.source.toLowerCase().includes(normalizedQuery)
@@ -367,26 +397,25 @@ export function buildKeybindingCommandOptions(
   return [...commands].toSorted((left, right) => compareCommands(left, right, commandLabel));
 }
 
-export function commandLabel(command: KeybindingCommand): string {
-  if (command === "workspace.focusNext") return "Focus Next Workspace Area";
-  if (command === "workspace.focusPrevious") return "Focus Previous Workspace Area";
-  if (command === "composer.sendAlternate") return "Composer: Opposite Queue or Steer Action";
-  if (command === "composer.sendBackground") return "Composer: Start in Background";
-  if (command === "composer.sendAndNewThread") return "Composer: Send and Start New Thread";
-  if (command === "thread.steerQueuedMessage") return "Queue: Send First Queued Message";
-  if (command === "thread.editQueuedMessage") return "Queue: Edit Last Queued Message";
-  if (command === "thread.copyReference") return "Pull Request: Copy Link or Thread";
-  const usageMetric = METRIC_OPTIONS.find((option) => option.command === command);
-  if (usageMetric) return `Usage: ${usageMetric.label}`;
-  const usagePeriod = WINDOW_OPTIONS.find((option) => option.command === command);
-  if (usagePeriod) return `Usage: Period: ${usagePeriod.label}`;
-  if (command === "view.reopenClosed") return "Reopen Closed Tab";
-  if (command === "preview.focusUrl") return "Preview: Focus URL";
+export function commandLabel(command: KeybindingCommand, t: TFunction = englishT): string {
   const raw = String(command);
-  if (raw.startsWith("script.") && raw.endsWith(".run")) {
-    return `Run Script: ${titleCaseCommandSegment(raw.slice("script.".length, -".run".length))}`;
+  const jump = /^(thread|modelPicker)\.jump\.(\d+)$/.exec(raw);
+  if (jump) {
+    return t(
+      jump[1] === "thread"
+        ? "settings.keybindingCommands.threadJump"
+        : "settings.keybindingCommands.modelPickerJump",
+      { n: jump[2] },
+    );
   }
-  return raw.split(".").map(titleCaseCommandSegment).join(": ");
+  if (raw.startsWith("script.") && raw.endsWith(".run")) {
+    return t("settings.keybindingCommands.runScript", {
+      name: titleCaseCommandSegment(raw.slice("script.".length, -".run".length)),
+    });
+  }
+  return t(`settings.keybindingCommands.${raw.replaceAll(".", "_")}`, {
+    defaultValue: raw.split(".").map(titleCaseCommandSegment).join(": "),
+  });
 }
 
 function titleCaseCommandSegment(segment: string): string {

@@ -58,7 +58,7 @@ export function PullRequestRoutingSettings({
 
   if (environments.length < 2) return null;
 
-  const { id, title } = searchableSetting("pull-request-routing");
+  const { id, title } = searchableSetting("pull-request-routing", t);
   return (
     <FoldedSettingsSection
       id={id}

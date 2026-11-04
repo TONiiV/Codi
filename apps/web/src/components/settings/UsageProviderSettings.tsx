@@ -64,7 +64,7 @@ export function UsageProviderSettings({
   return (
     <>
       <SettingsSection
-        {...searchableSetting("usage-providers")}
+        {...searchableSetting("usage-providers", t)}
         headerAction={
           !readOnly ? (
             <Button size="xs" variant="outline" onClick={() => setAdding(true)}>

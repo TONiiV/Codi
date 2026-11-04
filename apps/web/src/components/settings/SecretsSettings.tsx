@@ -43,7 +43,7 @@ export function SecretsSettingsPanel() {
       {connected &&
       environment.serverConfig !== null &&
       environment.serverConfig.secretProviderSettings !== true ? (
-        <SettingsSection {...searchableSetting("secret-providers")}>
+        <SettingsSection {...searchableSetting("secret-providers", t)}>
           <p className="px-4 py-3 text-sm text-muted-foreground">
             {t("settings.text.updateCodiOnLabelToManage", { label: environment.label })}
           </p>
@@ -55,7 +55,7 @@ export function SecretsSettingsPanel() {
           projectScoped={scope.kind === "project" || scope.kind === "checkout"}
         />
       ) : (
-        <SettingsSection {...searchableSetting("secret-providers")}>
+        <SettingsSection {...searchableSetting("secret-providers", t)}>
           <p className="px-4 py-3 text-sm text-muted-foreground">
             {t("settings.text.connectAnEnvironmentToManageThe")}
           </p>
@@ -100,7 +100,7 @@ function EnvironmentSecretProviders({
   return (
     <>
       <SettingsSection
-        {...searchableSetting("secret-providers")}
+        {...searchableSetting("secret-providers", t)}
         headerAction={
           !readOnly ? (
             <Button size="xs" variant="outline" onClick={() => setDialog({ mode: "add" })}>

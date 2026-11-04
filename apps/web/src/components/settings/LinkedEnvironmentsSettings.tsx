@@ -62,7 +62,7 @@ export function LinkedEnvironmentsSettings({
   const { t } = useTranslation();
   const links = useEnvironmentQuery(peerLinkEnvironment.list({ environmentId, input: {} }));
   const canLink = useAtomValue(peerLinkEnvironment.link.permissionAtom(environmentId));
-  const search = searchableSetting("linked-environments");
+  const search = searchableSetting("linked-environments", t);
   return (
     <SettingsSection
       {...(isSearchTarget ? { id: search.id } : {})}

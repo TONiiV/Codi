@@ -178,8 +178,8 @@ export function ArchivedThreadsPanel() {
     <SettingsPageContainer>
       {archivedGroups.length === 0 ? (
         <SettingsSection
-          id={isLoadingArchive ? undefined : searchableSetting("archive").id}
-          title={searchableSetting("archive").title}
+          id={isLoadingArchive ? undefined : searchableSetting("archive", t).id}
+          title={searchableSetting("archive", t).title}
         >
           <SettingsRow
             title={
@@ -207,7 +207,7 @@ export function ArchivedThreadsPanel() {
         archivedGroups.map(({ key, project, title, threads: projectThreads }, index) => (
           <SettingsSection
             key={key}
-            id={index === 0 ? searchableSetting("archive").id : undefined}
+            id={index === 0 ? searchableSetting("archive", t).id : undefined}
             title={title}
             icon={<ProjectFavicon project={project} />}
           >

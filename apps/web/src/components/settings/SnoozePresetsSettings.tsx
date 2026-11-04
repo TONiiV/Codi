@@ -187,7 +187,7 @@ export function SnoozePresetsRow() {
     <SettingsRow
       serverScoped
       settingKeys={["snoozePresets"]}
-      {...searchableSetting("snooze-options")}
+      {...searchableSetting("snooze-options", t)}
       description={t("settings.text.choicesInEverySnoozeMenuListed")}
       resetAction={
         !mixed && sameSnoozePresets(presets, DEFAULT_SNOOZE_PRESETS) ? null : (

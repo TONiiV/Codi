@@ -159,7 +159,7 @@ export function AppearanceSettingsPanel() {
         variant="plain"
         hideTitle
       >
-        <div id={searchableSetting("theme").id}>
+        <div id={searchableSetting("theme", t).id}>
           <ThemeLibrary
             appearanceMode={appearanceMode}
             customThemes={customThemes}
@@ -178,7 +178,7 @@ export function AppearanceSettingsPanel() {
 
       <SettingsSection id="appearance-interface" title={t("settings.text.interface")}>
         <SettingsRow
-          {...searchableSetting("theme-backdrop")}
+          {...searchableSetting("theme-backdrop", t)}
           description={
             themeBackdropEnabled && themeBackdropUnavailable
               ? t("settings.text.unavailableThisDeviceCouldNotStart")
@@ -196,7 +196,7 @@ export function AppearanceSettingsPanel() {
           }
         />
         <SettingsRow
-          {...searchableSetting("setting-appearance-contrast")}
+          {...searchableSetting("setting-appearance-contrast", t)}
           description={t("settings.text.adjustTheContrastOfColorsAnd")}
           resetAction={
             settings.appearanceContrast !== DEFAULT_UNIFIED_SETTINGS.appearanceContrast ? (
@@ -244,7 +244,7 @@ export function AppearanceSettingsPanel() {
         />
 
         <SettingsRow
-          {...searchableSetting("setting-glass-opacity")}
+          {...searchableSetting("setting-glass-opacity", t)}
           description={t("settings.text.higherValuesMakeMenusDialogsAnd")}
           resetAction={
             settings.glassOpacity !== DEFAULT_UNIFIED_SETTINGS.glassOpacity ? (
@@ -290,7 +290,7 @@ export function AppearanceSettingsPanel() {
         />
 
         <SettingsRow
-          {...searchableSetting("chat-width")}
+          {...searchableSetting("chat-width", t)}
           description={t("settings.text.setHowWideMessagesAndThe")}
           resetAction={
             settings.chatWidth !== DEFAULT_UNIFIED_SETTINGS.chatWidth ? (
@@ -329,7 +329,7 @@ export function AppearanceSettingsPanel() {
         />
         <ThreadDetailsItemsRow />
         <SettingsRow
-          {...searchableSetting("effort-display")}
+          {...searchableSetting("effort-display", t)}
           description={t("settings.text.showReasoningEffortInTheComposer")}
           resetAction={
             settings.effortDisplay !== DEFAULT_UNIFIED_SETTINGS.effortDisplay ? (
@@ -366,7 +366,7 @@ export function AppearanceSettingsPanel() {
           }
         />
         <SettingsRow
-          {...searchableSetting("math-rendering")}
+          {...searchableSetting("math-rendering", t)}
           description={t("settings.text.typesetLatexMathSuchAsX")}
           resetAction={
             settings.mathRenderingEnabled !== DEFAULT_UNIFIED_SETTINGS.mathRenderingEnabled ? (
@@ -392,15 +392,15 @@ export function AppearanceSettingsPanel() {
         />
         <AdvancedSettings
           targetIds={[
-            searchableSetting("panel-animations").id,
-            searchableSetting("environment-identification").id,
+            searchableSetting("panel-animations", t).id,
+            searchableSetting("environment-identification", t).id,
             // Environment identification's search result lands on this section.
             "appearance-interface",
-            searchableSetting("composer-context").id,
+            searchableSetting("composer-context", t).id,
           ]}
         >
           <SettingsRow
-            {...searchableSetting("panel-animations")}
+            {...searchableSetting("panel-animations", t)}
             description={t("settings.text.setHowFastPanelsOpenAnd")}
             control={
               <div className="grid w-full grid-cols-[5rem_minmax(0,1fr)] items-center gap-3 sm:w-auto sm:grid-cols-[7rem_13rem] sm:gap-4">
@@ -451,7 +451,7 @@ export function AppearanceSettingsPanel() {
             }
           />
           <SettingsRow
-            {...searchableSetting("environment-identification")}
+            {...searchableSetting("environment-identification", t)}
             description={environmentIdentificationDescription}
             resetAction={
               settings.environmentIdentificationMode !== DEFAULT_ENVIRONMENT_IDENTIFICATION_MODE ? (
@@ -493,7 +493,7 @@ export function AppearanceSettingsPanel() {
             }
           />
           <SettingsRow
-            {...searchableSetting("composer-context")}
+            {...searchableSetting("composer-context", t)}
             description={t("settings.text.keepBranchAndWorktreeControlsBelow")}
             resetAction={
               settings.persistComposerContextStrip !==

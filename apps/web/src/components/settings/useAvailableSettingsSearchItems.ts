@@ -1,4 +1,5 @@
 import { AuthEnvironmentMaintainScope } from "@t3tools/contracts";
+import { useTranslation } from "react-i18next";
 
 import { usePrimaryCloudLinkState } from "~/cloud/primaryCloudLinkState";
 import { hasCloudPublicConfig } from "~/cloud/publicConfig";
@@ -15,6 +16,7 @@ import type { SettingsScopeSearch } from "./settingsScope";
 import {
   filterAvailableSettingsSearchItems,
   getThreadAutoSettlementSearchAvailability,
+  localizeSettingsSearchItem,
 } from "./settingsSearch";
 
 export function useAvailableSettingsSearchItems(scopeSearch: SettingsScopeSearch = {}) {
@@ -58,7 +60,8 @@ export function useAvailableSettingsSearchItems(scopeSearch: SettingsScopeSearch
   const wslSettingsRowVisible =
     isWslSettingsRowVisible({ state: desktopWsl.data, error: desktopWsl.error }) === true;
 
-  return filterAvailableSettingsSearchItems({
+  const { t } = useTranslation();
+  const items = filterAvailableSettingsSearchItems({
     localEnvironmentDisabled,
     hasCloudPublicConfig: cloudPublicConfig,
     hasEnvironment,
@@ -70,4 +73,5 @@ export function useAvailableSettingsSearchItems(scopeSearch: SettingsScopeSearch
     managedTunnelActive,
     hasPeerLinkHost,
   });
+  return items.map((item) => localizeSettingsSearchItem(item, t));
 }

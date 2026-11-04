@@ -787,7 +787,7 @@ export function ConnectionsSettings({ view }: { readonly view: "environments" | 
       ) {
         return (
           <SettingsRow
-            {...searchableSetting("wsl-backend")}
+            {...searchableSetting("wsl-backend", t)}
             description={t("settings.text.couldnTLoadTheWslBackend")}
             status={<span className="block text-destructive">{desktopWslError}</span>}
             control={
@@ -811,7 +811,7 @@ export function ConnectionsSettings({ view }: { readonly view: "environments" | 
     if (!desktopWslState.available) {
       return (
         <SettingsRow
-          {...searchableSetting("wsl-backend")}
+          {...searchableSetting("wsl-backend", t)}
           description={t("settings.text.wslIsUnavailableSoWindowsIs")}
           status={
             desktopWslError ? (
@@ -845,7 +845,7 @@ export function ConnectionsSettings({ view }: { readonly view: "environments" | 
     return (
       <>
         <SettingsRow
-          {...searchableSetting("wsl-backend")}
+          {...searchableSetting("wsl-backend", t)}
           description={t("settings.text.runTheSelectedWslDistroAlongside")}
           status={
             desktopWslError ? (
@@ -915,7 +915,7 @@ export function ConnectionsSettings({ view }: { readonly view: "environments" | 
 
   const renderTailscaleRow = () => (
     <SettingsRow
-      title={searchableSetting("tailscale-https").title}
+      title={searchableSetting("tailscale-https", t).title}
       description={
         tailscaleHttpsEndpoint
           ? tailscaleHttpsEndpoint.status === "available"
@@ -967,7 +967,7 @@ export function ConnectionsSettings({ view }: { readonly view: "environments" | 
   );
   const renderNetworkAccessRow = () => (
     <SettingsRow
-      title={searchableSetting("network-access").title}
+      title={searchableSetting("network-access", t).title}
       description={
         isLocalBackendNetworkAccessible ? (
           <NetworkAccessDescription
@@ -1004,7 +1004,7 @@ export function ConnectionsSettings({ view }: { readonly view: "environments" | 
   );
   const renderDisabledNetworkAccessRow = () => (
     <SettingsRow
-      title={searchableSetting("network-access").title}
+      title={searchableSetting("network-access", t).title}
       description={
         desktopBridge
           ? t("settings.text.thisConnectionCannotViewOrChange")
@@ -1043,7 +1043,7 @@ export function ConnectionsSettings({ view }: { readonly view: "environments" | 
       {primaryEnvironmentId !== null ? (
         <>
           <SettingsSection
-            {...searchableSetting("connections-environment")}
+            {...searchableSetting("connections-environment", t)}
             title={
               primaryEnvironment?.label ??
               (desktopBridge
@@ -1491,7 +1491,7 @@ export function ConnectionsSettings({ view }: { readonly view: "environments" | 
           </Dialog>
         </>
       ) : (
-        <SettingsSection {...searchableSetting("connections-environment")}>
+        <SettingsSection {...searchableSetting("connections-environment", t)}>
           <SettingsRow
             title={t("settings.text.noEnvironmentSelected")}
             description={t("settings.text.connectAnEnvironmentToViewIts")}
@@ -1514,7 +1514,7 @@ export function ConnectionsSettings({ view }: { readonly view: "environments" | 
         </SettingsSection>
       ) : null}
       <SettingsSection
-        {...searchableSetting("remote-environments")}
+        {...searchableSetting("remote-environments", t)}
         title={t("settings.text.environments")}
         headerAction={
           <div className="flex items-center gap-1">

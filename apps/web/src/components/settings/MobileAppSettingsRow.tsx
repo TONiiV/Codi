@@ -25,7 +25,7 @@ export function MobileAppSettingsRow() {
   const { t } = useTranslation();
   return (
     <SettingsRow
-      {...searchableSetting("mobile-app")}
+      {...searchableSetting("mobile-app", t)}
       description={t("settings.text.connectToYourServerFromYour")}
       control={
         <div className="flex items-center gap-2">

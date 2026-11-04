@@ -262,7 +262,9 @@ export function SnapShotSettings() {
   const shortcutStatus = recording
     ? t("settings.text.pressYourShortcutEscCancels")
     : candidateConflict
-      ? `Codi already uses this for "${commandLabel(candidateConflict)}".`
+      ? t("settings.manual.keybindings.alreadyUsed", {
+          command: commandLabel(candidateConflict, t),
+        })
       : shortcutCheck.status === "checking"
         ? t("settings.text.checkingShortcut")
         : shortcutCheck.availability
@@ -360,7 +362,7 @@ export function SnapShotSettings() {
       <SettingsSection id="snap-shot" title={t("settings.text.snapshots")}>
         <SettingsUnavailableGroup message={unavailableMessage}>
           <SettingsRow
-            {...searchableSetting("snap-shot-enabled")}
+            {...searchableSetting("snap-shot-enabled", t)}
             description={snapShotDescription(state)}
             status={
               bridge
@@ -400,7 +402,7 @@ export function SnapShotSettings() {
           {settings.snapShotEnabled && captureAvailable ? (
             <>
               <SettingsRow
-                {...searchableSetting("snap-shot-accessibility")}
+                {...searchableSetting("snap-shot-accessibility", t)}
                 description={t("settings.text.includeTextAndControlsWhenThe")}
                 status={snapShotAccessibilityUnavailableMessage(state)}
                 control={
@@ -418,7 +420,7 @@ export function SnapShotSettings() {
                 }
               />
               <SettingsRow
-                {...searchableSetting("snap-shot-shortcut")}
+                {...searchableSetting("snap-shot-shortcut", t)}
                 description={
                   state?.linuxBackend === "picker"
                     ? t("settings.text.chooseAWindowToCaptureFrom")
@@ -478,7 +480,7 @@ export function SnapShotSettings() {
                 }
               />
               <SettingsRow
-                {...searchableSetting("snap-shot-sound")}
+                {...searchableSetting("snap-shot-sound", t)}
                 description={t("settings.text.chooseTheSoundPlayedWhenCapture")}
                 control={
                   <Menu>
@@ -544,7 +546,7 @@ export function SnapShotSettings() {
                 }
               />
               <SettingsRow
-                {...searchableSetting("snap-shot-flash")}
+                {...searchableSetting("snap-shot-flash", t)}
                 description={t("settings.text.showAGentleCueOnThe")}
                 status={feedbackUnavailable}
                 control={
@@ -557,7 +559,7 @@ export function SnapShotSettings() {
                 }
               />
               <SettingsRow
-                {...searchableSetting("snap-shot-animations")}
+                {...searchableSetting("snap-shot-animations", t)}
                 description={t("settings.text.animateCapturedWindowsIntoYourDraft")}
                 status={feedbackUnavailable}
                 control={

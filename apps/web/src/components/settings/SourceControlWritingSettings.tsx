@@ -178,7 +178,7 @@ export function SourceControlWritingSettingsSection() {
         serverScoped
         settingKeys={["sourceControlWritingStyle"]}
         mixed={writingStyleMixed}
-        {...searchableSetting("source-control-writing-style")}
+        {...searchableSetting("source-control-writing-style", t)}
         description={t(MODE_OPTIONS[style.mode].description)}
         resetAction={
           isSourceControlWritingStyleDirty ? (
@@ -295,7 +295,7 @@ export function SourceControlWritingSettingsSection() {
         serverScoped
         settingKeys={["reviewGuidesEnabled"]}
         mixed={mixedReviewGuidesEnabled}
-        {...searchableSetting("review-guides")}
+        {...searchableSetting("review-guides", t)}
         description={t("settings.text.addAGuideTabToPull")}
         control={
           <Switch
@@ -312,7 +312,7 @@ export function SourceControlWritingSettingsSection() {
           <SettingsRow
             serverScoped
             settingKeys={["reviewGuideModelSelection"]}
-            {...searchableSetting("review-guide-model")}
+            {...searchableSetting("review-guide-model", t)}
             description={t("settings.text.modelThatReadsAPullRequest")}
             control={
               !hasServerTargets ? (
@@ -413,7 +413,7 @@ export function SourceControlWritingSettingsSection() {
           <SettingsRow
             serverScoped
             settingKeys={["reviewGuideInstructions"]}
-            {...searchableSetting("review-guide-instructions")}
+            {...searchableSetting("review-guide-instructions", t)}
             description={t("settings.text.yourPreferencesForReviewGuidesWhat")}
             resetAction={
               mixedReviewGuideInstructions || settings.reviewGuideInstructions !== "" ? (
@@ -454,15 +454,15 @@ export function SourceControlWritingSettingsSection() {
       ) : null}
       <AdvancedSettings
         targetIds={[
-          searchableSetting("follow-change-request-templates").id,
-          searchableSetting("source-control-writer-model").id,
+          searchableSetting("follow-change-request-templates", t).id,
+          searchableSetting("source-control-writer-model", t).id,
         ]}
       >
         <SettingsRow
           serverScoped
           settingKeys={["sourceControlWritingStyle"]}
           mixed={templatesMixed}
-          {...searchableSetting("follow-change-request-templates")}
+          {...searchableSetting("follow-change-request-templates", t)}
           description={t("settings.text.useTheRepositorySTemplateFor")}
           resetAction={
             templatesMixed ||
@@ -498,7 +498,7 @@ export function SourceControlWritingSettingsSection() {
         <SettingsRow
           serverScoped
           settingKeys={["sourceControlWriterModelSelection"]}
-          {...searchableSetting("source-control-writer-model")}
+          {...searchableSetting("source-control-writer-model", t)}
           description={t("settings.text.modelForSourceControlTextAnd")}
           control={
             !hasServerTargets ? (

@@ -61,7 +61,7 @@ export function LoadBalancingSettings({
 
   if (environments.length < 2) return null;
 
-  const { id, title } = searchableSetting("load-balancing");
+  const { id, title } = searchableSetting("load-balancing", t);
   return (
     <FoldedSettingsSection
       id={id}
