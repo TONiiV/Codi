@@ -265,7 +265,8 @@ function AcpRegistryAgentRow({
   readonly onAdd: (agent: AcpRegistrySearchAgent) => void;
 }) {
   const { t } = useTranslation();
-  const progressLabel = agent.distribution === "binary" ? "Downloading" : "Preparing";
+  const progressLabel =
+    agent.distribution === "binary" ? t("settings.text.downloading") : t("settings.text.preparing");
   const aboutUrl = agent.website || agent.repository;
   return (
     <article className="min-w-0 py-2.5">
@@ -306,7 +307,7 @@ function AcpRegistryAgentRow({
             </Tooltip>
           ) : null}
           <Button
-            aria-label={`${alreadyAdded ? "Already added" : isPreparing ? progressLabel : "Add"} ${agent.name}`}
+            aria-label={`${alreadyAdded ? t("settings.text.alreadyAdded") : isPreparing ? progressLabel : "Add"} ${agent.name}`}
             disabled={!canAdd || alreadyAdded}
             onClick={() => onAdd(agent)}
             size="xs"

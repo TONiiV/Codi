@@ -66,10 +66,10 @@ const BACKGROUND_ACTIVITY_BOOLEAN_OVERRIDES: ReadonlyArray<{
     | "pauseWhenOnBattery";
   readonly label: string;
 }> = [
-  { key: "pauseWhenHostLocked", label: "Pause when host is locked" },
-  { key: "pauseWhenHostLowPower", label: "Pause on host low power" },
-  { key: "pauseWhenClientLowPower", label: "Pause on client low power" },
-  { key: "pauseWhenOnBattery", label: "Pause on battery" },
+  { key: "pauseWhenHostLocked", label: "settings.manual.bgPause.hostLocked" },
+  { key: "pauseWhenHostLowPower", label: "settings.manual.bgPause.hostLowPower" },
+  { key: "pauseWhenClientLowPower", label: "settings.manual.bgPause.clientLowPower" },
+  { key: "pauseWhenOnBattery", label: "settings.manual.bgPause.battery" },
 ];
 
 function resetBackgroundActivitySettings() {
@@ -290,7 +290,7 @@ function BackgroundActivityAdvancedDialog({
                   key={key}
                   className="flex items-center justify-between gap-3 border-b px-4 py-3 last:border-b-0 sm:border-r sm:even:border-r-0"
                 >
-                  <span className="text-sm font-medium">{label}</span>
+                  <span className="text-sm font-medium">{t(label)}</span>
                   <Switch
                     checked={resolvedBackgroundActivity[key]}
                     onCheckedChange={(checked) =>
@@ -390,7 +390,9 @@ export function BackgroundActivitySettingsRow() {
             >
               <SelectValue>
                 {(value: BackgroundActivityProfileOption | null) =>
-                  value === null ? "Mixed" : BACKGROUND_ACTIVITY_PROFILE_OPTION_LABELS[value]
+                  value === null
+                    ? t("settings.text.mixed")
+                    : BACKGROUND_ACTIVITY_PROFILE_OPTION_LABELS[value]
                 }
               </SelectValue>
             </SelectTrigger>

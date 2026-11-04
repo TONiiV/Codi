@@ -249,8 +249,8 @@ export function ProjectDefaultsSettings({ category }: { category: ProjectSetting
                 value === "local" || value === "worktree"
                   ? resolveEnvModeLabel(value)
                   : unavailable
-                    ? "Unavailable"
-                    : "Mixed"
+                    ? t("settings.text.unavailable")
+                    : t("settings.text.mixed")
               }
             </SelectValue>
           </SelectTrigger>
@@ -526,8 +526,8 @@ export function ProjectDefaultsSettings({ category }: { category: ProjectSetting
                       value === "merge" || value === "squash" || value === "rebase"
                         ? PULL_REQUEST_MERGE_METHOD_LABELS[value]
                         : value === "last"
-                          ? "Last selected"
-                          : "Mixed"
+                          ? t("settings.text.lastSelected")
+                          : t("settings.text.mixed")
                     }
                   </SelectValue>
                 </SelectTrigger>
@@ -590,8 +590,8 @@ export function WorktreeSubmodulesRow() {
                 isWorktreeSubmodules(value)
                   ? WORKTREE_SUBMODULES_LABELS[value]
                   : unavailable
-                    ? "Unavailable"
-                    : "Mixed"
+                    ? t("settings.text.unavailable")
+                    : t("settings.text.mixed")
               }
             </SelectValue>
           </SelectTrigger>

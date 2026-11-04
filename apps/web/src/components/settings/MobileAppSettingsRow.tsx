@@ -8,7 +8,7 @@ import { useTranslation } from "react-i18next";
 
 const stores = [
   {
-    label: "iPhone and iPad",
+    label: "settings.manual.mobile.iphoneIpad",
     store: "App Store",
     url: "https://apps.apple.com/us/app/t3-code-remote-claude-more/id6787819824",
     Icon: AppleIcon,
@@ -33,7 +33,7 @@ export function MobileAppSettingsRow() {
             <Popover key={store}>
               <PopoverTrigger render={<Button size="sm" variant="outline" />}>
                 <Icon />
-                {label}
+                {t(label)}
               </PopoverTrigger>
               <PopoverPopup align="end">
                 <div className="flex flex-col items-center gap-3">

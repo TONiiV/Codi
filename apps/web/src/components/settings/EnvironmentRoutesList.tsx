@@ -61,8 +61,14 @@ export function EnvironmentRoutesList({
     prepared._tag === "Some" && environment.connection.phase === "connected"
       ? connectionRouteId(prepared.value.target)
       : null;
-  const reorder = useAtomCommand(environmentCatalog.reorderRoutes, "Reorder routes");
-  const removeRoute = useAtomCommand(environmentCatalog.removeRoute, "Remove route");
+  const reorder = useAtomCommand(
+    environmentCatalog.reorderRoutes,
+    t("settings.text.reorderRoutes"),
+  );
+  const removeRoute = useAtomCommand(
+    environmentCatalog.removeRoute,
+    t("settings.text.removeRoute"),
+  );
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),

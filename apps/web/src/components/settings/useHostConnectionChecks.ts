@@ -11,8 +11,10 @@ import {
   type DeviceHostCheck,
   type DeviceHostCheckTarget,
 } from "./deviceHostConnectionChecks";
+import { useTranslation } from "react-i18next";
 
 export function useHostConnectionChecks(targets: ReadonlyArray<DeviceHostCheckTarget>) {
+  const { t } = useTranslation();
   const test = useAtomCommand(deviceEnvironment.testHost, { reportFailure: false });
   const [checks, setChecks] = useState<Record<string, Record<string, DeviceHostCheck>>>({});
   const running = useRef(new Set<string>());
@@ -27,7 +29,7 @@ export function useHostConnectionChecks(targets: ReadonlyArray<DeviceHostCheckTa
       host,
       async (environmentId, input) => {
         if (!readEnvironmentScope(environmentId, AuthSettingsWriteScope)) {
-          throw new Error("This connection cannot test device hosts.");
+          throw new Error(t("settings.text.thisConnectionCannotTestDeviceHosts"));
         }
         const result = await test({ environmentId, input });
         if (result._tag === "Failure") throw new Error(Cause.pretty(result.cause));

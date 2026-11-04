@@ -111,11 +111,15 @@ function SwitchPlan({
           description,
         }),
       );
-    const prepared = await prepareLocalTrackSwitch(bridge, {
-      channel: release.channel,
-      version: release.version,
-      reinstall: switchesLocal,
-    });
+    const prepared = await prepareLocalTrackSwitch(
+      bridge,
+      {
+        channel: release.channel,
+        version: release.version,
+        reinstall: switchesLocal,
+      },
+      t,
+    );
     onClose();
     if (!prepared.ok) {
       fail(prepared.message);
@@ -141,7 +145,7 @@ function SwitchPlan({
                   !acceptsTrackSwitchRelease(downloadedVersion, release.channel, release.version)
                 ) {
                   reportError(
-                    "Could not install update",
+                    t("settings.text.couldNotInstallUpdate"),
                     `This app downloaded ${downloadedVersion ?? "nothing"}, not ${release.version} or newer.`,
                   );
                   return false;
@@ -153,7 +157,7 @@ function SwitchPlan({
     );
     if (result._tag === "Failure") {
       const error = squashAtomCommandFailure(result);
-      fail(error instanceof Error ? error.message : "An unexpected error occurred.");
+      fail(error instanceof Error ? error.message : t("settings.text.anUnexpectedErrorOccurred"));
     }
   };
 
@@ -167,13 +171,11 @@ function SwitchPlan({
       rows={everything.rows}
       notes={[
         ...(everything.rows.length === 0 && !crossesLocal
-          ? [`Every connected machine is already on ${label}. This only saves the track.`]
+          ? [t("settings.text.everyConnectedMachineIsAlreadyOn", { label })]
           : []),
-        ...(crossesLocal && updatesOff
-          ? ["This app's updates are off here, so reinstall it yourself to switch."]
-          : []),
+        ...(crossesLocal && updatesOff ? [t("settings.text.thisAppSUpdatesAreOff")] : []),
         ...(switchesLocal && isMacPlatform(navigator.platform)
-          ? ["If Codi does not reopen after it restarts, open it again."]
+          ? [t("settings.text.ifCodiDoesNotReopenAfter")]
           : []),
       ]}
       restarts={everything.restarts}
@@ -182,7 +184,9 @@ function SwitchPlan({
       }
       busy={checking}
       disabledReason={
-        !switchesLocal || localBlocked === null ? null : `This app cannot switch: ${localBlocked}.`
+        !switchesLocal || localBlocked === null
+          ? null
+          : t("settings.text.thisAppCannotSwitchLocalblocked", { localBlocked })
       }
       onConfirm={() => void run()}
     />

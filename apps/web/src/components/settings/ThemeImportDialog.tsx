@@ -230,7 +230,7 @@ function ThemeImportBody({
     if (!isCurrentRequest(requestId)) return;
     setIsReading(false);
     if (fileText._tag === "Failure") {
-      setError("Could not read that file. Paste the JSON below instead.");
+      setError(t("settings.text.couldNotReadThatFilePaste"));
       return;
     }
     setJson(fileText.value);
@@ -255,7 +255,7 @@ function ThemeImportBody({
     for (const file of files) {
       const oversized = describeOversizedThemeFile(file.size);
       if (oversized) {
-        failures.push(`${file.name}: too large`);
+        failures.push(t("settings.text.nameTooLarge", { name: file.name }));
         continue;
       }
       try {
@@ -265,7 +265,7 @@ function ThemeImportBody({
         });
       } catch (cause) {
         failures.push(
-          `${file.name}: ${cause instanceof Error ? cause.message : "not a theme file"}`,
+          `${file.name}: ${cause instanceof Error ? cause.message : t("settings.text.notAThemeFile")}`,
         );
       }
     }
@@ -281,7 +281,7 @@ function ThemeImportBody({
         installed.push(installCustomTheme(theme));
       } catch (cause) {
         failures.push(
-          `${theme.label}: ${cause instanceof Error ? cause.message : "could not install"}`,
+          `${theme.label}: ${cause instanceof Error ? cause.message : t("settings.text.couldNotInstall")}`,
         );
       }
     }
@@ -357,7 +357,7 @@ function ThemeImportBody({
       if (getCustomThemes().some((existing) => existing.id === candidate.id)) continue;
       return candidate;
     }
-    throw new Error(`Too many copies of "${theme.label}".`);
+    throw new Error(t("settings.text.tooManyCopiesOfLabel", { label: theme.label }));
   };
 
   const resolveConflicts = (mode: "update" | "copy") => {
@@ -410,12 +410,12 @@ function ThemeImportBody({
         try {
           removeCustomTheme(installedTheme.id);
         } catch {}
-        setError("Theme added, but it could not be selected. Try again.");
+        setError(t("settings.text.themeAddedButItCouldNot"));
         return;
       }
       onClose();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "That theme file is invalid.");
+      setError(cause instanceof Error ? cause.message : t("settings.text.thatThemeFileIsInvalid"));
     }
   };
 
@@ -463,7 +463,7 @@ function ThemeImportBody({
             type="file"
           />
         );
-        const chooseButton = (label = "Choose files") => (
+        const chooseButton = (label = t("settings.text.chooseFiles")) => (
           <Button disabled={isReading} size="sm" variant="outline" onClick={openFilePicker}>
             <DownloadIcon />
             {isReading ? t("settings.text.reading") : label}

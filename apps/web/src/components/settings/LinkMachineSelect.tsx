@@ -65,7 +65,7 @@ export function LinkMachineSelect({
         <SelectTrigger aria-labelledby={labelId}>
           <SelectValue>
             {(selected: string | null) => {
-              if (selected === ANOTHER_ADDRESS) return "Another address…";
+              if (selected === ANOTHER_ADDRESS) return t("settings.text.anotherAddress");
               const machine = machines.find((candidate) => candidate.environmentId === selected);
               return machine === undefined ? "Choose a machine" : <MachineName machine={machine} />;
             }}

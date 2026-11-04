@@ -12,28 +12,29 @@ import { useSettingsScope } from "./SettingsScopeContext";
 import { useScopedSettings } from "./useScopedSettings";
 import { SettingsSection } from "./settingsLayout";
 import { SettingsScopeNotice } from "./SettingsScopeNotice";
-import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 const SIGNALS = [
   {
     key: "otlpTracesUrl",
     sourceKey: "otlpTracesSource",
     variableKey: "otlpTracesVariable",
-    label: "Traces",
+    label: "settings.manual.telemetry.traces",
     signal: "traces",
   },
   {
     key: "otlpMetricsUrl",
     sourceKey: "otlpMetricsSource",
     variableKey: "otlpMetricsVariable",
-    label: "Metrics",
+    label: "settings.manual.telemetry.metrics",
     signal: "metrics",
   },
   {
     key: "otlpLogsUrl",
     sourceKey: "otlpLogsSource",
     variableKey: "otlpLogsVariable",
-    label: "Logs",
+    label: "settings.manual.telemetry.logs",
     signal: "logs",
   },
 ] as const;
@@ -41,7 +42,10 @@ const SIGNALS = [
 type SignalDescriptor = (typeof SIGNALS)[number];
 type SignalKey = SignalDescriptor["key"];
 
-const OVERRIDE_LABELS = { environment: "Set by environment", bootstrap: "Set by desktop" } as const;
+const OVERRIDE_LABELS = {
+  environment: "settings.manual.telemetry.setByEnvironment",
+  bootstrap: "settings.manual.telemetry.setByDesktop",
+} as const;
 
 function runningOverride(
   running: ServerObservability | undefined,
@@ -57,18 +61,33 @@ type EndpointCheck = { readonly url: string; readonly result: OtlpEndpointCheckR
 
 const isHttpUrl = (url: string) => /^https?:\/\/./i.test(url);
 
-function endpointStatus(url: string, check: EndpointCheck | undefined) {
-  if (url === "") return { label: "Off", dot: "bg-muted-foreground/40" };
-  if (check?.url !== url) return { label: "Not checked", dot: "bg-muted-foreground/40" };
+function endpointStatus(url: string, check: EndpointCheck | undefined, t: TFunction) {
+  if (url === "")
+    return { label: t("settings.manual.telemetry.off"), dot: "bg-muted-foreground/40" };
+  if (check?.url !== url)
+    return { label: t("settings.manual.telemetry.notChecked"), dot: "bg-muted-foreground/40" };
   const { result } = check;
-  if (result === null) return { label: "Checking…", dot: "bg-warning" };
+  if (result === null) return { label: t("settings.manual.telemetry.checking"), dot: "bg-warning" };
   switch (result._tag) {
     case "Accepted":
-      return { label: `Connected · ${Math.round(result.latencyMs)} ms`, dot: "bg-success" };
+      return {
+        label: t("settings.manual.telemetry.connected", { latency: Math.round(result.latencyMs) }),
+        dot: "bg-success",
+      };
     case "Rejected":
-      return { label: `Rejected · HTTP ${result.status}`, dot: "bg-destructive" };
+      return {
+        label: t("settings.manual.telemetry.rejected", { status: result.status }),
+        dot: "bg-destructive",
+      };
     case "Unreachable":
-      return { label: result.timedOut ? "Timed out" : "Unreachable", dot: "bg-destructive" };
+      return {
+        label: t(
+          result.timedOut
+            ? "settings.manual.telemetry.timedOut"
+            : "settings.manual.telemetry.unreachable",
+        ),
+        dot: "bg-destructive",
+      };
   }
 }
 
@@ -167,7 +186,7 @@ function TelemetryExportForm() {
           setSaving(false);
           if (result._tag === "Success") {
             setDraft({});
-            setMessage("Saved. Restart the server to apply.");
+            setMessage(t("settings.text.savedRestartTheServerToApply"));
           }
         }}
       >
@@ -176,18 +195,19 @@ function TelemetryExportForm() {
         </p>
         {!canEdit && (
           <p className="text-xs text-muted-foreground">
-            This connection lacks permission to change settings on{" "}
-            {environment?.label ?? t("settings.text.theSelectedEnvironment")}.
+            {t("settings.manual.telemetry.noPermission", {
+              environment: environment?.label ?? t("settings.text.theSelectedEnvironment"),
+            })}
           </p>
         )}
         {SIGNALS.map((descriptor) => {
           const { key, label, signal } = descriptor;
           const override = runningOverride(running, descriptor);
           const url = override?.url ?? values[key].trim();
-          const check = canCheck ? endpointStatus(url, checks[key]) : null;
+          const check = canCheck ? endpointStatus(url, checks[key], t) : null;
           const status = override
             ? {
-                label: check ? `${override.label} · ${check.label}` : override.label,
+                label: check ? `${t(override.label)} · ${check.label}` : t(override.label),
                 dot: check?.dot ?? "bg-muted-foreground/40",
               }
             : check;
@@ -235,11 +255,17 @@ function TelemetryExportForm() {
               </div>
               {(saved[key] !== (running?.[key] ?? "") || override?.variable) && (
                 <p className="break-all text-xs text-muted-foreground">
-                  Running: {running?.[key] || t("settings.text.disabled")}
+                  {t("settings.manual.telemetry.running", {
+                    value: running?.[key] || t("settings.text.disabled"),
+                  })}
                   {override?.variable && (
                     <>
                       {" "}
-                      from <code className="font-mono">{override.variable}</code>
+                      <Trans
+                        i18nKey="settings.manual.telemetry.fromVariable"
+                        values={{ variable: override.variable }}
+                        components={{ code: <code className="font-mono" /> }}
+                      />
                     </>
                   )}
                 </p>

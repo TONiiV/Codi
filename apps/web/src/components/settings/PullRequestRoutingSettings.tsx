@@ -15,27 +15,32 @@ import { toastManager } from "../ui/toast";
 import { EnvironmentRow, EnvironmentTransportLabel } from "./EnvironmentRow";
 import { FoldedSettingsSection } from "./FoldedSettingsSection";
 import { searchableSetting } from "./settingsSearch";
+import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 
 const options: ReadonlyArray<{ value: PullRequestRoutingPermission; label: string }> = [
-  { value: "off", label: "Off" },
-  { value: "read", label: "Read PRs" },
-  { value: "read-write", label: "Read and act" },
+  { value: "off", label: "settings.manual.prRouting.off" },
+  { value: "read", label: "settings.manual.prRouting.read" },
+  { value: "read-write", label: "settings.manual.prRouting.readWrite" },
 ];
 
-const summaryLabels = { "read-write": "read and act", read: "read PRs" } as const;
+const summaryLabels = {
+  "read-write": "settings.manual.prRouting.summaryReadWrite",
+  read: "settings.manual.prRouting.summaryRead",
+} as const;
 
 function summarizePullRequestRouting(
   entries: ReadonlyArray<{
     readonly label: string;
     readonly permission: PullRequestRoutingPermission;
   }>,
+  t: TFunction,
 ): string | null {
   const groups = (["read-write", "read"] as const).flatMap((permission) => {
     const labels = entries.filter((entry) => entry.permission === permission);
     return labels.length === 0
       ? []
-      : [`${labels.map((entry) => entry.label).join(", ")} ${summaryLabels[permission]}`];
+      : [`${labels.map((entry) => entry.label).join(", ")} ${t(summaryLabels[permission])}`];
   });
   return groups.length === 0 ? null : groups.join(" · ");
 }
@@ -64,6 +69,7 @@ export function PullRequestRoutingSettings({
             label: environment.label,
             permission: pullRequestRoutingPermissionFor(environment.entry, permissions),
           })),
+          t,
         ) ?? t("settings.text.off")
       }
     >
@@ -110,7 +116,7 @@ export function PullRequestRoutingSettings({
             <SelectPopup align="end" alignItemWithTrigger={false}>
               {options.map(({ value, label }) => (
                 <SelectItem key={value} value={value}>
-                  {label}
+                  {t(label)}
                 </SelectItem>
               ))}
             </SelectPopup>

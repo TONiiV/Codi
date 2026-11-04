@@ -45,10 +45,11 @@ import {
 import { useTranslation } from "react-i18next";
 
 function useFontDefaultFamilies() {
+  const { t } = useTranslation();
   const settings = useScopedSettings();
   const [defaults] = useState(() => ({
-    sans: resolveDefaultFamilyLabel(DEFAULT_SANS_FONT_STACK) ?? "System default",
-    code: resolveDefaultFamilyLabel(DEFAULT_CODE_FONT_STACK) ?? "System monospace",
+    sans: resolveDefaultFamilyLabel(DEFAULT_SANS_FONT_STACK) ?? t("settings.text.systemDefault"),
+    code: resolveDefaultFamilyLabel(DEFAULT_CODE_FONT_STACK) ?? t("settings.text.systemMonospace"),
   }));
   return {
     sans: defaults.sans,
@@ -123,7 +124,7 @@ function PromptFontRow() {
 
 function CodeFontRow({
   title,
-  description = "Code blocks, diffs, and file previews.",
+  description: descriptionProp,
   preview,
 }: {
   title?: string;
@@ -131,6 +132,7 @@ function CodeFontRow({
   preview?: ReactNode;
 }) {
   const { t } = useTranslation();
+  const description = descriptionProp ?? t("settings.text.codeBlocksDiffsAndFilePreviews");
   const settings = useScopedSettings();
   const updateSettings = useUpdateScopedSettings();
   const defaults = useFontDefaultFamilies();

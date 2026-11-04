@@ -433,7 +433,7 @@ export function SettingsRow({
     managed !== undefined && control
       ? inertControl(managed)
       : managedBy !== undefined && control
-        ? inertControl(`Managed by ${managedBy}.`)
+        ? inertControl(t("settings.text.managedByManagedby", { managedBy }))
         : unavailable && control
           ? inertControl(
               !canWriteSettings
@@ -442,15 +442,15 @@ export function SettingsRow({
                       ? context.connectedEnvironments
                           .filter((target) => !writableIds.has(target.environmentId))
                           .map((target) => target.label)
-                          .join(", ") || "the selected environment"
-                      : (primaryEnvironment?.label ?? "the primary environment")
+                          .join(", ") || t("settings.text.theSelectedEnvironment")
+                      : (primaryEnvironment?.label ?? t("settings.text.thePrimaryEnvironment"))
                   }.`
                 : context
-                  ? "Reconnect the selected environment to change this setting."
+                  ? t("settings.text.reconnectTheSelectedEnvironmentToChange")
                   : PRIMARY_SETTINGS_UNAVAILABLE_MESSAGE,
             )
           : environmentWide && control
-            ? inertControl("Environment-wide setting. Select an environment to change it.")
+            ? inertControl(t("settings.text.environmentWideSettingSelectAnEnvironment"))
             : control;
   const customized =
     context !== null &&
@@ -557,7 +557,7 @@ export function SettingsRow({
 
 export function SettingResetButton({
   label,
-  tooltip = "Reset to default",
+  tooltip: tooltipProp,
   ariaLabel,
   disabled = false,
   onClick,
@@ -569,6 +569,7 @@ export function SettingResetButton({
   onClick: () => void;
 }) {
   const { t } = useTranslation();
+  const tooltip = tooltipProp ?? t("settings.text.resetToDefault");
   return (
     <Tooltip>
       <TooltipTrigger

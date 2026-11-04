@@ -249,10 +249,10 @@ export function AddProviderInstanceDialog({
   const acpSelectionError = isLocalAcp
     ? localCommandPath.length > 0
       ? null
-      : "Executable is required."
+      : t("settings.text.executableIsRequired")
     : selectedAcp !== null || (isManualAcpConfiguration && manualAgentId.length > 0)
       ? null
-      : "Select an ACP or configure one manually.";
+      : t("settings.text.selectAnAcpOrConfigureOne");
   const wizardStepSummaries = isAcpRegistry
     ? ([
         isLocalAcp ? "Local ACP command" : (selectedAcp?.name ?? (manualAgentId || null)),

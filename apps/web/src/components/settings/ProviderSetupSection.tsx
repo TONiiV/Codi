@@ -139,22 +139,22 @@ function ProviderSetupActions({
   const actionsDisabled = pendingLabel !== null || queryError !== null;
   const installationStatusMessage =
     installation === null
-      ? "Checking the Antigravity runtime."
+      ? t("settings.text.checkingTheAntigravityRuntime")
       : installation?.phase === "downloading"
         ? `Downloading ${(installation.downloadedBytes / 1_000_000).toFixed(1)} MB${installation.totalBytes === null ? "" : ` of ${(installation.totalBytes / 1_000_000).toFixed(1)} MB`}.`
         : installation?.phase === "extracting"
-          ? "Extracting Antigravity."
+          ? t("settings.text.extractingAntigravity")
           : installation?.phase === "verifying"
-            ? "Checking the downloaded runtime."
+            ? t("settings.text.checkingTheDownloadedRuntime")
             : installed
               ? "Installed."
               : usesCustomBinary
                 ? enabled
-                  ? "The configured Antigravity runtime is unavailable."
-                  : "The configured Antigravity runtime has not been checked."
+                  ? t("settings.text.theConfiguredAntigravityRuntimeIsUnavailable")
+                  : t("settings.text.theConfiguredAntigravityRuntimeHasNot")
                 : installation?.totalBytes
                   ? `${Math.ceil(installation.totalBytes / 1_000_000)} MB download.`
-                  : "Not installed.";
+                  : t("settings.text.notInstalled2");
 
   async function runCommand<A, E>(
     label: string,
@@ -168,14 +168,16 @@ function ProviderSetupActions({
     pendingRef.current = false;
     setPendingLabel(null);
     if (settled._tag === "Failure") {
-      setError("Provider setup failed. Try again.");
+      setError(t("settings.text.providerSetupFailedTryAgain"));
       return false;
     }
     const result = settled.value;
     if (result._tag === "Failure") {
       if (!isAtomCommandInterrupted(result)) {
         const failure = squashAtomCommandFailure(result);
-        setError(failure instanceof Error ? failure.message : "Provider setup failed.");
+        setError(
+          failure instanceof Error ? failure.message : t("settings.text.providerSetupFailed"),
+        );
       }
       return false;
     }
@@ -184,10 +186,10 @@ function ProviderSetupActions({
 
   async function removeRuntime() {
     const confirmed = await ensureLocalApi().dialogs.confirm(
-      `Remove the downloaded Antigravity runtime from ${environmentLabel}? Google sign-in and thread history are kept.`,
+      t("settings.text.removeTheDownloadedAntigravityRuntimeFrom", { environmentLabel }),
     );
     if (confirmed) {
-      await runCommand("Removing runtime", () => removeInstall(target));
+      await runCommand(t("settings.text.removingRuntime"), () => removeInstall(target));
     }
   }
 
@@ -254,7 +256,7 @@ function ProviderSetupActions({
                     onClick={() => {
                       const operationId = installation.operationId;
                       if (!operationId) return;
-                      void runCommand("Cancelling installation", () =>
+                      void runCommand(t("settings.text.cancellingInstallation"), () =>
                         cancelInstall({ environmentId, input: { instanceId, operationId } }),
                       );
                     }}
@@ -267,7 +269,9 @@ function ProviderSetupActions({
                     variant="outline"
                     disabled={actionsDisabled || authActive}
                     onClick={() =>
-                      void runCommand("Starting installation", () => startInstall(target))
+                      void runCommand(t("settings.text.startingInstallation"), () =>
+                        startInstall(target),
+                      )
                     }
                   >
                     {installation?.installedVersion

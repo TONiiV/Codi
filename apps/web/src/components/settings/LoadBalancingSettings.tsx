@@ -11,13 +11,14 @@ import { Switch } from "../ui/switch";
 import { EnvironmentRow, EnvironmentTransportLabel } from "./EnvironmentRow";
 import { FoldedSettingsSection } from "./FoldedSettingsSection";
 import { searchableSetting } from "./settingsSearch";
+import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 
 const preferences = [
-  { value: 100, label: "Prefer" },
-  { value: 50, label: "Normal" },
-  { value: 25, label: "Less often" },
-  { value: 0, label: "Manual only" },
+  { value: 100, label: "settings.manual.loadPreference.prefer" },
+  { value: 50, label: "settings.manual.loadPreference.normal" },
+  { value: 25, label: "settings.manual.loadPreference.lessOften" },
+  { value: 0, label: "settings.manual.loadPreference.manualOnly" },
 ] as const;
 
 type LoadPreference = (typeof preferences)[number]["value"];
@@ -28,19 +29,20 @@ function loadPreferenceForWeight(weight: number | undefined): LoadPreference {
   return weight < 50 ? 25 : 100;
 }
 
-function preferenceLabel(preference: LoadPreference): string {
-  return preferences.find((entry) => entry.value === preference)!.label;
+function preferenceLabel(preference: LoadPreference, t: TFunction): string {
+  return t(preferences.find((entry) => entry.value === preference)!.label);
 }
 
 function summarizeLoadPreferences(
   environments: ReadonlyArray<Pick<EnvironmentPresentation, "environmentId" | "label">>,
   weights: Readonly<Record<string, number>>,
+  t: TFunction,
 ): string | null {
   const parts = environments.flatMap((environment) => {
     const preference = loadPreferenceForWeight(weights[environment.environmentId]);
     return preference === 50
       ? []
-      : [`${environment.label} ${preferenceLabel(preference).toLowerCase()}`];
+      : [`${environment.label} ${preferenceLabel(preference, t).toLowerCase()}`];
   });
   return parts.length === 0 ? null : parts.join(" · ");
 }
@@ -66,7 +68,7 @@ export function LoadBalancingSettings({
       title={title}
       summary={
         settings.loadBalancingEnabled
-          ? summarizeLoadPreferences(environments, settings.loadBalancingWeights)
+          ? summarizeLoadPreferences(environments, settings.loadBalancingWeights, t)
           : t("settings.text.off")
       }
       control={
@@ -114,7 +116,7 @@ export function LoadBalancingSettings({
             <SelectPopup align="end" alignItemWithTrigger={false}>
               {preferences.map(({ value, label }) => (
                 <SelectItem key={value} value={value}>
-                  {label}
+                  {t(label)}
                 </SelectItem>
               ))}
             </SelectPopup>

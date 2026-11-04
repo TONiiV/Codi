@@ -65,7 +65,9 @@ export function BranchNamingSettings() {
           >
             <SelectTrigger size="sm" aria-label={t("settings.text.worktreeBranchNaming")}>
               <SelectValue>
-                {(value: BranchNamingMode | null) => (value === null ? "Mixed" : MODES[value])}
+                {(value: BranchNamingMode | null) =>
+                  value === null ? t("settings.text.mixed") : MODES[value]
+                }
               </SelectValue>
             </SelectTrigger>
             <SelectPopup align="end" alignItemWithTrigger={false}>

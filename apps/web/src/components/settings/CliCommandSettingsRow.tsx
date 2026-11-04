@@ -43,12 +43,16 @@ export function CliCommandSettingsRow() {
   if (!bridge || !state?.supported) return null;
   const installed = state.installedPath !== null;
   const description = state.shadowedBy
-    ? `Another t3 at ${state.shadowedBy} runs first in a new terminal. Remove it to use Codi's.`
+    ? t("settings.text.anotherT3AtShadowedbyRunsFirst", { shadowedBy: state.shadowedBy })
     : !installed
-      ? "Run Codi's CLI as `t3` from any terminal."
+      ? t("settings.text.runCodiSCliAsT3")
       : state.onPath
-        ? `Installed at ${state.installedPath}. Open a new terminal to use it.`
-        : `Installed at ${state.installedPath}, which is not on your PATH yet. Add its folder to your PATH to run \`t3\`.`;
+        ? t("settings.text.installedAtInstalledpathOpenANew", {
+            installedPath: state.installedPath,
+          })
+        : t("settings.text.installedAtInstalledpathWhichIsNot", {
+            installedPath: state.installedPath,
+          });
 
   return (
     <SettingsRow

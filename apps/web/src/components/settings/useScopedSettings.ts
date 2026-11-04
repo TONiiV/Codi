@@ -79,6 +79,7 @@ function useRunScopedPlan() {
         return persistServer(request);
       },
       persistClientSettingsPatch,
+      t,
     ).then(({ failedEnvironments, savedEnvironments, savedEnvironmentCount }) => {
       if (failedEnvironments.length === 0) return;
       onFailed?.();
@@ -89,11 +90,15 @@ function useRunScopedPlan() {
             ? t("settings.text.settingSavedOnSomeEnvironments")
             : t("settings.text.settingNotSaved"),
         description: [
-          ...failedEnvironments.map(
-            ({ label, message }) => `Could not save on ${label}: ${message}`,
+          ...failedEnvironments.map(({ label, message }) =>
+            t("${K}scopedSave.couldNotSaveOn", { label, message }),
           ),
           ...(savedEnvironmentCount > 0
-            ? [`Saved on ${savedEnvironments.map(({ label }) => label).join(", ")}.`]
+            ? [
+                t("${K}scopedSave.savedOn", {
+                  labels: savedEnvironments.map(({ label }) => label).join(", "),
+                }),
+              ]
             : []),
         ].join("\n"),
       });

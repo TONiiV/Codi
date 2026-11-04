@@ -25,6 +25,9 @@ import * as Equal from "effect/Equal";
 import * as Cause from "effect/Cause";
 
 import type { ResolvedSettingsScope } from "./settingsScope";
+import type { TFunction } from "i18next";
+
+import { englishT } from "~/i18n/englishT";
 
 export type ScopedSettingsPatch = ServerSettingsPatch & ClientSettingsPatch;
 
@@ -453,6 +456,7 @@ export async function persistScopedSettingsPatch(
     readonly value?: ServerSettings;
   }>,
   persistClient: (patch: ClientSettingsPatch) => void,
+  t: TFunction = englishT,
 ) {
   if (plan.hasClientWrite) persistClient(plan.clientPatch);
   const results = await Promise.allSettled(
@@ -475,7 +479,7 @@ export async function persistScopedSettingsPatch(
       return [
         {
           ...environment,
-          message: "This environment does not support this setting. Update Codi on it.",
+          message: t("settings.manual.scopedSave.unsupported"),
         },
       ];
     }
@@ -488,10 +492,7 @@ export async function persistScopedSettingsPatch(
     return [
       {
         ...environment,
-        message:
-          error instanceof Error
-            ? error.message
-            : "The save failed. Try reconnecting and saving again.",
+        message: error instanceof Error ? error.message : t("settings.manual.scopedSave.failed"),
       },
     ];
   });

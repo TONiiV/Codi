@@ -196,8 +196,8 @@ export function SimlockDeviceHostEditor(props: {
               </p>
             </div>
             <div className="grid grid-cols-2 gap-3 text-sm">
-              {limit("maxLeases", "Devices at once", 1, 20)}
-              {limit("maxLeaseMinutes", "Lease minutes", 5, 240)}
+              {limit("maxLeases", t("settings.text.devicesAtOnce"), 1, 20)}
+              {limit("maxLeaseMinutes", t("settings.text.leaseMinutes"), 5, 240)}
             </div>
             <p className="text-xs text-muted-foreground">
               {t("settings.text.aLeaseEndsAfterTheLease")}

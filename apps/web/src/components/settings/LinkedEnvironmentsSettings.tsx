@@ -111,7 +111,10 @@ function LinkedEnvironmentRow({
   const [busy, setBusy] = useState(false);
   const forget = async () => {
     const confirmed = await (requestConfirmDialog(
-      `Forget ${link.label}? Agents here stop working there. Revoke "Codi · …" in ${link.label}'s Connections to end the session there too.`,
+      t("settings.text.forgetLabelAgentsHereStopWorking", {
+        label: link.label,
+        label2: link.label,
+      }),
       { variant: "destructive" },
     ) ?? Promise.resolve(false));
     if (!confirmed) return;
@@ -119,19 +122,22 @@ function LinkedEnvironmentRow({
     const result = await unlink({ environmentId, input: { environmentId: link.environmentId } });
     setBusy(false);
     if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
-      failureToast("Could not forget the link", String(squashAtomCommandFailure(result)));
+      failureToast(
+        t("settings.text.couldNotForgetTheLink"),
+        String(squashAtomCommandFailure(result)),
+      );
     }
   };
   const status =
     health.kind === "expired"
-      ? "Expired. Link it again with a new pairing code."
+      ? t("settings.text.expiredLinkItAgainWithA")
       : health.kind === "unreachable"
-        ? (health.detail ?? "Not answering right now.")
+        ? (health.detail ?? t("settings.text.notAnsweringRightNow"))
         : health.kind === "failing"
           ? health.detail
           : health.expiresInDays !== null
             ? `Expires in ${health.expiresInDays} ${health.expiresInDays === 1 ? "day" : "days"}. Link it again to renew.`
-            : "Reachable";
+            : t("settings.text.reachable");
   return (
     <div className={ITEM_ROW_CLASSNAME}>
       <div className={ITEM_ROW_INNER_CLASSNAME}>
@@ -222,7 +228,10 @@ function LinkEnvironmentAction({ environmentId }: { readonly environmentId: Envi
     const minted = await mintPairingCodeOn(targetId, access);
     if (Result.isSuccess(minted)) return minted.success;
     setMintFailed((failed) => new Set(failed).add(targetId));
-    failureToast("Could not link the environment", linkRequestFailureMessage(minted.failure));
+    failureToast(
+      t("settings.text.couldNotLinkTheEnvironment"),
+      linkRequestFailureMessage(minted.failure),
+    );
     return null;
   };
   const submit = async () => {
@@ -257,7 +266,10 @@ function LinkEnvironmentAction({ environmentId }: { readonly environmentId: Envi
       });
       handleOpenChange(false);
     } else if (!isAtomCommandInterrupted(result)) {
-      failureToast("Could not link the environment", String(squashAtomCommandFailure(result)));
+      failureToast(
+        t("settings.text.couldNotLinkTheEnvironment"),
+        String(squashAtomCommandFailure(result)),
+      );
     }
   };
   return (

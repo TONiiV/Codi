@@ -103,7 +103,7 @@ export function ProjectActionsSettings() {
       setRequest({
         scriptId: null,
         initial: payload,
-        error: error instanceof Error ? error.message : "Failed to import action.",
+        error: error instanceof Error ? error.message : t("settings.text.failedToImportAction"),
       });
     }
   };

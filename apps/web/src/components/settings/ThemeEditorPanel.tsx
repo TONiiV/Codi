@@ -41,6 +41,7 @@ import {
   showThemeInspectorHover,
   type ThemeElementInspection,
 } from "./themeInspector";
+import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 
 const THEME_EDITOR_SIMPLE_ROLES: ReadonlyArray<ThemeColorRole> = ["canvas", "accent"];
@@ -59,36 +60,41 @@ const THEME_EDITOR_ROLE_GROUPS: ReadonlyArray<{
 }> = [
   {
     id: "foundation",
-    title: "Foundation",
+    title: "settings.manual.themeEditor.group.foundation",
     families: [
       {
         id: "background",
-        label: "Background",
+        label: "settings.manual.themeEditor.family.background",
         role: "canvas",
         roles: ["canvas", "chrome", "toolbar"],
       },
-      { id: "surface", label: "Surface", role: "surface", roles: ["surface"] },
+      {
+        id: "surface",
+        label: "settings.manual.themeEditor.family.surface",
+        role: "surface",
+        roles: ["surface"],
+      },
       {
         id: "raised-surface",
-        label: "Raised surface",
+        label: "settings.manual.themeEditor.family.raisedSurface",
         role: "surfaceRaised",
         roles: ["surfaceRaised"],
       },
       {
         id: "overlay",
-        label: "Overlay",
+        label: "settings.manual.themeEditor.family.overlay",
         role: "surfaceOverlay",
         roles: ["surfaceOverlay"],
       },
       {
         id: "text",
-        label: "Text",
+        label: "settings.manual.themeEditor.family.text",
         role: "text",
         roles: ["text", "toolbarForeground", "toolbarControlForeground"],
       },
       {
         id: "muted-text",
-        label: "Muted text",
+        label: "settings.manual.themeEditor.family.mutedText",
         role: "mutedForeground",
         roles: [
           "textMuted",
@@ -101,32 +107,37 @@ const THEME_EDITOR_ROLE_GROUPS: ReadonlyArray<{
       },
       {
         id: "border",
-        label: "Border",
+        label: "settings.manual.themeEditor.family.border",
         role: "border",
         roles: ["border", "toolbarBorder", "sidebarBorder"],
       },
-      { id: "input", label: "Input", role: "input", roles: ["input"] },
+      {
+        id: "input",
+        label: "settings.manual.themeEditor.family.input",
+        role: "input",
+        roles: ["input"],
+      },
     ],
   },
   {
     id: "brand-content",
-    title: "Brand & content",
+    title: "settings.manual.themeEditor.group.brandContent",
     families: [
       {
         id: "subtle-surface",
-        label: "Subtle surface",
+        label: "settings.manual.themeEditor.family.subtleSurface",
         role: "secondary",
         roles: ["secondary", "secondaryForeground", "muted", "toolbarControl"],
       },
       {
         id: "highlight-surface",
-        label: "Highlight surface",
+        label: "settings.manual.themeEditor.family.highlightSurface",
         role: "accentSurface",
         roles: ["accentSurface", "accentSurfaceForeground", "toolbarControlHover"],
       },
       {
         id: "accent",
-        label: "Accent",
+        label: "settings.manual.themeEditor.family.accent",
         role: "accent",
         roles: [
           "accent",
@@ -140,19 +151,19 @@ const THEME_EDITOR_ROLE_GROUPS: ReadonlyArray<{
       },
       {
         id: "action",
-        label: "Action",
+        label: "settings.manual.themeEditor.family.action",
         role: "messageAction",
         roles: ["messageAction", "messageActionForeground", "messageActionHover"],
       },
       {
         id: "message-surface",
-        label: "Message surface",
+        label: "settings.manual.themeEditor.family.messageSurface",
         role: "messageSurface",
         roles: ["messageSurface", "messageForeground"],
       },
       {
         id: "code-surface",
-        label: "Code surface",
+        label: "settings.manual.themeEditor.family.codeSurface",
         role: "codeBackground",
         roles: ["codeBackground", "codeForeground"],
       },
@@ -160,17 +171,17 @@ const THEME_EDITOR_ROLE_GROUPS: ReadonlyArray<{
   },
   {
     id: "search",
-    title: "Search",
+    title: "settings.manual.themeEditor.group.search",
     families: [
       {
         id: "search-matches",
-        label: "Search matches",
+        label: "settings.manual.themeEditor.family.searchMatches",
         role: "searchMatchBackground",
         roles: ["searchMatchBackground", "searchMatchForeground"],
       },
       {
         id: "current-match",
-        label: "Current match",
+        label: "settings.manual.themeEditor.family.currentMatch",
         role: "searchMatchActiveBackground",
         roles: ["searchMatchActiveBackground", "searchMatchActiveForeground"],
       },
@@ -178,29 +189,29 @@ const THEME_EDITOR_ROLE_GROUPS: ReadonlyArray<{
   },
   {
     id: "context",
-    title: "Context",
+    title: "settings.manual.themeEditor.group.context",
     families: [
       {
         id: "sidebar-background",
-        label: "Sidebar background",
+        label: "settings.manual.themeEditor.family.sidebarBackground",
         role: "sidebar",
         roles: ["sidebar", "sidebarForeground"],
       },
       {
         id: "sidebar-controls",
-        label: "Sidebar controls",
+        label: "settings.manual.themeEditor.family.sidebarControls",
         role: "sidebarControlSurface",
         roles: ["sidebarControlSurface"],
       },
       {
         id: "sidebar-selection",
-        label: "Sidebar selection",
+        label: "settings.manual.themeEditor.family.sidebarSelection",
         role: "sidebarRowSelected",
         roles: ["sidebarRowHover", "sidebarRowActive", "sidebarRowSelected"],
       },
       {
         id: "terminal-background",
-        label: "Terminal background",
+        label: "settings.manual.themeEditor.family.terminalBackground",
         role: "terminalBackground",
         roles: [
           "terminalBackground",
@@ -214,17 +225,17 @@ const THEME_EDITOR_ROLE_GROUPS: ReadonlyArray<{
   },
   {
     id: "status",
-    title: "Status",
+    title: "settings.manual.themeEditor.group.status",
     families: [
       {
         id: "error",
-        label: "Error",
+        label: "settings.manual.themeEditor.family.error",
         role: "error",
         roles: ["error", "errorForeground", "errorSurface"],
       },
       {
         id: "warning",
-        label: "Warning",
+        label: "settings.manual.themeEditor.family.warning",
         role: "warning",
         roles: ["warning", "warningForeground", "warningSurface"],
       },
@@ -241,6 +252,11 @@ const THEME_EDITOR_COLOR_FAMILY_BY_ROLE = new Map(
 
 function getThemeEditorColorFamily(role: ThemeColorRole): ThemeEditorColorFamily | null {
   return THEME_EDITOR_COLOR_FAMILY_BY_ROLE.get(role) ?? null;
+}
+
+function roleLabel(role: ThemeColorRole, t: TFunction): string {
+  const family = getThemeEditorColorFamily(role);
+  return family ? t(family.label) : getThemeRoleLabel(role, t);
 }
 
 type ThemeEditorColors = ThemeColors;
@@ -419,10 +435,16 @@ export function ThemeEditorPanel({
 
   const appearanceLockReason = (appearance: ThemeAppearance): string | null => {
     if (editableAppearances && !editableAppearances.includes(appearance)) {
-      return `“${editingTheme?.label}” has no ${appearance} palette. Create a theme with the same name to add one.`;
+      return t("settings.text.labelHasNoAppearancePaletteCreate", {
+        label: editingTheme?.label,
+        appearance,
+      });
     }
     if (!isEditing && takenAppearances.includes(appearance)) {
-      return `“${mergeTarget?.label}” already has a ${appearance} palette.`;
+      return t("settings.text.labelAlreadyHasAAppearancePalette", {
+        label: mergeTarget?.label,
+        appearance,
+      });
     }
     return null;
   };
@@ -624,10 +646,7 @@ export function ThemeEditorPanel({
     };
     const showInspection = (inspection: ThemeElementInspection) => {
       hoverInspection = inspection;
-      showThemeInspectorHover(
-        inspection,
-        getThemeEditorColorFamily(inspection.role)?.label ?? getThemeRoleLabel(inspection.role),
-      );
+      showThemeInspectorHover(inspection, roleLabel(inspection.role, t));
     };
     const handlePointerOver = (event: PointerEvent) => {
       const target = event.target;
@@ -690,11 +709,7 @@ export function ThemeEditorPanel({
       hoverFrame = requestAnimationFrame(() => {
         hoverFrame = null;
         if (hoverInspection) {
-          showThemeInspectorHover(
-            hoverInspection,
-            getThemeEditorColorFamily(hoverInspection.role)?.label ??
-              getThemeRoleLabel(hoverInspection.role),
-          );
+          showThemeInspectorHover(hoverInspection, roleLabel(hoverInspection.role, t));
         }
       });
     };
@@ -719,7 +734,7 @@ export function ThemeEditorPanel({
       if (hoverFrame !== null) cancelAnimationFrame(hoverFrame);
       clearThemeInspectorHover();
     };
-  }, [clearInspectorSelection, isInspecting, open, selectThemeRole]);
+  }, [clearInspectorSelection, isInspecting, open, selectThemeRole, t]);
 
   const handleAdvancedChange = (checked: boolean) => {
     setIsAdvanced(checked);
@@ -750,7 +765,7 @@ export function ThemeEditorPanel({
 
   const handleSubmit = () => {
     if (!name.trim()) {
-      setError("Name your theme first.");
+      setError(t("settings.text.nameYourThemeFirst"));
       return;
     }
 
@@ -773,7 +788,12 @@ export function ThemeEditorPanel({
         const editedModes = getThemeModes(editingTheme);
         const collision = editedModes.find((mode) => takenAppearances.includes(mode));
         if (collision) {
-          setError(`“${mergeTarget.label}” already has a ${collision} palette. Pick another name.`);
+          setError(
+            t("settings.text.labelAlreadyHasACollisionPalette", {
+              label: mergeTarget.label,
+              collision,
+            }),
+          );
           return;
         }
         mergedAppearance = editedModes[0] ?? null;
@@ -813,9 +833,7 @@ export function ThemeEditorPanel({
         });
       } else if (mergeTarget) {
         if (takenAppearances.includes(activeAppearance)) {
-          setError(
-            `“${mergeTarget.label}” already has light and dark palettes. Pick another name.`,
-          );
+          setError(t("settings.text.labelAlreadyHasLightAndDark", { label: mergeTarget.label }));
           return;
         }
         mergedAppearance = activeAppearance;
@@ -861,7 +879,7 @@ export function ThemeEditorPanel({
             if (retiredTheme) installCustomTheme(retiredTheme);
           } catch {}
         }
-        setError("Theme saved, but it could not be made active. Try again.");
+        setError(t("settings.text.themeSavedButItCouldNot"));
         return;
       }
       onOpenChange(false);
@@ -870,8 +888,8 @@ export function ThemeEditorPanel({
         cause instanceof Error
           ? cause.message
           : isEditing
-            ? "Could not save the theme."
-            : "Could not create the theme.",
+            ? t("settings.text.couldNotSaveTheTheme")
+            : t("settings.text.couldNotCreateTheTheme"),
       );
     }
   };
@@ -971,7 +989,7 @@ export function ThemeEditorPanel({
       {families.map((family) => (
         <ThemeColorField
           key={family.id}
-          label={family.label}
+          label={t(family.label)}
           onChange={updateColor}
           onEditCancel={cancelColorEdit}
           onEditStart={startColorEdit}
@@ -992,7 +1010,7 @@ export function ThemeEditorPanel({
       families: group.families.filter(
         (family) =>
           !query ||
-          [family.label, ...family.roles.map((role) => getThemeRoleLabel(role))]
+          [t(family.label), ...family.roles.map((role) => getThemeRoleLabel(role, t))]
             .join(" ")
             .toLowerCase()
             .includes(query),
@@ -1002,7 +1020,7 @@ export function ThemeEditorPanel({
       <div className="space-y-5">
         {groups.map((group) => (
           <section className="space-y-2" key={group.id}>
-            <h4 className="text-sm font-medium text-foreground">{group.title}</h4>
+            <h4 className="text-sm font-medium text-foreground">{t(group.title)}</h4>
             {renderRoleFields(group.families, "grid gap-1")}
           </section>
         ))}
@@ -1144,7 +1162,7 @@ export function ThemeEditorPanel({
               {isInspecting
                 ? t("settings.text.selectAnElementEscToCancel")
                 : selectedRole
-                  ? `${isAdvanced ? (getThemeEditorColorFamily(selectedRole)?.label ?? getThemeRoleLabel(selectedRole)) : getThemeRoleLabel(selectedRole)} · ${usageCount ?? 0} ${usageCount === 1 ? "use" : "uses"}`
+                  ? `${isAdvanced ? roleLabel(selectedRole, t) : getThemeRoleLabel(selectedRole, t)} · ${t("settings.manual.themeEditor.uses", { count: usageCount ?? 0 })}`
                   : t("settings.text.selectAColorBelow")}
             </p>
           )}

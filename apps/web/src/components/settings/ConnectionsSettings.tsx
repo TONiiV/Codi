@@ -369,7 +369,8 @@ export function ConnectionsSettings({ view }: { readonly view: "environments" | 
       setPendingDesktopServerExposureMode(null);
       setIsUpdatingDesktopServerExposure(false);
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Failed to update network exposure.";
+      const message =
+        error instanceof Error ? error.message : t("settings.text.failedToUpdateNetworkExposure");
       setPendingDesktopServerExposureMode(null);
       setDesktopServerExposureMutationError(message);
       toastManager.add(
@@ -410,7 +411,7 @@ export function ConnectionsSettings({ view }: { readonly view: "environments" | 
     if (settled._tag === "Failure") {
       const error = Cause.squash(settled.cause);
       const message =
-        error instanceof Error ? error.message : "Failed to configure Tailscale HTTPS.";
+        error instanceof Error ? error.message : t("settings.text.failedToConfigureTailscaleHttps");
       setDesktopServerExposureMutationError(message);
       toastManager.add(
         stackedThreadToast({
@@ -449,7 +450,8 @@ export function ConnectionsSettings({ view }: { readonly view: "environments" | 
     });
     if (settled._tag === "Failure") {
       const error = Cause.squash(settled.cause);
-      const message = error instanceof Error ? error.message : "Failed to disable Tailscale HTTPS.";
+      const message =
+        error instanceof Error ? error.message : t("settings.text.failedToDisableTailscaleHttps");
       setDesktopServerExposureMutationError(message);
       toastManager.add(
         stackedThreadToast({
@@ -479,7 +481,8 @@ export function ConnectionsSettings({ view }: { readonly view: "environments" | 
     });
     if (settled._tag === "Failure") {
       const error = Cause.squash(settled.cause);
-      const message = error instanceof Error ? error.message : "Failed to revoke pairing link.";
+      const message =
+        error instanceof Error ? error.message : t("settings.text.failedToRevokePairingLink");
       setDesktopAccessManagementMutationError(message);
       toastManager.add(
         stackedThreadToast({
@@ -507,7 +510,8 @@ export function ConnectionsSettings({ view }: { readonly view: "environments" | 
     });
     if (settled._tag === "Failure") {
       const error = Cause.squash(settled.cause);
-      const message = error instanceof Error ? error.message : "Failed to revoke client access.";
+      const message =
+        error instanceof Error ? error.message : t("settings.text.failedToRevokeClientAccess");
       setDesktopAccessManagementMutationError(message);
       toastManager.add(
         stackedThreadToast({
@@ -541,7 +545,8 @@ export function ConnectionsSettings({ view }: { readonly view: "environments" | 
     });
     if (settled._tag === "Failure") {
       const error = Cause.squash(settled.cause);
-      const message = error instanceof Error ? error.message : "Failed to revoke other clients.";
+      const message =
+        error instanceof Error ? error.message : t("settings.text.failedToRevokeOtherClients");
       setDesktopAccessManagementMutationError(message);
       toastManager.add(
         stackedThreadToast({
@@ -582,7 +587,8 @@ export function ConnectionsSettings({ view }: { readonly view: "environments" | 
     setRemovingSavedEnvironmentId(null);
     if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
       const error = squashAtomCommandFailure(result);
-      const message = error instanceof Error ? error.message : "Failed to remove backend.";
+      const message =
+        error instanceof Error ? error.message : t("settings.text.failedToRemoveBackend");
       setSavedBackendError(message);
       toastManager.add(
         stackedThreadToast({
@@ -604,7 +610,7 @@ export function ConnectionsSettings({ view }: { readonly view: "environments" | 
       return;
     }
     const confirmed = await requestConfirmDialog(
-      `Remove ${environment.label} from this device?\nThis forgets its pairing, credentials, and cached threads here. Switch it off instead to keep it saved.`,
+      t("settings.text.removeLabelFromThisDeviceThis", { label: environment.label }),
       { variant: "destructive" },
     );
     if (confirmed === true) await removeSavedBackend(environment);
@@ -677,7 +683,8 @@ export function ConnectionsSettings({ view }: { readonly view: "environments" | 
     });
     if (settled._tag === "Failure") {
       const error = Cause.squash(settled.cause);
-      const message = error instanceof Error ? error.message : "Failed to update WSL backend.";
+      const message =
+        error instanceof Error ? error.message : t("settings.text.failedToUpdateWslBackend");
       setDesktopWslMutationError(message);
       toastManager.add(
         stackedThreadToast({
@@ -833,7 +840,7 @@ export function ConnectionsSettings({ view }: { readonly view: "environments" | 
       selectValue === BACKEND_VALUE_WSL_OFF
         ? "Off"
         : selectValue === BACKEND_VALUE_DEFAULT_WSL
-          ? "Default distro"
+          ? t("settings.text.defaultDistro")
           : selectValue;
     return (
       <>
@@ -970,10 +977,14 @@ export function ConnectionsSettings({ view }: { readonly view: "environments" | 
             onToggleExpanded={() => setIsAdvertisedEndpointListExpanded((expanded) => !expanded)}
             fallback={
               desktopServerExposureState?.endpointUrl
-                ? `Reachable at ${desktopServerExposureState.endpointUrl}`
+                ? t("settings.text.reachableAtEndpointurl", {
+                    endpointUrl: desktopServerExposureState.endpointUrl,
+                  })
                 : desktopServerExposureState?.advertisedHost
-                  ? `Exposed on all interfaces. Pairing links use ${desktopServerExposureState.advertisedHost}.`
-                  : "Exposed on all interfaces."
+                  ? t("settings.text.exposedOnAllInterfacesPairingLinks", {
+                      advertisedHost: desktopServerExposureState.advertisedHost,
+                    })
+                  : t("settings.text.exposedOnAllInterfaces")
             }
           />
         ) : desktopServerExposureState ? (

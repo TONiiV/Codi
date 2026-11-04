@@ -171,9 +171,9 @@ export function SourceControlAppSignInSettings({
           />
         </span>
       ) : tokenOverrides ? (
-        "Signed in, but the token saved below is used until you remove it."
+        t("settings.text.signedInButTheTokenSaved")
       ) : (
-        "Signed in"
+        t("settings.text.signedIn2")
       );
     action = (
       <Button size="xs" variant="outline" disabled={!canSignIn} onClick={() => void signOut()}>
@@ -181,7 +181,7 @@ export function SourceControlAppSignInSettings({
       </Button>
     );
   } else if (waiting !== null) {
-    subtitle = "Approve the app on GitHub to finish signing in.";
+    subtitle = t("settings.text.approveTheAppOnGithubTo");
     action = (
       <Button
         size="xs"
@@ -195,7 +195,7 @@ export function SourceControlAppSignInSettings({
       </Button>
     );
   } else {
-    subtitle = "A far higher GitHub API rate limit than a personal token or gh login.";
+    subtitle = t("settings.text.aFarHigherGithubApiRate");
     action = (
       <Button
         size="xs"

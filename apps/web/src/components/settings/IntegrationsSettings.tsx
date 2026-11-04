@@ -883,10 +883,10 @@ function DeviceIntegrationControls({
     const results = await Promise.allSettled(
       environments.map(async (environment) => {
         if (environment.connection.phase !== "connected" || !environment.serverConfig) {
-          throw new Error("Environment disconnected");
+          throw new Error(t("settings.text.environmentDisconnected"));
         }
         if (!readEnvironmentScope(environment.environmentId, AuthSettingsWriteScope)) {
-          throw new Error("This connection cannot change device settings.");
+          throw new Error(t("settings.text.thisConnectionCannotChangeDeviceSettings"));
         }
         return configure({
           environmentId: environment.environmentId,
@@ -1243,7 +1243,7 @@ function BrowserProfilesSetting({ disabled }: { readonly disabled: boolean }) {
   const removeProfile = async (id: string) => {
     if (!settingsHydrated || importInFlightRef.current) return;
     if (!removalAvailable) {
-      setProfileRemovalError("Connect to an environment before removing this profile.");
+      setProfileRemovalError(t("settings.text.connectToAnEnvironmentBeforeRemoving"));
       return;
     }
     setProfileRemovalError(null);
@@ -1256,7 +1256,7 @@ function BrowserProfilesSetting({ disabled }: { readonly disabled: boolean }) {
         serverProfileData,
       );
     } catch {
-      setProfileRemovalError("Profile data could not be deleted. Try again.");
+      setProfileRemovalError(t("settings.text.profileDataCouldNotBeDeleted"));
       setProfileRemovalInFlight(false);
       return;
     }
@@ -1346,7 +1346,7 @@ function BrowserProfilesSetting({ disabled }: { readonly disabled: boolean }) {
           <MenuPopup align="end">
             <MenuItem
               disabled={!settingsHydrated || atProfileLimit}
-              onClick={() => createProfile("New profile")}
+              onClick={() => createProfile(t("settings.text.newProfile"))}
             >
               {t("settings.text.blankProfile")}
             </MenuItem>
@@ -1616,7 +1616,9 @@ function BrowserProfilesSetting({ disabled }: { readonly disabled: boolean }) {
 export function BrowserSettingsPanel() {
   const { t } = useTranslation();
   const desktopOnly = !isElectron;
-  const desktopOnlyMessage = desktopOnly ? "Only available in the desktop app." : undefined;
+  const desktopOnlyMessage = desktopOnly
+    ? t("settings.text.onlyAvailableInTheDesktopApp")
+    : undefined;
 
   return (
     <SettingsPageContainer>

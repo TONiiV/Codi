@@ -6,8 +6,9 @@ import { ColorHueSlider, ColorSaturationValuePlane } from "../ui/color-picker";
 import { Input } from "../ui/input";
 import { Popover, PopoverPopup, PopoverTrigger } from "../ui/popover";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
+import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
-export function getThemeRoleLabel(role: ThemeColorRole): string {
+export function getThemeRoleLabel(role: ThemeColorRole, t: TFunction): string {
   const labels: Partial<Record<ThemeColorRole, string>> = {
     canvas: "Background",
     toolbar: "Toolbar background",
@@ -24,8 +25,7 @@ export function getThemeRoleLabel(role: ThemeColorRole): string {
     updateForeground: "Update text",
     updateSurface: "Update background",
   };
-  const label = labels[role];
-  if (label) return label;
+  if (role in labels) return t(`settings.manual.themeRoles.${role}`);
   return role.replace(/([A-Z])/g, " $1").replace(/^./, (character) => character.toUpperCase());
 }
 
@@ -338,7 +338,7 @@ export const ThemeColorField = memo(function ThemeColorField({
   label?: string;
 }) {
   const { t } = useTranslation();
-  const label = customLabel ?? getThemeRoleLabel(role);
+  const label = customLabel ?? getThemeRoleLabel(role, t);
   const isColorValue = isThemeColor(value);
   const swatchValue = isColorValue ? value : "#000000";
   const editorValue = value.trim().toLowerCase().startsWith("oklch(")
@@ -367,7 +367,7 @@ export const ThemeColorField = memo(function ThemeColorField({
             </button>
           }
         />
-        <TooltipPopup side="top">{`${selected ? "Hide" : "Show"} where ${label} is used`}</TooltipPopup>
+        <TooltipPopup side="top">{`${selected ? t("settings.text.hide") : t("settings.text.show")} where ${label} is used`}</TooltipPopup>
       </Tooltip>
       <div className="ml-auto flex shrink-0 items-center gap-2">
         <ThemeColorPicker

@@ -20,48 +20,48 @@ import {
   captureSetupShortcutReady,
   type CaptureSetupStep,
 } from "./SnapShotSetupDialog.logic";
+import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 
 const SETUP_STEPS = [
-  { id: "access", label: "Access" },
-  { id: "shortcut", label: "Shortcut" },
+  { id: "access", label: "settings.manual.snapshotSetup.access" },
+  { id: "shortcut", label: "settings.manual.snapshotSetup.shortcut" },
 ] as const;
 
-const GNOME_ACCESS_COPY = {
+const gnomeAccessCopy = (t: TFunction) => ({
   "not-installed": {
-    title: "Install the extension",
-    description:
-      "The Codi GNOME extension lets you capture other windows and bring them into your draft. Sign out once after installing.",
+    title: t("settings.text.installTheExtension"),
+    description: t("settings.text.theCodiGnomeExtensionLetsYou"),
   },
   "restart-required": {
-    title: "Extension installed",
-    description: "Save your work, then sign out and back in. Your setup will be waiting here.",
+    title: t("settings.text.extensionInstalled"),
+    description: t("settings.text.saveYourWorkThenSignOut"),
   },
   "update-required": {
-    title: "Update the extension",
-    description: "Install the update, then sign out and back in.",
+    title: t("settings.text.updateTheExtension"),
+    description: t("settings.text.installTheUpdateThenSignOut"),
   },
   "extensions-disabled": {
-    title: "Allow GNOME extensions",
-    description: "Open GNOME Extensions and turn on extensions, then check again.",
+    title: t("settings.text.allowGnomeExtensions"),
+    description: t("settings.text.openGnomeExtensionsAndTurnOn"),
   },
   disabled: {
-    title: "Enable the extension",
-    description: "Enable Codi SnapShots to start capturing windows.",
+    title: t("settings.text.enableTheExtension"),
+    description: t("settings.text.enableCodiSnapshotsToStartCapturing"),
   },
   enabled: {
-    title: "Capture is ready",
-    description: "Next, choose your shortcut.",
+    title: t("settings.text.captureIsReady"),
+    description: t("settings.text.nextChooseYourShortcut"),
   },
   unsupported: {
-    title: "Automatic capture isn't available",
-    description: "Use Take snapshot from the command palette to choose a window.",
+    title: t("settings.text.automaticCaptureIsnTAvailable"),
+    description: t("settings.text.useTakeSnapshotFromTheCommand"),
   },
   error: {
-    title: "Couldn't set up the extension",
-    description: "Check Codi SnapShots in GNOME Extensions, then try again.",
+    title: t("settings.text.couldnTSetUpTheExtension"),
+    description: t("settings.text.checkCodiSnapshotsInGnomeExtensions"),
   },
-};
+});
 
 export function SnapShotSetupDialog({
   state,
@@ -116,7 +116,8 @@ export function SnapShotSetupDialog({
   const permissionStatus = usePermissionStatus(
     async () => {
       const refreshed = await onRefresh();
-      if (!refreshed?.macPermissions) throw new Error("Permission status unavailable");
+      if (!refreshed?.macPermissions)
+        throw new Error(t("settings.text.permissionStatusUnavailable"));
       return refreshed.macPermissions;
     },
     state.macPermissions ?? { screenRecording: false, accessibility: false },
@@ -155,7 +156,7 @@ export function SnapShotSetupDialog({
               title: t("settings.text.checkCaptureAccess"),
               description: t("settings.text.theExtensionIsnTReadyYet"),
             }
-          : GNOME_ACCESS_COPY[extension.status]
+          : gnomeAccessCopy(t)[extension.status]
         : helperBackend
           ? helper?.status === "ready"
             ? {
@@ -195,15 +196,15 @@ export function SnapShotSetupDialog({
                           : t("settings.text.allowEachPermissionThenContinue")
                         : t("settings.text.allowAccessWhenPromptedToStart"),
                 };
-  const title = step === "access" ? accessCopy.title : "Choose your shortcut";
+  const title = step === "access" ? accessCopy.title : t("settings.text.chooseYourShortcut");
   const description =
     step === "access"
       ? accessCopy.description
       : configShortcut
-        ? "Click the shortcut, then press the keys you want."
+        ? t("settings.text.clickTheShortcutThenPressThe")
         : state.mode === "portal"
-          ? "Choose your keys, then approve the permission prompt if asked."
-          : "Use both Shift keys, or record a different shortcut.";
+          ? t("settings.text.chooseYourKeysThenApproveThe")
+          : t("settings.text.useBothShiftKeysOrRecord");
   const stepIndex = SETUP_STEPS.findIndex(({ id }) => id === step);
   const details = [
     ...new Set(
@@ -239,7 +240,7 @@ export function SnapShotSetupDialog({
           }
         >
           <WizardSteps
-            steps={SETUP_STEPS.map((item) => item.label)}
+            steps={SETUP_STEPS.map((item) => t(item.label))}
             currentStep={stepIndex}
             isStepDisabled={(index) => busy || index > stepIndex}
             onStepChange={(index) => {

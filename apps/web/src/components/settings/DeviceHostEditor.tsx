@@ -90,12 +90,12 @@ function DeviceHostEditorForm({
     targets.length === 1 ||
     (expandedChecks?.key === connectionKey ? expandedChecks.open : failed > 0);
   const checkSummary = checking
-    ? "Checking environments…"
+    ? t("settings.text.checkingEnvironments")
     : results
       ? failed
         ? `${failed} of ${targets.length} failed`
-        : "Connection checks passed"
-      : "Check access before saving";
+        : t("settings.text.connectionChecksPassed")
+      : t("settings.text.checkAccessBeforeSaving");
   return (
     <form
       className="flex min-h-0 flex-col"

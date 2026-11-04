@@ -267,7 +267,7 @@ function KeybindingConflictWarning({ labels }: { labels: ReadonlyArray<string> }
   const description =
     labels.length === 1
       ? `Conflicts with ${labels[0]}.`
-      : `Conflicts with ${labels.slice(0, 3).join(", ")}${labels.length > 3 ? ", and more" : ""}.`;
+      : `Conflicts with ${labels.slice(0, 3).join(", ")}${labels.length > 3 ? t("settings.text.andMore") : ""}.`;
 
   return (
     <WarningTooltipIcon label={description}>
@@ -1297,7 +1297,8 @@ function KeybindingsGroups(props: KeybindingsGroupsProps) {
 }
 
 function BrowserKeybindingNotice() {
-  const message = "The browser may claim some shortcuts first. The desktop app receives them all.";
+  const { t } = useTranslation();
+  const message = t("settings.text.theBrowserMayClaimSomeShortcuts");
   return (
     <Tooltip>
       <TooltipTrigger

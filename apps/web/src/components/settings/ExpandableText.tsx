@@ -9,7 +9,7 @@ export function ExpandableText({
   collapsedText = text,
   className,
   collapsedClassName = "line-clamp-3",
-  expandLabel = "Show full error",
+  expandLabel: expandLabelProp,
 }: {
   text: string;
   collapsedText?: string;
@@ -18,6 +18,7 @@ export function ExpandableText({
   expandLabel?: string;
 }) {
   const { t } = useTranslation();
+  const expandLabel = expandLabelProp ?? t("settings.text.showFullError");
   const textId = useId();
   const [expanded, setExpanded] = useState(false);
   const canExpand = collapsedText !== text || text.length > 180 || text.includes("\n");

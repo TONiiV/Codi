@@ -219,7 +219,8 @@ export function AddEnvironmentDialog({
         pairingCode: savedBackendPairingCode,
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Failed to add backend.";
+      const message =
+        error instanceof Error ? error.message : t("settings.text.failedToAddBackend");
       onErrorChange(message);
       toastManager.add(
         stackedThreadToast({
@@ -239,7 +240,8 @@ export function AddEnvironmentDialog({
     if (result._tag === "Failure") {
       if (!isAtomCommandInterrupted(result)) {
         const error = squashAtomCommandFailure(result);
-        const message = error instanceof Error ? error.message : "Failed to add backend.";
+        const message =
+          error instanceof Error ? error.message : t("settings.text.failedToAddBackend");
         onErrorChange(message);
         toastManager.add(
           stackedThreadToast({
@@ -450,7 +452,9 @@ export function AddEnvironmentDialog({
     if (result._tag === "Failure") {
       if (!isAtomCommandInterrupted(result)) {
         const error = squashAtomCommandFailure(result);
-        onErrorChange(error instanceof Error ? error.message : "Could not add the route.");
+        onErrorChange(
+          error instanceof Error ? error.message : t("settings.text.couldNotAddTheRoute"),
+        );
       }
       return;
     }

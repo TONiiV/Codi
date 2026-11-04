@@ -149,7 +149,7 @@ export function AcpSessionManagementSection(props: {
       setNextCursor(result.value.nextCursor);
       return;
     }
-    reportFailure("Could not list ACP sessions", result);
+    reportFailure(t("settings.text.couldNotListAcpSessions"), result);
   };
 
   const importNativeSession = async (session: AcpRegistrySession) => {
@@ -187,7 +187,7 @@ export function AcpSessionManagementSection(props: {
       });
       return;
     }
-    reportFailure("Could not import ACP session", result);
+    reportFailure(t("settings.text.couldNotImportAcpSession"), result);
   };
 
   const deleteNativeSession = async (session: AcpRegistrySession) => {
@@ -212,7 +212,7 @@ export function AcpSessionManagementSection(props: {
       toastManager.add({ type: "success", title: t("settings.text.acpSessionDeleted") });
       return;
     }
-    reportFailure("Could not delete ACP session", result);
+    reportFailure(t("settings.text.couldNotDeleteAcpSession"), result);
   };
 
   const loadProviders = async (resetProviderId?: string) => {
@@ -241,7 +241,7 @@ export function AcpSessionManagementSection(props: {
       );
       return;
     }
-    reportFailure("Could not list ACP providers", result);
+    reportFailure(t("settings.text.couldNotListAcpProviders"), result);
   };
 
   const saveProvider = async (provider: AcpRegistryConfigurableProvider) => {
@@ -282,14 +282,14 @@ export function AcpSessionManagementSection(props: {
       await loadProviders(provider.providerId);
       return;
     }
-    reportFailure("Could not configure ACP provider", result);
+    reportFailure(t("settings.text.couldNotConfigureAcpProvider"), result);
   };
 
   const disableConfiguredProvider = async (provider: AcpRegistryConfigurableProvider) => {
     if (projectId === null || savingProviderId !== null || loadingProviders || provider.required)
       return;
     const confirmed = await ensureLocalApi().dialogs.confirm(
-      `Disable ACP provider "${provider.providerId}"?`,
+      t("settings.text.disableAcpProviderProviderid", { providerId: provider.providerId }),
       { variant: "destructive" },
     );
     if (!confirmed || !readEnvironmentScope(props.environmentId, AuthProvidersManageScope)) return;
@@ -304,7 +304,7 @@ export function AcpSessionManagementSection(props: {
       await loadProviders(provider.providerId);
       return;
     }
-    reportFailure("Could not disable ACP provider", result);
+    reportFailure(t("settings.text.couldNotDisableAcpProvider"), result);
   };
 
   const logoutProvider = async () => {
@@ -321,7 +321,7 @@ export function AcpSessionManagementSection(props: {
       toastManager.add({ type: "success", title: t("settings.text.loggedOutOfAcpAgent") });
       return;
     }
-    reportFailure("Could not log out of ACP agent", result);
+    reportFailure(t("settings.text.couldNotLogOutOfAcp"), result);
   };
 
   return (

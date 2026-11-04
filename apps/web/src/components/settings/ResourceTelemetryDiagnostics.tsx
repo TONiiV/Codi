@@ -895,7 +895,7 @@ function ResourceTelemetryDiagnosticsBody({
       let confirmed = false;
       try {
         confirmed = await ensureLocalApi().dialogs.confirm(
-          `Send SIGKILL to process ${process.identity.pid}? This cannot be handled by the process.`,
+          t("settings.text.sendSigkillToProcessPidThis", { pid: process.identity.pid }),
           { variant: "destructive" },
         );
       } catch (error) {

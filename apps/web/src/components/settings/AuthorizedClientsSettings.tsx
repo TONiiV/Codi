@@ -263,7 +263,7 @@ const PairingLinkListRow = memo(function PairingLinkListRow({
 
   const expiresAbsolute = formatAccessTimestamp(pairingLink.expiresAt);
 
-  const primaryLabel = pairingLink.label ?? "Pairing link";
+  const primaryLabel = pairingLink.label ?? t("settings.text.pairingLink");
   const selectedQrOption = selectQrEndpointOption(
     endpointCopyOptions,
     qrEndpointId,
@@ -515,10 +515,10 @@ const ConnectedClientListRow = memo(function ConnectedClientListRow({
   const statusTooltip = isLive
     ? lastConnectedAt
       ? `Connected for ${formatElapsedDurationLabel(lastConnectedAt, nowMs)}`
-      : "Connected"
+      : t("settings.text.connected")
     : lastConnectedAt
       ? `Last connected at ${formatAccessTimestamp(lastConnectedAt)}`
-      : "Not connected yet.";
+      : t("settings.text.notConnectedYet");
   const deviceInfoBits = [
     clientSession.client.deviceType !== "unknown"
       ? clientSession.client.deviceType[0]?.toUpperCase() + clientSession.client.deviceType.slice(1)
@@ -630,7 +630,8 @@ export const AuthorizedClientsHeaderAction = memo(function AuthorizedClientsHead
     });
     if (settled._tag === "Failure") {
       const error = Cause.squash(settled.cause);
-      const message = error instanceof Error ? error.message : "Failed to create pairing URL.";
+      const message =
+        error instanceof Error ? error.message : t("settings.text.failedToCreatePairingUrl");
       toastManager.add(
         stackedThreadToast({
           type: "error",

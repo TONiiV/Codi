@@ -94,8 +94,8 @@ export function EasDeviceHostEditor(props: {
   const problem = valid
     ? null
     : draft.maxSessionMinutes > 0 && draft.idleMinutes >= draft.maxSessionMinutes
-      ? "Idle minutes must be smaller than session minutes."
-      : "Give the host a label and limits within the ranges shown.";
+      ? t("settings.text.idleMinutesMustBeSmallerThan")
+      : t("settings.text.giveTheHostALabelAnd");
   const apps = account.status === "signed-in" ? account.account.apps : [];
 
   // A check answers for the credential it was asked about: a later check or a
@@ -267,7 +267,7 @@ export function EasDeviceHostEditor(props: {
                   <SelectValue>
                     {(value: string) =>
                       value === FROM_THREAD_PROJECT
-                        ? "From the thread's project"
+                        ? t("settings.text.fromTheThreadSProject")
                         : (apps.find((app) => app.id === value)?.fullName ?? value)
                     }
                   </SelectValue>
@@ -291,9 +291,9 @@ export function EasDeviceHostEditor(props: {
               </p>
             </div>
             <div className="grid grid-cols-3 gap-3 text-sm">
-              {limit("maxConcurrentSessions", "Sessions at once", 20)}
-              {limit("maxSessionMinutes", "Session minutes", 115)}
-              {limit("idleMinutes", "Idle minutes", 60)}
+              {limit("maxConcurrentSessions", t("settings.text.sessionsAtOnce"), 20)}
+              {limit("maxSessionMinutes", t("settings.text.sessionMinutes"), 115)}
+              {limit("idleMinutes", t("settings.text.idleMinutes"), 60)}
             </div>
             <p className="text-xs text-muted-foreground">
               {t("settings.text.expoAllowsSessionsOfUpTo")}

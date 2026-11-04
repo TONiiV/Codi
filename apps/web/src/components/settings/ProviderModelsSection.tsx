@@ -189,19 +189,19 @@ export function ProviderModelsSection({
     if (!canManageCustomModels || driverKind === "antigravity") return;
     const normalized = normalizeCustomModelSlug(input);
     if (!normalized) {
-      setError("Enter a model slug.");
+      setError(t("settings.text.enterAModelSlug"));
       return;
     }
     if (models.some((model) => !model.isCustom && model.slug === normalized)) {
-      setError("That model is already built in.");
+      setError(t("settings.text.thatModelIsAlreadyBuiltIn"));
       return;
     }
     if (normalized.length > MAX_CUSTOM_MODEL_LENGTH) {
-      setError(`Model slugs must be ${MAX_CUSTOM_MODEL_LENGTH} characters or less.`);
+      setError(t("settings.text.modelSlugsMustBeMaxCustom", { MAX_CUSTOM_MODEL_LENGTH }));
       return;
     }
     if (customModels.some((entry) => entry.slug === normalized)) {
-      setError("That custom model is already saved.");
+      setError(t("settings.text.thatCustomModelIsAlreadySaved"));
       return;
     }
 
@@ -380,13 +380,13 @@ export function ProviderModelsSection({
           return (
             <div key={`${instanceId}:${model.slug}:group`}>
               {startsGroup && favoriteCount > 0 && group === "favorite"
-                ? groupLabel("Favorites", index === 0)
+                ? groupLabel(t("settings.text.favorites"), index === 0)
                 : null}
               {startsGroup && favoriteCount > 0 && group === "visible"
                 ? groupLabel("All", index === 0)
                 : null}
               {startsGroup && group === "hidden"
-                ? groupLabel("Hidden from picker", index === 0)
+                ? groupLabel(t("settings.text.hiddenFromPicker"), index === 0)
                 : null}
               {renderRow(model)}
               {editingEntry ? (
@@ -482,10 +482,10 @@ function ProviderModelRow({
   const capLabels = describeModelCapabilities(model, flagMissingReasoning);
   const nameClassName = cn("text-xs", isHidden ? "text-muted-foreground" : "text-foreground/90");
   const pickerTooltip = model.isCustom
-    ? "Custom models are always shown in the picker"
+    ? t("settings.text.customModelsAreAlwaysShownIn")
     : isHidden
-      ? "Hidden from picker"
-      : "Shown in picker";
+      ? t("settings.text.hiddenFromPicker")
+      : t("settings.text.shownInPicker");
 
   return (
     <div

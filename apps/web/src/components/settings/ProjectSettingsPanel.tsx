@@ -249,7 +249,7 @@ function ProjectDetail({
     ) {
       return;
     }
-    await updateAllMembers({ title }, "Failed to rename project");
+    await updateAllMembers({ title }, t("settings.text.failedToRenameProject"));
   };
 
   const [faviconPickerOpen, setFaviconPickerOpen] = useComposerMenuState(!canEditGroup);
@@ -260,7 +260,7 @@ function ProjectDetail({
     if (savingFaviconRef.current) return;
     savingFaviconRef.current = true;
     setIsSavingFavicon(true);
-    await updateAllMembers(input, "Failed to update project icon");
+    await updateAllMembers(input, t("settings.text.failedToUpdateProjectIcon"));
     savingFaviconRef.current = false;
     setIsSavingFavicon(false);
   };
@@ -271,7 +271,7 @@ function ProjectDetail({
     group.memberProjects.some((member) => member.title !== SCRATCH_PROJECT_TITLE);
 
   const removeMembers = async (members: ReadonlyArray<SidebarProjectGroupMember>) => {
-    if (checkProjectAccess(members, "Failed to remove project")) return;
+    if (checkProjectAccess(members, t("settings.text.failedToRemoveProject"))) return;
     const api = readLocalApi();
     if (!api) return;
 
@@ -287,11 +287,11 @@ function ProjectDetail({
       api.dialogs.confirm(confirmationMessage, { variant: "destructive" }),
     );
     if (confirmed._tag === "Failure" || !confirmed.value) return;
-    if (checkProjectAccess(members, "Failed to remove project")) return;
+    if (checkProjectAccess(members, t("settings.text.failedToRemoveProject"))) return;
 
     const draftStore = useComposerDraftStore.getState();
     for (const member of members) {
-      if (checkProjectAccess([member], "Failed to remove project")) return;
+      if (checkProjectAccess([member], t("settings.text.failedToRemoveProject"))) return;
       const memberThreads = projectThreads.filter(
         (thread) => thread.environmentId === member.environmentId && thread.projectId === member.id,
       );
@@ -306,7 +306,10 @@ function ProjectDetail({
         () => undefined,
       );
       if (result._tag === "Failure") {
-        reportProjectFailure(`Failed to remove "${member.title}"`, result);
+        reportProjectFailure(
+          t("settings.text.failedToRemoveTitle", { title: member.title }),
+          result,
+        );
         return;
       }
       const projectRef = scopeProjectRef(member.environmentId, member.id);
@@ -368,7 +371,10 @@ function ProjectDetail({
         const environment = environmentById.get(environmentId);
         const labels = environment
           ? settingsScopeEnvironmentLabels(environment, environments)
-          : { primary: firstMember.environmentLabel ?? "Environment", secondary: environmentId };
+          : {
+              primary: firstMember.environmentLabel ?? t("settings.text.environment"),
+              secondary: environmentId,
+            };
         return (
           <SettingsRow
             key={environmentId}
@@ -444,7 +450,7 @@ function ProjectDetail({
                   onClick={() =>
                     void updateAllMembers(
                       { title: SCRATCH_PROJECT_TITLE },
-                      "Failed to rename project",
+                      t("settings.text.failedToRenameProject"),
                     )
                   }
                 />
@@ -531,7 +537,9 @@ function ProjectDetail({
                     onCheckedChange={(checked) =>
                       void organize(
                         { pinned: Boolean(checked) },
-                        checked ? "Failed to pin project" : "Failed to unpin project",
+                        checked
+                          ? t("settings.text.failedToPinProject")
+                          : t("settings.text.failedToUnpinProject"),
                       )
                     }
                     aria-label={t("settings.text.pinProject")}
@@ -554,8 +562,8 @@ function ProjectDetail({
                       void organize(
                         { archived: !group.archived },
                         group.archived
-                          ? "Failed to unarchive project"
-                          : "Failed to archive project",
+                          ? t("settings.text.failedToUnarchiveProject")
+                          : t("settings.text.failedToArchiveProject"),
                       )
                     }
                   >

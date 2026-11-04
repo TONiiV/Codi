@@ -116,7 +116,7 @@ export function CodexSetupSection(props: CodexSetupSectionProps) {
   const existingReady = props.enabled && existingState === "ready";
   const existingAuthenticated = props.provider?.auth.status === "authenticated";
   const existingChecking = existingState === "checking";
-  const existingSummary = getProviderSummary(props.provider);
+  const existingSummary = getProviderSummary(props.provider, t);
   const content =
     props.mode === "existing" && props.presentation === "onboarding" ? (
       <CodexWelcomeCard
@@ -391,14 +391,18 @@ function ManagedCodexSetup({
       if (result._tag === "Failure") {
         if (!isAtomCommandInterrupted(result)) {
           const failure = squashAtomCommandFailure(result);
-          setError(failure instanceof Error ? failure.message : "Codex setup failed. Try again.");
+          setError(
+            failure instanceof Error
+              ? failure.message
+              : t("settings.text.codexSetupFailedTryAgain"),
+          );
         }
       } else {
         succeeded = true;
         onSuccess?.(result.value);
       }
     } catch {
-      setError("Codex setup failed. Try again.");
+      setError(t("settings.text.codexSetupFailedTryAgain"));
     }
     pendingRef.current = false;
     setPending(false);
@@ -438,8 +442,8 @@ function ManagedCodexSetup({
   ) {
     setError(
       handoffQuery.data?.phase === "auth"
-        ? (handoffQuery.data.state.message ?? "ChatGPT sign-in could not finish. Try again.")
-        : "ChatGPT sign-in on the primary environment was interrupted. Try again.",
+        ? (handoffQuery.data.state.message ?? t("settings.text.chatgptSignInCouldNotFinish"))
+        : t("settings.text.chatgptSignInOnThePrimary"),
     );
     setHandoff(null);
   }
@@ -476,9 +480,7 @@ function ManagedCodexSetup({
         await ensureLocalApi().shell.openExternal(authorizationUrl);
       }
     } catch {
-      setError(
-        "Could not finish sign-in on this computer. Try again or paste the redirect URL below.",
-      );
+      setError(t("settings.text.couldNotFinishSignInOn"));
     }
   };
 
@@ -608,21 +610,21 @@ function ManagedCodexSetup({
     installation?.phase === "downloading"
       ? `Downloading ${(installation.downloadedBytes / 1_000_000).toFixed(1)}${installation.totalBytes === null ? "" : ` of ${(installation.totalBytes / 1_000_000).toFixed(1)}`} MB.`
       : installation?.phase === "extracting"
-        ? "Installing Codex."
+        ? t("settings.text.installingCodex")
         : installation?.phase === "verifying"
-          ? "Checking Codex."
+          ? t("settings.text.checkingCodex")
           : installed
-            ? `${installation?.source === "local" ? "Using your installed Codex" : "Managed by Codi"}${installation?.installedVersion ? ` · v${installation.installedVersion}` : ""}.`
-            : (installation?.message ?? "Codi downloads and manages Codex for you.");
+            ? `${installation?.source === "local" ? t("settings.text.usingYourInstalledCodex") : t("settings.text.managedByCodi")}${installation?.installedVersion ? ` · v${installation.installedVersion}` : ""}.`
+            : (installation?.message ?? t("settings.text.codiDownloadsAndManagesCodexFor"));
   const accountDescription = finishingSignIn ? (
-    "Finishing sign-in..."
+    t("settings.text.finishingSignIn")
   ) : installActive ? (
     runtimeDescription
   ) : authActive || auth?.phase === "failed" || auth?.phase === "cancelled" ? (
     auth?.phase === "waiting" && requestedAccountEmail ? (
-      `Continue as ${requestedAccountEmail} on OpenAI.`
+      t("settings.text.continueAsRequestedaccountemailOnOpenai", { requestedAccountEmail })
     ) : (
-      (auth?.message ?? "Finish signing in in your browser.")
+      (auth?.message ?? t("settings.text.finishSigningInInYourBrowser"))
     )
   ) : authenticated ? (
     provider?.auth.email?.trim() ? (
@@ -637,10 +639,10 @@ function ManagedCodexSetup({
         .
       </>
     ) : (
-      "Signed in with ChatGPT."
+      t("settings.text.signedInWithChatgpt")
     )
   ) : (
-    (reconnectEmail ?? "Use your ChatGPT subscription.")
+    (reconnectEmail ?? t("settings.text.useYourChatgptSubscription"))
   );
 
   const handoffUrl =
@@ -796,7 +798,7 @@ function ManagedCodexSetup({
       logoutWarning ??
       error ??
       (authQuery.error || installQuery.error
-        ? "Could not read setup status. Reconnect and try again."
+        ? t("settings.text.couldNotReadSetupStatusReconnect")
         : installation?.phase === "failed"
           ? installation.message
           : null);
@@ -1134,7 +1136,7 @@ export function CodexManagedRuntimeFields({
 }
 
 function CodexSignInDescription({
-  label = "Complete sign-in in your browser.",
+  label: labelProp,
   expanded = false,
   controls,
   onToggle,
@@ -1145,6 +1147,7 @@ function CodexSignInDescription({
   readonly onToggle?: () => void;
 }) {
   const { t } = useTranslation();
+  const label = labelProp ?? t("settings.text.completeSignInInYourBrowser");
   if (!onToggle) return <div className="leading-relaxed">{label}</div>;
   return (
     <button

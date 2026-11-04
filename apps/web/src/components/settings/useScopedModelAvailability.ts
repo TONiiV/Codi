@@ -9,11 +9,13 @@ import {
 } from "../../providerInstances";
 import { useEnvironmentProviders, useEnvironments } from "../../state/environments";
 import { useSettingsScope } from "./SettingsScopeContext";
+import { useTranslation } from "react-i18next";
 
 export function useScopedModelDisabledReason(
   settings: UnifiedSettings,
   entries: readonly ProviderInstanceEntry[],
 ) {
+  const { t } = useTranslation();
   const { targets } = useSettingsScope();
   const { environments } = useEnvironments();
   const providersByEnvironment = useEnvironmentProviders();
@@ -40,7 +42,7 @@ export function useScopedModelDisabledReason(
         entry.driverKind !== sourceEntry?.driverKind ||
         !options?.some((option) => option.slug === model && !option.isUnavailable)
       ) {
-        return `This model is unavailable on ${environment?.label ?? "a selected environment"}. Select that environment to choose its model separately.`;
+        return `This model is unavailable on ${environment?.label ?? t("settings.text.aSelectedEnvironment")}. Select that environment to choose its model separately.`;
       }
     }
     return null;

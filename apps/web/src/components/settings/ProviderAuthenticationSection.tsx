@@ -80,25 +80,25 @@ export function ProviderAuthenticationSection({
     (provider.auth.type === "gemini-api-key" || provider.auth.type === "agent-platform");
   const accountDescription = active
     ? auth?.phase === "starting"
-      ? (auth.message ?? (usesCredentials ? "Connecting…" : "Starting sign-in…"))
+      ? (auth.message ?? (usesCredentials ? "Connecting…" : t("settings.text.startingSignIn")))
       : auth?.phase === "verifying"
         ? usesCredentials
-          ? "Checking credentials and loading models…"
-          : "Checking your account…"
+          ? t("settings.text.checkingCredentialsAndLoadingModels")
+          : t("settings.text.checkingYourAccount")
         : interaction?.type === "terminal"
-          ? "Complete sign-in in the terminal below."
+          ? t("settings.text.completeSignInInTheTerminal")
           : interaction?.type === "credentials"
-            ? "Enter your credentials below."
-            : "Finish signing in in your browser."
+            ? t("settings.text.enterYourCredentialsBelow")
+            : t("settings.text.finishSigningInInYourBrowser")
     : signedIn
-      ? "Signed in."
+      ? t("settings.text.signedIn")
       : isDiscovering
-        ? "Discovering sign-in methods…"
+        ? t("settings.text.discoveringSignInMethods")
         : needsExternalSetup
-          ? "No in-app sign-in advertised. Follow the provider's docs to finish setup."
+          ? t("settings.text.noInAppSignInAdvertised")
           : usesCredentials
-            ? `Connect on ${environmentLabel} to load models.`
-            : `Sign in on ${environmentLabel}.`;
+            ? t("settings.text.connectOnEnvironmentlabelToLoadModels", { environmentLabel })
+            : t("settings.text.signInOnEnvironmentlabel", { environmentLabel });
   const statusMessage = auth?.phase === "failed" ? auth.message : null;
   const disabled = readOnly || pending || query.error !== null || isDiscovering;
   const draftId = `${auth?.flowId ?? ""}:${interaction?.id ?? ""}`;
@@ -120,11 +120,13 @@ export function ProviderAuthenticationSection({
       else if (!isAtomCommandInterrupted(result)) {
         const failure = squashAtomCommandFailure(result);
         setError(
-          failure instanceof Error ? failure.message : "Provider sign-in failed. Try again.",
+          failure instanceof Error
+            ? failure.message
+            : t("settings.text.providerSignInFailedTryAgain"),
         );
       }
     } catch {
-      setError("Provider sign-in failed. Try again.");
+      setError(t("settings.text.providerSignInFailedTryAgain"));
     }
     pendingRef.current = false;
     setPending(false);
@@ -157,7 +159,7 @@ export function ProviderAuthenticationSection({
       setError(null);
     } catch {
       pending?.close();
-      setError("Could not open the sign-in page. Copy the link and open it in your browser.");
+      setError(t("settings.text.couldNotOpenTheSignIn"));
     }
   }
 
@@ -387,14 +389,14 @@ export function ProviderAuthenticationSection({
                         if (result._tag !== "Success") {
                           terminalQueue.current = [];
                           if (!isAtomCommandInterrupted(result))
-                            setError("The provider sign-in terminal is no longer available.");
+                            setError(t("settings.text.theProviderSignInTerminalIs"));
                           break;
                         }
                       }
                     })()
                       .catch(() => {
                         terminalQueue.current = [];
-                        setError("Could not send input to the provider sign-in terminal.");
+                        setError(t("settings.text.couldNotSendInputToThe"));
                       })
                       .finally(() => {
                         terminalSending.current = false;

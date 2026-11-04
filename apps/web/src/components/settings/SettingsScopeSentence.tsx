@@ -237,7 +237,7 @@ function EnvironmentScopeMenu({
   singleEnvironment,
 }: SettingsScopeMenuProps) {
   const { t } = useTranslation();
-  const resolved = resolveSettingsScope(value, groups, environments);
+  const resolved = resolveSettingsScope(value, groups, environments, t);
   const environmentValue = environmentAxisValue(
     value,
     resolved.kind === "checkout" ? resolved.environmentId : null,

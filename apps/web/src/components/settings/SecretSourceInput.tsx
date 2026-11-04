@@ -90,7 +90,7 @@ export function SecretSourceInput({
   const reference = secret !== undefined && secret.provider === provider ? secret.reference : "";
   const providerSource = sources.find((source) => source.id === provider);
   const definition = providerSource && builtInSecretProviderDefinitions.find(providerSource.kind);
-  const label = input["aria-label"] ?? "Secret";
+  const label = input["aria-label"] ?? t("settings.text.secret");
   const providerLabel = (id: SecretProviderId) =>
     sources.find((source) => source.id === id)?.label ?? id;
   const providerIcon = (id: SecretProviderId) =>

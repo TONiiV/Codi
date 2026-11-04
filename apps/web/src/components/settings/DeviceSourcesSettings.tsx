@@ -231,7 +231,9 @@ export function DeviceSourcesSettings(props: {
               ),
             },
           })),
-        remove ? "Device host not removed everywhere" : "Device host not saved everywhere",
+        remove
+          ? t("settings.text.deviceHostNotRemovedEverywhere")
+          : t("settings.text.deviceHostNotSavedEverywhere"),
       );
       if (saved) setEditing(null);
     } catch (error) {
@@ -261,7 +263,9 @@ export function DeviceSourcesSettings(props: {
           ),
         },
       })),
-      remove ? "EAS host not removed everywhere" : "EAS host not saved everywhere",
+      remove
+        ? t("settings.text.easHostNotRemovedEverywhere")
+        : t("settings.text.easHostNotSavedEverywhere"),
     );
     if (saved) setEditing(null);
   };
@@ -282,7 +286,7 @@ export function DeviceSourcesSettings(props: {
         environmentId: patch.environmentId,
         patch: { simlockDeviceHosts: patch.hosts },
       })),
-      "Simlock host not saved everywhere",
+      t("settings.text.simlockHostNotSavedEverywhere"),
     );
     if (saved) setEditing(null);
   };
@@ -294,7 +298,7 @@ export function DeviceSourcesSettings(props: {
           environmentId: environment.environmentId,
           patch: { simlockDeviceHosts: updateSimlockDeviceHosts(environment.hosts, host, true) },
         })),
-      "Simlock host not removed everywhere",
+      t("settings.text.simlockHostNotRemovedEverywhere"),
     );
 
   const [testing, setTesting] = useState<ReadonlySet<string>>(new Set());

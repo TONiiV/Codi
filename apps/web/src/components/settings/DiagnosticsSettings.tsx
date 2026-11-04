@@ -458,13 +458,14 @@ function ResourceHistoryProcessNameCell({
   process: ServerProcessResourceHistorySummary;
   visualDepth: number;
 }) {
+  const { t } = useTranslation();
   const name = formatShortProcessName(process.command);
 
   return (
     <div
       className="grid min-w-0 grid-cols-[1.25rem_0.375rem_minmax(0,1fr)] items-center gap-2"
       style={{ paddingLeft: `${Math.min(visualDepth, 6) * 10}px` }}
-      aria-label={`${process.isServerRoot ? "Root" : "Child"} process ${name}`}
+      aria-label={`${process.isServerRoot ? t("settings.text.root") : t("settings.text.child")} process ${name}`}
     >
       <span className="size-5 shrink-0" aria-hidden="true" />
       <span
@@ -810,7 +811,7 @@ function DiagnosticsSettingsBody() {
       if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
         const error = squashAtomCommandFailure(result);
         setOpenLogsDirectoryError(
-          error instanceof Error ? error.message : "Unable to open logs folder.",
+          error instanceof Error ? error.message : t("settings.text.unableToOpenLogsFolder"),
         );
       }
     })();
@@ -851,7 +852,7 @@ function DiagnosticsSettingsBody() {
       let confirmed = false;
       try {
         confirmed = await ensureLocalApi().dialogs.confirm(
-          `Send SIGKILL to process ${pid}? This cannot be handled by the process.`,
+          t("settings.text.sendSigkillToProcessPidThis", { pid }),
           { variant: "destructive" },
         );
       } catch (error) {
@@ -1172,7 +1173,14 @@ function DiagnosticsSettingsBody() {
 
       <SettingsSection title={t("settings.text.latestFailures")}>
         {data && data.latestFailures.length > 0 ? (
-          <DiagnosticsTable headers={["Span", "Cause", "Duration", "Ended"]}>
+          <DiagnosticsTable
+            headers={[
+              t("settings.text.span"),
+              t("settings.text.cause"),
+              t("settings.text.duration"),
+              t("settings.text.ended"),
+            ]}
+          >
             {data.latestFailures.map((failure) => (
               <tr key={`${failure.traceId}:${failure.spanId}`}>
                 <td className="px-4 py-3 align-top text-xs font-medium text-foreground first:sm:pl-5">
@@ -1204,7 +1212,12 @@ function DiagnosticsSettingsBody() {
       <SettingsSection title={t("settings.text.mostCommonFailures")}>
         {data && data.commonFailures.length > 0 ? (
           <DiagnosticsTable
-            headers={["Span", "Count", "Cause", "Last Seen"]}
+            headers={[
+              t("settings.text.span"),
+              t("settings.text.count"),
+              t("settings.text.cause"),
+              t("settings.text.lastSeen"),
+            ]}
             minTableWidth="min-w-[760px]"
           >
             {data.commonFailures.map((failure) => (
@@ -1238,7 +1251,12 @@ function DiagnosticsSettingsBody() {
       <SettingsSection title={t("settings.text.slowestSpans")}>
         {data && data.slowestSpans.length > 0 ? (
           <DiagnosticsTable
-            headers={["Span", "Duration", "Ended", "Trace"]}
+            headers={[
+              t("settings.text.span"),
+              t("settings.text.duration"),
+              t("settings.text.ended"),
+              t("settings.text.trace"),
+            ]}
             minTableWidth="min-w-[900px]"
             columnWidths={["w-[44%]", "w-[14%]", "w-[12%]", "w-[30%]"]}
           >
@@ -1352,7 +1370,13 @@ function DiagnosticsSettingsBody() {
       <SettingsSection title={t("settings.text.topSpanNames")}>
         {data && data.topSpansByCount.length > 0 ? (
           <DiagnosticsTable
-            headers={["Span", "Count", "Failures", "Average", "Max"]}
+            headers={[
+              t("settings.text.span"),
+              t("settings.text.count"),
+              t("settings.text.failures"),
+              t("settings.text.average"),
+              "Max",
+            ]}
             minTableWidth="min-w-[760px]"
             columnWidths={["w-[48%]", "w-[13%]", "w-[13%]", "w-[13%]", "w-[13%]"]}
           >
