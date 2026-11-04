@@ -14,6 +14,7 @@ import { SnapShotShortcutKeys } from "../desktop/SnapShotShortcutKeys";
 import { Button } from "../ui/button";
 import { keybindingFromKeyboardEvent } from "./KeybindingsSettings.logic";
 import { createRecordingRequestTracker } from "./SnapShotSettings.logic";
+import { useTranslation } from "react-i18next";
 
 const MODIFIER_FROM_KEY: Readonly<Record<string, SnapShotModifier>> = {
   Shift: "shift",
@@ -47,6 +48,7 @@ export function useSnapShotShortcutRecorder({
   onStart?: () => void;
   onError: (message: string) => void;
 }) {
+  const { t } = useTranslation();
   const bridge = getDesktopSnapShotBridge();
   const displayShortcut = shortcutLabel ? parseDesktopSnapShotShortcut(shortcutLabel) : shortcut;
   const [recording, setRecording] = useState(false);
@@ -128,7 +130,7 @@ export function useSnapShotShortcutRecorder({
         aria-label={
           displayShortcut
             ? `Record snapshot shortcut, currently ${formatSnapShotShortcutLabel(displayShortcut)}`
-            : "Change snapshot shortcut"
+            : t("settings.text.changeSnapshotShortcut")
         }
         aria-pressed={recording}
         data-keybinding-capture=""
@@ -138,11 +140,11 @@ export function useSnapShotShortcutRecorder({
         onBlur={stopRecording}
       >
         {recording ? (
-          "Press shortcut…"
+          t("settings.text.pressShortcut2")
         ) : !displayShortcut ? (
-          "Change shortcut"
+          t("settings.text.changeShortcut")
         ) : !allowModifierPairs && isModifierPairShortcut(displayShortcut) ? (
-          "Choose shortcut"
+          t("settings.text.chooseShortcut")
         ) : (
           <SnapShotShortcutKeys shortcut={displayShortcut} />
         )}

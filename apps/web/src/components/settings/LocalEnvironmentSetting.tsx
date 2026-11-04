@@ -15,9 +15,11 @@ import { Spinner } from "../ui/spinner";
 import { Switch } from "../ui/switch";
 import { SettingsRow } from "./settingsLayout";
 import { searchableSetting } from "./settingsSearch";
+import { useTranslation } from "react-i18next";
 
 // Toggling relaunches desktop; the switch reflects startup state.
 export function LocalEnvironmentSetting() {
+  const { t } = useTranslation();
   const setEnabled = window.desktopBridge?.setLocalEnvironmentEnabled;
   const [enabled] = useState(() => !isLocalEnvironmentDisabled());
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -42,15 +44,15 @@ export function LocalEnvironmentSetting() {
         {...searchableSetting("local-environment")}
         description={
           enabled
-            ? "Run agents on this computer. Turn off to use Codi only with remote environments."
-            : "Turned off. Agents only run in remote environments."
+            ? t("settings.text.runAgentsOnThisComputerTurn")
+            : t("settings.text.turnedOffAgentsOnlyRunIn")
         }
         control={
           <Switch
             checked={enabled}
             disabled={isUpdating}
             onCheckedChange={() => setConfirmOpen(true)}
-            aria-label="Local environment"
+            aria-label={t("settings.text.localEnvironment")}
           />
         }
       />
@@ -65,18 +67,20 @@ export function LocalEnvironmentSetting() {
         <AlertDialogPopup>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              {enabled ? "Turn off local environment?" : "Turn on local environment?"}
+              {enabled
+                ? t("settings.text.turnOffLocalEnvironment")
+                : t("settings.text.turnOnLocalEnvironment")}
             </AlertDialogTitle>
             <AlertDialogDescription>
               {enabled
-                ? "Codi will restart without running a server on this computer. Any agents and terminals running here will stop, and other devices will no longer be able to connect to this computer. Your projects, history, and remote environments are unaffected."
-                : "Codi will restart and start running a server on this computer again."}
+                ? t("settings.text.codiWillRestartWithoutRunningA")
+                : t("settings.text.codiWillRestartAndStartRunning")}
             </AlertDialogDescription>
           </AlertDialogHeader>
           {error ? <p className="px-6 pb-4 text-sm text-destructive">{error}</p> : null}
           <AlertDialogFooter>
             <AlertDialogClose disabled={isUpdating} render={<Button variant="outline" />}>
-              Cancel
+              {t("settings.text.cancel")}
             </AlertDialogClose>
             <Button
               variant={enabled ? "destructive" : "default"}
@@ -86,12 +90,12 @@ export function LocalEnvironmentSetting() {
               {isUpdating ? (
                 <>
                   <Spinner size="sm" />
-                  Restarting…
+                  {t("settings.text.restarting")}
                 </>
               ) : enabled ? (
-                "Restart and turn off"
+                t("settings.text.restartAndTurnOff")
               ) : (
-                "Restart and turn on"
+                t("settings.text.restartAndTurnOn")
               )}
             </Button>
           </AlertDialogFooter>

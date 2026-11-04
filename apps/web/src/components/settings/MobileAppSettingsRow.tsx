@@ -4,6 +4,7 @@ import { Popover, PopoverPopup, PopoverTitle, PopoverTrigger } from "../ui/popov
 import { QRCodeSvg } from "../ui/qr-code";
 import { SettingsRow } from "./settingsLayout";
 import { searchableSetting } from "./settingsSearch";
+import { useTranslation } from "react-i18next";
 
 const stores = [
   {
@@ -21,10 +22,11 @@ const stores = [
 ];
 
 export function MobileAppSettingsRow() {
+  const { t } = useTranslation();
   return (
     <SettingsRow
       {...searchableSetting("mobile-app")}
-      description="Connect to your server from your phone or tablet."
+      description={t("settings.text.connectToYourServerFromYour")}
       control={
         <div className="flex items-center gap-2">
           {stores.map(({ label, store, url, Icon }) => (
@@ -36,14 +38,16 @@ export function MobileAppSettingsRow() {
               <PopoverPopup align="end">
                 <div className="flex flex-col items-center gap-3">
                   <PopoverTitle>{store}</PopoverTitle>
-                  <p className="text-xs text-muted-foreground">Scan with your phone camera.</p>
+                  <p className="text-xs text-muted-foreground">
+                    {t("settings.text.scanWithYourPhoneCamera")}
+                  </p>
                   <div className="rounded-lg bg-white p-1.5">
                     <QRCodeSvg
                       value={url}
                       size={128}
                       level="M"
                       marginSize={1}
-                      title={`${store} link`}
+                      title={t("settings.text.storeLink", { store })}
                     />
                   </div>
                   <Button
@@ -51,7 +55,7 @@ export function MobileAppSettingsRow() {
                     variant="outline"
                     render={<a href={url} target="_blank" rel="noreferrer noopener" />}
                   >
-                    Open {store}
+                    {t("settings.text.openStore", { store })}
                   </Button>
                 </div>
               </PopoverPopup>

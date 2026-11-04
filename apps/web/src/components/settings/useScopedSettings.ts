@@ -29,6 +29,7 @@ import {
   type ProjectOverrideEntry,
   type ScopedSettingsPatch,
 } from "./scopedSettings";
+import { useTranslation } from "react-i18next";
 
 export function useScopedSettings<T = UnifiedSettings>(
   selector?: (settings: UnifiedSettings) => T,
@@ -48,12 +49,13 @@ export function useScopedSettingSource(keys: readonly (keyof ServerSettings)[]) 
 }
 
 function useRunScopedPlan() {
+  const { t } = useTranslation();
   const persistServer = useAtomCommand(serverEnvironment.updateSettings, { reportFailure: false });
   return (plan: ReturnType<typeof planScopedSettingsPatch>, onFailed?: () => void) => {
     if (plan.unavailableReason) {
       toastManager.add({
         type: "warning",
-        title: "Setting not saved",
+        title: t("settings.text.settingNotSaved"),
         description: plan.unavailableReason,
       });
       onFailed?.();
@@ -70,7 +72,7 @@ function useRunScopedPlan() {
             Cause.fail(
               new EnvironmentAuthorizationError({
                 requiredScope: missing,
-                message: "This connection lacks permission to change these settings.",
+                message: t("settings.text.thisConnectionLacksPermissionToChange"),
               }),
             ),
           );
@@ -83,7 +85,9 @@ function useRunScopedPlan() {
       toastManager.add({
         type: "error",
         title:
-          savedEnvironmentCount > 0 ? "Setting saved on some environments" : "Setting not saved",
+          savedEnvironmentCount > 0
+            ? t("settings.text.settingSavedOnSomeEnvironments")
+            : t("settings.text.settingNotSaved"),
         description: [
           ...failedEnvironments.map(
             ({ label, message }) => `Could not save on ${label}: ${message}`,

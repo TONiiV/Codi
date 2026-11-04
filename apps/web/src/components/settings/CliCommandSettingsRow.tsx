@@ -10,8 +10,10 @@ import { Button } from "../ui/button";
 import { stackedThreadToast, toastManager } from "../ui/toast";
 import { SettingsRow } from "./settingsLayout";
 import { searchableSetting } from "./settingsSearch";
+import { useTranslation } from "react-i18next";
 
 export function CliCommandSettingsRow() {
+  const { t } = useTranslation();
   const bridge = getDesktopCliCommandBridge();
   const query = useEnvironmentQuery(bridge ? desktopCliCommandStateAtom : null);
   const state = query.data;
@@ -26,8 +28,12 @@ export function CliCommandSettingsRow() {
         toastManager.add(
           stackedThreadToast({
             type: "error",
-            title: action === "install" ? "Could not install t3" : "Could not remove t3",
-            description: error instanceof Error ? error.message : "Something went wrong.",
+            title:
+              action === "install"
+                ? t("settings.text.couldNotInstallT3")
+                : t("settings.text.couldNotRemoveT3"),
+            description:
+              error instanceof Error ? error.message : t("settings.text.somethingWentWrong"),
           }),
         );
       })
@@ -55,7 +61,7 @@ export function CliCommandSettingsRow() {
           disabled={pending || query.isPending || (!installed && Boolean(state.shadowedBy))}
           onClick={() => change(installed ? "uninstall" : "install")}
         >
-          {installed ? "Remove" : "Install"}
+          {installed ? t("settings.text.remove") : t("settings.text.install")}
         </Button>
       }
     />

@@ -36,6 +36,7 @@ import {
   type WizardTargetSelection,
   type WizardStep,
 } from "./browserImportWizard.logic";
+import { useTranslation } from "react-i18next";
 
 export type { WizardTarget } from "./browserImportWizard.logic";
 
@@ -189,19 +190,20 @@ function QuitStep({
   readonly onCancel: () => void;
   readonly onRechecked: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <>
       <DialogHeader>
-        <DialogTitle>Quit {source.name} to import</DialogTitle>
+        <DialogTitle>{t("settings.text.quitNameToImport", { name: source.name })}</DialogTitle>
         <DialogDescription>
-          {source.name} is open, so its cookies can&rsquo;t be read yet. Quit it, then continue.
+          {t("settings.text.nameIsOpenSoItsCookies", { name: source.name })}
         </DialogDescription>
       </DialogHeader>
       <DialogFooter>
         <Button variant="outline" onClick={onCancel}>
-          Cancel
+          {t("settings.text.cancel")}
         </Button>
-        <Button onClick={onRechecked}>I&rsquo;ve quit it</Button>
+        <Button onClick={onRechecked}>{t("settings.text.iVeQuitIt")}</Button>
       </DialogFooter>
     </>
   );
@@ -246,6 +248,7 @@ function FullDiskAccessStep({
   readonly onGranted: () => void;
   readonly stillRequired: boolean;
 }) {
+  const { t } = useTranslation();
   const [opening, setOpening] = useState(false);
   const [openingError, setOpeningError] = useState<string | null>(null);
   const permission = usePermissionStatus(async () => ({ fullDiskAccess: await onCheck() }), {
@@ -263,11 +266,11 @@ function FullDiskAccessStep({
   return (
     <>
       <DialogHeader>
-        <DialogTitle>Let Codi read {source.name}&rsquo;s cookies</DialogTitle>
+        <DialogTitle>
+          {t("settings.text.letCodiReadNameSCookies", { name: source.name })}
+        </DialogTitle>
         <DialogDescription>
-          To import cookies from {source.name}, Codi needs Full Disk Access. Turn it on in System
-          Settings, then come back to finish the import. You can revoke it again once the import is
-          done.
+          {t("settings.text.toImportCookiesFromNameCodi", { name: source.name })}
         </DialogDescription>
       </DialogHeader>
       <DialogPanel>
@@ -282,8 +285,8 @@ function FullDiskAccessStep({
                   aria-hidden="true"
                 />
               ),
-              title: "Full Disk Access",
-              description: `Read ${source.name}'s cookies for this import.`,
+              title: t("settings.text.fullDiskAccess"),
+              description: t("settings.text.readNameSCookiesForThis", { name: source.name }),
               granted: permission.status.fullDiskAccess,
               onAllow: () => void allow(),
             },
@@ -297,21 +300,21 @@ function FullDiskAccessStep({
         {!permission.isReady(["fullDiskAccess"]) ? (
           <p className="mt-3 text-xs text-muted-foreground">
             {stillRequired
-              ? "Access is still required. Quit and reopen Codi if you just allowed it, then retry the import."
-              : "If access doesn't update after you allow it, quit and reopen Codi, then retry the import."}
+              ? t("settings.text.accessIsStillRequiredQuitAnd")
+              : t("settings.text.ifAccessDoesnTUpdateAfter")}
           </p>
         ) : null}
       </DialogPanel>
       <DialogFooter>
         <Button variant="outline" onClick={onCancel}>
-          Cancel
+          {t("settings.text.cancel")}
         </Button>
         <PermissionContinueButton
           ready={permission.isReady(["fullDiskAccess"])}
           busy={opening}
           onClick={onGranted}
         >
-          Continue
+          {t("settings.text.continue")}
         </PermissionContinueButton>
       </DialogFooter>
     </>
@@ -330,6 +333,7 @@ function ConfigureStep({
   onCancel,
   onImport,
 }: ConfigureStepProps) {
+  const { t } = useTranslation();
   const targetMissing =
     target.kind === "existing" &&
     !targetProfiles.some((profile) => profile.id === target.profileId);
@@ -344,16 +348,16 @@ function ConfigureStep({
   return (
     <>
       <DialogHeader>
-        <DialogTitle>Import from {source.name}</DialogTitle>
+        <DialogTitle>{t("settings.text.importFromName", { name: source.name })}</DialogTitle>
         <DialogDescription>
-          Choose which cookies to import for {destinationEnvironmentName}.
+          {t("settings.text.chooseWhichCookiesToImportFor", { destinationEnvironmentName })}
         </DialogDescription>
       </DialogHeader>
       <DialogPanel>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
           <section className="flex-1 space-y-2">
             <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              From
+              {t("settings.text.from")}
             </p>
             {source.profiles.map((profile) => (
               <SelectableTile
@@ -371,13 +375,13 @@ function ConfigureStep({
           </div>
           <section className="flex-1 space-y-2">
             <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              Into
+              {t("settings.text.into")}
             </p>
             {canCreateProfile ? (
               <SelectableTile
                 selected={target.kind === "new"}
-                title="New profile"
-                subtitle="Created for these cookies"
+                title={t("settings.text.newProfile")}
+                subtitle={t("settings.text.createdForTheseCookies")}
                 onSelect={() => onTargetChange({ kind: "new" })}
               />
             ) : null}
@@ -386,7 +390,7 @@ function ConfigureStep({
                 key={profile.id}
                 selected={target.kind === "existing" && target.profileId === profile.id}
                 title={profile.name}
-                subtitle="Existing profile"
+                subtitle={t("settings.text.existingProfile")}
                 onSelect={() => onTargetChange({ kind: "existing", profileId: profile.id })}
               />
             ))}
@@ -400,13 +404,13 @@ function ConfigureStep({
       </DialogPanel>
       <DialogFooter>
         <Button variant="outline" onClick={onCancel}>
-          Cancel
+          {t("settings.text.cancel")}
         </Button>
         <Button
           disabled={sourceProfileDirectory === "" || targetMissing || targetUncreatable}
           onClick={onImport}
         >
-          Import
+          {t("settings.text.import")}
         </Button>
       </DialogFooter>
     </>
@@ -457,16 +461,17 @@ function SelectableTile({
 }
 
 function ImportingStep() {
+  const { t } = useTranslation();
   return (
     <>
       <DialogHeader>
-        <DialogTitle>Importing cookies</DialogTitle>
-        <DialogDescription>This may take a moment.</DialogDescription>
+        <DialogTitle>{t("settings.text.importingCookies")}</DialogTitle>
+        <DialogDescription>{t("settings.text.thisMayTakeAMoment")}</DialogDescription>
       </DialogHeader>
       <DialogPanel>
         <div className="flex items-center gap-3 py-2">
           <Spinner size="md" tone="muted" />
-          <span className="text-sm text-muted-foreground">Importing…</span>
+          <span className="text-sm text-muted-foreground">{t("settings.text.importing2")}</span>
         </div>
       </DialogPanel>
     </>
@@ -480,21 +485,24 @@ function CheckingStep({
   readonly sourceName: string;
   readonly check: "browser" | "fullDiskAccess";
 }) {
+  const { t } = useTranslation();
   return (
     <>
       <DialogHeader>
-        <DialogTitle>Checking {sourceName}</DialogTitle>
+        <DialogTitle>{t("settings.text.checkingSourcename", { sourceName })}</DialogTitle>
         <DialogDescription>
           {check === "fullDiskAccess"
-            ? "Checking Full Disk Access."
-            : "Checking whether the browser has closed."}
+            ? t("settings.text.checkingFullDiskAccess")
+            : t("settings.text.checkingWhetherTheBrowserHasClosed")}
         </DialogDescription>
       </DialogHeader>
       <DialogPanel>
         <div className="flex items-center gap-3 py-2">
           <Spinner size="md" tone="muted" />
           <span className="text-sm text-muted-foreground">
-            {check === "fullDiskAccess" ? "Checking access…" : "Checking…"}
+            {check === "fullDiskAccess"
+              ? t("settings.text.checkingAccess")
+              : t("settings.text.checking")}
           </span>
         </div>
       </DialogPanel>
@@ -517,6 +525,7 @@ function DoneStep({
   readonly destinationEnvironmentName: string;
   readonly onClose: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <>
       <DialogHeader>
@@ -525,27 +534,29 @@ function DoneStep({
             ? `Imported ${cookieResultCount(imported)}`
             : skipped > 0
               ? `Skipped ${cookieResultCount(skipped)}`
-              : "No cookies found"}
+              : t("settings.text.noCookiesFound")}
         </DialogTitle>
         <DialogDescription>
           {imported > 0
             ? `Added to ${targetName} for ${destinationEnvironmentName}.${skipped > 0 ? ` ${cookieResultCount(skipped)} skipped.` : ""}`
             : skipped > 0
-              ? `No cookies were imported for ${destinationEnvironmentName}.`
-              : `There were no cookies to import for ${destinationEnvironmentName}.`}
+              ? t("settings.text.noCookiesWereImportedForDestinationenvironmentna", {
+                  destinationEnvironmentName,
+                })
+              : t("settings.text.thereWereNoCookiesToImport", { destinationEnvironmentName })}
         </DialogDescription>
       </DialogHeader>
       {skippedDomains.length > 0 ? (
         <DialogPanel>
           <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            Skipped
+            {t("settings.text.skipped")}
           </p>
           <p className="mt-1 text-sm text-foreground">{formatSkippedDomains(skippedDomains)}</p>
         </DialogPanel>
       ) : null}
       <DialogFooter>
         <DialogClose render={<Button />} onClick={onClose}>
-          Done
+          {t("settings.text.done")}
         </DialogClose>
       </DialogFooter>
     </>
@@ -565,17 +576,18 @@ function BlockedStep({
   readonly onClose: () => void;
   readonly onRetry: (() => void) | undefined;
 }) {
+  const { t } = useTranslation();
   return (
     <>
       <DialogHeader>
-        <DialogTitle>Couldn&rsquo;t import from {source.name}</DialogTitle>
+        <DialogTitle>{t("settings.text.couldnTImportFromName", { name: source.name })}</DialogTitle>
         <DialogDescription>{message ?? BROWSER_IMPORT_FAILURE_COPY[reason]}</DialogDescription>
       </DialogHeader>
       <DialogFooter>
         <Button variant="outline" onClick={onClose}>
-          Close
+          {t("settings.text.close")}
         </Button>
-        {onRetry ? <Button onClick={onRetry}>Try again</Button> : null}
+        {onRetry ? <Button onClick={onRetry}>{t("settings.text.tryAgain")}</Button> : null}
       </DialogFooter>
     </>
   );

@@ -20,6 +20,7 @@ import { DraftInput } from "../ui/draft-input";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { SecretInput } from "./SecretInput";
 import { classifySecretProvider } from "./SecretProviderDialog.logic";
+import { useTranslation } from "react-i18next";
 
 export interface SecretSource {
   readonly id: SecretProviderId;
@@ -79,6 +80,7 @@ export function SecretSourceInput({
   children,
   ...rest
 }: SecretSourceInputProps) {
+  const { t } = useTranslation();
   // A provider picked here applies once a reference for it is committed.
   const [pendingProvider, setPendingProvider] = useState<SecretProviderId | null>(null);
   const [rejectedReference, setRejectedReference] = useState<string | null>(null);
@@ -112,8 +114,8 @@ export function SecretSourceInput({
         <SelectTrigger
           size="sm"
           className="w-auto min-w-0 shrink-0"
-          aria-label={`${label} source`}
-          title={provider === null ? "Value" : providerLabel(provider)}
+          aria-label={t("settings.text.labelSource", { label })}
+          title={provider === null ? t("settings.text.value") : providerLabel(provider)}
         >
           <SelectValue>
             <SourceIcon icon={provider === null ? TypeIcon : providerIcon(provider)} />
@@ -121,7 +123,7 @@ export function SecretSourceInput({
         </SelectTrigger>
         <SelectPopup align="start" alignItemWithTrigger={false}>
           <SelectItem value={STORED_VALUE}>
-            <SourceLabel icon={TypeIcon} label="Value" />
+            <SourceLabel icon={TypeIcon} label={t("settings.text.value")} />
           </SelectItem>
           {sources.map((source) => (
             <SelectItem key={source.id} value={source.id}>
@@ -168,12 +170,12 @@ export function SecretSourceInput({
           autoComplete="off"
           placeholder={definition?.referencePlaceholder}
           spellCheck={false}
-          aria-label={`${label} reference`}
+          aria-label={t("settings.text.labelReference", { label })}
           aria-invalid={rejectedReference !== null}
         />
         {rejectedReference !== null ? (
           <p className="text-2xs text-destructive">
-            {definition?.invalidReferenceMessage ?? "Enter a valid secret reference."}
+            {definition?.invalidReferenceMessage ?? t("settings.text.enterAValidSecretReference")}
           </p>
         ) : null}
       </div>
