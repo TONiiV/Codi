@@ -19,7 +19,7 @@ export function normalizeLighthouseSearch(raw: Record<string, unknown>): Lightho
     chat: typeof raw.chat === "string" && raw.chat.length > 0 ? raw.chat : "mine",
     view:
       raw.view === "projects" ||
-      raw.view === "bots" ||
+      raw.view === "teams" ||
       raw.view === "dashboard" ||
       raw.view === "tasks" ||
       raw.view === "decisions" ||

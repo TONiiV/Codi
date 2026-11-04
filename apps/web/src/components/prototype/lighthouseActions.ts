@@ -5,10 +5,11 @@ import { useSyncExternalStore } from "react";
 
 import {
   BOTS,
-  PROJECTS,
+  CHIEF_NAMES,
   PROJECT_COS,
   TASKS,
   VIEWERS,
+  chiefName,
   projectsIn,
   registerProject,
   type LighthouseBot,
@@ -24,21 +25,32 @@ interface Store {
   tickets: Readonly<Record<string, ReadonlyArray<Ticket>>>;
   workers: ReadonlyArray<LighthouseBot>;
   status: Readonly<Record<string, TaskStatus>>;
+  leases: Readonly<Record<string, NonNullable<LighthouseTask["lease"]>>>;
   cos: Readonly<Record<string, CosSetup>>;
   linked: ReadonlyArray<string>;
   version: number;
   request: SideChatRequest | null;
+  teamsTab: TeamsTab;
 }
+
+export type TeamsTab = "mine" | "company" | "skills";
 
 export type CosPower = "ticket" | "worker" | "answer" | "merge";
 
-/** How a project Chief Agent is set up, and what it may do without asking its owner. */
+/**
+ * How one of the viewer's own agents is set up: their Chief of Staff, or their Chief Agent in a
+ * project. Powers are what it may do without asking its owner, capped by the owner's role.
+ */
 export interface CosSetup {
   name: string;
-  owner: string;
   harness: string;
   powers: ReadonlyArray<CosPower>;
   report: "daily" | "weekly";
+  /** Takes a lease on the shared task board before work and writes a report back after. */
+  board: boolean;
+  /** The company main agent may hand it work. */
+  dispatchable: boolean;
+  onDispatch: "start" | "inbox";
 }
 
 /** What the project Chief Agent did when a task was dragged into 进行中. */
@@ -60,10 +72,12 @@ let store: Store = {
   tickets: {},
   workers: [],
   status: {},
+  leases: {},
   cos: {},
   linked: [],
   version: 0,
   request: null,
+  teamsTab: "mine",
 };
 const listeners = new Set<() => void>();
 
@@ -85,10 +99,12 @@ function useStore(): Store {
 function withChanges(s: Store, t: LighthouseTask): LighthouseTask {
   const tickets = s.tickets[t.id];
   const status = s.status[t.id];
-  if (!tickets && !status) return t;
+  const lease = s.leases[t.id];
+  if (!tickets && !status && !lease) return t;
   return {
     ...t,
     ...(status ? { status } : {}),
+    ...(lease ? { lease } : {}),
     tickets: tickets ? [...t.tickets, ...tickets] : t.tickets,
   };
 }
@@ -114,7 +130,7 @@ export function findTask(id: string): LighthouseTask | undefined {
 
 /** The agent that owns a task: its project Chief Agent, or the desk for desk tasks. */
 export function taskAgent(task: LighthouseTask, viewer: LighthouseViewer, workspace: string) {
-  if (task.assignees.some((a) => a.kind === "bot" && a.name === "总台")) return "desk";
+  if (task.assignees.some((a) => a.kind === "bot" && a.name === "公司主 Agent")) return "desk";
   return projectsIn(workspace, viewer).open.includes(task.project) ? task.project : "mine";
 }
 
@@ -128,10 +144,19 @@ export function openTaskInSideChat(chat: string, task: string, kickoff?: Kickoff
  * puts a Worker on its first unclaimed ticket, opening one if needed, or chases the Workers
  * already on it, and reports in the side chat.
  */
-export function moveTask(task: LighthouseTask, status: TaskStatus, chat: string) {
+export function moveTask(
+  task: LighthouseTask,
+  status: TaskStatus,
+  chat: string,
+  viewer: LighthouseViewer,
+) {
   if (task.status === status) return;
   update({ status: { ...store.status, [task.id]: status } });
   if (task.status !== "todo" || status !== "doing") return;
+  if (!task.lease) {
+    const lease = { owner: VIEWERS[viewer].name, until: "12:30" };
+    update({ leases: { ...store.leases, [task.id]: lease } });
+  }
   const busy = task.tickets.find((t) => t.state !== "merged" && t.worker);
   if (busy) {
     openTaskInSideChat(chat, task.id, { ticket: busy, worker: busy.worker!, fresh: false });
@@ -192,18 +217,27 @@ export function createTask(from: LighthouseTask, title: string): LighthouseTask 
   return task;
 }
 
-function defaultCos(project: string): CosSetup {
+const cosKey = (viewer: LighthouseViewer, project: string | null) =>
+  `${viewer}:${project ?? "cos"}`;
+
+// The version argument keeps the React Compiler from caching names read from module data.
+function defaultCos(viewer: LighthouseViewer, project: string | null, _version: number): CosSetup {
   return {
-    name: PROJECT_COS[project]?.name ?? `${project} Chief Agent`,
-    owner: PROJECTS[project]?.lead ?? "Tonic",
+    name: project ? chiefName(viewer, project) : VIEWERS[viewer].cos.name,
     harness: "Codi 滚动线程 / Sonnet",
-    powers: ["ticket", "worker", "answer"],
+    powers: project ? ["ticket", "worker", "answer"] : ["answer"],
     report: "daily",
+    board: true,
+    dispatchable: true,
+    onDispatch: "inbox",
   };
 }
 
-export function useCosSetup(project: string): CosSetup {
-  return useStore().cos[project] ?? defaultCos(project);
+/** `project` null is the viewer's Chief of Staff. */
+export function useCosSetup(viewer: LighthouseViewer, project: string | null): CosSetup {
+  const s = useStore();
+  const saved = s.cos[cosKey(viewer, project)];
+  return saved ? saved : defaultCos(viewer, project, s.version);
 }
 
 /**
@@ -226,17 +260,22 @@ export function useViewer(viewer: LighthouseViewer) {
 /** Only the viewer renames their own Chief of Staff. */
 export function renameChiefOfStaff(viewer: LighthouseViewer, name: string) {
   VIEWERS[viewer].cos = { name };
-  update({ version: store.version + 1 });
+  const key = cosKey(viewer, null);
+  const saved = store.cos[key];
+  update({
+    version: store.version + 1,
+    ...(saved ? { cos: { ...store.cos, [key]: { ...saved, name } } } : {}),
+  });
 }
 
-/** Only a project's own lead renames its Chief Agent; the dialog enforces that. */
-export function saveCos(project: string, setup: CosSetup) {
-  const cos = PROJECT_COS[project];
-  if (cos) PROJECT_COS[project] = { ...cos, name: setup.name };
-  update({ cos: { ...store.cos, [project]: setup }, version: store.version + 1 });
+/** A member renames and sets up only their own agents; nobody else's Chief Agent changes. */
+export function saveCos(viewer: LighthouseViewer, project: string | null, setup: CosSetup) {
+  if (project) CHIEF_NAMES[`${viewer}:${project}`] = setup.name;
+  else VIEWERS[viewer].cos = { name: setup.name };
+  update({ cos: { ...store.cos, [cosKey(viewer, project)]: setup }, version: store.version + 1 });
 }
 
-/** Turns a Code project into a Lighthouse project: same record, plus a project Chief Agent. */
+/** Turns a Code project into a Lighthouse project led by the viewer, with their Chief Agent. */
 export function linkProject(
   source: { title: string; root: string; repo: string; machine: string },
   workspace: string,
@@ -246,13 +285,22 @@ export function linkProject(
   const id = `p${store.linked.length + 1}`;
   registerProject(
     id,
-    { name: source.title, workspace, lead: setup.owner, cos: setup.name, viewer },
+    { name: source.title, workspace, lead: VIEWERS[viewer].name, cos: setup.name, viewer },
     { root: source.root, repo: source.repo, machine: source.machine },
   );
   update({
     linked: [...store.linked, id],
-    cos: { ...store.cos, [id]: setup },
+    cos: { ...store.cos, [cosKey(viewer, id)]: setup },
     version: store.version + 1,
   });
   return id;
+}
+
+/** My Teams has one tab state, shared by its own tabs and the sidebar list next to it. */
+export function useTeamsTab(): TeamsTab {
+  return useStore().teamsTab;
+}
+
+export function setTeamsTab(tab: TeamsTab) {
+  update({ teamsTab: tab });
 }

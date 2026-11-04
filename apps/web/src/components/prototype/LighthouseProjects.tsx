@@ -1,12 +1,13 @@
 // PROTOTYPE, wipe me. Lighthouse projects are Code projects: the same title, workspace root,
-// repository and machine. Adding one goes through Code's own add-project flow; linking it
-// gives it a project Chief Agent, whose owner and powers are set here.
+// repository and machine. Adding one goes through Code's own add-project flow. Every member
+// has their own Chief Agent in each project; here the viewer sets up theirs.
 import { FolderGit2Icon, LockIcon, PencilIcon, PlusIcon, Settings2Icon } from "lucide-react";
-import { useId, useState } from "react";
+import { useState } from "react";
 
 import { openCommandPalette } from "../../commandPaletteBus";
 import { useProjects } from "../../state/entities";
 import { BotAvatar } from "./LighthouseChatList";
+import { AgentDialog, CLOUD, freshSetup, powerSummary } from "./LighthouseTeams";
 import {
   linkProject,
   saveCos,
@@ -14,48 +15,17 @@ import {
   useCosSetup,
   useRegistryVersion,
   useViewer,
-  type CosPower,
-  type CosSetup,
 } from "./lighthouseActions";
 import {
   PROJECT_SOURCE,
   PROJECTS,
-  VIEWERS,
   projectsIn,
+  roleIn,
   type LighthouseViewer,
 } from "./lighthouseData";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
-import { Checkbox } from "../ui/checkbox";
-import {
-  Dialog,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogPanel,
-  DialogPopup,
-  DialogTitle,
-} from "../ui/dialog";
 import { Input } from "../ui/input";
-import { Label } from "../ui/label";
-import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
-
-const POWERS: ReadonlyArray<{ id: CosPower; label: string; hint: string }> = [
-  { id: "ticket", label: "开工单", hint: "把任务拆成工单，挂到任务下面" },
-  { id: "worker", label: "派 Worker", hint: "在项目的机器上起 Worker 接工单" },
-  { id: "answer", label: "回答成员", hint: "用成员自己的权限回答项目里的问题" },
-  { id: "merge", label: "合并 PR", hint: "CI 绿、评审过就合并；关掉时每次都先问负责人" },
-];
-
-const HARNESSES = [
-  "Codi 滚动线程 / Sonnet",
-  "Codi 滚动线程 / Opus",
-  "Claude Code / Sonnet",
-  "Codex / gpt-5",
-];
-// The Chief of Staff and every Chief Agent run here; Workers run where the code is.
-const CLOUD = "公司云服务器 · lighthouse-01";
-const MEMBERS = Object.values(VIEWERS).map((v) => v.name);
 
 interface Source {
   title: string;
@@ -64,154 +34,7 @@ interface Source {
   machine: string;
 }
 
-function CosDialog({
-  title,
-  source,
-  initial,
-  canRename,
-  onSave,
-  onClose,
-}: {
-  title: string;
-  source: Source;
-  initial: CosSetup;
-  canRename: (setup: CosSetup) => boolean;
-  onSave: (setup: CosSetup) => void;
-  onClose: () => void;
-}) {
-  const id = useId();
-  const [setup, setSetup] = useState(initial);
-  const set = <K extends keyof CosSetup>(key: K, value: CosSetup[K]) =>
-    setSetup({ ...setup, [key]: value });
-  const toggle = (power: CosPower, on: boolean) =>
-    set("powers", on ? [...setup.powers, power] : setup.powers.filter((p) => p !== power));
-  return (
-    <Dialog
-      open
-      onOpenChange={(open) => {
-        if (!open) onClose();
-      }}
-    >
-      <DialogPopup className="sm:max-w-lg">
-        <form
-          className="flex min-h-0 flex-col"
-          onSubmit={(event) => {
-            event.preventDefault();
-            onSave(setup);
-          }}
-        >
-          <DialogHeader>
-            <DialogTitle>{title}</DialogTitle>
-            <DialogDescription>
-              {source.title} · {source.root} · {source.repo} · 代码在 {source.machine}
-            </DialogDescription>
-          </DialogHeader>
-          <DialogPanel>
-            <div className="flex flex-col gap-4">
-              <div className="flex items-center gap-3">
-                <BotAvatar seed={setup.name} size="lg" />
-                {canRename(setup) ? (
-                  <Label className="flex flex-1 flex-col items-stretch" htmlFor={`${id}-name`}>
-                    名字
-                    <Input
-                      nativeInput
-                      id={`${id}-name`}
-                      value={setup.name}
-                      onChange={(e) => set("name", e.currentTarget.value)}
-                    />
-                  </Label>
-                ) : (
-                  <div className="flex flex-1 flex-col">
-                    <span className="font-medium">{setup.name}</span>
-                    <span className="text-xs text-muted-foreground">只有项目负责人能改名</span>
-                  </div>
-                )}
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <Label className="flex flex-col items-stretch">
-                  委派给（负责人）
-                  <Select value={setup.owner} onValueChange={(v) => v && set("owner", v)}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectPopup>
-                      {MEMBERS.map((m) => (
-                        <SelectItem key={m} value={m}>
-                          {m}
-                        </SelectItem>
-                      ))}
-                    </SelectPopup>
-                  </Select>
-                </Label>
-                <Label className="flex flex-col items-stretch">
-                  汇报
-                  <Select
-                    value={setup.report}
-                    items={{ daily: "每天早上", weekly: "每周一" }}
-                    onValueChange={(v) => (v === "daily" || v === "weekly") && set("report", v)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectPopup>
-                      <SelectItem value="daily">每天早上</SelectItem>
-                      <SelectItem value="weekly">每周一</SelectItem>
-                    </SelectPopup>
-                  </Select>
-                </Label>
-                <Label className="flex flex-col items-stretch">
-                  Harness / 模型
-                  <Select value={setup.harness} onValueChange={(v) => v && set("harness", v)}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectPopup>
-                      {HARNESSES.map((h) => (
-                        <SelectItem key={h} value={h}>
-                          {h}
-                        </SelectItem>
-                      ))}
-                    </SelectPopup>
-                  </Select>
-                </Label>
-                <div className="flex flex-col gap-1 text-sm">
-                  <span className="font-medium">运行在</span>
-                  <span className="text-muted-foreground">{CLOUD}</span>
-                </div>
-              </div>
-              <fieldset className="flex flex-col gap-2">
-                <legend className="mb-1 text-sm font-medium">不用问 {setup.owner} 就能做</legend>
-                {POWERS.map((p) => (
-                  <label key={p.id} className="flex cursor-pointer items-start gap-2 text-sm">
-                    <Checkbox
-                      checked={setup.powers.includes(p.id)}
-                      onCheckedChange={(on) => toggle(p.id, on)}
-                    />
-                    <span className="flex flex-col">
-                      <span>{p.label}</span>
-                      <span className="text-xs text-muted-foreground">{p.hint}</span>
-                    </span>
-                  </label>
-                ))}
-                <p className="text-xs text-muted-foreground">
-                  没勾的事，Chief Agent 先问 {setup.owner}。它每次动手都以提问人的权限执行并记审计。
-                </p>
-              </fieldset>
-            </div>
-          </DialogPanel>
-          <DialogFooter>
-            <Button type="button" variant="ghost-muted" onClick={onClose}>
-              取消
-            </Button>
-            <Button type="submit" disabled={setup.name.trim().length === 0}>
-              保存
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogPopup>
-    </Dialog>
-  );
-}
+const sourceLine = (s: Source) => `${s.title} · ${s.root} · ${s.repo} · 代码在 ${s.machine}`;
 
 /** Your own Chief of Staff (总幕僚长): only you can rename it. */
 function ChiefOfStaffCard({ viewer, name }: { viewer: LighthouseViewer; name: string }) {
@@ -245,7 +68,7 @@ function ChiefOfStaffCard({ viewer, name }: { viewer: LighthouseViewer; name: st
           </form>
         )}
         <div className="text-xs text-muted-foreground">
-          你的 Chief of Staff（总幕僚长），管你能看到的所有项目 Chief Agent · 运行在 {CLOUD}
+          你的 Chief of Staff（总幕僚长），管你在各个项目里的 Chief Agent · 运行在 {CLOUD}
         </div>
       </div>
       {draft === null ? (
@@ -257,14 +80,16 @@ function ChiefOfStaffCard({ viewer, name }: { viewer: LighthouseViewer; name: st
   );
 }
 
-function powerSummary(setup: CosSetup) {
-  return POWERS.filter((p) => setup.powers.includes(p.id))
-    .map((p) => p.label)
-    .join("、");
-}
-
-function ProjectRow({ id, onEdit }: { id: string; onEdit: () => void }) {
-  const setup = useCosSetup(id);
+function ProjectRow({
+  viewer,
+  id,
+  onEdit,
+}: {
+  viewer: LighthouseViewer;
+  id: string;
+  onEdit: () => void;
+}) {
+  const setup = useCosSetup(viewer, id);
   const source = PROJECT_SOURCE[id];
   return (
     <tr className="border-b last:border-b-0 hover:bg-accent/40">
@@ -286,7 +111,8 @@ function ProjectRow({ id, onEdit }: { id: string; onEdit: () => void }) {
           <span className="flex flex-col">
             <span className="whitespace-nowrap">{setup.name}</span>
             <span className="text-xs text-muted-foreground">
-              委派给 {setup.owner} · 直接做：{powerSummary(setup) || "都先问"}
+              你是{roleIn(viewer, id) === "lead" ? "负责人" : "成员"} · 直接做：
+              {powerSummary(setup) || "都先问"}
             </span>
           </span>
         </span>
@@ -301,7 +127,7 @@ function ProjectRow({ id, onEdit }: { id: string; onEdit: () => void }) {
   );
 }
 
-const HEADS = ["项目", "仓库", "代码所在机器", "Chief Agent（公司云）", ""];
+const HEADS = ["项目", "仓库", "代码所在机器", "你的 Chief Agent（公司云）", ""];
 
 // Registries are module data; passing the version makes the React Compiler recompute.
 const visible = (workspace: string, viewer: LighthouseViewer, _version: number) =>
@@ -324,7 +150,7 @@ export function ProjectsPage({
   const [editing, setEditing] = useState<
     { kind: "edit"; id: string } | { kind: "link"; source: Source } | null
   >(null);
-  const editingSetup = useCosSetup(editing?.kind === "edit" ? editing.id : "");
+  const editingSetup = useCosSetup(viewer, editing?.kind === "edit" ? editing.id : "");
 
   return (
     <div className="flex flex-col gap-8">
@@ -332,7 +158,8 @@ export function ProjectsPage({
         <div>
           <h1 className="text-2xl font-semibold">项目</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            和 Code 里是同一个项目：名字、目录、仓库、机器都一样。Lighthouse 只多一位 Chief Agent。
+            和 Code 里是同一个项目：名字、目录、仓库、机器都一样。每个成员在项目里有自己的 Chief
+            Agent，大家靠同一块任务板对齐。
           </p>
         </div>
         <Button size="sm" onClick={() => openCommandPalette({ open: "add-project" })}>
@@ -357,7 +184,12 @@ export function ProjectsPage({
             </thead>
             <tbody>
               {open.map((id) => (
-                <ProjectRow key={id} id={id} onEdit={() => setEditing({ kind: "edit", id })} />
+                <ProjectRow
+                  key={id}
+                  viewer={viewer}
+                  id={id}
+                  onEdit={() => setEditing({ kind: "edit", id })}
+                />
               ))}
             </tbody>
           </table>
@@ -421,33 +253,27 @@ export function ProjectsPage({
       </section>
 
       {editing?.kind === "edit" ? (
-        <CosDialog
-          title="设定 Chief Agent"
-          source={{
+        <AgentDialog
+          title="设定你的 Chief Agent"
+          subtitle={sourceLine({
             title: PROJECTS[editing.id]?.name ?? editing.id,
             ...(PROJECT_SOURCE[editing.id] ?? { root: "", repo: "", machine: "" }),
-          }}
+          })}
+          role={roleIn(viewer, editing.id)}
           initial={editingSetup}
-          canRename={() => PROJECTS[editing.id]?.lead === me.name}
           onClose={() => setEditing(null)}
           onSave={(setup) => {
-            saveCos(editing.id, setup);
+            saveCos(viewer, editing.id, setup);
             setEditing(null);
           }}
         />
       ) : null}
       {editing?.kind === "link" ? (
-        <CosDialog
+        <AgentDialog
           title={`接入 ${editing.source.title}`}
-          source={editing.source}
-          initial={{
-            name: `${editing.source.title} Chief Agent`,
-            owner: me.name,
-            harness: HARNESSES[0]!,
-            powers: ["ticket", "worker", "answer"],
-            report: "daily",
-          }}
-          canRename={(setup) => setup.owner === me.name}
+          subtitle={`${sourceLine(editing.source)}。你是负责人；其他成员加入后各有自己的 Chief Agent。`}
+          role="lead"
+          initial={freshSetup(`${editing.source.title} Chief Agent`)}
           onClose={() => setEditing(null)}
           onSave={(setup) => {
             linkProject(editing.source, workspace, viewer, setup);

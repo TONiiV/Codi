@@ -11,11 +11,12 @@ import { LighthousePanel } from "./LighthousePanel";
 import { ChatComposerCard, ChatTimeline, type ChatMessage } from "./LighthouseChat";
 import {
   ASKS,
-  PROJECT_COS,
   PROJECTS,
   VIEWERS,
   WORKERS,
   WORKSPACES,
+  chiefName,
+  companyAgent,
   projectsIn,
   type LighthouseViewer,
 } from "./lighthouseData";
@@ -24,13 +25,14 @@ import { RAIL_ITEMS } from "./LighthouseRail";
 import { useRegistryVersion, useViewer } from "./lighthouseActions";
 import { TasksPage } from "./LighthouseTasks";
 import { DashboardPage } from "./LighthouseDashboard";
-import { BotsPage } from "./LighthouseWork";
+import { TeamsPage } from "./LighthouseTeams";
 import { DecisionsPage } from "./LighthouseDecisions";
 import { ProjectsPage } from "./LighthouseProjects";
 import { useWorkspaceId } from "./workspaceStore";
 
-// Chief Agent names can change at runtime; the version argument keeps the compiler honest.
-const chiefAgentName = (chat: string, _version: number) => PROJECT_COS[chat]?.name ?? chat;
+// Names can change at runtime; the version argument keeps the compiler honest.
+const agentName = (viewer: LighthouseViewer, chat: string, _version: number) =>
+  companyAgent(chat)?.name ?? chiefName(viewer, chat);
 import { PullRequestGlyph } from "../pullRequest/pullRequestIcons";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
@@ -199,9 +201,31 @@ function conversation(
 ): ReadonlyArray<ChatMessage> {
   const v = useViewer(viewer);
   const { open, locked } = projectsIn(workspace, viewer);
+  const company = companyAgent(chat);
+  if (company) {
+    return [
+      {
+        id: "a1",
+        role: "assistant",
+        author: company.name,
+        body: (
+          <div className="flex flex-col gap-2">
+            <span>
+              我是公司的{company.dept} agent，归 {company.owner}。我按你的权限回答，能帮你：
+            </span>
+            <ul className="list-disc ps-5">
+              {company.can.map((c) => (
+                <li key={c}>{c}</li>
+              ))}
+            </ul>
+          </div>
+        ),
+      },
+    ];
+  }
   if (chat !== "mine") {
     const p = PROJECTS[chat];
-    const cos = PROJECT_COS[chat]?.name ?? chat;
+    const cos = chiefName(viewer, chat);
     if (!p) return [];
     return [
       { id: "a1", role: "assistant", author: cos, body: p.line },
@@ -260,7 +284,7 @@ function ChatPage({
   const v = useViewer(viewer);
   const version = useRegistryVersion();
   const asks = asksFor(viewer, workspace, chat === "mine" ? undefined : chat);
-  const cosName = chat === "mine" ? v.cos.name : chiefAgentName(chat, version);
+  const cosName = chat === "mine" ? v.cos.name : agentName(viewer, chat, version);
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="min-h-0 flex-1 overflow-y-auto scrollbar-gutter-both">
@@ -329,11 +353,12 @@ export function LighthousePrototypePage({ background }: { background?: boolean }
   const openProjects = projectsIn(workspace, viewer).open;
   // A project chat from another workspace falls back to the viewer's Chief of Staff (总幕僚长).
   const chat =
-    search.chat === "mine" || search.chat === "desk" || openProjects.includes(search.chat)
+    search.chat === "mine" ||
+    companyAgent(search.chat) !== undefined ||
+    openProjects.includes(search.chat)
       ? search.chat
       : "mine";
-  const chatName =
-    chat === "mine" ? v.cos.name : chat === "desk" ? "总台" : chiefAgentName(chat, version);
+  const chatName = chat === "mine" ? v.cos.name : agentName(viewer, chat, version);
   const viewLabel =
     view === "members" ? "成员与授权" : (RAIL_ITEMS.find((r) => r.id === view)?.label ?? view);
 
@@ -383,7 +408,7 @@ export function LighthousePrototypePage({ background }: { background?: boolean }
                       ? "px-8 pt-10"
                       : view === "decisions"
                         ? "mx-auto max-w-3xl px-5 pt-10"
-                        : view === "projects"
+                        : view === "projects" || view === "teams"
                           ? "mx-auto max-w-5xl px-5 pt-10"
                           : "mx-auto max-w-5xl px-5",
                   )}
@@ -391,7 +416,7 @@ export function LighthousePrototypePage({ background }: { background?: boolean }
                   {view === "projects" ? (
                     <ProjectsPage viewer={viewer} workspace={workspace} />
                   ) : null}
-                  {view === "bots" ? <BotsPage viewer={viewer} workspace={workspace} /> : null}
+                  {view === "teams" ? <TeamsPage viewer={viewer} workspace={workspace} /> : null}
                   {view === "dashboard" ? (
                     <DashboardPage viewer={viewer} workspace={workspace} />
                   ) : null}

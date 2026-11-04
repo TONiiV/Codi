@@ -147,6 +147,88 @@ export const PROJECT_COS: Record<string, { name: string; tone: string }> = {
   tactile: { name: "触觉 Chief Agent", tone: "bg-success" },
 };
 
+/** Each member has their own Chief Agent per project; key is `${viewer}:${project}`. */
+export const CHIEF_NAMES: Record<string, string> = {};
+
+export function chiefName(viewer: LighthouseViewer, project: string): string {
+  return CHIEF_NAMES[`${viewer}:${project}`] ?? PROJECT_COS[project]?.name ?? project;
+}
+
+/** A member's role in a project caps what their own Chief Agent may do. */
+export function roleIn(viewer: LighthouseViewer, project: string): "lead" | "member" {
+  return PROJECTS[project]?.lead === VIEWERS[viewer].name ? "lead" : "member";
+}
+
+export interface CompanyAgent {
+  id: string;
+  name: string;
+  dept: string;
+  owner: string;
+  can: ReadonlyArray<string>;
+  last: string;
+}
+
+/** Company agents belong to the company, not to a member. "desk" is the router and desk in one. */
+export const COMPANY_AGENTS: ReadonlyArray<CompanyAgent> = [
+  {
+    id: "desk",
+    name: "公司主 Agent",
+    dept: "路由 + 总台",
+    owner: "Tonic · 管理员",
+    can: [
+      "把 IM、邮件、Webhook 进来的消息分给对的人和 agent",
+      "按你的权限回答公司里的问题",
+      "你允许时，给你的 Chief of Staff 派活",
+      "读任务板，出周报",
+    ],
+    last: "本周周报已整理。",
+  },
+  {
+    id: "hr",
+    name: "人事 Agent",
+    dept: "人事 HR",
+    owner: "人事部 · Lin",
+    can: ["入职和离职清单", "请假、考勤问题", "按职级讲薪酬政策，不给具体数字"],
+    last: "11 月考勤已出。",
+  },
+  {
+    id: "finance",
+    name: "财务 Agent",
+    dept: "财务",
+    owner: "财务部 · Zhou",
+    can: ["检查报销单", "发票抬头和税号", "查你项目的预算余额"],
+    last: "报销截止到 11/10。",
+  },
+  {
+    id: "legal",
+    name: "法务 Agent",
+    dept: "法务",
+    owner: "法务部 · Wen",
+    can: ["合同模板和条款比对", "开源许可检查", "NDA 流程"],
+    last: "新版 NDA 模板已上线。",
+  },
+  {
+    id: "it",
+    name: "IT Agent",
+    dept: "IT",
+    owner: "IT · Tonic",
+    can: ["账号和权限申请", "设备、VPN", "公司服务器和沙箱配额"],
+    last: "lighthouse-01 磁盘 62%。",
+  },
+  {
+    id: "office",
+    name: "行政 Agent",
+    dept: "行政",
+    owner: "行政部 · Su",
+    can: ["会议室和差旅", "快递、办公用品"],
+    last: "周五下午消防演练。",
+  },
+];
+
+export function companyAgent(id: string): CompanyAgent | undefined {
+  return COMPANY_AGENTS.find((a) => a.id === id);
+}
+
 export interface LighthouseAsk {
   kind: "merge" | "question";
   project: string;
@@ -283,6 +365,7 @@ export interface LighthouseChat {
   unread: number;
   online: boolean;
   readOnly?: boolean;
+  company?: boolean;
 }
 
 const LAST_LINE: Record<string, { last: string; time: string; unread: number }> = {
@@ -334,28 +417,29 @@ export function chatsFor(
   };
   const projects = open.map((id) => ({
     id,
-    name: PROJECT_COS[id]!.name,
+    name: chiefName(viewer, id),
     tone: PROJECT_COS[id]!.tone,
     online: true,
     ...LAST_LINE[id]!,
   }));
-  const desk: LighthouseChat = {
-    id: "desk",
-    name: "总台",
+  const company = COMPANY_AGENTS.map((a): LighthouseChat => ({
+    id: a.id,
+    name: a.name,
     tone: "bg-muted-foreground",
-    last: "本周周报已整理。",
-    time: "09:00",
+    last: a.last,
+    time: a.id === "desk" ? "09:00" : "昨天",
     unread: 0,
     online: true,
-    readOnly: true,
-  };
-  return [mine, ...projects, desk];
+    company: true,
+    ...(a.id === "desk" ? { readOnly: true } : {}),
+  }));
+  return [mine, ...projects, ...company];
 }
 
 export type LighthouseView =
   | "chats"
   | "projects"
-  | "bots"
+  | "teams"
   | "dashboard"
   | "tasks"
   | "decisions"
@@ -405,6 +489,10 @@ const B = (name: string, tone: string): TaskAssignee => ({ kind: "bot", name, to
 
 export interface LighthouseTask {
   id: string;
+  /** Whose Chief Agent holds the task on the board right now, and until when. */
+  lease?: { owner: string; until: string };
+  /** What the leaseholder wrote back when it finished. */
+  report?: string;
   title: string;
   project: string;
   status: TaskStatus;
@@ -424,6 +512,7 @@ export interface LighthouseTask {
 const TONIIV_TASKS: ReadonlyArray<LighthouseTask> = [
   {
     id: "T-12",
+    lease: { owner: "Keting Chen", until: "11:00" },
     title: "官网 RSS 与封面图",
     project: "site",
     status: "review",
@@ -439,6 +528,7 @@ const TONIIV_TASKS: ReadonlyArray<LighthouseTask> = [
   },
   {
     id: "T-15",
+    lease: { owner: "Tonic", until: "11:30" },
     title: "Webhook 入口签名校验",
     project: "codi",
     status: "doing",
@@ -455,6 +545,7 @@ const TONIIV_TASKS: ReadonlyArray<LighthouseTask> = [
   },
   {
     id: "T-18",
+    lease: { owner: "Max", until: "12:00" },
     title: "移动端离线缓存",
     project: "app",
     status: "doing",
@@ -467,7 +558,7 @@ const TONIIV_TASKS: ReadonlyArray<LighthouseTask> = [
   },
   {
     id: "T-09",
-    title: "企微 Bot 接入总台",
+    title: "企微 Bot 接入公司主 Agent",
     project: "codi",
     status: "todo",
     assignees: [B("Codi Chief Agent", "bg-primary")],
@@ -482,6 +573,7 @@ const TONIIV_TASKS: ReadonlyArray<LighthouseTask> = [
   },
   {
     id: "T-21",
+    report: "flex gap 回退，PR #88 已合并；决定记入官网决定链 s4。",
     title: "价格页 Safari 错位",
     project: "site",
     status: "done",
@@ -493,6 +585,7 @@ const TONIIV_TASKS: ReadonlyArray<LighthouseTask> = [
   },
   {
     id: "T-07",
+    report: "Logo、色板、首页都已上线；品牌规范放在 site/docs/brand.md。",
     title: "Fold 品牌落地",
     project: "site",
     status: "done",
@@ -533,7 +626,7 @@ const TONIIV_TASKS: ReadonlyArray<LighthouseTask> = [
     title: "周报模板",
     project: "codi",
     status: "doing",
-    assignees: [B("总台", "bg-muted-foreground")],
+    assignees: [B("公司主 Agent", "bg-muted-foreground")],
     priority: "low",
     type: "polish",
     tickets: [],
@@ -554,6 +647,7 @@ const DIMX_TASKS: ReadonlyArray<LighthouseTask> = [
   },
   {
     id: "D-02",
+    report: "结构和选型定稿，BOM 在 gripper#2。",
     title: "夹爪 Demo 硬件设计",
     project: "gripper",
     status: "done",
@@ -564,6 +658,7 @@ const DIMX_TASKS: ReadonlyArray<LighthouseTask> = [
   },
   {
     id: "D-03",
+    lease: { owner: "Tonic", until: "15:00" },
     title: "夹爪 Demo 软件开发",
     project: "gripper",
     status: "doing",
@@ -582,6 +677,7 @@ const DIMX_TASKS: ReadonlyArray<LighthouseTask> = [
   },
   {
     id: "D-05",
+    report: "四路都通，BLE 20 Hz 稳定；接线图在 tactile#1。",
     title: "ESP32-S3 四路电阻式传感器 + BLE Demo",
     project: "tactile",
     status: "done",
@@ -593,6 +689,7 @@ const DIMX_TASKS: ReadonlyArray<LighthouseTask> = [
   },
   {
     id: "D-06",
+    lease: { owner: "Max", until: "18:00" },
     title: "护膝膝关节角度 Demo（电阻 + 电容，2 天方案）",
     project: "tactile",
     status: "doing",
@@ -617,7 +714,7 @@ export const TASKS: ReadonlyArray<LighthouseTask> = [...TONIIV_TASKS, ...DIMX_TA
 export interface LighthouseBot {
   id: string;
   name: string;
-  kind: "cos" | "desk" | "router" | "worker";
+  kind: "cos" | "desk" | "worker";
   tone: string;
   harness: string;
   where: string;
@@ -629,23 +726,13 @@ export interface LighthouseBot {
 
 export const BOTS: ReadonlyArray<LighthouseBot> = [
   {
-    id: "router",
-    name: "Lighthouse 路由",
-    kind: "router",
-    tone: "bg-foreground",
-    harness: "Codi 常驻线程 / Haiku",
-    where: "公司云 · lighthouse-01",
-    status: "盯 6 个信道，今天分发 14 条",
-    online: true,
-  },
-  {
     id: "desk",
-    name: "总台",
+    name: "公司主 Agent",
     kind: "desk",
     tone: "bg-muted-foreground",
-    harness: "Codi 线程 / Sonnet",
+    harness: "Codi 常驻线程 / Sonnet",
     where: "公司云 · lighthouse-01",
-    status: "只读，按权限过滤",
+    status: "盯 6 个信道，今天分发 14 条",
     online: true,
     chat: "desk",
   },

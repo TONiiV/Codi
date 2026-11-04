@@ -1,7 +1,8 @@
-// PROTOTYPE, wipe me. Teams-style vertical rail on the Work tab: chats, bots, dashboard, tasks, decisions.
+// PROTOTYPE, wipe me. Teams-style vertical rail on the Work tab: chats, projects, My Teams, dashboard, tasks, decisions.
 import { useNavigate } from "@tanstack/react-router";
 import {
   BotIcon,
+  UsersRoundIcon,
   FolderGit2Icon,
   GitBranchIcon,
   LayoutDashboardIcon,
@@ -24,7 +25,7 @@ export const RAIL_ITEMS: ReadonlyArray<{
 }> = [
   { id: "chats", label: "对话", icon: MessagesSquareIcon, badge: 4 },
   { id: "projects", label: "项目", icon: FolderGit2Icon },
-  { id: "bots", label: "Bots", icon: BotIcon },
+  { id: "teams", label: "My Teams", icon: UsersRoundIcon },
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboardIcon },
   { id: "tasks", label: "任务", icon: ListChecksIcon, badge: 2 },
   { id: "decisions", label: "决定", icon: GitBranchIcon },

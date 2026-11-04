@@ -78,8 +78,8 @@ const LAUNCH = [
 
 const OPENING_LINE: Record<LighthouseView, string> = {
   chats: "要我先看哪件？",
-  projects: "要接入哪个项目，或者改哪位 Chief Agent 的权限？",
-  bots: "要重启哪个，或者给哪个项目加 Worker？",
+  projects: "要接入哪个项目，或者改你哪位 Chief Agent 的权限？",
+  teams: "要改哪个 agent 的权限，还是找哪个公司 agent？",
   dashboard: "要我解释哪个数字？",
   tasks: "改状态、加工单、改派 Worker，说一句就行。",
   decisions: "要追溯哪个决定？",

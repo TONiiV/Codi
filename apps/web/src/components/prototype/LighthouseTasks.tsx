@@ -32,6 +32,8 @@ import {
   TASK_PRIORITY,
   TASK_STATUS,
   TASK_TYPE,
+  VIEWERS,
+  chiefName,
   projectsIn,
   type LighthouseTask,
   type LighthouseViewer,
@@ -333,6 +335,27 @@ function Checklist({ tasks }: { tasks: ReadonlyArray<LighthouseTask> }) {
   );
 }
 
+/** The board is the shared context: who holds a task now, and what the holder reported back. */
+function BoardLine({ task }: { task: LighthouseTask }) {
+  const search = useLighthouseSearch() ?? normalizeLighthouseSearch({});
+  if (task.status === "done" && task.report) {
+    return (
+      <span className="rounded-md bg-success/8 px-2 py-1 text-xs text-muted-foreground">
+        汇报：{task.report}
+      </span>
+    );
+  }
+  if (task.status === "done" || !task.lease) return null;
+  const mine = task.lease.owner === VIEWERS[search.as].name;
+  return (
+    <span className="text-xs text-muted-foreground">
+      租约：
+      {mine ? `你的 ${chiefName(search.as, task.project)}` : `${task.lease.owner} 的 Chief Agent`} ·
+      至 {task.lease.until}
+    </span>
+  );
+}
+
 function TaskCard({ task, draggable }: { task: LighthouseTask; draggable?: boolean }) {
   return (
     <div
@@ -386,6 +409,7 @@ function TaskCard({ task, draggable }: { task: LighthouseTask; draggable?: boole
           ))}
         </span>
       ) : null}
+      <BoardLine task={task} />
     </div>
   );
 }
@@ -434,7 +458,7 @@ function StatusBoard({ tasks }: { tasks: ReadonlyArray<LighthouseTask> }) {
               event.preventDefault();
               setOver(null);
               const task = tasks.find((t) => t.id === event.dataTransfer.getData("text/plain"));
-              if (task) moveTask(task, s, taskAgent(task, search.as, workspace));
+              if (task) moveTask(task, s, taskAgent(task, search.as, workspace), search.as);
             }}
             className={cn(
               "flex w-72 shrink-0 flex-col gap-2 rounded-xl p-2",

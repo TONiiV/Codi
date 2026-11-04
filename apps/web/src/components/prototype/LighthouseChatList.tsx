@@ -1,5 +1,6 @@
 // PROTOTYPE, wipe me. On the Work tab the real sidebar body becomes a Teams-style list of
-// chats: the viewer's Chief of Staff (总幕僚长), the project Chief Agent, and the company desk.
+// chats: the viewer's Chief of Staff (总幕僚长), their own Chief Agent in each project, and the
+// company's agents (the main agent plus department agents), which are a separate set.
 import { useNavigate } from "@tanstack/react-router";
 import { Fragment } from "react";
 
@@ -7,7 +8,7 @@ import { cn } from "../../lib/utils";
 import { Badge } from "../ui/badge";
 import { SidebarGroup, SidebarMenu, SidebarMenuButton, SidebarMenuItem } from "../ui/sidebar";
 import { useRegistryVersion } from "./lighthouseActions";
-import { chatsFor, type LighthouseViewer } from "./lighthouseData";
+import { chatsFor, type LighthouseChat, type LighthouseViewer } from "./lighthouseData";
 import { Bloub, type AgentState } from "./LighthouseBloub";
 import { normalizeLighthouseSearch, useLighthouseSearch } from "./lighthouseLocation";
 import { useWorkspaceId } from "./workspaceStore";
@@ -35,11 +36,13 @@ export function BotAvatar({
 const chatsWith = (viewer: LighthouseViewer, workspace: string, _version: number) =>
   chatsFor(viewer, workspace);
 
-// "mine" is the viewer's Chief of Staff (总幕僚长); the project Chief Agent report to it.
 const SECTIONS = [
-  { label: "Chief of Staff · 总幕僚长", has: (id: string) => id === "mine" },
-  { label: "项目 Chief Agent", has: (id: string) => id !== "mine" && id !== "desk" },
-  { label: "公司", has: (id: string) => id === "desk" },
+  { label: "Chief of Staff · 总幕僚长", has: (c: LighthouseChat) => c.id === "mine" },
+  {
+    label: "我的 Chief Agent",
+    has: (c: LighthouseChat) => c.id !== "mine" && c.company !== true,
+  },
+  { label: "公司 agents", has: (c: LighthouseChat) => c.company === true },
 ];
 
 export function LighthouseChatList() {
@@ -52,7 +55,7 @@ export function LighthouseChatList() {
   return (
     <SidebarGroup className="flex-1" role="presentation">
       {SECTIONS.map((section) => {
-        const rows = chats.filter((c) => section.has(c.id));
+        const rows = chats.filter(section.has);
         return rows.length === 0 ? null : (
           <Fragment key={section.label}>
             <div className="px-2 pt-1 pb-2 text-xs font-medium text-sidebar-muted-foreground">
