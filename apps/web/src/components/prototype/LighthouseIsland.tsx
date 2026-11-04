@@ -5,8 +5,9 @@ import { useNavigate } from "@tanstack/react-router";
 import { useId, type CSSProperties, type SVGProps } from "react";
 
 import { cn } from "../../lib/utils";
+import { AdhdIsland } from "./AdhdIsland";
 import { AdhdMode } from "./AdhdMode";
-import { openAdhdPicker } from "./adhdStore";
+import { openAdhdPicker, useAdhd } from "./adhdStore";
 import { useLighthouseSearch } from "./lighthouseLocation";
 
 // Hover animations are scoped to each segment's own group, so they run only while that segment is
@@ -272,6 +273,7 @@ function FidgetLabel() {
 export function LighthouseIsland() {
   const navigate = useNavigate();
   const onWork = useLighthouseSearch() !== null;
+  const inSession = ["adhd", "next"].includes(useAdhd().phase);
   const Current = onWork ? TelescopeGlyph : MicroscopeGlyph;
   const modes = [
     {
@@ -302,9 +304,13 @@ export function LighthouseIsland() {
     <>
       {/* Outside the island: its translate would make the full-screen page relative to it. */}
       <AdhdMode />
+      {inSession ? <AdhdIsland /> : null}
       {/* The wrapper is the "near" zone: larger than the resting capsule, so the island opens
     before the pointer is on it. */}
-      <div className="group/island fixed top-(--workspace-controls-top) left-1/2 z-50 flex h-(--workspace-topbar-height) w-104 -translate-x-1/2 items-center justify-center [-webkit-app-region:no-drag]">
+      <div
+        hidden={inSession}
+        className="group/island fixed top-(--workspace-controls-top) left-1/2 z-50 flex h-(--workspace-topbar-height) w-104 -translate-x-1/2 items-center justify-center [-webkit-app-region:no-drag]"
+      >
         <div
           role="group"
           aria-label="Telescope, ADHD or Microscope"

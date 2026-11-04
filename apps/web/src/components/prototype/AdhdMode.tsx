@@ -1,6 +1,7 @@
 // PROTOTYPE, wipe me. ADHD mode, opened from the island. Pick one project and one task, then the
-// whole screen is that task's thread with its owning agent until it is done. Three layouts are
-// on trial behind the 演示 switch (?adhd=a|b|c).
+// screen becomes a Microscope-style single thread with that task's owning agent, the right panel
+// kept and the left sidebar covered, until it is done. Task status lives in the island.
+import { CheckIcon, CoffeeIcon } from "lucide-react";
 import { useState } from "react";
 
 import { cn } from "../../lib/utils";
@@ -15,26 +16,20 @@ import {
   DialogPopup,
   DialogTitle,
 } from "../ui/dialog";
-import { AdhdVariantA } from "./AdhdVariantA";
-import { AdhdVariantB } from "./AdhdVariantB";
-import { AdhdVariantC } from "./AdhdVariantC";
 import {
   DemoBar,
-  useFinishTask,
+  ThreadScroller,
+  useAdhdTask,
+  useNextTasks,
   useTaskAgent,
   useTaskThread,
   useViewerAndProjects,
 } from "./AdhdParts";
-import {
-  leaveAdhd,
-  projectName,
-  recommend,
-  startAdhd,
-  useAdhd,
-  type AdhdVariant,
-} from "./adhdStore";
+import { leaveAdhd, projectName, recommend, startAdhd, useAdhd } from "./adhdStore";
+import { ChatComposerCard, type ChatMessage } from "./LighthouseChat";
 import { useAllTasks } from "./lighthouseActions";
 import { TASK_PRIORITY, TASK_STATUS, type LighthouseTask } from "./lighthouseData";
+import { LighthousePanel } from "./LighthousePanel";
 
 function AdhdPicker() {
   const { projects } = useViewerAndProjects();
@@ -144,41 +139,91 @@ function AdhdPicker() {
   );
 }
 
-const VARIANTS = { a: AdhdVariantA, b: AdhdVariantB, c: AdhdVariantC };
+function useDoneMessage(agent: string): ChatMessage {
+  const { done, next } = useNextTasks();
+  return {
+    id: "a-done",
+    role: "assistant",
+    author: agent,
+    body: (
+      <div className="flex flex-col gap-2">
+        <p>
+          <CheckIcon className="me-1 inline size-4 text-success" />
+          搞定，{done ? `「${done.title}」` : "这个任务"}已经标成完成。下一件只挑一个：
+        </p>
+        <div aria-label="下一个推荐任务" className="flex flex-col divide-y rounded-lg border">
+          {next.length === 0 ? (
+            <p className="px-3 py-2 text-muted-foreground">没有待办的任务了。</p>
+          ) : (
+            next.map((t, i) => (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => startAdhd(t.project, t.id)}
+                className="flex items-center gap-3 px-3 py-2 text-left outline-none transition-colors first:rounded-t-lg last:rounded-b-lg hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+              >
+                <span className="font-mono text-xs text-muted-foreground">{t.id}</span>
+                <span className="min-w-0 flex-1 truncate">{t.title}</span>
+                <span className="shrink-0 text-xs text-muted-foreground">
+                  {projectName(t.project)}
+                </span>
+                {i === 0 ? (
+                  <Badge size="sm" variant="success">
+                    推荐
+                  </Badge>
+                ) : null}
+              </button>
+            ))
+          )}
+        </div>
+      </div>
+    ),
+  };
+}
 
-/** Holds the thread above the variant, so switching layouts keeps the conversation. */
-function AdhdSession({
-  task,
-  done,
-  variant,
-}: {
-  task: LighthouseTask;
-  done: boolean;
-  variant: AdhdVariant;
-}) {
+function AdhdSession({ task, done }: { task: LighthouseTask; done: boolean }) {
+  const { viewer, workspace } = useViewerAndProjects();
   const agent = useTaskAgent(task);
   const thread = useTaskThread(task, agent.name);
-  const onFinish = useFinishTask(task, agent);
-  const Variant = VARIANTS[variant];
-  return <Variant task={task} agent={agent} thread={thread} done={done} onFinish={onFinish} />;
+  const doneMessage = useDoneMessage(agent.name);
+  return (
+    <LighthousePanel viewer={viewer} workspace={workspace} view="chats" mainChat={agent.id}>
+      <header className="flex h-(--workspace-topbar-height) min-h-(--workspace-topbar-height) shrink-0 items-center px-5 text-sm text-muted-foreground">
+        ADHD 模式 · {projectName(task.project)}
+      </header>
+      {/* The top padding keeps the first messages clear of popups dropping from the island. */}
+      <ThreadScroller
+        messages={done ? [...thread.messages, doneMessage] : thread.messages}
+        className="pt-24 pb-6"
+      />
+      <div className="mx-auto w-full max-w-(--chat-content-max-width) px-5 pb-4">
+        {done ? (
+          <Button variant="outline" onClick={leaveAdhd}>
+            <CoffeeIcon />
+            休息一下
+          </Button>
+        ) : (
+          <ChatComposerCard placeholder={`对 ${agent.name} 说`} onSend={thread.send} autoFocus />
+        )}
+      </div>
+    </LighthousePanel>
+  );
 }
 
 export function AdhdMode() {
   const adhd = useAdhd();
-  const tasks = useAllTasks();
-  if (adhd.phase === "idle") return null;
+  const current = useAdhdTask();
   if (adhd.phase === "pick") return <AdhdPicker />;
-  const task = tasks.find((t) => t.id === (adhd.phase === "adhd" ? adhd.task : adhd.finished));
-  if (!task) return null;
+  if (!current) return null;
+  // Not modal: the island, which carries the task status, sits outside this subtree.
   return (
     <div
-      role="dialog"
-      aria-modal="true"
+      role="region"
       aria-label="ADHD 模式"
       className="fixed inset-0 z-60 flex flex-col bg-background"
     >
-      <AdhdSession key={task.id} task={task} done={adhd.phase === "next"} variant={adhd.variant} />
-      <DemoBar />
+      <AdhdSession key={current.task.id} task={current.task} done={current.done} />
+      {current.done ? null : <DemoBar />}
     </div>
   );
 }

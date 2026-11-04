@@ -1,6 +1,5 @@
-// PROTOTYPE, wipe me. Pieces every ADHD mode variant shares: the task thread with its owning
-// agent, the short-lived milestone and achievement popups, the achievements popover, the next-task
-// list and the 演示 bar. Each variant only decides where these sit.
+// PROTOTYPE, wipe me. ADHD mode pieces: the task thread with its owning agent, the short-lived
+// milestone and achievement popups, the achievements popover, the next-task list and the 演示 bar.
 import { FastForwardIcon, SparklesIcon, TrophyIcon } from "lucide-react";
 import { useState, type CSSProperties, type ReactElement } from "react";
 
@@ -8,14 +7,12 @@ import { cn } from "../../lib/utils";
 import { Button } from "../ui/button";
 import { Popover, PopoverPopup, PopoverTrigger } from "../ui/popover";
 import {
-  ADHD_VARIANTS,
   finishAdhdTask,
   SESSION_ACHIEVEMENTS,
   TOTAL_ACHIEVEMENTS,
   achievementProgress,
   formatDuration,
   recommend,
-  setAdhdVariant,
   skipFiveMinutes,
   useAdhd,
   type AdhdToast,
@@ -144,10 +141,12 @@ export function ThreadScroller({
   className?: string;
 }) {
   return (
-    <div className={cn("min-h-0 flex-1 overflow-y-auto", className)}>
-      <ChatTimeline messages={messages} />
-      {/* Keyed by count, so each new message remounts it and scrolls the thread down. */}
-      <div key={messages.length} ref={(el) => el?.scrollIntoView({ block: "end" })} />
+    <div className="min-h-0 flex-1 overflow-y-auto scrollbar-gutter-both">
+      <div className={cn("mx-auto w-full max-w-(--chat-content-max-width) px-5", className)}>
+        <ChatTimeline messages={messages} />
+        {/* Keyed by count, so each new message remounts it and scrolls the thread down. */}
+        <div key={messages.length} ref={(el) => el?.scrollIntoView({ block: "end" })} />
+      </div>
     </div>
   );
 }
@@ -242,21 +241,12 @@ function ToastCard({ toast, from }: { toast: AdhdToast; from: string }) {
 
 /**
  * The popups live in a polite live region with nothing focusable, so they never take focus from
- * the composer. Each variant positions the stack and says which way a popup slides in.
+ * the composer. The caller positions the stack and says which way a popup slides in.
  */
-export function ToastStack({
-  className,
-  style,
-  from,
-}: {
-  className?: string;
-  style?: CSSProperties;
-  from: string;
-}) {
+export function ToastStack({ className, from }: { className?: string; from: string }) {
   const { toasts } = useAdhd();
   return (
     <div
-      style={style}
       role="status"
       aria-live="polite"
       className={cn("pointer-events-none flex flex-col gap-2", className)}
@@ -326,13 +316,15 @@ export function AchievementsButton({
   trigger,
   side = "bottom",
   align = "end",
+  onOpenChange,
 }: {
   trigger: ReactElement;
   side?: "bottom" | "top" | "right";
   align?: "start" | "end" | "center";
+  onOpenChange?: (open: boolean) => void;
 }) {
   return (
-    <Popover>
+    <Popover {...(onOpenChange ? { onOpenChange } : {})}>
       <PopoverTrigger aria-label="成就" render={trigger}>
         <TrophyIcon />
       </PopoverTrigger>
@@ -341,6 +333,16 @@ export function AchievementsButton({
       </PopoverPopup>
     </Popover>
   );
+}
+
+/** The task on screen: the one in progress, or the one just finished while picking the next. */
+export function useAdhdTask() {
+  const adhd = useAdhd();
+  const tasks = useAllTasks();
+  if (adhd.phase !== "adhd" && adhd.phase !== "next") return null;
+  const id = adhd.phase === "adhd" ? adhd.task : adhd.finished;
+  const task = tasks.find((t) => t.id === id);
+  return task ? { task, done: adhd.phase === "next" } : null;
 }
 
 /** Same project first, then the rest; the first one is the recommendation. */
@@ -359,41 +361,17 @@ export function useNextTasks(limit = 4) {
   };
 }
 
-/** Prototype only: variant switch and time fast-forward, kept small and out of the way. */
+/** Prototype only: fast-forward so the milestones can be shown, kept small and out of the way. */
 export function DemoBar() {
-  const adhd = useAdhd();
   return (
     <div className="fixed bottom-3 left-3 flex items-center gap-1 rounded-lg border border-dashed bg-background/90 p-1 text-xs text-muted-foreground">
       <span className="px-1.5">演示</span>
-      {ADHD_VARIANTS.map((v) => (
-        <Button
-          key={v.id}
-          size="xs"
-          variant={adhd.variant === v.id ? "secondary" : "ghost-muted"}
-          aria-pressed={adhd.variant === v.id}
-          title={v.name}
-          onClick={() => setAdhdVariant(v.id)}
-        >
-          {v.id.toUpperCase()}
-        </Button>
-      ))}
-      {adhd.phase === "adhd" ? (
-        <Button size="xs" variant="ghost-muted" onClick={skipFiveMinutes}>
-          <FastForwardIcon />
-          快进 5 分钟
-        </Button>
-      ) : null}
+      <Button size="xs" variant="ghost-muted" onClick={skipFiveMinutes}>
+        <FastForwardIcon />
+        快进 5 分钟
+      </Button>
     </div>
   );
-}
-
-export interface AdhdVariantProps {
-  task: LighthouseTask;
-  agent: TaskAgent;
-  thread: ReturnType<typeof useTaskThread>;
-  /** The task is done and the next recommendations are showing. */
-  done: boolean;
-  onFinish: () => void;
 }
 
 export function useFinishTask(task: LighthouseTask, agent: TaskAgent) {
