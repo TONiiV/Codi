@@ -241,6 +241,7 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(t3-mobil
   --animate-microscope-hide: microscope-hide 2.2s ease-in-out;
   --animate-microscope-lens: microscope-lens 2.2s ease-in-out;
   --animate-microscope-detail: microscope-detail 2.2s ease-out;
+  --animate-microscope-token: microscope-token 0.14s ease-out both;
   --color-warning-foreground: var(--warning-foreground);
   --color-warning: var(--warning);
   --color-warning-surface: var(--warning-surface);
@@ -475,17 +476,31 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(t3-mobil
     }
   }
   @keyframes microscope-detail {
-    /* Inside the lens the specimen comes into focus from a wider field and drifts in slightly. */
+    /* Inside the lens the text comes into focus from a wider field, then scrolls up as rows stream in. */
     0%,
     12% {
       scale: 2;
+      translate: 0 0;
     }
     24% {
       scale: 1;
+      translate: 0 0;
     }
     58%,
     100% {
-      scale: 1.12;
+      scale: 1;
+      translate: 0 -2px;
+    }
+  }
+  @keyframes microscope-token {
+    /* Each token block grows in from its left edge, one after another, like a streamed reply. */
+    0% {
+      opacity: 0;
+      scale: 0.3 1;
+    }
+    100% {
+      opacity: 1;
+      scale: 1 1;
     }
   }
   @keyframes status-ping {

@@ -99,22 +99,13 @@ export function useWorkspaces(): ReadonlyArray<LighthouseWorkspace> {
   return useSnapshot().workspaces;
 }
 
-const INVITE_CHAT = "invite-";
-
-export const inviteChatId = (invite: WorkspaceInvite) => INVITE_CHAT + invite.code;
+/** Every pending invite lives in this one pinned chat, which goes away once none are left. */
+export const INVITES_CHAT = "invites";
 
 /** Invites addressed to the viewer that are not answered yet. */
 export function usePendingInvites(viewer: LighthouseViewer): ReadonlyArray<WorkspaceInvite> {
   const { decided } = useSnapshot();
   return INVITES.filter((i) => i.to === viewer && decided[i.code] === undefined);
-}
-
-/** The pending invite a chat id points at, if any. */
-export function usePendingInvite(
-  viewer: LighthouseViewer,
-  chat: string,
-): WorkspaceInvite | undefined {
-  return usePendingInvites(viewer).find((i) => inviteChatId(i) === chat);
 }
 
 export function acceptInvite(invite: WorkspaceInvite) {

@@ -76,8 +76,33 @@ function TelescopeFlare() {
 
 const LENS_VIEW = { transformBox: "view-box", transformOrigin: "12px 12.5px" } as const;
 
+// Rows of token blocks inside the lens; the last row stops part way, as if still generating.
+const STREAM_ROWS = [
+  { x: 1, y: 1.8, widths: [5, 3, 6, 4] },
+  { x: -1, y: 6.3, widths: [4, 7, 3, 5, 4] },
+  { x: -2, y: 10.8, widths: [6, 2, 5, 8, 3] },
+  { x: -1, y: 15.3, widths: [3, 6, 4, 5, 4] },
+  { x: 0, y: 19.8, widths: [5, 4, 6] },
+];
+const STREAM_START_MS = 420;
+const STREAM_STEP_MS = 38;
+const STREAM_TOKENS = STREAM_ROWS.flatMap((row, rowIndex) => {
+  let x = row.x;
+  return row.widths.map((width, index) => {
+    const token = {
+      key: `${rowIndex}-${index}`,
+      x,
+      y: row.y,
+      width,
+      opacity: (rowIndex + index) % 3 === 0 ? 0.55 : 0.9,
+    };
+    x += width + 1;
+    return token;
+  });
+}).map((token, index) => ({ ...token, delay: STREAM_START_MS + index * STREAM_STEP_MS }));
+
 // Monochrome microscope. Live, the objective drops onto the slide, then a magnified lens view
-// opens on top of the whole icon with a dark vignette around it, holds about 0.8s and shrinks back.
+// opens on top of the whole icon with a dark vignette, streams token rows for about 0.8s and shrinks back.
 function MicroscopeGlyph({
   live,
   className,
@@ -149,15 +174,23 @@ function MicroscopeGlyph({
               style={LENS_VIEW}
               className="motion-safe:group-hover/micro:animate-microscope-detail motion-safe:group-focus-visible/micro:animate-microscope-detail"
             >
-              <circle cx="7" cy="9" r="5" fill="none" stroke="currentColor" strokeWidth={0.8} />
-              <circle cx="7.6" cy="9.4" r="1.6" />
-              <circle cx="17.5" cy="11" r="4" fill="none" stroke="currentColor" strokeWidth={0.8} />
-              <circle cx="17" cy="11.6" r="1.2" />
-              <circle cx="11" cy="19" r="4.6" fill="none" stroke="currentColor" strokeWidth={0.8} />
-              <circle cx="10.4" cy="18.4" r="1.4" />
-              <circle cx="13.4" cy="5" r="1" fillOpacity={0.6} />
-              <circle cx="20" cy="18" r="0.8" fillOpacity={0.6} />
-              <circle cx="3.6" cy="16" r="0.9" fillOpacity={0.6} />
+              {STREAM_TOKENS.map((token) => (
+                <rect
+                  key={token.key}
+                  x={token.x}
+                  y={token.y}
+                  width={token.width}
+                  height={2.4}
+                  rx={1.2}
+                  fillOpacity={token.opacity}
+                  style={{
+                    animationDelay: `${token.delay}ms`,
+                    transformBox: "fill-box",
+                    transformOrigin: "left center",
+                  }}
+                  className="opacity-0 motion-safe:group-hover/micro:animate-microscope-token motion-safe:group-focus-visible/micro:animate-microscope-token"
+                />
+              ))}
             </g>
             <circle cx="12" cy="12.5" r="16" fill={`url(#${id}-rim)`} />
           </g>

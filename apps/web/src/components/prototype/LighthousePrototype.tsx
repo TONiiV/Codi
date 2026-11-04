@@ -40,7 +40,7 @@ import { TeamsPage } from "./LighthouseTeams";
 import { DecisionsPage } from "./LighthouseDecisions";
 import { ProjectsPage } from "./LighthouseProjects";
 import { InviteChatPage } from "./WorkspaceInviteChat";
-import { usePendingInvite, useWorkspaceId } from "./workspaceStore";
+import { INVITES_CHAT, usePendingInvites, useWorkspaceId } from "./workspaceStore";
 
 // Names can change at runtime; the version argument keeps the compiler honest.
 const agentName = (viewer: LighthouseViewer, chat: string, _version: number) =>
@@ -508,11 +508,12 @@ export function LighthousePrototypePage({ background }: { background?: boolean }
   const { as: viewer, view } = search;
   const v = useViewer(viewer);
   const version = useRegistryVersion();
-  const invite = usePendingInvite(viewer, search.chat);
+  const invites = usePendingInvites(viewer);
+  const invite = search.chat === INVITES_CHAT && invites.length > 0;
   // A chat this workspace does not have falls back to the viewer's 个人助理.
   const chat = chatIds(viewer, workspace, version).includes(search.chat) ? search.chat : "mine";
   const chatName = invite
-    ? `工作区邀请 · ${invite.workspace.name}`
+    ? "工作区邀请"
     : chat === "mine"
       ? v.cos.name
       : agentName(viewer, chat, version);
@@ -540,7 +541,7 @@ export function LighthousePrototypePage({ background }: { background?: boolean }
           </WorkspaceBreadcrumb>
         </header>
         <div className="flex min-h-0 flex-1 flex-col">
-          {view === "chats" && invite ? <InviteChatPage viewer={viewer} invite={invite} /> : null}
+          {view === "chats" && invite ? <InviteChatPage viewer={viewer} invites={invites} /> : null}
           {view === "chats" && !invite && chat === "desk" ? (
             <div className="min-h-0 flex-1 overflow-y-auto scrollbar-gutter-both">
               <div className="mx-auto w-full max-w-(--chat-content-max-width) px-5 py-6">
