@@ -1,7 +1,7 @@
 // PROTOTYPE, wipe me. Chat surfaces in the Code look: assistant text without a bubble, user
 // messages in a right-aligned bubble, and the Code composer card with a round send button.
 import { PaperclipIcon } from "lucide-react";
-import type { ReactNode } from "react";
+import { useRef, type ReactNode } from "react";
 
 import { ComposerSurface } from "../chat/ComposerSurface";
 import { Button } from "../ui/button";
@@ -70,18 +70,38 @@ export function ChatComposerCard({
   label,
   gauge,
   className,
+  onSend,
+  autoFocus,
 }: {
   placeholder: string;
   label?: ReactNode;
   gauge?: ReactNode;
   className?: string;
+  /** Enter or the send button hands over the trimmed text and clears the box. */
+  onSend?: (text: string) => void;
+  autoFocus?: boolean;
 }) {
+  const box = useRef<HTMLTextAreaElement>(null);
+  const send = () => {
+    const text = box.current?.value.trim();
+    if (!onSend || !box.current || !text) return;
+    onSend(text);
+    box.current.value = "";
+  };
   return (
     <ComposerSurface.Shell className={className}>
       <ComposerSurface.Host>
         <ComposerSurface.Main>
           <textarea
+            ref={box}
             rows={2}
+            autoFocus={autoFocus}
+            aria-label={placeholder}
+            onKeyDown={(e) => {
+              if (e.key !== "Enter" || e.shiftKey || e.nativeEvent.isComposing) return;
+              e.preventDefault();
+              send();
+            }}
             placeholder={placeholder}
             className="block max-h-52 min-h-14 w-full resize-none bg-transparent px-4 pt-4 pb-2 text-sm leading-relaxed text-foreground outline-none placeholder:text-muted-foreground"
           />
@@ -97,6 +117,7 @@ export function ChatComposerCard({
               <button
                 type="button"
                 aria-label="Send"
+                onClick={send}
                 className="flex size-8 cursor-pointer items-center justify-center rounded-full bg-message-action text-message-action-foreground shadow-xs transition-transform hover:scale-105 hover:bg-message-action-hover"
               >
                 <SendGlyph />

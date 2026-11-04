@@ -1,12 +1,12 @@
-// PROTOTYPE, wipe me. Floating Telescope / Focus / Microscope switch at the top centre of the app
-// (the Lighthouse and Code modes, with focus mode between them). It rests as a faint capsule and morphs into a two-icon switch when
+// PROTOTYPE, wipe me. Floating Telescope / ADHD / Microscope switch at the top centre of the app
+// (the Lighthouse and Code modes, with ADHD mode between them). It rests as a faint capsule and morphs into a two-icon switch when
 // the pointer comes near. Pure CSS hover, so nothing animates while the pointer is elsewhere.
 import { useNavigate } from "@tanstack/react-router";
 import { useId, type CSSProperties, type SVGProps } from "react";
 
 import { cn } from "../../lib/utils";
-import { FocusMode } from "./FocusMode";
-import { openFocusPicker } from "./focusStore";
+import { AdhdMode } from "./AdhdMode";
+import { openAdhdPicker } from "./adhdStore";
 import { useLighthouseSearch } from "./lighthouseLocation";
 
 // Hover animations are scoped to each segment's own group, so they run only while that segment is
@@ -203,7 +203,7 @@ function MicroscopeGlyph({
   );
 }
 
-// Each letter of "Focus" (and the target's dot) fidgets along its own path, then settles in line:
+// Each letter of "ADHD" (and the target's dot) fidgets along its own path, then settles in line:
 // restless first, focused at the end. One shot per hover.
 const FIDGET = [
   ["-1px", "-3px", "-12deg", "2px", "1px", "9deg", "-2px", "2px", "-6deg", "1px", "-2px", "8deg"],
@@ -231,9 +231,9 @@ const fidget = (i: number, delay: number) => {
   } as CSSProperties;
 };
 const FIDGET_RUN =
-  "motion-safe:group-hover/focus:animate-focus-fidget motion-safe:group-focus-visible/focus:animate-focus-fidget";
+  "motion-safe:group-hover/adhd:animate-adhd-fidget motion-safe:group-focus-visible/adhd:animate-adhd-fidget";
 
-function FocusGlyph(props: SVGProps<SVGSVGElement>) {
+function AdhdGlyph(props: SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true" {...props}>
       <circle cx="12" cy="12" r="8.5" strokeWidth={1.8} />
@@ -251,7 +251,7 @@ function FocusGlyph(props: SVGProps<SVGSVGElement>) {
   );
 }
 
-const FOCUS_LETTERS = [..."Focus"].map((ch, i) => ({
+const ADHD_LETTERS = [..."ADHD"].map((ch, i) => ({
   ch,
   id: `${ch}${i}`,
   style: fidget(i, i * 25),
@@ -259,8 +259,8 @@ const FOCUS_LETTERS = [..."Focus"].map((ch, i) => ({
 
 function FidgetLabel() {
   return (
-    <span aria-label="Focus" className="inline-flex">
-      {FOCUS_LETTERS.map(({ ch, id, style }) => (
+    <span aria-label="ADHD" className="inline-flex">
+      {ADHD_LETTERS.map(({ ch, id, style }) => (
         <span key={id} aria-hidden="true" style={style} className={cn("inline-block", FIDGET_RUN)}>
           {ch}
         </span>
@@ -285,10 +285,10 @@ export function LighthouseIsland() {
         }),
     },
     {
-      id: "focus",
-      label: "Focus",
+      id: "adhd",
+      label: "ADHD",
       active: false,
-      go: openFocusPicker,
+      go: openAdhdPicker,
     },
     {
       id: "code",
@@ -301,13 +301,13 @@ export function LighthouseIsland() {
   return (
     <>
       {/* Outside the island: its translate would make the full-screen page relative to it. */}
-      <FocusMode />
+      <AdhdMode />
       {/* The wrapper is the "near" zone: larger than the resting capsule, so the island opens
     before the pointer is on it. */}
       <div className="group/island fixed top-(--workspace-controls-top) left-1/2 z-50 flex h-(--workspace-topbar-height) w-104 -translate-x-1/2 items-center justify-center [-webkit-app-region:no-drag]">
         <div
           role="group"
-          aria-label="Telescope, Focus or Microscope"
+          aria-label="Telescope, ADHD or Microscope"
           className={cn(
             "relative flex h-6 w-14 items-center justify-center overflow-hidden rounded-full border border-transparent bg-foreground/85 opacity-45 shadow-sm",
             "transition-[width,height,border-radius,background-color,opacity,box-shadow] duration-300 ease-out motion-reduce:transition-none",
@@ -340,11 +340,11 @@ export function LighthouseIsland() {
                 key={m.id}
                 type="button"
                 data-tele={m.id === "work" ? "" : undefined}
-                aria-pressed={m.id === "focus" ? undefined : m.active}
+                aria-pressed={m.id === "adhd" ? undefined : m.active}
                 onClick={m.active ? undefined : m.go}
                 className={cn(
                   "relative z-10 flex items-center justify-center gap-2 rounded-xl text-sm font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
-                  m.id === "work" ? "group/tele" : m.id === "focus" ? "group/focus" : "group/micro",
+                  m.id === "work" ? "group/tele" : m.id === "adhd" ? "group/adhd" : "group/micro",
                   m.active
                     ? "cursor-default text-background"
                     : "cursor-pointer text-muted-foreground hover:text-foreground",
@@ -352,12 +352,12 @@ export function LighthouseIsland() {
               >
                 {m.id === "work" ? (
                   <TelescopeGlyph className="relative size-4.5" live />
-                ) : m.id === "focus" ? (
-                  <FocusGlyph className="relative size-4.5" />
+                ) : m.id === "adhd" ? (
+                  <AdhdGlyph className="relative size-4.5" />
                 ) : (
                   <MicroscopeGlyph className="relative size-4.5" live />
                 )}
-                {m.id === "focus" ? <FidgetLabel /> : m.label}
+                {m.id === "adhd" ? <FidgetLabel /> : m.label}
               </button>
             ))}
           </div>
