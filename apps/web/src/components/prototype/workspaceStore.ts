@@ -1,7 +1,7 @@
 // PROTOTYPE, wipe me. The current workspace, shared by Code and Lighthouse and kept per browser,
 // plus workspaces created in this tab and invites, which are the only way to join one.
-// A Code project belongs to a workspace by a name rule here; one that matches no rule is unbound
-// and shows in Code under every workspace.
+// Every Code project belongs to one workspace: a name rule picks the default, and Settings ->
+// Projects can move it. Code lists only the current workspace's projects.
 import { useSyncExternalStore } from "react";
 
 import {
@@ -13,6 +13,7 @@ import {
 } from "./lighthouseData";
 
 const KEY = "lighthouse-prototype-workspace";
+const PROJECT_KEY = "lighthouse-prototype-project-workspace";
 const listeners = new Set<() => void>();
 
 export interface WorkspaceInvite {
@@ -60,13 +61,28 @@ function read(): string {
   return WORKSPACES[0]!.id;
 }
 
+function readMoves(): Record<string, string> {
+  try {
+    return JSON.parse(localStorage.getItem(PROJECT_KEY) ?? "{}") as Record<string, string>;
+  } catch {
+    return {};
+  }
+}
+
 interface Snapshot {
   current: string;
+  /** Code projects moved to a workspace by hand, by project key. */
+  moved: Readonly<Record<string, string>>;
   workspaces: ReadonlyArray<LighthouseWorkspace>;
   decided: Readonly<Record<string, "accepted" | "declined">>;
 }
 
-let snapshot: Snapshot = { current: read(), workspaces: [...WORKSPACES], decided: {} };
+let snapshot: Snapshot = {
+  current: read(),
+  moved: readMoves(),
+  workspaces: [...WORKSPACES],
+  decided: {},
+};
 
 function commit(patch: Partial<Snapshot>) {
   snapshot = { ...snapshot, ...patch, workspaces: [...WORKSPACES] };
@@ -150,8 +166,30 @@ const CODE_PROJECT_RULES: ReadonlyArray<{ workspace: string; match: RegExp }> = 
   { workspace: "dimx", match: /dimension|gripper|夹爪|tactile|触觉|robot|esp32/i },
 ];
 
-/** Code shows a project when it is unbound or bound to the current workspace. */
-export function isCodeProjectInWorkspace(displayName: string, workspace: string): boolean {
-  const rule = CODE_PROJECT_RULES.find((r) => r.match.test(displayName));
-  return rule === undefined || rule.workspace === workspace;
+interface CodeProject {
+  projectKey: string;
+  displayName: string;
+}
+
+function workspaceOf(project: CodeProject, moved: Snapshot["moved"]): string {
+  const id =
+    moved[project.projectKey] ??
+    CODE_PROJECT_RULES.find((r) => r.match.test(project.displayName))?.workspace;
+  return id && snapshot.workspaces.some((w) => w.id === id) ? id : WORKSPACES[0]!.id;
+}
+
+/** The workspace a Code project belongs to; a project no rule matches starts in the personal one. */
+export function useCodeProjectWorkspace(): (project: CodeProject) => string {
+  const { moved } = useSnapshot();
+  return (project) => workspaceOf(project, moved);
+}
+
+export function moveCodeProject(projectKey: string, workspace: string) {
+  const moved = { ...snapshot.moved, [projectKey]: workspace };
+  try {
+    localStorage.setItem(PROJECT_KEY, JSON.stringify(moved));
+  } catch {
+    // Keep the in-memory move when storage is blocked.
+  }
+  commit({ moved });
 }

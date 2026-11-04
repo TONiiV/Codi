@@ -43,6 +43,7 @@ import {
   canPickExternalProjectFavicon,
   ProjectFaviconPickerDialog,
 } from "./ProjectFaviconPickerDialog";
+import { ProjectWorkspaceRow } from "../prototype/WorkspaceSettings";
 import { ProjectActionsSettings } from "./ProjectActionsSettings";
 import { ProjectDefaultsSettings } from "./ProjectDefaultsSettings";
 import {
@@ -516,6 +517,7 @@ function ProjectDetail({
               </div>
             }
           />
+          {import.meta.env.DEV ? <ProjectWorkspaceRow group={group} /> : null}
           {canOrganize ? (
             <>
               <SettingsRow

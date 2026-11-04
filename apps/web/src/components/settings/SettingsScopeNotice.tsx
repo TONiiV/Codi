@@ -9,6 +9,7 @@ import { useEnvironments, type EnvironmentPresentation } from "../../state/envir
 import { EnvironmentMachineIcon } from "../EnvironmentMachineIcon";
 import { ProjectFavicon } from "../ProjectFavicon";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
+import { WorkspaceProjectGroups } from "../prototype/WorkspaceSettings";
 import { ITEM_ROW_CLASSNAME } from "./itemRows";
 import { SettingsGroup } from "./SettingsGroup";
 import { SettingsPageContainer, SettingsSection } from "./settingsLayout";
@@ -57,7 +58,10 @@ export function SettingsScopeNotice({
     target === "checkout"
       ? groups.filter((group) => !search.project || group.projectKey === search.project)
       : [null];
-  const renderChoices = (group: SidebarProjectSnapshot | null) => {
+  const renderChoices = (
+    group: SidebarProjectSnapshot | null,
+    projectGroups: readonly SidebarProjectSnapshot[] = groups,
+  ) => {
     const choices: ScopeChoice[] = group
       ? group.memberProjects.map((member) => {
           const environment = environments.find(
@@ -81,7 +85,7 @@ export function SettingsScopeNotice({
           };
         })
       : target === "project"
-        ? groups.map((group) => ({
+        ? projectGroups.map((group) => ({
             label: group.displayName,
             secondary: [
               ...(group.archived ? ["Archived"] : []),
@@ -166,7 +170,10 @@ export function SettingsScopeNotice({
         {children}
       </p>
       <div className="space-y-4">
-        {choiceGroups.map((group) =>
+        {target === "project" && import.meta.env.DEV ? (
+          <WorkspaceProjectGroups groups={groups} render={(list) => renderChoices(null, list)} />
+        ) : null}
+        {(target === "project" && import.meta.env.DEV ? [] : choiceGroups).map((group) =>
           group?.displayName ? (
             <SettingsSection key={group.projectKey} title={group.displayName}>
               {renderChoices(group)}

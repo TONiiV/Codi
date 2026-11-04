@@ -85,7 +85,7 @@ import { LighthouseChatList } from "./prototype/LighthouseChatList";
 import { LighthouseRail } from "./prototype/LighthouseRail";
 import { useLighthouseSearch } from "./prototype/lighthouseLocation";
 import { WorkspaceFooter } from "./prototype/WorkspaceFooter";
-import { isCodeProjectInWorkspace, useWorkspaceId } from "./prototype/workspaceStore";
+import { useCodeProjectWorkspace, useWorkspaceId } from "./prototype/workspaceStore";
 import { WorkSubList } from "./prototype/LighthouseWork";
 
 import {
@@ -831,9 +831,10 @@ function useSidebarLookups() {
   const serverConfigs = useServerConfigs();
   const providerEntriesByEnvironment = useAtomValue(sidebarProviderEntriesAtom);
   const workspaceId = useWorkspaceId();
-  // PROTOTYPE, wipe me: Code hides projects bound to another workspace.
+  const workspaceOf = useCodeProjectWorkspace();
+  // PROTOTYPE, wipe me: Code lists only the current workspace's projects.
   const projectGroups = useSidebarProjectGroups().filter(
-    (group) => !import.meta.env.DEV || isCodeProjectInWorkspace(group.displayName, workspaceId),
+    (group) => !import.meta.env.DEV || workspaceOf(group) === workspaceId,
   );
   const environmentLabelById = new Map(
     environments.map((environment) => [environment.environmentId, environment.label] as const),
@@ -1131,7 +1132,11 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
             ),
           ),
         );
-  const threads = useQuietThreadShells();
+  const allThreads = useQuietThreadShells();
+  // PROTOTYPE, wipe me: threads of another workspace's projects stay hidden too.
+  const threads = import.meta.env.DEV
+    ? allThreads.filter((t) => projectDisplayNameByKey.has(`${t.environmentId}:${t.projectId}`))
+    : allThreads;
   const routeRowThreadKey =
     routeThreadRef === null
       ? null

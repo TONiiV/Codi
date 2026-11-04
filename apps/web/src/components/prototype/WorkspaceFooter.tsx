@@ -3,7 +3,7 @@
 // right. Invites are answered in their pinned chat, not here.
 import { useNavigate } from "@tanstack/react-router";
 import { ChevronsUpDownIcon, PlusIcon, SettingsIcon, UsersIcon } from "lucide-react";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 
 import { cn } from "../../lib/utils";
 import { Badge } from "../ui/badge";
@@ -25,7 +25,14 @@ import { normalizeLighthouseSearch, useLighthouseSearch } from "./lighthouseLoca
 import { CreateWorkspaceDialog } from "./WorkspaceDialogs";
 import { setWorkspace, useWorkspaceId, useWorkspaces } from "./workspaceStore";
 
-export function WorkspaceUserMenu({ compact }: { compact?: boolean }) {
+export function WorkspaceUserMenu({
+  compact,
+  extra,
+}: {
+  compact?: boolean;
+  /** Surface-specific items under the workspaces, such as Code's pull requests and usage. */
+  extra?: ReactNode;
+}) {
   const navigate = useNavigate();
   const lighthouse = useLighthouseSearch();
   const search = lighthouse ?? normalizeLighthouseSearch({});
@@ -49,8 +56,8 @@ export function WorkspaceUserMenu({ compact }: { compact?: boolean }) {
             <button
               type="button"
               className={cn(
-                "flex min-w-0 items-center gap-2 rounded-md p-1 text-start text-sm outline-none hover:bg-sidebar-row-hover focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
-                !compact && "flex-1 pe-2",
+                "flex max-w-full min-w-0 items-center gap-2 rounded-md p-1 text-start text-sm outline-none hover:bg-sidebar-row-hover focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
+                !compact && "pe-2",
               )}
             />
           }
@@ -97,6 +104,12 @@ export function WorkspaceUserMenu({ compact }: { compact?: boolean }) {
               新建工作区
             </MenuItem>
           </MenuGroup>
+          {extra ? (
+            <>
+              <MenuSeparator />
+              {extra}
+            </>
+          ) : null}
           {lighthouse ? (
             <>
               <MenuSeparator />

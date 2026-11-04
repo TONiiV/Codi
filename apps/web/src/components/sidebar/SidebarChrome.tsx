@@ -1,6 +1,6 @@
 import { ArrowLeftIcon, ArrowRightIcon, ChartNoAxesColumnIcon, SettingsIcon } from "lucide-react";
 import type { ReactNode } from "react";
-import { memo } from "react";
+import { memo, useState } from "react";
 import { Link, useLocation, useNavigate } from "@tanstack/react-router";
 
 import { useAtomValue } from "@effect/atom-react";
@@ -34,6 +34,8 @@ import {
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { readPullRequestListPreferences } from "../pullRequest/pullRequestListPreferences";
 import { isSidebarUtilityPage, useNavigateToMainApp } from "./mainAppLocation";
+import { WorkspaceUserMenu } from "../prototype/WorkspaceFooter";
+import { MenuItem } from "../ui/menu";
 import { SidebarThreadUndoNotice } from "./SidebarThreadUndoNotice";
 import { SidebarProviderUpdatePill } from "./SidebarProviderUpdatePill";
 import { SidebarUpdateArchitectureWarning, SidebarUpdatePill } from "./SidebarUpdatePill";
@@ -210,6 +212,11 @@ const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
     select: (location) => isSidebarUtilityPage(location.pathname),
   });
   const pullRequestsSupported = usePullRequestsSupported();
+  // PROTOTYPE, wipe me: a sidebar wide enough for the account row and three icons shows pull
+  // requests and usage beside settings; a narrower one keeps them in the account menu.
+  const [wide, setWide] = useState(false);
+  const observeRow = (row: HTMLUListElement) =>
+    observeResize(row, ([entry]) => setWide((entry?.contentRect.width ?? 0) >= 300));
   const closeMobileSidebar = () => {
     if (isMobile) {
       setOpenMobile(false);
@@ -240,7 +247,10 @@ const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
   };
 
   return (
-    <SidebarMenu className="flex-row items-center">
+    <SidebarMenu
+      ref={import.meta.env.DEV ? observeRow : undefined}
+      className="flex-row items-center"
+    >
       {isOnUtilityPage ? (
         <SidebarMenuItem className="min-w-0 flex-1">
           <SidebarMenuButton onClick={handleBackClick}>
@@ -248,6 +258,49 @@ const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
             <span>Back</span>
           </SidebarMenuButton>
         </SidebarMenuItem>
+      ) : import.meta.env.DEV ? (
+        // PROTOTYPE, wipe me: the same account and workspace row as Lighthouse.
+        <>
+          <SidebarMenuItem className="min-w-0 flex-1">
+            <WorkspaceUserMenu
+              extra={
+                wide ? null : (
+                  <>
+                    {pullRequestsSupported ? (
+                      <MenuItem onClick={handlePullRequestsClick}>
+                        <PullRequestGlyph.pullRequest className="size-3.5" />
+                        Pull requests
+                      </MenuItem>
+                    ) : null}
+                    <MenuItem onClick={handleUsageClick}>
+                      <ChartNoAxesColumnIcon className="size-3.5" />
+                      Usage
+                    </MenuItem>
+                  </>
+                )
+              }
+            />
+          </SidebarMenuItem>
+          {wide && pullRequestsSupported ? (
+            <SidebarUtilityItem
+              icon={<PullRequestGlyph.pullRequest />}
+              label="Pull requests"
+              onClick={handlePullRequestsClick}
+            />
+          ) : null}
+          {wide ? (
+            <SidebarUtilityItem
+              icon={<ChartNoAxesColumnIcon />}
+              label="Usage"
+              onClick={handleUsageClick}
+            />
+          ) : null}
+          <SidebarUtilityItem
+            icon={<SettingsIcon />}
+            label="Settings"
+            onClick={handleSettingsClick}
+          />
+        </>
       ) : (
         <>
           <SidebarUtilityItem
