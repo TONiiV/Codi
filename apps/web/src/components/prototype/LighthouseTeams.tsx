@@ -32,6 +32,7 @@ import {
   customAgentsIn,
   hasChief,
   isEnterprise,
+  isWorkspaceAdmin,
   projectsIn,
   roleIn,
   type CompanyAgent,
@@ -729,7 +730,7 @@ const companyAt = (workspace: string, _version: number) => companyAgentsIn(works
 function CompanyAgents({ viewer, workspace }: { viewer: LighthouseViewer; workspace: string }) {
   const navigate = useNavigate();
   const agents = companyAt(workspace, useRegistryVersion());
-  const admin = viewer === "admin";
+  const admin = isWorkspaceAdmin(viewer, workspace);
   const [editing, setEditing] = useState<CompanyAgent | null>(null);
   return (
     <section className="flex flex-col gap-3">

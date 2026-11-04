@@ -15,6 +15,7 @@ import {
   VIEWERS,
   WORKERS,
   WORKSPACES,
+  WORKSPACE_KIND,
   chatsFor,
   chiefName,
   companyAgent,
@@ -30,7 +31,13 @@ import { DashboardPage } from "./LighthouseDashboard";
 import { TeamsPage } from "./LighthouseTeams";
 import { DecisionsPage } from "./LighthouseDecisions";
 import { ProjectsPage } from "./LighthouseProjects";
-import { useWorkspaceId } from "./workspaceStore";
+import {
+  acceptInvite,
+  declineInvite,
+  useInvites,
+  useWorkspaceId,
+  type WorkspaceInvite,
+} from "./workspaceStore";
 
 // Names can change at runtime; the version argument keeps the compiler honest.
 const agentName = (viewer: LighthouseViewer, chat: string, _version: number) =>
@@ -129,6 +136,37 @@ function Inbox({ asks }: { asks: ReturnType<typeof asksFor> }) {
   );
 }
 
+function InviteInbox({ invites }: { invites: ReadonlyArray<WorkspaceInvite> }) {
+  if (invites.length === 0) return null;
+  return (
+    <ul className="flex flex-col gap-4">
+      {invites.map((invite) => (
+        <li key={invite.code} className="flex gap-3">
+          <span className="mt-1.5">
+            <ToneDot tone="ok" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <div className="text-xs text-muted-foreground">
+              工作区邀请 · {WORKSPACE_KIND[invite.workspace.kind]}
+            </div>
+            <div className="mt-0.5 text-sm">
+              {invite.from} 邀请你以「{invite.role}」身份加入 {invite.workspace.name}。
+            </div>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <Button size="xs" onClick={() => acceptInvite(invite)}>
+                接受并进入
+              </Button>
+              <Button size="xs" variant="outline" onClick={() => declineInvite(invite)}>
+                拒绝
+              </Button>
+            </div>
+          </div>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 function ProjectRows({
   viewer,
   workspace,
@@ -201,10 +239,10 @@ function DeskPage({ viewer, workspace }: { viewer: LighthouseViewer; workspace: 
 
 function conversation(
   viewer: LighthouseViewer,
+  v: ReturnType<typeof useViewer>,
   workspace: string,
   chat: string,
 ): ReadonlyArray<ChatMessage> {
-  const v = useViewer(viewer);
   const { open, locked } = projectsIn(workspace, viewer);
   const custom = customAgent(chat);
   if (custom) {
@@ -300,21 +338,25 @@ function ChatPage({
   const v = useViewer(viewer);
   const version = useRegistryVersion();
   const asks = asksFor(viewer, workspace, chat === "mine" ? undefined : chat);
+  const invites = useInvites(viewer).pending;
+  const inviteAsks = chat === "mine" ? invites : [];
+  const count = asks.length + inviteAsks.length;
   const cosName = chat === "mine" ? v.cos.name : agentName(viewer, chat, version);
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="min-h-0 flex-1 overflow-y-auto scrollbar-gutter-both">
         <div className="mx-auto w-full max-w-(--chat-content-max-width) px-5 py-6">
-          {asks.length > 0 ? (
-            <div className="mb-8">
-              <h2 className="mb-3 flex items-center gap-2 text-lg font-semibold">
+          {count > 0 ? (
+            <div className="mb-8 flex flex-col gap-4">
+              <h2 className="flex items-center gap-2 text-lg font-semibold">
                 需要你定
-                <Badge variant="secondary">{asks.length}</Badge>
+                <Badge variant="secondary">{count}</Badge>
               </h2>
+              <InviteInbox invites={inviteAsks} />
               <Inbox asks={asks} />
             </div>
           ) : null}
-          <ChatTimeline messages={conversation(viewer, workspace, chat)} />
+          <ChatTimeline messages={conversation(viewer, v, workspace, chat)} />
         </div>
       </div>
       <div className="mx-auto w-full max-w-(--chat-content-max-width) px-5 pb-4">

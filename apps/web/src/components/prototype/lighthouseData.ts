@@ -9,10 +9,26 @@ export interface LighthouseWorkspace {
   kind: "enterprise" | "personal";
 }
 
-export const WORKSPACES: ReadonlyArray<LighthouseWorkspace> = [
+export const WORKSPACES: Array<LighthouseWorkspace> = [
   { id: "toniiv", name: "TONiiV", kind: "personal" },
   { id: "dimx", name: "DimensionX", kind: "enterprise" },
 ];
+
+/** Workspaces created or joined in this tab, with their admin; they last until reload. */
+const ADDED: Record<string, { admin: LighthouseViewer | null; adminName: string }> = {};
+
+export function addWorkspace(
+  workspace: LighthouseWorkspace,
+  admin: { viewer: LighthouseViewer | null; name: string },
+) {
+  if (!WORKSPACES.some((w) => w.id === workspace.id)) WORKSPACES.push(workspace);
+  ADDED[workspace.id] = { admin: admin.viewer, adminName: admin.name };
+}
+
+export function isWorkspaceAdmin(viewer: LighthouseViewer, workspace: string): boolean {
+  const added = ADDED[workspace];
+  return added ? added.admin === viewer : viewer === "admin";
+}
 
 export const WORKSPACE_KIND = { enterprise: "企业", personal: "个人" } as const;
 
@@ -272,8 +288,21 @@ export function companyAgent(id: string): CompanyAgent | undefined {
   return COMPANY_AGENTS.find((a) => a.id === id);
 }
 
+const SEEDED: Record<string, ReadonlyArray<CompanyAgent>> = {};
+
+/** A new enterprise workspace starts with 主代理 only; its admin adds department agents later. */
 export function companyAgentsIn(workspace: string): ReadonlyArray<CompanyAgent> {
-  return workspace === COMPANY_WORKSPACE ? COMPANY_AGENTS : [];
+  if (workspace === COMPANY_WORKSPACE) return COMPANY_AGENTS;
+  const added = ADDED[workspace];
+  if (!added || !isEnterprise(workspace)) return [];
+  SEEDED[workspace] ??= [
+    {
+      ...COMPANY_AGENTS[0]!,
+      owner: `${added.adminName} · 管理员`,
+      last: "工作区刚建好。部门代理由管理员添加。",
+    },
+  ];
+  return SEEDED[workspace]!;
 }
 
 export interface LighthouseAsk {
