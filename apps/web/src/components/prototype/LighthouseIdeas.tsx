@@ -1,6 +1,6 @@
 // PROTOTYPE, wipe me. Ideas: a scratchpad on a dot-grid canvas. Ideas look like a checklist but
 // are not one: selected ideas go to an agent that files each as a task in its project; ideas with
-// no project stay. Pasted or dropped files snap to the grid and ideas can link to them.
+// no project stay. Pasted or dropped files snap to the grid and an idea can link several of them.
 // In memory only; pasted files are object URLs for this session.
 import {
   CheckIcon,
@@ -47,7 +47,8 @@ interface Idea {
   text: string;
   /** An agent tried to file it and found no matching project, so it stayed here. */
   unsorted: boolean;
-  link: string | null;
+  /** Canvas cards this idea points at; one idea can link several. */
+  links: ReadonlyArray<string>;
 }
 
 interface Card {
@@ -84,11 +85,16 @@ let state: IdeasState = {
       id: "i1",
       text: "Ideas 里的一条想法，一键交给个人助理展开成任务",
       unsorted: false,
-      link: null,
+      links: [],
     },
-    { id: "i2", text: "Dashboard 第一屏改成卡片网格，参考这张草图", unsorted: false, link: "c1" },
-    { id: "i3", text: "竞品的定价分层值得抄一下", unsorted: false, link: "c2" },
-    { id: "i4", text: "Telegram 语音消息直接转成想法", unsorted: false, link: null },
+    {
+      id: "i2",
+      text: "Dashboard 第一屏改成卡片网格，参考这张草图",
+      unsorted: false,
+      links: ["c1"],
+    },
+    { id: "i3", text: "竞品的定价分层值得抄一下", unsorted: false, links: ["c2", "c1"] },
+    { id: "i4", text: "Telegram 语音消息直接转成想法", unsorted: false, links: [] },
   ],
   cards: [
     {
@@ -172,7 +178,7 @@ function addIdea(text: string) {
   const clean = text.trim();
   if (!clean) return;
   commit({
-    ideas: [...state.ideas, { id: nextId("i"), text: clean, unsorted: false, link: null }],
+    ideas: [...state.ideas, { id: nextId("i"), text: clean, unsorted: false, links: [] }],
   });
 }
 
@@ -239,7 +245,7 @@ function removeCard(id: string) {
   if (card?.url?.startsWith("blob:")) URL.revokeObjectURL(card.url);
   commit({
     cards: state.cards.filter((c) => c.id !== id),
-    ideas: state.ideas.map((i) => (i.link === id ? { ...i, link: null } : i)),
+    ideas: state.ideas.map((i) => ({ ...i, links: i.links.filter((l) => l !== id) })),
   });
 }
 
@@ -253,8 +259,8 @@ const TOPICS: Record<string, ReadonlyArray<string>> = {
 };
 
 function classify(idea: Idea, open: ReadonlyArray<string>): string | null {
-  const card = state.cards.find((c) => c.id === idea.link);
-  const text = `${idea.text} ${card?.name ?? ""}`;
+  const names = state.cards.filter((c) => idea.links.includes(c.id)).map((c) => c.name);
+  const text = `${idea.text} ${names.join(" ")}`;
   return open.find((p) => TOPICS[p]?.some((word) => text.includes(word))) ?? null;
 }
 
@@ -267,8 +273,12 @@ function sendToAgent(agent: string, ids: ReadonlyArray<string>, open: ReadonlyAr
       kept.add(idea.id);
       continue;
     }
-    const card = state.cards.find((c) => c.id === idea.link);
-    createTaskIn(project, idea.text, card ? `来自 Ideas，附件：${card.name}` : "来自 Ideas");
+    const names = state.cards.filter((c) => idea.links.includes(c.id)).map((c) => c.name);
+    createTaskIn(
+      project,
+      idea.text,
+      names.length > 0 ? `来自 Ideas，附件：${names.join("、")}` : "来自 Ideas",
+    );
     filed[project] = (filed[project] ?? 0) + 1;
   }
   commit({
@@ -286,6 +296,26 @@ function sendToAgent(agent: string, ids: ReadonlyArray<string>, open: ReadonlyAr
       kept.size > 0
         ? `${kept.size} 条没找到对应项目，留在 Ideas 里。`
         : "这些条目已从 Ideas 移走。",
+  });
+}
+
+// Each idea keeps one colour (from its id) for its row mark and every line it draws.
+const HUES = [
+  "text-primary",
+  "text-success",
+  "text-warning",
+  "text-info",
+  "text-destructive",
+  "text-update",
+  "text-guest",
+] as const;
+const hueOf = (id: string) =>
+  HUES[[...id].reduce((n, ch) => n + ch.charCodeAt(0), 0) % HUES.length];
+
+function toggleLink(idea: string, card: string) {
+  const links = state.ideas.find((i) => i.id === idea)?.links ?? [];
+  patchIdea(idea, {
+    links: links.includes(card) ? links.filter((l) => l !== card) : [...links, card],
   });
 }
 
@@ -321,6 +351,72 @@ function useDrag(
       start.current = null;
     },
   };
+}
+
+function CardThumb({ card }: { card: Card }) {
+  return card.kind === "image" ? (
+    <img src={card.url ?? ""} alt="" className="size-3.5 shrink-0 rounded-sm object-cover" />
+  ) : (
+    <FileIcon className="size-3 shrink-0" />
+  );
+}
+
+const CHIP =
+  "inline-flex max-w-28 shrink-0 items-center gap-1 rounded-md bg-muted px-1.5 py-0.5 text-2xs text-muted-foreground";
+
+/** One link shows as a chip; several fold into a "N 个附件" chip whose menu unlinks each one. */
+function LinkChips({ idea, linked }: { idea: Idea; linked: ReadonlyArray<Card> }) {
+  const [only] = linked;
+  if (!only) return null;
+  if (linked.length === 1)
+    return (
+      <span className={CHIP}>
+        <CardThumb card={only} />
+        <span className="truncate">{only.name}</span>
+        <button
+          type="button"
+          aria-label={`取消链接 ${only.name}`}
+          onClick={() => toggleLink(idea.id, only.id)}
+          className="rounded-sm outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+        >
+          <XIcon className="size-3" />
+        </button>
+      </span>
+    );
+  return (
+    <Menu>
+      <MenuTrigger
+        render={
+          <button
+            type="button"
+            className={cn(
+              CHIP,
+              "outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
+            )}
+          />
+        }
+      >
+        <span className="flex -space-x-1">
+          {linked.slice(0, 3).map((c) => (
+            <CardThumb key={c.id} card={c} />
+          ))}
+        </span>
+        {linked.length} 个附件
+      </MenuTrigger>
+      <MenuPopup align="end" sideOffset={6}>
+        <MenuGroup>
+          <MenuGroupLabel>点一项取消链接</MenuGroupLabel>
+          {linked.map((c) => (
+            <MenuItem key={c.id} onClick={() => toggleLink(idea.id, c.id)}>
+              <CardThumb card={c} />
+              {c.name}
+              <XIcon className="ms-auto size-3" />
+            </MenuItem>
+          ))}
+        </MenuGroup>
+      </MenuPopup>
+    </Menu>
+  );
 }
 
 function SendToAgent({ ids, onSent }: { ids: ReadonlyArray<string>; onSent: () => void }) {
@@ -399,17 +495,26 @@ function IdeaList({
       </header>
       <ul>
         {ideas.map((idea) => {
-          const card = cards.find((c) => c.id === idea.link);
+          const linked = cards.filter((c) => idea.links.includes(c.id));
           const on = selected.includes(idea.id);
           return (
             <li
               key={idea.id}
               style={{ height: ROW_H }}
               className={cn(
-                "group/idea flex items-center gap-2 px-3",
+                "group/idea relative flex items-center gap-2 px-3",
                 (on || linking === idea.id) && "bg-primary/8",
               )}
             >
+              {linked.length > 0 ? (
+                <span
+                  aria-hidden="true"
+                  className={cn(
+                    "absolute inset-y-2 start-0 w-1 rounded-e-full bg-current",
+                    hueOf(idea.id),
+                  )}
+                />
+              ) : null}
               <button
                 type="button"
                 aria-pressed={on}
@@ -430,42 +535,24 @@ function IdeaList({
                   没找到项目
                 </span>
               ) : null}
-              {card ? (
-                <span className="inline-flex max-w-28 shrink-0 items-center gap-1 rounded-md bg-muted px-1.5 py-0.5 text-2xs text-muted-foreground">
-                  {card.kind === "image" ? (
-                    <img src={card.url ?? ""} alt="" className="size-3.5 rounded-sm object-cover" />
-                  ) : (
-                    <FileIcon className="size-3" />
-                  )}
-                  <span className="truncate">{card.name}</span>
-                  <button
-                    type="button"
-                    aria-label={`取消链接 ${card.name}`}
-                    onClick={() => patchIdea(idea.id, { link: null })}
-                    className="rounded-sm outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
-                  >
-                    <XIcon className="size-3" />
-                  </button>
-                </span>
-              ) : (
-                <span
-                  className={cn(
-                    "shrink-0",
-                    linking !== idea.id &&
-                      "opacity-0 group-hover/idea:opacity-100 has-focus-visible:opacity-100",
-                  )}
+              <LinkChips idea={idea} linked={linked} />
+              <span
+                className={cn(
+                  "shrink-0",
+                  linking !== idea.id &&
+                    "opacity-0 group-hover/idea:opacity-100 has-focus-visible:opacity-100",
+                )}
+              >
+                <Button
+                  size="icon-xs"
+                  variant="ghost-muted"
+                  aria-label={`链接「${idea.text}」到文件或图片`}
+                  aria-pressed={linking === idea.id}
+                  onClick={() => onLink(linking === idea.id ? null : idea.id)}
                 >
-                  <Button
-                    size="icon-xs"
-                    variant="ghost-muted"
-                    aria-label={`链接「${idea.text}」到文件或图片`}
-                    aria-pressed={linking === idea.id}
-                    onClick={() => onLink(linking === idea.id ? null : idea.id)}
-                  >
-                    <LinkIcon />
-                  </Button>
-                </span>
-              )}
+                  <LinkIcon />
+                </Button>
+              </span>
             </li>
           );
         })}
@@ -507,11 +594,12 @@ function CanvasCard({
   onPick,
 }: {
   card: Card;
-  linking: boolean;
+  linking: Idea | null;
   onPick: () => void;
 }) {
   const { ideas } = useIdeas();
-  const linked = ideas.filter((i) => i.link === card.id);
+  const linked = ideas.filter((i) => i.links.includes(card.id));
+  const picked = linking?.links.includes(card.id) ?? false;
   const drag = useDrag(
     card,
     (x, y) => commit({ cards: state.cards.map((c) => (c.id === card.id ? { ...c, x, y } : c)) }),
@@ -525,10 +613,18 @@ function CanvasCard({
       className={cn(
         "group/card absolute m-0 flex touch-none flex-col overflow-hidden rounded-xl border bg-card shadow-md select-none motion-safe:animate-ideas-snap",
         linking
-          ? "cursor-pointer ring-2 ring-primary/40 hover:ring-primary"
+          ? cn(
+              "cursor-pointer ring-2 hover:ring-primary",
+              picked ? "ring-primary" : "ring-primary/40",
+            )
           : "cursor-grab active:cursor-grabbing",
       )}
     >
+      {picked ? (
+        <span className="absolute start-1.5 top-1.5 z-10 inline-flex size-5 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-sm">
+          <CheckIcon className="size-3.5" />
+        </span>
+      ) : null}
       {card.kind === "image" && card.url ? (
         <img
           src={card.url}
@@ -572,37 +668,39 @@ function Links() {
       aria-hidden="true"
       width={CANVAS.w}
       height={CANVAS.h}
-      className="pointer-events-none absolute inset-0 text-primary"
+      className="pointer-events-none absolute inset-0"
     >
-      {ideas.map((idea, i) => {
-        const card = cards.find((c) => c.id === idea.link);
-        if (!card) return null;
-        const y1 = list.y + HEADER_H + i * ROW_H + ROW_H / 2;
-        const y2 = card.y + 28;
-        // Beside the list: curve straight across. Under or over it: loop round its right side.
-        const left = card.x + CARD_W <= list.x;
-        const across = left || card.x >= list.x + LIST_W;
-        const x1 = left ? list.x : list.x + LIST_W;
-        const x2 = left || !across ? card.x + CARD_W : card.x;
-        const bend = Math.max(48, Math.abs(x2 - x1) / 2);
-        const d = across
-          ? `M${x1} ${y1} C${x1 + (left ? -bend : bend)} ${y1} ${x2 + (left ? bend : -bend)} ${y2} ${x2} ${y2}`
-          : `M${x1} ${y1} C${Math.max(x1, x2) + 72} ${y1} ${Math.max(x1, x2) + 72} ${y2} ${x2} ${y2}`;
-        return (
-          <g key={idea.id}>
-            <path
-              d={d}
-              fill="none"
-              stroke="currentColor"
-              strokeWidth={1.5}
-              strokeDasharray="5 4"
-              opacity={0.7}
-            />
-            <circle cx={x1} cy={y1} r={3} fill="currentColor" />
-            <circle cx={x2} cy={y2} r={3} fill="currentColor" />
-          </g>
-        );
-      })}
+      {ideas.flatMap((idea, i) =>
+        cards
+          .filter((c) => idea.links.includes(c.id))
+          .map((card) => {
+            const y1 = list.y + HEADER_H + i * ROW_H + ROW_H / 2;
+            const y2 = card.y + 28;
+            // Beside the list: curve straight across. Under or over it: loop round its right side.
+            const left = card.x + CARD_W <= list.x;
+            const across = left || card.x >= list.x + LIST_W;
+            const x1 = left ? list.x : list.x + LIST_W;
+            const x2 = left || !across ? card.x + CARD_W : card.x;
+            const bend = Math.max(48, Math.abs(x2 - x1) / 2);
+            const d = across
+              ? `M${x1} ${y1} C${x1 + (left ? -bend : bend)} ${y1} ${x2 + (left ? bend : -bend)} ${y2} ${x2} ${y2}`
+              : `M${x1} ${y1} C${Math.max(x1, x2) + 72} ${y1} ${Math.max(x1, x2) + 72} ${y2} ${x2} ${y2}`;
+            return (
+              <g key={`${idea.id}-${card.id}`} className={hueOf(idea.id)}>
+                <path
+                  d={d}
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={1.5}
+                  strokeDasharray="5 4"
+                  opacity={0.85}
+                />
+                <circle cx={x1} cy={y1} r={3} fill="currentColor" />
+                <circle cx={x2} cy={y2} r={3} fill="currentColor" />
+              </g>
+            );
+          }),
+      )}
     </svg>
   );
 }
@@ -660,7 +758,12 @@ function IdeasBoard() {
           )}
         >
           {linkingIdea ? (
-            <>点画布上的一个文件或图片，链接到「{linkingIdea.text}」。按 Esc 取消。</>
+            <>
+              点文件或图片，链接到「{linkingIdea.text}」，可以点多个；再点一次取消。
+              <Button size="xs" variant="secondary" onClick={() => setLinking(null)}>
+                完成
+              </Button>
+            </>
           ) : (
             <>
               Ctrl+V 粘贴截图或文件，或者直接拖进来，它们会吸附到网格上。粘贴文字会记成一条新想法。
@@ -698,10 +801,9 @@ function IdeasBoard() {
             <CanvasCard
               key={card.id}
               card={card}
-              linking={linking !== null}
+              linking={linkingIdea ?? null}
               onPick={() => {
-                if (linking) patchIdea(linking, { link: card.id });
-                setLinking(null);
+                if (linking) toggleLink(linking, card.id);
               }}
             />
           ))}

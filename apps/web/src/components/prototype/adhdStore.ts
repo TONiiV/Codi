@@ -21,13 +21,6 @@ export const SESSION_ACHIEVEMENTS = [25, 45, 60, 90].map((minutes) => ({
   label: `连续 ${minutes} 分钟`,
 }));
 
-export type AdhdVariant = "a" | "b" | "c";
-export const ADHD_VARIANTS: ReadonlyArray<{ id: AdhdVariant; name: string }> = [
-  { id: "a", name: "安静单栏" },
-  { id: "b", name: "边缘进度" },
-  { id: "c", name: "任务收进标题" },
-];
-
 export type AdhdToast =
   | { id: number; kind: "milestone"; minutes: number }
   | { id: number; kind: "session"; minutes: number; label: string }
@@ -36,7 +29,6 @@ export type AdhdToast =
 const TOTAL_KEY = "lighthouse-adhd-total";
 const SEEN_KEY = "lighthouse-adhd-seen";
 const BEST_KEY = "lighthouse-adhd-best";
-const VARIANT_KEY = "lighthouse-adhd-variant";
 // A fresh prototype starts just under the first total achievement so it is reachable in a demo.
 const SEED_TOTAL = 52 * 60_000;
 const TOAST_MS = 4000;
@@ -61,7 +53,6 @@ interface AdhdState {
   /** Total-time achievements already celebrated, by hours. */
   seen: ReadonlyArray<number>;
   toasts: ReadonlyArray<AdhdToast>;
-  variant: AdhdVariant;
 }
 
 function read(key: string): string | null {
@@ -93,14 +84,6 @@ function readSeen(): ReadonlyArray<number> {
   }
 }
 
-function readVariant(): AdhdVariant {
-  const wanted =
-    typeof window === "undefined"
-      ? null
-      : (new URLSearchParams(window.location.search).get("adhd") ?? read(VARIANT_KEY));
-  return ADHD_VARIANTS.find((v) => v.id === wanted)?.id ?? "a";
-}
-
 let state: AdhdState = {
   phase: "idle",
   project: null,
@@ -113,7 +96,6 @@ let state: AdhdState = {
   best: readNumber(BEST_KEY, 0),
   seen: readSeen(),
   toasts: [],
-  variant: readVariant(),
 };
 const listeners = new Set<() => void>();
 let ticker: number | undefined;
@@ -131,11 +113,6 @@ const subscribe = (cb: () => void) => {
 
 export function useAdhd(): AdhdState {
   return useSyncExternalStore(subscribe, () => state);
-}
-
-/** Whole session minutes: views that show progress re-render once a minute, not every second. */
-export function useSessionMinutes(): number {
-  return useSyncExternalStore(subscribe, () => Math.floor(state.elapsed / 60_000));
 }
 
 const elapsedAt = (now: number) =>
@@ -224,14 +201,31 @@ export function skipFiveMinutes() {
   tick();
 }
 
-export function setAdhdVariant(variant: AdhdVariant) {
-  write(VARIANT_KEY, variant);
-  commit({ variant });
-}
-
 /** What the achievements popover shows: total time and best session, both counting this one. */
 export function achievementProgress(s: AdhdState) {
   return { total: s.total + s.elapsed, best: Math.max(s.best, s.elapsed), session: s.elapsed };
+}
+
+/**
+ * The nearest real milestone across both tracks (5-minute ticks do not count), with the share of
+ * the way there from the previous one on that track.
+ */
+export function nextMilestone(s: AdhdState) {
+  const { total, session } = achievementProgress(s);
+  const step = (list: typeof SESSION_ACHIEVEMENTS, value: number) => {
+    const next = list.find((a) => value < a.ms);
+    if (!next) return null;
+    const from = list.findLast((a) => value >= a.ms)?.ms ?? 0;
+    return { label: next.label, left: next.ms - value, share: (value - from) / (next.ms - from) };
+  };
+  const a = step(SESSION_ACHIEVEMENTS, session);
+  const b = step(TOTAL_ACHIEVEMENTS, total);
+  return a && b ? (a.left <= b.left ? a : b) : (a ?? b);
+}
+
+/** Time left, rounded up to the minute so it never reads "0 分" before the moment arrives. */
+export function formatLeft(ms: number): string {
+  return formatDuration(Math.ceil(ms / 60_000) * 60_000);
 }
 
 const PRIORITY = { high: 30, medium: 20, low: 10 } as const;
