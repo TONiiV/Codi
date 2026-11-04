@@ -2,7 +2,6 @@
 // message that came from IM or email, the email card and reply draft, the channel filter, the
 // per-agent channel switches, and the context meter that shows what the agent has loaded.
 import {
-  BrainIcon,
   Building2Icon,
   HashIcon,
   MailIcon,
@@ -259,29 +258,47 @@ export interface ContextLoad {
   used: number;
   total: number;
   memories: number;
-  parts: ReadonlyArray<{ label: string; detail: string; tokens: number }>;
+  parts: ReadonlyArray<{ label: string; detail: string; tokens: number; budget?: number }>;
 }
 
-const k = (n: number) => `${Math.round(n / 100) / 10}k`;
+const COMPACT_AT = 0.7;
+const pct = (n: number, total: number) => `${Math.max(1, Math.round((n / total) * 100))}%`;
 
-/** A static mock of context management: what the agent has loaded for this chat right now. */
-export function ContextMeter({ load }: { load: ContextLoad }) {
+/** A static mock of context management: a ring left of send, with what is loaded on hover. */
+export function ContextGauge({ load }: { load: ContextLoad }) {
+  const share = load.used / load.total;
+  const hot = share >= COMPACT_AT;
+  const r = 7;
+  const around = 2 * Math.PI * r;
+  const label = `上下文已用 ${Math.round(share * 100)}%`;
   return (
     <Popover>
-      <PopoverTrigger render={<Button size="xs" variant="ghost-muted" />}>
-        <BrainIcon />
-        上下文 {k(load.used)} / {k(load.total)} · 记忆 {load.memories} 条
+      <PopoverTrigger
+        openOnHover
+        delay={150}
+        aria-label={label}
+        render={<Button variant="ghost" size="icon-sm" />}
+      >
+        <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" className="-rotate-90">
+          <circle cx="10" cy="10" r={r} fill="none" strokeWidth="2.5" className="stroke-border" />
+          <circle
+            cx="10"
+            cy="10"
+            r={r}
+            fill="none"
+            strokeWidth="2.5"
+            strokeLinecap="round"
+            strokeDasharray={around}
+            strokeDashoffset={around * (1 - Math.min(1, Math.max(0.02, share)))}
+            className={hot ? "stroke-warning" : "stroke-muted-foreground"}
+          />
+        </svg>
       </PopoverTrigger>
-      <PopoverPopup align="end" aria-label="现在装进上下文的内容">
-        <div className="flex w-80 flex-col gap-3 text-sm">
-          <div className="flex flex-col gap-1">
-            <span className="font-medium">现在装进上下文的内容</span>
-            <div className="h-1.5 overflow-hidden rounded-full bg-muted">
-              <div
-                className="h-full rounded-full bg-primary"
-                style={{ width: `${Math.max(2, (load.used / load.total) * 100)}%` }}
-              />
-            </div>
+      <PopoverPopup side="top" align="end" aria-label="现在装进上下文的内容">
+        <div className="flex w-72 flex-col gap-3 text-sm">
+          <div className="flex items-baseline justify-between gap-3">
+            <span className="font-medium">上下文已用 {pct(load.used, load.total)}</span>
+            <span className="text-xs text-muted-foreground">记忆 {load.memories} 条</span>
           </div>
           <ul className="flex flex-col gap-2">
             {load.parts.map((p) => (
@@ -291,13 +308,16 @@ export function ContextMeter({ load }: { load: ContextLoad }) {
                   <span className="text-xs text-muted-foreground">{p.detail}</span>
                 </span>
                 <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
-                  {k(p.tokens)}
+                  {pct(p.tokens, load.total)}
+                  {p.budget === undefined ? null : ` / 上限 ${Math.round(p.budget * 100)}%`}
                 </span>
               </li>
             ))}
           </ul>
-          <p className="text-xs text-muted-foreground">
-            每个信道的消息都进这一份上下文。旧消息先压成摘要，用到时再从记忆里检索，不整段塞回来。
+          <p className={cn("text-xs", hot ? "text-warning" : "text-muted-foreground")}>
+            {hot
+              ? "已过 70%：先清掉旧的工具结果，再把较早的对话压成摘要。"
+              : "到 70% 时开始压缩。旧消息先压成摘要，用到时再从记忆里检索。"}
           </p>
         </div>
       </PopoverPopup>

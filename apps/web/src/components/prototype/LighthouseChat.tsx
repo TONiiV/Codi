@@ -68,10 +68,12 @@ function SendGlyph() {
 export function ChatComposerCard({
   placeholder,
   label,
+  gauge,
   className,
 }: {
   placeholder: string;
   label?: ReactNode;
+  gauge?: ReactNode;
   className?: string;
 }) {
   return (
@@ -91,6 +93,7 @@ export function ChatComposerCard({
               {label ? (
                 <span className="truncate text-xs text-muted-foreground">{label}</span>
               ) : null}
+              {gauge}
               <button
                 type="button"
                 aria-label="Send"
