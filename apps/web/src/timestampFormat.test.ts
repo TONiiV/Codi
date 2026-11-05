@@ -2,9 +2,11 @@ import type { TFunction } from "i18next";
 import { describe, expect, it } from "vite-plus/test";
 
 import {
+  formatDayAwareTimestamp,
   formatElapsedDurationLabel,
   formatExpiresInLabel,
   formatRelativeTimeLabel,
+  formatUpcomingTimestamp,
 } from "./timestampFormat";
 
 const NOW = Date.UTC(2026, 0, 2, 12, 0, 0);
@@ -54,5 +56,23 @@ describe("timestampFormat translations", () => {
     expect(formatExpiresInLabel(fromNow(90_000), NOW, zh)).toBe("1 分钟 30 秒后过期");
     expect(formatExpiresInLabel(fromNow(1_000), NOW, zh)).toBe("即将过期");
     expect(formatExpiresInLabel(ago(1_000), NOW, zh)).toBe("已过期");
+  });
+});
+
+describe("timestamps in an explicit time zone", () => {
+  // 23:00 UTC on July 1 is 7 PM on July 1 in New York, whatever the host zone.
+  const now = Date.parse("2026-07-01T23:00:00.000Z");
+  const zone = "America/New_York";
+
+  it("picks relative days from the calendar in that zone", () => {
+    expect(formatUpcomingTimestamp("2026-07-02T00:30:00.000Z", "12-hour", now, zone)).not.toMatch(
+      /tomorrow/,
+    );
+    expect(formatUpcomingTimestamp("2026-07-02T05:30:00.000Z", "12-hour", now, zone)).toMatch(
+      /^tomorrow at /,
+    );
+    expect(formatDayAwareTimestamp("2026-07-01T03:30:00.000Z", "12-hour", now, zone)).toMatch(
+      /^yesterday at /,
+    );
   });
 });

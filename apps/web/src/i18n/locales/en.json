@@ -3442,6 +3442,11 @@
       "statusSuffix": "{{name}}: {{status}}.",
       "statusWithMessage": "{{name}}: {{status}}. {{message}}",
       "unavailableSuffix": " (Unavailable)"
+    },
+    "merge": {
+      "checkoutGroupingDescription": "Grouping rule decides how each checkout joins project groups in the sidebar. Changing it can move a checkout to a different project.",
+      "signedInTokenReadable": "Signed in, but the token saved below is used while it can be read.",
+      "removeCheckout": "Remove checkout {{path}}"
     }
   }
 }

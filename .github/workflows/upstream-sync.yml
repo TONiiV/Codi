@@ -57,7 +57,7 @@ jobs:
           fi
 
       - name: Setup Vite+
-        if: steps.merge.outputs.status == 'conflict'
+        if: steps.merge.outputs.status == 'conflict' || steps.merge.outputs.status == 'merged'
         uses: ./.github/actions/setup-ci-deps
         with:
           install: "false"
@@ -100,6 +100,7 @@ jobs:
           )
           set +e
           claude -p "$prompt" \
+            --model claude-sonnet-5-5 --effort medium \
             --add-dir "$RUNNER_TEMP" \
             --permission-mode acceptEdits \
             --allowedTools "Read" "Edit" "Write" "Glob" "Grep" \
@@ -126,10 +127,14 @@ jobs:
             vp install
             xargs vp fmt --no-error-on-unmatched-pattern < "$RUNNER_TEMP/conflicts" || fail "format failed on resolved files"
             xargs git add < "$RUNNER_TEMP/conflicts"
-            xargs vp lint --no-error-on-unmatched-pattern < "$RUNNER_TEMP/conflicts" || fail "lint failed on resolved files"
-            vp run typecheck || fail "typecheck failed"
             git commit --no-edit
+          else
+            vp install
           fi
+          # The PR checks, scoped to what the fork changes relative to upstream (the Codi
+          # rename and any resolved conflicts). Upstream's own CI covers its changes.
+          vp run check:changed upstream/main 2>&1 | tee "$RUNNER_TEMP/check.log"
+          [ "${PIPESTATUS[0]}" = 0 ] || fail "check:changed failed"
           git push origin HEAD:main
           {
             echo "## Merged ${{ steps.merge.outputs.behind }} upstream commits"
@@ -141,7 +146,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Report blocked sync
-        if: failure() && steps.merge.outputs.status == 'conflict'
+        if: failure() && (steps.merge.outputs.status == 'conflict' || steps.merge.outputs.status == 'merged')
         run: |
           git merge --abort || true
           {
@@ -153,9 +158,18 @@ jobs:
               echo
               echo "> Claude authentication failed. The token may have expired: run \`claude setup-token\` and update \`CLAUDE_CODE_OAUTH_TOKEN\`."
             fi
-            echo
-            echo "Conflicted files:"
-            sed 's/^/- `/; s/$/`/' "$RUNNER_TEMP/conflicts"
+            if [ -s "$RUNNER_TEMP/conflicts" ]; then
+              echo
+              echo "Conflicted files:"
+              sed 's/^/- `/; s/$/`/' "$RUNNER_TEMP/conflicts"
+            fi
+            if [ -f "$RUNNER_TEMP/check.log" ]; then
+              echo
+              echo "### check:changed (last 60 lines)"
+              echo '```'
+              tail -60 "$RUNNER_TEMP/check.log"
+              echo '```'
+            fi
             if [ -f "$RUNNER_TEMP/claude-report.md" ]; then
               echo
               echo "### Claude's report"
