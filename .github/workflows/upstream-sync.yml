@@ -131,6 +131,12 @@ jobs:
           else
             vp install
           fi
+          # New upstream copy arrives as "T3 Code". Re-apply the rename, and the byte budget it
+          # shrinks, by script so the model only handles real conflicts.
+          node scripts/rebrand-codi.mjs
+          node scripts/refresh-agent-context-budget.ts || fail "agent context budget grew: run the evals in evals/README.md, then raise it by hand"
+          git diff --name-only | xargs -r vp fmt --no-error-on-unmatched-pattern
+          git diff --quiet || git commit -qam "chore: re-apply the Codi rename after the upstream merge"
           # The PR checks, scoped to what the fork changes relative to upstream (the Codi
           # rename and any resolved conflicts). Upstream's own CI covers its changes.
           vp run check:changed upstream/main 2>&1 | tee "$RUNNER_TEMP/check.log"
