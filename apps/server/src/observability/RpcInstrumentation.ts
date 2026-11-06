@@ -1,4 +1,9 @@
-import { ORCHESTRATION_V2_WS_METHODS, WS_METHODS, type WsRpcGroup } from "@t3tools/contracts";
+import {
+  ORCHESTRATION_V2_WS_METHODS,
+  Telescope,
+  WS_METHODS,
+  type WsRpcGroup,
+} from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as References from "effect/References";
@@ -222,6 +227,17 @@ const RPC_AGGREGATES = {
   [WS_METHODS.subscribeServerConfig]: "server",
   [WS_METHODS.subscribeServerLifecycle]: "server",
   [WS_METHODS.subscribeAuthAccess]: "auth",
+  [Telescope.WS_METHODS.workspaceCreate]: "telescope",
+  [Telescope.WS_METHODS.workspaceList]: "telescope",
+  [Telescope.WS_METHODS.workspaceGet]: "telescope",
+  [Telescope.WS_METHODS.memberInvite]: "telescope",
+  [Telescope.WS_METHODS.memberAccept]: "telescope",
+  [Telescope.WS_METHODS.memberList]: "telescope",
+  [Telescope.WS_METHODS.memberSetRole]: "telescope",
+  [Telescope.WS_METHODS.memberRevoke]: "telescope",
+  [Telescope.WS_METHODS.projectBind]: "telescope",
+  [Telescope.WS_METHODS.projectUnbind]: "telescope",
+  [Telescope.WS_METHODS.projectListBindings]: "telescope",
 } as const satisfies Readonly<Record<WsRpcMethod, string>>;
 
 const RPC_SPAN_PREFIX = "ws.rpc";

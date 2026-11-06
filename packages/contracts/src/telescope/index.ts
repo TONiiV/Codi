@@ -5,3 +5,4 @@ export * from "./board.ts";
 export * from "./governance.ts";
 export * from "./runtime.ts";
 export * from "./a2a.ts";
+export * from "./rpc.ts";

@@ -24,6 +24,8 @@ import {
   AuthTerminalOperateScope,
   ORCHESTRATION_V2_WS_METHODS,
   AuthTerminalReadScope,
+  AuthTelescopeMemberScope,
+  Telescope,
   type AuthEnvironmentScope,
   EnvironmentAuthorizationError,
   RpcScopeAuthorization,
@@ -210,6 +212,12 @@ export const RPC_REQUIRED_SCOPES = {
   [WS_METHODS.subscribeServerConfig]: AuthOrchestrationReadScope,
   [WS_METHODS.subscribeServerLifecycle]: AuthOrchestrationReadScope,
   [WS_METHODS.subscribeAuthAccess]: AuthAccessReadScope,
+  [Telescope.WS_METHODS.workspaceCreate]: AuthTelescopeMemberScope,
+  [Telescope.WS_METHODS.workspaceList]: AuthTelescopeMemberScope,
+  [Telescope.WS_METHODS.workspaceGet]: AuthTelescopeMemberScope,
+  [Telescope.WS_METHODS.memberAccept]: AuthTelescopeMemberScope,
+  [Telescope.WS_METHODS.memberList]: AuthTelescopeMemberScope,
+  [Telescope.WS_METHODS.projectListBindings]: AuthTelescopeMemberScope,
 } as const satisfies Readonly<Record<WsRpcMethod, AuthEnvironmentScope>>;
 
 export function requiredScopeForRpcMethod(method: string): AuthEnvironmentScope {

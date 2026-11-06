@@ -23,6 +23,7 @@ import { rpcInitialItems } from "./rpcInitialItems.ts";
 import { subscribeChatGptHandoff } from "./provider/CodexChatGptHandoff.ts";
 import {
   AcpRegistryOperationError,
+  Telescope,
   CommandId,
   authScopeResponse,
   AuthAccessStreamError,
@@ -125,6 +126,8 @@ import * as ThreadMessageIntake from "./orchestration-v2/ThreadMessageIntake.ts"
 import * as DocumentText from "./provider/DocumentText.ts";
 import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
 import * as ScheduledTasks from "./scheduledTasks/ScheduledTaskService.ts";
+import * as TelescopeWorkspaces from "./telescope/WorkspaceService.ts";
+import type { PersistenceDecodeError, PersistenceSqlError } from "./persistence/Errors.ts";
 import * as SecretRequests from "./secrets/SecretRequests.ts";
 import * as GuestShareService from "./guest/GuestShareService.ts";
 import {
@@ -1385,6 +1388,23 @@ export const subscribeOrchestrationV2Shell = Effect.fn("ws.orchestrationV2.subsc
   },
 );
 
+const telescopeStorage = <A, R>(
+  effect: Effect.Effect<
+    A,
+    Telescope.WorkspaceError | PersistenceSqlError | PersistenceDecodeError,
+    R
+  >,
+) =>
+  effect.pipe(
+    Effect.catchTags({
+      PersistenceSqlError: () => telescopeStorageError,
+      PersistenceDecodeError: () => telescopeStorageError,
+    }),
+  );
+const telescopeStorageError = Effect.fail(
+  new Telescope.WorkspaceError({ reason: "storage", message: "Telescope storage is unavailable." }),
+);
+
 export const layerWsRpc = (
   currentSession: EnvironmentAuth.AuthenticatedSession,
   clientAnalyticsProps: Readonly<Record<string, unknown>>,
@@ -1438,6 +1458,8 @@ export const layerWsRpc = (
       const commandOutputHub = yield* CommandOutputHub.CommandOutputHub;
       const providerSessionManager = yield* ProviderSessionManager.ProviderSessionManagerV2;
       const scheduledTasks = yield* ScheduledTasks.ScheduledTaskService;
+      const telescope = yield* TelescopeWorkspaces.WorkspaceService;
+      const caller = currentSession.subject;
       const secretRequests = yield* SecretRequests.SecretRequests;
       const guestShares = yield* GuestShareService.GuestShareService;
       const pullRequests = yield* PullRequestService.PullRequestService;
@@ -2346,6 +2368,28 @@ export const layerWsRpc = (
           Effect.annotateCurrentSpan({ "scheduled_task.id": input.id }).pipe(
             Effect.andThen(scheduledTasks.rotateWebhookToken(input)),
           ),
+        [Telescope.WS_METHODS.workspaceCreate]: (input) =>
+          telescopeStorage(telescope.create(caller, input)),
+        [Telescope.WS_METHODS.workspaceList]: (input) =>
+          telescopeStorage(telescope.list(caller, input)),
+        [Telescope.WS_METHODS.workspaceGet]: (input) =>
+          telescopeStorage(telescope.get(caller, input)),
+        [Telescope.WS_METHODS.memberInvite]: (input) =>
+          telescopeStorage(telescope.invite(caller, input)),
+        [Telescope.WS_METHODS.memberAccept]: (input) =>
+          telescopeStorage(telescope.accept(caller, input)),
+        [Telescope.WS_METHODS.memberList]: (input) =>
+          telescopeStorage(telescope.members(caller, input)),
+        [Telescope.WS_METHODS.memberSetRole]: (input) =>
+          telescopeStorage(telescope.setRole(caller, input)),
+        [Telescope.WS_METHODS.memberRevoke]: (input) =>
+          telescopeStorage(telescope.revoke(caller, input)),
+        [Telescope.WS_METHODS.projectBind]: (input) =>
+          telescopeStorage(telescope.bind(caller, input)),
+        [Telescope.WS_METHODS.projectUnbind]: (input) =>
+          telescopeStorage(telescope.unbind(caller, input)),
+        [Telescope.WS_METHODS.projectListBindings]: (input) =>
+          telescopeStorage(telescope.bindings(caller, input)),
         [WS_METHODS.guestShareCreate]: (input) =>
           Effect.annotateCurrentSpan({ "orchestration_v2.thread_id": input.threadId }).pipe(
             Effect.andThen(guestShares.create(input)),
@@ -3501,6 +3545,7 @@ export const layer = Layer.unwrap(
     const reviewGuides = yield* PullRequestReviewGuideService.PullRequestReviewGuideService;
     const peerLinks = yield* PeerLinks.PeerLinks;
     const peerLinkRequests = yield* PeerLinkRequests.PeerLinkRequests;
+    const telescopeWorkspaces = yield* TelescopeWorkspaces.WorkspaceService;
     const sql = yield* SqlClient.SqlClient;
     return HttpRouter.add(
       "GET",
@@ -3590,6 +3635,9 @@ export const layer = Layer.unwrap(
               ),
               Layer.provide(Layer.succeed(PeerLinks.PeerLinks, peerLinks)),
               Layer.provide(Layer.succeed(PeerLinkRequests.PeerLinkRequests, peerLinkRequests)),
+              Layer.provide(
+                Layer.succeed(TelescopeWorkspaces.WorkspaceService, telescopeWorkspaces),
+              ),
               Layer.provide(
                 SourceControlDiscovery.layer.pipe(
                   Layer.provide(

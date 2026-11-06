@@ -89,7 +89,7 @@ export const ProjectListBindingsResult = Schema.Struct({
 export class WorkspaceError extends Schema.TaggedError<WorkspaceError>()(
   "TelescopeWorkspaceError",
   {
-    reason: Schema.Literals(["not_found", "forbidden", "invalid", "expired", "conflict"]),
+    reason: Schema.Literals(["not_found", "forbidden", "expired", "conflict", "storage"]),
     message: Schema.String,
   },
 ) {}

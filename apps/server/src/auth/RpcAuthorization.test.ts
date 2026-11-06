@@ -14,6 +14,9 @@ import {
   AuthSourceControlWriteScope,
   AuthTerminalReadScope,
   AuthTerminalOperateScope,
+  AuthTelescopeAdminScope,
+  AuthTelescopeMemberScope,
+  Telescope,
   WS_METHODS,
   WsRpcGroup,
 } from "@t3tools/contracts";
@@ -65,6 +68,21 @@ describe("RPC authorization scopes", () => {
       WS_METHODS.previewStopLocalServer,
     ]) {
       expect(requiredScopeForRpcMethod(method)).toBe(AuthTerminalOperateScope);
+    }
+  });
+
+  it("keeps telescope membership and project binding changes behind admin scope", () => {
+    expect(requiredScopeForRpcMethod(Telescope.WS_METHODS.memberAccept)).toBe(
+      AuthTelescopeMemberScope,
+    );
+    for (const method of [
+      Telescope.WS_METHODS.memberInvite,
+      Telescope.WS_METHODS.memberSetRole,
+      Telescope.WS_METHODS.memberRevoke,
+      Telescope.WS_METHODS.projectBind,
+      Telescope.WS_METHODS.projectUnbind,
+    ]) {
+      expect(requiredScopeForRpcMethod(method)).toBe(AuthTelescopeAdminScope);
     }
   });
 
