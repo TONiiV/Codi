@@ -11,6 +11,8 @@ import {
 import * as Option from "effect/Option";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
+import type { TFunction } from "i18next";
+import { englishT } from "~/i18n/englishT";
 
 const decodeSecretProviderId = Schema.decodeOption(SecretProviderId);
 const decodeOnePasswordConfig = Schema.decodeUnknownOption(OnePasswordSecretProviderConfig);
@@ -75,15 +77,20 @@ export function secretProviderFromDraft(
   draft: SecretProviderDraft,
   existingIds: ReadonlySet<string>,
   target: SecretProviderTarget,
+  t: TFunction = englishT,
 ): Result.Result<
   { readonly id: SecretProviderId; readonly config: SecretProviderConfig },
   SecretProviderDraftIssues
 > {
-  const label = decodeField(SecretProviderLabel, draft.name, "Enter a name.");
+  const label = decodeField(
+    SecretProviderLabel,
+    draft.name,
+    t("settings.parallelSystem.enterAName"),
+  );
   const account = decodeField(
     OnePasswordSecretProviderConfig.fields.account,
     draft.account,
-    "Enter the 1Password account.",
+    t("settings.text.enterThe1passwordAccount"),
   );
 
   let id: SecretProviderId | null = null;
@@ -92,9 +99,9 @@ export function secretProviderFromDraft(
     nameIssue = label.failure;
   } else {
     id = target.mode === "edit" ? target.id : secretProviderIdFromName(label.success);
-    if (id === null) nameIssue = "The name needs at least one letter or digit.";
+    if (id === null) nameIssue = t("settings.text.theNameNeedsAtLeastOne");
     else if (target.mode === "add" && existingIds.has(id))
-      nameIssue = "A secret provider with this name exists.";
+      nameIssue = t("settings.text.aSecretProviderWithThisName");
   }
 
   if (

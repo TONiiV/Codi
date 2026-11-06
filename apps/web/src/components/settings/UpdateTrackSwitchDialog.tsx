@@ -13,7 +13,6 @@ import { npmReleaseAtom, npmReleaseFailureMessage } from "~/state/npmRelease";
 import { downloadLocalUpdate, installLocalUpdate } from "../sidebar/SidebarUpdatePill";
 import { UpdateEverythingDialog } from "../sidebar/UpdateEverythingDialog";
 import {
-  channelSwitchLabel,
   localSwitchBlockReason,
   type ChannelSwitchRelease,
 } from "../sidebar/updateEverything.logic";
@@ -30,6 +29,7 @@ import {
 } from "../ui/alert-dialog";
 import { Button } from "../ui/button";
 import { stackedThreadToast, toastManager } from "../ui/toast";
+import { useTranslation } from "react-i18next";
 
 /** Moves this app and every connected machine to `channel`. */
 export function UpdateTrackSwitchDialog({
@@ -39,27 +39,30 @@ export function UpdateTrackSwitchDialog({
   readonly channel: DesktopUpdateChannel;
   readonly onClose: () => void;
 }) {
+  const { t } = useTranslation();
   // npm dist-tags match the desktop channel names.
   const release = useAtomValue(npmReleaseAtom(channel));
   if (AsyncResult.isSuccess(release) && release.value !== null) {
     return <SwitchPlan release={{ channel, ...release.value }} onClose={onClose} />;
   }
-  const label = channelSwitchLabel(channel);
+  const label = t(channel === "nightly" ? "settings.text.nightly" : "settings.text.stable");
   return (
     <AlertDialog open onOpenChange={(open) => !open && onClose()}>
       <AlertDialogPopup>
         <AlertDialogHeader>
-          <AlertDialogTitle>Switch to {label}</AlertDialogTitle>
+          <AlertDialogTitle>{t("settings.text.switchToLabel3", { label })}</AlertDialogTitle>
           <AlertDialogDescription>
             {AsyncResult.isFailure(release)
               ? npmReleaseFailureMessage(release.cause)
               : AsyncResult.isSuccess(release)
-                ? `Could not find the latest ${label} release in this environment's npm registry.`
-                : "Checking releases…"}
+                ? t("settings.text.couldNotFindTheLatestLabel", { label })
+                : t("settings.text.checkingReleases")}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogClose render={<Button variant="outline" />}>Cancel</AlertDialogClose>
+          <AlertDialogClose render={<Button variant="outline" />}>
+            {t("settings.text.cancel")}
+          </AlertDialogClose>
         </AlertDialogFooter>
       </AlertDialogPopup>
     </AlertDialog>
@@ -73,6 +76,7 @@ function SwitchPlan({
   readonly release: ChannelSwitchRelease;
   readonly onClose: () => void;
 }) {
+  const { t } = useTranslation();
   const updateState = useDesktopUpdateState();
   const { environments } = useEnvironments();
   const crossesLocal = desktopUpdateChannelOf(APP_VERSION) !== release.channel;
@@ -81,7 +85,7 @@ function SwitchPlan({
   const switchesLocal = crossesLocal && !updatesOff;
   const [checking, setChecking] = useState(false);
   const everything = useUpdateEverything(switchesLocal ? release.version : null, release);
-  const label = channelSwitchLabel(release.channel);
+  const label = t(release.channel === "nightly" ? "settings.text.nightly" : "settings.text.stable");
   // This app's reinstall restarts every server it hosts, so each of their databases must allow it.
   const localBlocked = localSwitchBlockReason(
     APP_VERSION,
@@ -100,13 +104,21 @@ function SwitchPlan({
     setChecking(true);
     const fail = (description: string) =>
       toastManager.add(
-        stackedThreadToast({ type: "error", title: `Could not switch to ${label}`, description }),
+        stackedThreadToast({
+          type: "error",
+          title: t("settings.text.couldNotSwitchToLabel", { label }),
+          description,
+        }),
       );
-    const prepared = await prepareLocalTrackSwitch(bridge, {
-      channel: release.channel,
-      version: release.version,
-      reinstall: switchesLocal,
-    });
+    const prepared = await prepareLocalTrackSwitch(
+      bridge,
+      {
+        channel: release.channel,
+        version: release.version,
+        reinstall: switchesLocal,
+      },
+      t,
+    );
     onClose();
     if (!prepared.ok) {
       fail(prepared.message);
@@ -132,8 +144,11 @@ function SwitchPlan({
                   !acceptsTrackSwitchRelease(downloadedVersion, release.channel, release.version)
                 ) {
                   reportError(
-                    "Could not install update",
-                    `This app downloaded ${downloadedVersion ?? "nothing"}, not ${release.version} or newer.`,
+                    t("settings.text.couldNotInstallUpdate"),
+                    t("settings.parallelSystem.trackSwitchDownloadedBuild", {
+                      downloaded: downloadedVersion ?? t("settings.parallelSystem.nothing"),
+                      version: release.version,
+                    }),
                   );
                   return false;
                 }
@@ -144,7 +159,7 @@ function SwitchPlan({
     );
     if (result._tag === "Failure") {
       const error = squashAtomCommandFailure(result);
-      fail(error instanceof Error ? error.message : "An unexpected error occurred.");
+      fail(error instanceof Error ? error.message : t("settings.text.anUnexpectedErrorOccurred"));
     }
   };
 
@@ -152,26 +167,28 @@ function SwitchPlan({
     <UpdateEverythingDialog
       open
       onOpenChange={(open) => !open && !checking && onClose()}
-      title={`Switch to ${label}?`}
+      title={t("settings.text.switchToLabel2", { label })}
       version={release.version}
       providerCount={0}
       rows={everything.rows}
       notes={[
         ...(everything.rows.length === 0 && !crossesLocal
-          ? [`Every connected machine is already on ${label}. This only saves the track.`]
+          ? [t("settings.text.everyConnectedMachineIsAlreadyOn", { label })]
           : []),
-        ...(crossesLocal && updatesOff
-          ? ["This app's updates are off here, so reinstall it yourself to switch."]
-          : []),
+        ...(crossesLocal && updatesOff ? [t("settings.text.thisAppSUpdatesAreOff")] : []),
         ...(switchesLocal && isMacPlatform(navigator.platform)
-          ? ["If Codi does not reopen after it restarts, open it again."]
+          ? [t("settings.text.ifCodiDoesNotReopenAfter")]
           : []),
       ]}
       restarts={everything.restarts}
-      confirmLabel={checking ? "Checking…" : `Switch to ${label}`}
+      confirmLabel={
+        checking ? t("settings.text.checking") : t("settings.text.switchToLabel3", { label })
+      }
       busy={checking}
       disabledReason={
-        !switchesLocal || localBlocked === null ? null : `This app cannot switch: ${localBlocked}.`
+        !switchesLocal || localBlocked === null
+          ? null
+          : t("settings.text.thisAppCannotSwitchLocalblocked", { localBlocked })
       }
       onConfirm={() => void run()}
     />

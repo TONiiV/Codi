@@ -1,5 +1,6 @@
 import { DraftInput, type DraftInputProps } from "../ui/draft-input";
 import { Input, type InputProps } from "../ui/input";
+import { useTranslation } from "react-i18next";
 
 type SecretInputProps = Omit<InputProps, "type" | "autoComplete" | "defaultValue" | "value"> & {
   /** Pass only the replacement draft as `value`. */
@@ -14,14 +15,15 @@ export function SecretInput({
   onCommit,
   ...props
 }: SecretInputProps) {
+  const { t } = useTranslation();
   const shared = {
     ...props,
     type: "password" as const,
     autoComplete: "off",
     spellCheck: false,
     placeholder: configured
-      ? "Stored secret, enter a new value to replace"
-      : (placeholder ?? "Not set"),
+      ? t("settings.text.storedSecretEnterANewValue")
+      : (placeholder ?? t("settings.text.notSet")),
   };
   if (onCommit) {
     return (
