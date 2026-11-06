@@ -1,0 +1,30 @@
+{
+  "common": {
+    "search": "Search"
+  },
+  "sidebar": {
+    "toggle": "Toggle main sidebar"
+  },
+  "settings": {
+    "parallelShared": {
+      "copied": "Copied!",
+      "failedToCopy": "Failed to copy",
+      "justNow": "just now",
+      "relativeAgo": "ago",
+      "relativeMinutes": "{{value}}m",
+      "relativeHours": "{{value}}h",
+      "relativeDays": "{{value}}d",
+      "durationSeconds": "{{value}}s",
+      "durationMinutes": "{{value}}m",
+      "durationHours": "{{value}}h",
+      "durationDays": "{{value}}d",
+      "expiresExpired": "Expired",
+      "expiresMoment": "Expires in a moment",
+      "expiresIn": "Expires in {{duration}}",
+      "copyUnavailable": "Clipboard API is unavailable while copying {{target}}.",
+      "copyFailed": "Failed to copy {{target}} to the clipboard.",
+      "readUnavailable": "Clipboard API is unavailable while reading {{target}}.",
+      "readFailed": "Failed to read {{target}} from the clipboard."
+    }
+  }
+}
