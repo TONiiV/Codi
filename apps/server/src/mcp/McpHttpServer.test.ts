@@ -6,6 +6,7 @@ import { NodeHttpServer } from "@effect/platform-node";
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import {
+  AuthSessionId,
   DeviceId,
   DeviceOperationError,
   EnvironmentId,
@@ -35,6 +36,10 @@ import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
 import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
 import * as Sqlite from "../persistence/Sqlite.ts";
 import * as ManagedPolicy from "../policy/ManagedPolicy.ts";
+import { runMigrations } from "../persistence/Migrations.ts";
+import * as MemoryService from "../telescope/MemoryService.ts";
+import * as TelescopeDb from "../telescope/TelescopeDb.ts";
+import * as WorkspaceService from "../telescope/WorkspaceService.ts";
 
 import * as DeviceService from "../device/DeviceService.ts";
 import * as PullRequestReviewGuideService from "../pullRequest/PullRequestReviewGuideService.ts";
@@ -1328,6 +1333,142 @@ it.effect("lists pull request watch tools only to threads that are not delegated
       expect(childTools).toContain("link_pull_request");
       expect(childTools).not.toContain("watch_pull_request");
       expect(childTools).not.toContain("unwatch_pull_request");
+    }),
+  ).pipe(Effect.provide(NodeHttpServer.layerTest)),
+);
+
+it.effect("lists memory tools only to threads with an open Telescope run", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const scopeFor = (token: string): McpInvocationContext.McpThreadInvocationScope => ({
+        environmentId,
+        requestNamespace: token,
+        thread: {
+          threadId: ThreadId.make(`thread-${token}`),
+          providerSessionId: token,
+          providerInstanceId: ProviderInstanceId.make("codex"),
+        },
+        client: undefined,
+        capabilities: new Set(["orchestration"]),
+        issuedAt: 1,
+      });
+      const database = Layer.effectDiscard(runMigrations()).pipe(
+        Layer.provideMerge(Sqlite.layerMemory),
+      );
+      const telescope = Layer.mergeAll(
+        TelescopeDb.layer,
+        WorkspaceService.layer,
+        MemoryService.layer,
+      ).pipe(Layer.provideMerge(Layer.merge(database, NodeCrypto.layer)));
+      const telescopeContext = yield* Layer.build(telescope);
+      const serverLayer = McpHttpServer.layerMcpTransport(McpHttpServer.layerMemoryToolkit).pipe(
+        Layer.provide(ServerSettings.layerTest()),
+        Layer.provide(
+          Layer.mock(McpSessionRegistry.McpSessionRegistry)({
+            resolve: (token) => Effect.succeed(scopeFor(token)),
+          }),
+        ),
+        Layer.provide(
+          Layer.mergeAll(
+            McpToolAccessTestkit.liveThreadsLayer,
+            Layer.succeedContext(telescopeContext),
+            NodeServices.layer,
+          ),
+        ),
+      );
+      yield* HttpRouter.serve(serverLayer, { disableListenLog: true, disableLogger: true }).pipe(
+        Layer.build,
+      );
+      const httpClient = yield* HttpClient.HttpClient;
+      const rpcAs = (token: string) =>
+        Effect.gen(function* () {
+          const headers = {
+            accept: "application/json, text/event-stream",
+            authorization: `Bearer ${token}`,
+          };
+          const initialize = yield* httpClient.post("/mcp", {
+            headers,
+            body: HttpBody.text(
+              `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"probe","version":"1.0.0"}}}`,
+              "application/json",
+            ),
+          });
+          return (method: string, params: object) =>
+            httpClient
+              .post("/mcp", {
+                headers: {
+                  ...headers,
+                  "mcp-session-id": initialize.headers["mcp-session-id"]!,
+                  "mcp-protocol-version": "2025-06-18",
+                },
+                body: HttpBody.text(
+                  JSON.stringify({ jsonrpc: "2.0", id: 2, method, params }),
+                  "application/json",
+                ),
+              })
+              .pipe(
+                Effect.flatMap((response) => response.json),
+                Effect.map(
+                  (body) =>
+                    body as {
+                      readonly result?: {
+                        readonly tools?: ReadonlyArray<{ readonly name: string }>;
+                        readonly structuredContent?: unknown;
+                      };
+                      readonly error?: { readonly message: string };
+                    },
+                ),
+              );
+        });
+      const listed = (rpc: Effect.Success<ReturnType<typeof rpcAs>>) =>
+        rpc("tools/list", {}).pipe(
+          Effect.map((body) => body.result?.tools?.map((tool) => tool.name)),
+        );
+      const write = (rpc: Effect.Success<ReturnType<typeof rpcAs>>) =>
+        rpc("tools/call", { name: "memory_write", arguments: { op: "add", text: "样机周五交付" } });
+
+      const plain = yield* rpcAs("plain");
+      expect(yield* listed(plain)).toEqual([]);
+      expect((yield* write(plain)).error?.message).toContain("not found");
+
+      const db = Context.get(telescopeContext, TelescopeDb.TelescopeDb);
+      const workspace = yield* Context.get(telescopeContext, WorkspaceService.WorkspaceService)
+        .create(
+          { sessionId: AuthSessionId.make("session-alice"), subject: "one-time-token" },
+          { kind: "personal", name: "Acme", displayName: "Alice" },
+        )
+        .pipe(Effect.orDie);
+      const at = "2026-11-06T00:00:00.000Z";
+      yield* db.insert(workspace.id, "agents", {
+        agent_id: "agent-alice",
+        owner_subject_id: workspace.createdBy,
+        kind: "chief_of_staff",
+        name: "agent-alice",
+        standing_powers_json: "{}",
+        exposure: "hidden",
+        sync_with_board: 0,
+        dispatch_mode: "inbox",
+        channels_json: "[]",
+        created_at: at,
+        updated_at: at,
+      });
+      yield* db.insert(workspace.id, "runs", {
+        run_id: "run-1",
+        agent_id: "agent-alice",
+        on_behalf_of_json: JSON.stringify([workspace.createdBy]),
+        input_snapshot_json: "{}",
+        started_at: at,
+        thread_id: "thread-telescope",
+      });
+      const telescopeRun = yield* rpcAs("telescope");
+      expect(yield* listed(telescopeRun)).toEqual(["memory_search", "memory_write"]);
+      expect((yield* write(telescopeRun)).result?.structuredContent).toMatchObject({
+        memory: { agentId: "agent-alice", text: "样机周五交付" },
+      });
+
+      yield* db.update(workspace.id, "runs", { finished_at: at }, { run_id: "run-1" });
+      expect(yield* listed(telescopeRun)).toEqual([]);
+      expect((yield* write(telescopeRun)).error?.message).toContain("not found");
     }),
   ).pipe(Effect.provide(NodeHttpServer.layerTest)),
 );

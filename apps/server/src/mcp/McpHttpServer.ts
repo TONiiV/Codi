@@ -77,6 +77,9 @@ import {
   DeviceStandardToolkit,
 } from "./toolkits/device/tools.ts";
 import * as HtmlHandlers from "./toolkits/html/handlers.ts";
+import * as MemoryHandlers from "./toolkits/memory/handlers.ts";
+import * as MemoryService from "../telescope/MemoryService.ts";
+import { MemoryToolkit } from "./toolkits/memory/tools.ts";
 import { HtmlPreviewTool, HtmlPreviewToolkit, HtmlRenderToolkit } from "./toolkits/html/tools.ts";
 import { requestUrl } from "../requestUrl.ts";
 
@@ -1199,6 +1202,29 @@ export const layerDeviceToolkit = Layer.mergeAll(
   layerDeviceScreenshotRegistration,
 );
 
+/** Out of `layerTools`: only threads with an open Telescope run see these, so other lists keep their size. */
+const visibleToTelescopeRuns = McpServer.visibility(
+  Effect.map(
+    MemoryService.MemoryService,
+    (memory) => () =>
+      Effect.serviceOption(McpInvocationContext.McpInvocationContext).pipe(
+        Effect.flatMap((scope) => {
+          const thread = Option.getOrUndefined(scope)?.thread;
+          return thread === undefined
+            ? Effect.succeed(false)
+            : memory.callerForThread(thread.threadId).pipe(
+                Effect.as(true),
+                Effect.orElseSucceed(() => false),
+              );
+        }),
+      ),
+  ),
+);
+
+export const layerMemoryToolkit = toolkitRegistration(MemoryToolkit, MemoryHandlers.layer).pipe(
+  Layer.provide(visibleToTelescopeRuns.layer),
+);
+
 /**
  * `McpServer` for in-process calls, which provide `McpInvocationContext`
  * around `callTool` as the auth middleware does for each /mcp request.
@@ -1243,4 +1269,4 @@ export const layerTools = Layer.mergeAll(
   layerHtmlToolkit,
 );
 
-export const layer = layerMcpTransport(layerTools);
+export const layer = layerMcpTransport(Layer.merge(layerTools, layerMemoryToolkit));
