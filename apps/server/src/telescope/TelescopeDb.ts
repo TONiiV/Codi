@@ -44,7 +44,7 @@ export type RowsDecoder<A, R> = (rows: unknown) => Effect.Effect<A, Schema.Schem
 /** `filter` is parenthesised and ANDed with the workspace filter, so it cannot widen a select. */
 interface SelectOptions {
   readonly filter?: Statement.Fragment;
-  readonly orderBy?: string;
+  readonly orderBy?: ReadonlyArray<string>;
   readonly descending?: boolean;
   readonly limit?: number;
 }
@@ -140,10 +140,11 @@ const make = Effect.gen(function* () {
   ) {
     yield* checkColumns(`TelescopeDb.select.${table}`, where, "caller");
     const filter = options.filter === undefined ? sql`` : sql` AND (${options.filter})`;
+    const direction = sql.literal(options.descending ? "DESC" : "ASC");
     const order =
       options.orderBy === undefined
         ? sql``
-        : sql` ORDER BY ${sql(options.orderBy)} ${sql.literal(options.descending ? "DESC" : "ASC")}`;
+        : sql` ORDER BY ${sql.csv(options.orderBy.map((column) => sql`${sql(column)} ${direction}`))}`;
     const limit = options.limit === undefined ? sql`` : sql` LIMIT ${options.limit}`;
     const rows =
       yield* sql`SELECT * FROM ${tableName(table)} WHERE ${scoped(workspaceId, where)}${filter}${order}${limit}`.pipe(

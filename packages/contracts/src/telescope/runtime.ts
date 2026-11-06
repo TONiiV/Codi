@@ -121,8 +121,8 @@ export const RunListInput = Schema.Struct({
   workspaceId: WorkspaceId,
   agentId: Schema.optionalKey(AgentId),
   threadId: Schema.optionalKey(ThreadId),
-  /** Runs that started before this time, for paging back. */
-  before: Schema.optionalKey(Timestamp),
+  /** The last run of the previous page; runs are ordered by start time, then id. */
+  before: Schema.optionalKey(Schema.Struct({ startedAt: Timestamp, runId: AgentRunId })),
   limit: Schema.optionalKey(Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 200 }))),
 });
 export const RunListResult = Schema.Struct({ runs: Schema.Array(AgentRun) });

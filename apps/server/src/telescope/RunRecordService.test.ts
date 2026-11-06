@@ -143,25 +143,41 @@ it.layer(layer)("Telescope run records", (it) => {
         });
       const first = yield* start([memoryId]);
       yield* TestClock.adjust("1 minute");
-      yield* start(["memory-2"]);
+      const sameIdOtherKind = snapshot(["memory-2"]);
+      const second = yield* runs.start(alice, workspaceId, {
+        agentId,
+        inputSnapshot: {
+          ...sameIdOtherKind,
+          contextManifest: [
+            ...sameIdOtherKind.contextManifest,
+            { kind: "diary", id: memoryId, hash: "d1" },
+          ],
+        },
+      });
       yield* TestClock.adjust("1 minute");
       const third = yield* start(["memory-2", memoryId]);
+      const sameInstant = yield* start([]);
 
       const used = yield* runs.runsForMemory(alice, { workspaceId, memoryId });
       assert.deepStrictEqual(
         used.runs.map((run) => run.id),
         [third.id, first.id],
       );
-      const page = yield* runs.list(alice, { workspaceId, limit: 2 });
-      assert.strictEqual(page.runs[0]?.id, third.id);
-      const older = yield* runs.list(alice, {
-        workspaceId,
-        before: page.runs[1]!.startedAt,
-      });
-      assert.deepStrictEqual(
-        older.runs.map((run) => run.id),
-        [first.id],
-      );
+      const paged: Array<Telescope.AgentRunId> = [];
+      let before: (typeof Telescope.RunListInput.Type)["before"];
+      for (let page = 0; page < 5; page++) {
+        const [run] = (yield* runs.list(alice, {
+          workspaceId,
+          limit: 1,
+          ...(before && { before }),
+        })).runs;
+        if (run === undefined) break;
+        paged.push(run.id);
+        before = { startedAt: run.startedAt, runId: run.id };
+      }
+      assert.strictEqual(third.startedAt, sameInstant.startedAt);
+      assert.sameMembers(paged.slice(0, 2), [third.id, sameInstant.id]);
+      assert.deepStrictEqual(paged.slice(2), [second.id, first.id]);
     }),
   );
 

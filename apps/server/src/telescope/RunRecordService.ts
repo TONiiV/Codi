@@ -222,7 +222,7 @@ const make = Effect.gen(function* () {
     return yield* db.transaction(
       Effect.gen(function* () {
         yield* runRow(run, "open");
-        const last = { orderBy: "seq", descending: true, limit: 1 } as const;
+        const last = { orderBy: ["seq"], descending: true, limit: 1 } as const;
         const [previous] = yield* db.select(
           run.workspaceId,
           "run_calls",
@@ -320,7 +320,7 @@ const make = Effect.gen(function* () {
     return toRun(yield* runRow(run));
   });
 
-  const newestFirst = { orderBy: "started_at", descending: true } as const;
+  const newestFirst = { orderBy: ["started_at", "run_id"], descending: true } as const;
 
   const list = Effect.fn("RunRecordService.list")(function* (
     caller: Caller,
@@ -338,7 +338,11 @@ const make = Effect.gen(function* () {
       {
         ...newestFirst,
         limit: input.limit ?? DEFAULT_LIST_LIMIT,
-        ...(input.before === undefined ? {} : { filter: sql`started_at < ${input.before}` }),
+        ...(input.before === undefined
+          ? {}
+          : {
+              filter: sql`(started_at, run_id) < (${input.before.startedAt}, ${input.before.runId})`,
+            }),
       },
     );
     return { runs: rows.map(toRun) };
@@ -348,7 +352,7 @@ const make = Effect.gen(function* () {
     yield* requireMember(run.workspaceId, caller);
     const where = { run_id: run.runId };
     const rows = yield* db.select(run.workspaceId, "run_calls", decodeCalls, where, {
-      orderBy: "seq",
+      orderBy: ["seq"],
     });
     return { calls: rows.map(toCall) };
   });
