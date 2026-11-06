@@ -40,6 +40,7 @@ function TitleCell({ task, write }: { task: Telescope.Task; write: Write }) {
       onChange={(event) => setDraft(event.target.value)}
       onBlur={save}
       onKeyDown={(event) => {
+        if (event.nativeEvent.isComposing || event.keyCode === 229) return;
         if (event.key === "Enter") save();
         if (event.key === "Escape") setDraft(null);
       }}
