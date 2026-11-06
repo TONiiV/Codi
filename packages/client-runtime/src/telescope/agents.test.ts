@@ -11,7 +11,8 @@ import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
 import * as SubscriptionRef from "effect/SubscriptionRef";
 import { AsyncResult, Atom, AtomRegistry } from "effect/reactivity";
-import { describe, expect, it, vi } from "vite-plus/test";
+import { describe, expect, it } from "@effect/vitest";
+import { vi } from "vite-plus/test";
 
 import { AVAILABLE_CONNECTION_STATE, BearerConnectionTarget } from "../connection/model.ts";
 import { EnvironmentRegistry } from "../connection/registry.ts";
@@ -94,21 +95,21 @@ describe("telescope standing power cap", () => {
 });
 
 describe("telescope agent queries", () => {
-  it("re-read the caller's agents and the bindings after this client binds a project", async () => {
-    const env = EnvironmentId.make("local");
-    let bindings: ReadonlyArray<Telescope.ProjectBinding> = [];
-    const listMine = vi.fn(() => Effect.succeed({ agents: [] }));
-    const client = {
-      [Telescope.WS_METHODS.agentListMine]: listMine,
-      [Telescope.WS_METHODS.projectListBindings]: () => Effect.sync(() => ({ bindings })),
-      [Telescope.WS_METHODS.projectBindingSummary]: () => Effect.succeed({ projects: [] }),
-      [Telescope.WS_METHODS.projectBind]: (input: Telescope.ProjectBinding) =>
-        Effect.sync(() => {
-          bindings = [input];
-          return input;
-        }),
-    };
-    const program = Effect.gen(function* () {
+  it.effect("re-read the caller's agents and the bindings after this client binds a project", () =>
+    Effect.gen(function* () {
+      const env = EnvironmentId.make("local");
+      let bindings: ReadonlyArray<Telescope.ProjectBinding> = [];
+      const listMine = vi.fn(() => Effect.succeed({ agents: [] }));
+      const client = {
+        [Telescope.WS_METHODS.agentListMine]: listMine,
+        [Telescope.WS_METHODS.projectListBindings]: () => Effect.sync(() => ({ bindings })),
+        [Telescope.WS_METHODS.projectBindingSummary]: () => Effect.succeed({ projects: [] }),
+        [Telescope.WS_METHODS.projectBind]: (input: Telescope.ProjectBinding) =>
+          Effect.sync(() => {
+            bindings = [input];
+            return input;
+          }),
+      };
       const supervisor = {
         target: new BearerConnectionTarget({
           environmentId: env,
@@ -169,7 +170,6 @@ describe("telescope agent queries", () => {
       expect(yield* read(bound)).toEqual({ bindings: [input] });
       yield* read(mine);
       expect(listMine).toHaveBeenCalledTimes(2);
-    });
-    await Effect.runPromise(Effect.scoped(program));
-  });
+    }),
+  );
 });
