@@ -24,7 +24,7 @@ export const EXPOSURE_LABEL: Record<Telescope.AgentExposure, string> = {
   dispatchable: "可调度",
 };
 
-const POWERS: ReadonlyArray<{
+export const POWERS: ReadonlyArray<{
   id: keyof Telescope.StandingPowers;
   label: string;
   hint: string;

@@ -1,7 +1,8 @@
+import { useAtomValue } from "@effect/atom-react";
 import { cappedPowers, ownerCanMergePRs } from "@t3tools/client-runtime/telescope/agents";
 import { type EnvironmentId, Telescope } from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
-import { LockIcon, UsersRoundIcon } from "lucide-react";
+import { LockIcon, PlusIcon, Settings2Icon, UsersRoundIcon } from "lucide-react";
 import { useState, type ReactNode } from "react";
 
 import { useEnvironmentQuery, type EnvironmentQueryView } from "../../state/query";
@@ -11,6 +12,7 @@ import { Button } from "../ui/button";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "../ui/empty";
 import { Spinner } from "../ui/spinner";
 import { Toggle, ToggleGroup } from "../ui/toggle-group";
+import { AgentSettingsDialog, CreateCustomAgentDialog } from "./MyTeamsAgentDialog";
 import { EXPOSURE_LABEL, KIND_LABEL, powerSummary, telescopeAgents } from "./myTeamsShared";
 import { telescope, useTelescopeWorkspaces } from "./telescopeState";
 
@@ -64,7 +66,15 @@ function QueryState<A>({
   );
 }
 
-function AgentRow({ agent, powers }: { agent: Telescope.Agent; powers: Telescope.StandingPowers }) {
+function AgentRow({
+  agent,
+  powers,
+  action,
+}: {
+  agent: Telescope.Agent;
+  powers: Telescope.StandingPowers;
+  action: ReactNode;
+}) {
   return (
     <li className="flex items-start gap-3 px-4 py-3">
       <div className="min-w-0 flex-1">
@@ -86,6 +96,7 @@ function AgentRow({ agent, powers }: { agent: Telescope.Agent; powers: Telescope
           </Badge>
         </div>
       </div>
+      {action}
     </li>
   );
 }
@@ -107,9 +118,19 @@ function Teams({
   const scoped = { environmentId, input: { workspaceId: workspace.id } };
   const [picked, setPicked] = useState<Tab>("mine");
   const tab = picked === "company" && !enterprise ? "mine" : picked;
+  const [editing, setEditing] = useState<Telescope.Agent | null>(null);
+  const [creating, setCreating] = useState(false);
   const bindings = useEnvironmentQuery(telescopeAgents.bindings(scoped));
   const mine = useEnvironmentQuery(telescopeAgents.listMine(scoped));
   const company = useEnvironmentQuery(enterprise ? telescopeAgents.listCompany(scoped) : null);
+  const mayConfigureCompany =
+    useAtomValue(telescopeAgents.updateCompany.permissionAtom(environmentId)) &&
+    self.role === "admin";
+  const settingsButton = (agent: Telescope.Agent) => (
+    <Button size="xs" variant="ghost-muted" onClick={() => setEditing(agent)}>
+      <Settings2Icon /> 设定
+    </Button>
+  );
 
   return (
     <div className="flex flex-col gap-5">
@@ -136,10 +157,16 @@ function Teams({
 
       {tab === "mine" ? (
         <section className="flex flex-col gap-3">
-          <p className="max-w-xl text-sm text-muted-foreground">
-            这些 agent 归你：最上面是首席幕僚，然后是你在每个项目里的首席代理，以及你自己建的自定义
-            agent。改名和设定只有你能做。
-          </p>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <p className="max-w-xl text-sm text-muted-foreground">
+              这些 agent
+              归你：最上面是首席幕僚，然后是你在每个项目里的首席代理，以及你自己建的自定义
+              agent。改名和设定只有你能做。
+            </p>
+            <Button size="sm" onClick={() => setCreating(true)}>
+              <PlusIcon /> 新建自定义 agent
+            </Button>
+          </div>
           <QueryState query={mine}>
             {({ agents }) =>
               agents.length === 0 ? (
@@ -156,6 +183,7 @@ function Teams({
                             agent.standingPowers,
                             ownerCanMergePRs(self, agent, projects.bindings),
                           )}
+                          action={settingsButton(agent)}
                         />
                       ))}
                     </AgentList>
@@ -173,7 +201,7 @@ function Teams({
             <LockIcon />
             <AlertDescription>
               公司 agents 和你的 agents 是两套。公司 agents 归公司，按你的权限回答。
-              {self.role === "admin"
+              {mayConfigureCompany
                 ? "你是公司管理员，可以设定它们。"
                 : "只有公司管理员能配置它们。"}
             </AlertDescription>
@@ -186,7 +214,12 @@ function Teams({
               ) : (
                 <AgentList>
                   {own.map((agent) => (
-                    <AgentRow key={agent.id} agent={agent} powers={agent.standingPowers} />
+                    <AgentRow
+                      key={agent.id}
+                      agent={agent}
+                      powers={agent.standingPowers}
+                      action={mayConfigureCompany ? settingsButton(agent) : null}
+                    />
                   ))}
                 </AgentList>
               );
@@ -215,6 +248,24 @@ function Teams({
             ))}
           </AgentList>
         </section>
+      ) : null}
+
+      {editing ? (
+        <AgentSettingsDialog
+          environmentId={environmentId}
+          workspace={workspace}
+          self={self}
+          agent={editing}
+          bindings={bindings.data?.bindings ?? []}
+          onClose={() => setEditing(null)}
+        />
+      ) : null}
+      {creating ? (
+        <CreateCustomAgentDialog
+          environmentId={environmentId}
+          workspaceId={workspace.id}
+          onClose={() => setCreating(false)}
+        />
       ) : null}
     </div>
   );

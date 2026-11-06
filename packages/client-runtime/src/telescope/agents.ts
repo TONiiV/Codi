@@ -9,6 +9,24 @@ import {
 } from "../state/runtime.ts";
 
 const { WS_METHODS } = Telescope;
+const EXPOSURES = Telescope.AgentExposure.literals;
+
+/**
+ * Exposure levels the owner may pick from `saved`: any lower level, or exactly one step up.
+ * Personal workspaces have no 主代理, so nothing there is dispatchable.
+ */
+export function selectableExposures(
+  saved: Telescope.AgentExposure,
+  workspaceKind: Telescope.Workspace["kind"],
+): ReadonlySet<Telescope.AgentExposure> {
+  const ceiling = EXPOSURES.indexOf(saved) + 1;
+  return new Set(
+    EXPOSURES.filter(
+      (exposure, rank) =>
+        rank <= ceiling && !(exposure === "dispatchable" && workspaceKind === "personal"),
+    ),
+  );
+}
 
 /** Mirrors the server: only workspace admins and the agent's project lead may merge PRs. */
 export function ownerCanMergePRs(
