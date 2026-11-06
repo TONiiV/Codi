@@ -8,7 +8,7 @@ import type { EnvironmentUsageStatus } from "../../state/usage";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "../ui/empty";
 import { Toggle, ToggleGroup } from "../ui/toggle-group";
 import { TYPE_COLORS } from "./usageBreakdown";
-import { buildUsageFlow, fitLabel, type FlowUnit, type UsageFlowData } from "./usageFlow";
+import { buildUsageFlow, fitLabel, type FlowUnit, type UsageFlowData } from "./UsageFlow.logic";
 import { PROVIDER_PRESENTATION } from "./usageProviders";
 
 const W = 960;
