@@ -1,5 +1,6 @@
 import { cappedPowers, ownerCanMergePRs } from "@t3tools/client-runtime/telescope/agents";
-import type { EnvironmentId, Telescope } from "@t3tools/contracts";
+import { type EnvironmentId, Telescope } from "@t3tools/contracts";
+import * as Schema from "effect/Schema";
 import { LockIcon, UsersRoundIcon } from "lucide-react";
 import { useState, type ReactNode } from "react";
 
@@ -22,6 +23,16 @@ const EXAMPLE_SKILLS = [
   { id: "weekly", name: "周报格式", summary: "从任务板汇总本周完成和卡住的事。" },
 ];
 
+const isWorkspaceError = Schema.is(Telescope.WorkspaceError);
+
+const READ_ERROR_TEXT: Record<Telescope.WorkspaceError["reason"], string> = {
+  not_found: "找不到这个工作区，请刷新后再试。",
+  forbidden: "你没有权限查看这些内容。",
+  expired: "已经过期，请刷新后再试。",
+  conflict: "和当前状态冲突，请刷新后再试。",
+  storage: "服务器读取出错，请稍后再试。",
+};
+
 function QueryState<A>({
   query,
   children,
@@ -33,7 +44,12 @@ function QueryState<A>({
   if (query.error !== null)
     return (
       <Alert variant="error">
-        <AlertDescription>读取失败：{query.error}</AlertDescription>
+        <AlertDescription>
+          读取失败：
+          {isWorkspaceError(query.failure)
+            ? READ_ERROR_TEXT[query.failure.reason]
+            : "请检查连接后再试。"}
+        </AlertDescription>
         <AlertAction>
           <Button size="xs" variant="outline" onClick={query.refresh}>
             重试
