@@ -26,7 +26,14 @@ export const WakeReason = Schema.Literals([
   "board_event",
   "maintenance",
 ]);
-export const WakeStatus = Schema.Literals(["queued", "running", "done", "merged", "interrupted"]);
+export const WakeStatus = Schema.Literals([
+  "queued",
+  "running",
+  "done",
+  "failed",
+  "merged",
+  "interrupted",
+]);
 
 export const Wake = Schema.Struct({
   id: WakeId,
@@ -48,7 +55,10 @@ export const Wake = Schema.Struct({
 });
 export type Wake = typeof Wake.Type;
 
-/** `position` is 1-based among queued wakes on this machine; absent once a wake has started. */
+/**
+ * `position` is 1-based among queued wakes on this machine, caps and hold windows ignored; absent
+ * once a wake has started.
+ */
 export const WakeListResult = Schema.Struct({
   wakes: Schema.Array(Schema.Struct({ ...Wake.fields, position: Schema.optionalKey(PositiveInt) })),
 });

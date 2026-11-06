@@ -3,11 +3,14 @@ import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as DateTime from "effect/DateTime";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Latch from "effect/Latch";
+import * as Option from "effect/Option";
 import * as Layer from "effect/Layer";
 import * as Ref from "effect/Ref";
+import * as Result from "effect/Result";
 import type * as Rpc from "effect/rpc/Rpc";
 import * as Schema from "effect/Schema";
 import * as Struct from "effect/Struct";
@@ -19,6 +22,12 @@ import * as TelescopeDb from "./TelescopeDb.ts";
 import * as WorkspaceService from "./WorkspaceService.ts";
 
 const RUNNING_PER_SUBJECT = 3;
+const HOLD = Duration.seconds(90);
+const HELD_REASONS: ReadonlySet<typeof Telescope.WakeReason.Type> = new Set([
+  "channel",
+  "board_event",
+  "scheduled",
+]);
 
 const WakeRow = Schema.Struct({
   wake_id: Telescope.WakeId,
@@ -29,16 +38,21 @@ const WakeRow = Schema.Struct({
   priority: Schema.Literals([1, 2, 3]),
   subject_id: Telescope.SubjectId,
   thread_id: Schema.NullOr(ThreadId),
+  task_id: Schema.NullOr(Telescope.TaskId),
   project_id: Schema.NullOr(ProjectId),
   payload_json: Schema.fromJsonString(Schema.Json),
   status: Telescope.WakeStatus,
+  merged_into: Schema.NullOr(Telescope.WakeId),
+  run_after: Schema.NullOr(Schema.String),
   created_at: Schema.String,
   started_at: Schema.NullOr(Schema.String),
   finished_at: Schema.NullOr(Schema.String),
 });
 type WakeRow = typeof WakeRow.Type;
 
-const decodeWakes = Schema.decodeUnknownEffect(Schema.Array(WakeRow));
+const decodeRawRows = Schema.decodeUnknownEffect(Schema.Array(Schema.Unknown));
+const decodeWake = Schema.decodeUnknownEffect(WakeRow);
+const decodeRowId = Schema.decodeUnknownOption(Schema.Struct({ wake_id: Telescope.WakeId }));
 const encodePayload = Schema.encodeSync(Schema.fromJsonString(Schema.Json));
 
 const toWake = (row: WakeRow): Telescope.Wake => ({
@@ -50,6 +64,7 @@ const toWake = (row: WakeRow): Telescope.Wake => ({
   priority: row.priority,
   subjectId: row.subject_id,
   ...(row.thread_id === null ? {} : { threadId: row.thread_id }),
+  ...(row.task_id === null ? {} : { taskId: row.task_id }),
   ...(row.project_id === null ? {} : { projectId: row.project_id }),
   payload: row.payload_json,
   status: row.status,
@@ -57,6 +72,9 @@ const toWake = (row: WakeRow): Telescope.Wake => ({
   ...(row.started_at === null ? {} : { startedAt: row.started_at }),
   ...(row.finished_at === null ? {} : { finishedAt: row.finished_at }),
 });
+
+const byAge = (a: WakeRow, b: WakeRow) =>
+  a.created_at.localeCompare(b.created_at) || a.wake_id.localeCompare(b.wake_id);
 
 const countBy = (rows: ReadonlyArray<WakeRow>, key: (row: WakeRow) => string | null) => {
   const counts = new Map<string, number>();
@@ -74,15 +92,27 @@ const pick = (rows: ReadonlyArray<WakeRow>, lastServed: ReadonlyMap<string, numb
     const order =
       row.priority - best.priority ||
       (lastServed.get(row.subject_id) ?? -1) - (lastServed.get(best.subject_id) ?? -1) ||
-      row.created_at.localeCompare(best.created_at) ||
-      row.wake_id.localeCompare(best.wake_id);
+      byAge(row, best);
     return order < 0 ? row : best;
   }, undefined);
 
+/** `subjectId` is the Telescope member id the wake serves, never an auth subject. */
 export type WakeRequest = Pick<
   Telescope.Wake,
-  "reason" | "agentId" | "coalesceKey" | "priority" | "subjectId" | "threadId" | "projectId"
+  | "reason"
+  | "agentId"
+  | "coalesceKey"
+  | "priority"
+  | "subjectId"
+  | "threadId"
+  | "taskId"
+  | "projectId"
 > & { readonly payload: Schema.Json };
+/** A started wake and, in arrival order, its own payload and those of the wakes merged into it. */
+export interface WakeRun {
+  readonly wake: Telescope.Wake;
+  readonly payloads: ReadonlyArray<Schema.Json>;
+}
 interface WakeLimits {
   readonly perProject: number;
   readonly machine: number;
@@ -92,7 +122,8 @@ type ListInput = Rpc.Payload<(typeof Telescope.WakeRpcs)[number]>;
 
 /**
  * One queue for every reason an agent wakes, shared by the whole machine. A queued wake absorbs
- * later wakes with its coalesce key until it starts.
+ * later wakes with its coalesce key until it starts; each absorbed one stays as a `merged` row.
+ * Channel, board and scheduled wakes below priority 1 are held for 90 seconds so a burst merges.
  */
 export class WakeQueueService extends Context.Service<
   WakeQueueService,
@@ -102,35 +133,36 @@ export class WakeQueueService extends Context.Service<
       workspaceId: Telescope.WorkspaceId,
       request: WakeRequest,
     ) => Effect.Effect<Telescope.Wake, Failure>;
-    /** Starts the next wake the running caps allow, if any. */
+    /** Starts the next due wake the running caps allow, if any. */
     readonly dequeue: Effect.Effect<Telescope.Wake | undefined, Failure>;
     /** Like `dequeue`, but waits until a wake can start. */
-    readonly take: Effect.Effect<Telescope.Wake, Failure>;
+    readonly take: Effect.Effect<WakeRun, Failure>;
     readonly finish: (
       wake: Telescope.Wake,
-      status: "done" | "interrupted",
+      status: "done" | "failed" | "interrupted",
     ) => Effect.Effect<void, Failure>;
     /** Marks wakes left running by a previous process as interrupted. */
     readonly interruptRunning: Effect.Effect<void, Failure>;
-    /** 1-based place among all queued wakes on this machine; undefined once started. */
+    /** 1-based place among queued wakes on this machine, caps and holds ignored. */
     readonly position: (
       workspaceId: Telescope.WorkspaceId,
       wakeId: Telescope.Wake["id"],
     ) => Effect.Effect<number | undefined, Failure>;
+    /** `caller` is the auth session; it must be a member of the workspace. */
     readonly list: (
-      caller: Telescope.SubjectId,
+      caller: WorkspaceService.Caller,
       input: ListInput,
     ) => Effect.Effect<typeof Telescope.WakeListResult.Type, Failure | Telescope.WorkspaceError>;
     readonly setLimits: (limits: Partial<WakeLimits>) => Effect.Effect<void>;
   }
 >()("t3/telescope/WakeQueueService") {}
 
-/** Runs one wake. Provide another value to plug in the agent runtime. */
-export const WakeRunner = Context.Reference<(wake: Telescope.Wake) => Effect.Effect<void>>(
+/** Runs one wake; a failure is logged and recorded as `failed`. Provide the agent runtime here. */
+export const WakeRunner = Context.Reference<(run: WakeRun) => Effect.Effect<void>>(
   "t3/telescope/WakeRunner",
   {
-    defaultValue: () => (wake) =>
-      Effect.logInfo("Telescope wake ran", { wakeId: wake.id, reason: wake.reason }),
+    defaultValue: () => (run) =>
+      Effect.logInfo("Telescope wake ran", { wakeId: run.wake.id, reason: run.wake.reason }),
   },
 );
 
@@ -145,11 +177,43 @@ const make = Effect.gen(function* () {
   const lastServed = new Map<string, number>();
   let turn = 0;
   const now = DateTime.now.pipe(Effect.map(DateTime.formatIso));
+  // One unreadable row must not stall the machine-wide queue: it is logged, marked failed and skipped.
+  const selectWakes = Effect.fn("WakeQueueService.selectWakes")(function* (
+    workspaceId: Telescope.WorkspaceId,
+    where: Readonly<Record<string, string>>,
+  ) {
+    const rows = yield* db.select(workspaceId, "wakes", decodeRawRows, where);
+    const wakes: Array<WakeRow> = [];
+    for (const raw of rows) {
+      const decoded = yield* Effect.result(decodeWake(raw));
+      if (Result.isSuccess(decoded)) {
+        wakes.push(decoded.success);
+        continue;
+      }
+      const id = decodeRowId(raw);
+      yield* Effect.logWarning("Telescope wake row skipped", {
+        workspaceId,
+        error: decoded.failure,
+      });
+      if (Option.isSome(id))
+        yield* db.update(
+          workspaceId,
+          "wakes",
+          { status: "failed", finished_at: yield* now },
+          { wake_id: id.value.wake_id },
+        );
+    }
+    return wakes;
+  });
+  const decodeMerged = (workspaceId: Telescope.WorkspaceId, wakeId: Telescope.Wake["id"]) =>
+    selectWakes(workspaceId, { merged_into: wakeId, status: "merged" }).pipe(
+      Effect.map((rows) => rows.toSorted(byAge)),
+    );
 
   const active = Effect.fn("WakeQueueService.active")(function* () {
     const ids = yield* db.workspaceIdsWithActiveWakes;
     const byStatus = (status: "queued" | "running") =>
-      Effect.forEach(ids, (id) => db.select(id, "wakes", decodeWakes, { status })).pipe(
+      Effect.forEach(ids, (id) => selectWakes(id, { status })).pipe(
         Effect.map((rows) => rows.flat()),
       );
     return { queued: yield* byStatus("queued"), running: yield* byStatus("running") };
@@ -171,16 +235,11 @@ const make = Effect.gen(function* () {
     workspaceId: Telescope.WorkspaceId,
     request: WakeRequest,
   ) {
-    const [survivor] = yield* db.select(workspaceId, "wakes", decodeWakes, {
+    const [survivor] = yield* selectWakes(workspaceId, {
       coalesce_key: request.coalesceKey,
       status: "queued",
     });
-    if (survivor !== undefined) {
-      const priority = request.priority < survivor.priority ? request.priority : survivor.priority;
-      if (priority !== survivor.priority)
-        yield* db.update(workspaceId, "wakes", { priority }, { wake_id: survivor.wake_id });
-      return toWake({ ...survivor, priority });
-    }
+    const createdAt = yield* DateTime.now;
     const row: WakeRow = {
       wake_id: Telescope.WakeId.make(yield* random.uuidV4()),
       workspace_id: workspaceId,
@@ -190,10 +249,16 @@ const make = Effect.gen(function* () {
       priority: request.priority,
       subject_id: request.subjectId,
       thread_id: request.threadId ?? null,
+      task_id: request.taskId ?? null,
       project_id: request.projectId ?? null,
       payload_json: request.payload,
-      status: "queued",
-      created_at: yield* now,
+      status: survivor === undefined ? "queued" : "merged",
+      merged_into: survivor?.wake_id ?? null,
+      run_after:
+        survivor === undefined && request.priority !== 1 && HELD_REASONS.has(request.reason)
+          ? DateTime.formatIso(DateTime.addDuration(createdAt, HOLD))
+          : null,
+      created_at: DateTime.formatIso(createdAt),
       started_at: null,
       finished_at: null,
     };
@@ -201,19 +266,35 @@ const make = Effect.gen(function* () {
       ...Struct.omit(row, ["workspace_id"]),
       payload_json: encodePayload(row.payload_json),
     });
+    if (survivor === undefined) {
+      yield* work.open;
+      return toWake(row);
+    }
+    if (request.priority >= survivor.priority) return toWake(survivor);
+    // Priority 1 is never held, so the raise also releases the hold.
+    const raised = {
+      priority: request.priority,
+      run_after: request.priority === 1 ? null : survivor.run_after,
+    };
+    yield* db.update(workspaceId, "wakes", raised, { wake_id: survivor.wake_id });
     yield* work.open;
-    return toWake(row);
+    return toWake({ ...survivor, ...raised });
   }, lock.withPermit);
 
-  const dequeue = Effect.gen(function* () {
+  const step = Effect.gen(function* () {
     const { queued, running } = yield* active();
     const { perProject, machine } = yield* Ref.get(limits);
-    if (running.length >= machine) return undefined;
+    const current = yield* now;
+    const due = queued.filter((row) => row.run_after === null || row.run_after <= current);
+    const heldUntil = queued
+      .flatMap((row) => (row.run_after !== null && row.run_after > current ? [row.run_after] : []))
+      .toSorted()[0];
+    if (running.length >= machine) return { run: undefined, heldUntil };
     const bySubject = countBy(running, (row) => row.subject_id);
     const byProject = countBy(running, (row) => row.project_id);
     const busyThreads = new Set(running.map((row) => row.thread_id));
     const next = pick(
-      queued.filter(
+      due.filter(
         (row) =>
           (bySubject.get(row.subject_id) ?? 0) < RUNNING_PER_SUBJECT &&
           (row.thread_id === null || !busyThreads.has(row.thread_id)) &&
@@ -221,30 +302,41 @@ const make = Effect.gen(function* () {
       ),
       lastServed,
     );
-    if (next === undefined) return undefined;
-    const startedAt = yield* now;
+    if (next === undefined) return { run: undefined, heldUntil };
     yield* db.update(
       next.workspace_id,
       "wakes",
-      { status: "running", started_at: startedAt },
+      { status: "running", started_at: current },
       { wake_id: next.wake_id, status: "queued" },
     );
     lastServed.set(next.subject_id, turn++);
-    return toWake({ ...next, status: "running", started_at: startedAt });
+    const merged = yield* decodeMerged(next.workspace_id, next.wake_id);
+    const run: WakeRun = {
+      wake: toWake({ ...next, status: "running", started_at: current }),
+      payloads: [next.payload_json, ...merged.map((row) => row.payload_json)],
+    };
+    return { run, heldUntil };
   }).pipe(lock.withPermit, Effect.withSpan("WakeQueueService.dequeue"));
+
+  const dequeue = step.pipe(Effect.map((result) => result.run?.wake));
 
   const take = Effect.gen(function* () {
     while (true) {
       yield* work.close;
-      const wake = yield* dequeue;
-      if (wake !== undefined) return wake;
-      yield* work.await;
+      const { run, heldUntil } = yield* step;
+      if (run !== undefined) return run;
+      if (heldUntil === undefined) {
+        yield* work.await;
+        continue;
+      }
+      const duration = DateTime.distance(yield* DateTime.now, DateTime.makeUnsafe(heldUntil));
+      yield* work.await.pipe(Effect.timeoutOrElse({ duration, orElse: () => Effect.void }));
     }
   });
 
   const finish = Effect.fn("WakeQueueService.finish")(function* (
     wake: Telescope.Wake,
-    status: "done" | "interrupted",
+    status: "done" | "failed" | "interrupted",
   ) {
     yield* db
       .update(
@@ -282,7 +374,7 @@ const make = Effect.gen(function* () {
   });
 
   const list = Effect.fn("WakeQueueService.list")(function* (
-    caller: Telescope.SubjectId,
+    caller: WorkspaceService.Caller,
     input: ListInput,
   ) {
     yield* workspaces.get(caller, input);
@@ -329,20 +421,29 @@ export const layerWorker = Layer.effectDiscard(
     yield* queue.interruptRunning.pipe(
       Effect.catchCause((cause) => Effect.logWarning("Telescope wake recovery failed", { cause })),
     );
-    const start = (wake: Telescope.Wake) =>
-      run(wake).pipe(
+    const record = (wake: Telescope.Wake, exit: Exit.Exit<void>) => {
+      if (Exit.isSuccess(exit)) return queue.finish(wake, "done");
+      if (Cause.hasInterruptsOnly(exit.cause)) return queue.finish(wake, "interrupted");
+      return Effect.logWarning("Telescope wake failed", {
+        wakeId: wake.id,
+        cause: exit.cause,
+      }).pipe(Effect.andThen(queue.finish(wake, "failed")));
+    };
+    const start = (wakeRun: WakeRun) =>
+      run(wakeRun).pipe(
+        Effect.onExit((exit) =>
+          record(wakeRun.wake, exit).pipe(
+            Effect.catchCause((cause) =>
+              Effect.logWarning("Telescope wake bookkeeping failed", {
+                wakeId: wakeRun.wake.id,
+                cause,
+              }),
+            ),
+          ),
+        ),
         Effect.catchCauseIf(
           (cause) => !Cause.hasInterruptsOnly(cause),
-          (cause) => Effect.logWarning("Telescope wake failed", { wakeId: wake.id, cause }),
-        ),
-        Effect.onExit((exit) =>
-          queue
-            .finish(wake, Exit.isSuccess(exit) ? "done" : "interrupted")
-            .pipe(
-              Effect.catchCause((cause) =>
-                Effect.logWarning("Telescope wake bookkeeping failed", { wakeId: wake.id, cause }),
-              ),
-            ),
+          () => Effect.void,
         ),
         Effect.forkIn(scope),
       );

@@ -1,8 +1,10 @@
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, it } from "@effect/vitest";
-import { ProjectId, Telescope, ThreadId } from "@t3tools/contracts";
+import { AuthSessionId, ProjectId, Telescope, ThreadId } from "@t3tools/contracts";
+import * as DateTime from "effect/DateTime";
 import * as Deferred from "effect/Deferred";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
@@ -22,10 +24,14 @@ const database = Layer.effectDiscard(runMigrations()).pipe(
 const layer = Layer.mergeAll(WakeQueue.layer, TelescopeDb.layer, WorkspaceService.layer).pipe(
   Layer.provideMerge(Layer.merge(database, NodeCrypto.layer)),
 );
-const worker = (run: (wake: Telescope.Wake) => Effect.Effect<void>) =>
+const worker = (run: (wakeRun: WakeQueue.WakeRun) => Effect.Effect<void>) =>
   Layer.build(WakeQueue.layerWorker.pipe(Layer.provide(Layer.succeed(WakeQueue.WakeRunner, run))));
 
 const ws = Telescope.WorkspaceId.make("ws-a");
+const session = (name: string): WorkspaceService.Caller => ({
+  sessionId: AuthSessionId.make(`session-${name}`),
+  subject: "one-time-token",
+});
 const request = (
   subjectId: string,
   coalesceKey: string,
@@ -40,24 +46,75 @@ const request = (
   ...overrides,
 });
 
-const StatusRow = Schema.Struct({ wake_id: Schema.String, status: Schema.String });
+const StatusRow = Schema.Struct({
+  wake_id: Schema.String,
+  status: Schema.String,
+  merged_into: Schema.NullOr(Schema.String),
+});
 const decodeStatuses = Schema.decodeUnknownEffect(Schema.Array(StatusRow));
 const statuses = (where: Readonly<Record<string, string>> = {}) =>
-  TelescopeDb.TelescopeDb.use((db) => db.select(ws, "wakes", decodeStatuses, where));
+  TelescopeDb.TelescopeDb.use((db) => db.select(ws, "wakes", decodeStatuses, where)).pipe(
+    Effect.map((rows) => rows.map(({ wake_id, status }) => ({ wake_id, status }))),
+  );
+const mergedInto = (wakeId: string) =>
+  TelescopeDb.TelescopeDb.use((db) =>
+    db.select(ws, "wakes", decodeStatuses, { merged_into: wakeId, status: "merged" }),
+  );
+const sinceCreated = (wake: Telescope.Wake, later: Telescope.Wake) =>
+  later.startedAt === undefined
+    ? undefined
+    : DateTime.distance(
+        DateTime.makeUnsafe(wake.createdAt),
+        DateTime.makeUnsafe(later.startedAt),
+      ).pipe(Duration.toSeconds);
 
-it.effect("five emails within ten minutes while the thread is busy produce one run", () =>
+it.effect("five emails to an idle agent within the hold window produce one run after 90s", () =>
   Effect.gen(function* () {
     const queue = yield* WakeQueue.WakeQueueService;
-    const started = yield* Queue.unbounded<Telescope.Wake>();
+    const started = yield* Queue.unbounded<WakeQueue.WakeRun>();
+    yield* worker((wakeRun) => Queue.offer(started, wakeRun));
+    const email = (n: number) =>
+      queue.enqueue(ws, request("ann", "mail:ann", { reason: "channel", payload: { n } }));
+
+    const emails: Array<Telescope.Wake> = [];
+    for (const n of [1, 2, 3, 4, 5]) {
+      emails.push(yield* email(n));
+      yield* TestClock.adjust(n < 5 ? "20 seconds" : "10 seconds");
+    }
+    assert.strictEqual(new Set(emails.map((wake) => wake.id)).size, 1);
+    const [first] = emails;
+    assert(first !== undefined);
+
+    const run = yield* Queue.take(started);
+    assert.strictEqual(run.wake.id, first.id);
+    assert.strictEqual(sinceCreated(first, run.wake), 90);
+    assert.deepStrictEqual(run.payloads, [{ n: 1 }, { n: 2 }, { n: 3 }, { n: 4 }, { n: 5 }]);
+    const merged = yield* mergedInto(first.id);
+    assert.strictEqual(merged.length, 4);
+    assert.isTrue(merged.every((row) => row.merged_into === first.id));
+
+    const late = yield* email(6);
+    assert.notStrictEqual(late.id, first.id);
+    yield* TestClock.adjust("90 seconds");
+    const lateRun = yield* Queue.take(started);
+    assert.strictEqual(lateRun.wake.id, late.id);
+    assert.deepStrictEqual(lateRun.payloads, [{ n: 6 }]);
+  }).pipe(Effect.scoped, Effect.provide(layer)),
+);
+
+it.effect("keeps merging into a wake whose thread is busy past its hold", () =>
+  Effect.gen(function* () {
+    const queue = yield* WakeQueue.WakeQueueService;
+    const started = yield* Queue.unbounded<WakeQueue.WakeRun>();
     const release = yield* Deferred.make<void>();
-    yield* worker((wake) =>
-      Queue.offer(started, wake).pipe(
-        Effect.andThen(wake.coalesceKey === "turn" ? Deferred.await(release) : Effect.void),
+    yield* worker((wakeRun) =>
+      Queue.offer(started, wakeRun).pipe(
+        Effect.andThen(wakeRun.wake.coalesceKey === "turn" ? Deferred.await(release) : Effect.void),
       ),
     );
     const threadId = ThreadId.make("thread-1");
     const turn = yield* queue.enqueue(ws, request("ann", "turn", { threadId, priority: 1 }));
-    assert.strictEqual((yield* Queue.take(started)).id, turn.id);
+    assert.strictEqual((yield* Queue.take(started)).wake.id, turn.id);
 
     const emails = yield* Effect.forEach([1, 2, 3, 4, 5], (n) =>
       queue
@@ -67,8 +124,28 @@ it.effect("five emails within ten minutes while the thread is busy produce one r
     assert.strictEqual(new Set(emails.map((wake) => wake.id)).size, 1);
 
     yield* Deferred.succeed(release, undefined);
-    assert.strictEqual((yield* Queue.take(started)).id, emails[0]?.id);
-    assert.strictEqual((yield* statuses({ coalesce_key: "mail:ann" })).length, 1);
+    const run = yield* Queue.take(started);
+    assert.strictEqual(run.wake.id, emails[0]?.id);
+    assert.strictEqual(run.payloads.length, 5);
+  }).pipe(Effect.scoped, Effect.provide(layer)),
+);
+
+it.effect("records a failed run as failed", () =>
+  Effect.gen(function* () {
+    const queue = yield* WakeQueue.WakeQueueService;
+    const threadId = ThreadId.make("thread-1");
+    const wake = yield* queue.enqueue(ws, request("ann", "boom", { threadId }));
+    yield* TestClock.adjust("1 second");
+    yield* queue.enqueue(ws, request("ann", "after", { threadId }));
+    const next = yield* Deferred.make<void>();
+    yield* worker(({ wake: { coalesceKey } }) =>
+      coalesceKey === "boom" ? Effect.die("boom") : Deferred.succeed(next, undefined),
+    );
+    // The thread cap starts "after" only once "boom" is recorded.
+    yield* Deferred.await(next);
+    assert.deepStrictEqual(yield* statuses({ wake_id: wake.id }), [
+      { wake_id: wake.id, status: "failed" },
+    ]);
   }).pipe(Effect.scoped, Effect.provide(layer)),
 );
 
@@ -90,6 +167,12 @@ it.effect("runs a waiting conversation before background work and rotates subjec
       ["bea", "ann", "cal", "ann"],
     );
     assert.strictEqual(yield* queue.position(ws, bea.id), undefined);
+
+    const urgent = yield* queue.enqueue(ws, request("ann", "ann-urgent", { priority: 3 }));
+    const raised = yield* queue.enqueue(ws, request("ann", "ann-urgent", { priority: 1 }));
+    assert.deepStrictEqual([raised.id, raised.priority], [urgent.id, 1]);
+    assert.strictEqual(yield* queue.position(ws, urgent.id), 1);
+    assert.strictEqual((yield* queue.dequeue)?.id, urgent.id);
   }).pipe(Effect.provide(layer)),
 );
 
@@ -145,43 +228,66 @@ it.effect("marks wakes interrupted on shutdown and on restart", () =>
   }).pipe(Effect.provide(layer)),
 );
 
-it.effect("lists a workspace's wakes with machine-wide positions, for members only", () =>
-  Effect.gen(function* () {
-    const queue = yield* WakeQueue.WakeQueueService;
-    const workspaces = yield* WorkspaceService.WorkspaceService;
-    const own = yield* workspaces.create("ann", {
-      kind: "personal",
-      name: "Ann",
-      displayName: "Ann",
-    });
-    const running = yield* queue.enqueue(own.id, request("ann", "first"));
-    yield* TestClock.adjust("1 second");
-    yield* queue.enqueue(own.id, request("ann", "second"));
-    yield* queue.dequeue;
-    yield* queue.enqueue(ws, request("zed", "elsewhere", { priority: 1 }));
+it.effect(
+  "lists a workspace's wakes with machine-wide positions, for members only, past unreadable rows",
+  () =>
+    Effect.gen(function* () {
+      const queue = yield* WakeQueue.WakeQueueService;
+      const workspaces = yield* WorkspaceService.WorkspaceService;
+      const own = yield* workspaces.create(session("ann"), {
+        kind: "personal",
+        name: "Ann",
+        displayName: "Ann",
+      });
+      const db = yield* TelescopeDb.TelescopeDb;
+      yield* db.insert(ws, "wakes", {
+        wake_id: "unreadable",
+        reason: "bogus",
+        agent_id: "agent-1",
+        coalesce_key: "bogus",
+        priority: 2,
+        subject_id: "zed",
+        payload_json: "{}",
+        status: "queued",
+        created_at: "2026-01-01T00:00:00.000Z",
+      });
+      const ann = own.createdBy;
+      const running = yield* queue.enqueue(own.id, request(ann, "first"));
+      yield* TestClock.adjust("1 second");
+      yield* queue.enqueue(own.id, request(ann, "second"));
+      yield* queue.dequeue;
+      yield* queue.enqueue(ws, request("zed", "elsewhere", { priority: 1 }));
 
-    const { wakes } = yield* queue.list("ann", { workspaceId: own.id });
-    assert.deepStrictEqual(
-      wakes.map((wake) => [wake.coalesceKey, wake.status, wake.position]),
-      [
-        ["first", "running", undefined],
-        ["second", "queued", 2],
-      ],
-    );
-    assert.strictEqual(wakes[0]?.id, running.id);
-    const denied = yield* queue.list("eve", { workspaceId: own.id }).pipe(Effect.flip);
-    assert.strictEqual(denied._tag === "TelescopeWorkspaceError" && denied.reason, "forbidden");
-  }).pipe(Effect.provide(layer)),
+      const { wakes } = yield* queue.list(session("ann"), { workspaceId: own.id });
+      assert.deepStrictEqual(
+        wakes.map((wake) => [wake.coalesceKey, wake.status, wake.position]),
+        [
+          ["first", "running", undefined],
+          ["second", "queued", 2],
+        ],
+      );
+      assert.strictEqual(wakes[0]?.id, running.id);
+      assert.deepStrictEqual(yield* statuses({ wake_id: "unreadable" }), [
+        { wake_id: "unreadable", status: "failed" },
+      ]);
+      const denied = yield* queue.list(session("eve"), { workspaceId: own.id }).pipe(Effect.flip);
+      assert.strictEqual(denied._tag === "TelescopeWorkspaceError" && denied.reason, "forbidden");
+    }).pipe(Effect.provide(layer)),
 );
 
-// An @mention on the board is not a dispatch: board modules never reach the queue.
+// An @mention on the board is not a dispatch. No board module exists until #46 adds TaskBoardService.ts.
 it.effect("keeps board modules away from the wake queue", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
-    for (const file of yield* fs.readDirectory(import.meta.dirname)) {
-      if (!file.startsWith("Board") || file.includes(".test.")) continue;
+    const files = yield* fs.readDirectory(import.meta.dirname);
+    assert.include(files, "WakeQueueService.ts");
+    const boardFiles = files.filter((file) => /Board/.test(file) && !file.includes(".test."));
+    let checked = 0;
+    for (const file of boardFiles) {
       const source = yield* fs.readFileString(`${import.meta.dirname}/${file}`);
-      assert.notMatch(source, /WakeQueue/);
+      assert.notMatch(source, /import[^;]*WakeQueueService/, file);
+      checked++;
     }
+    assert.strictEqual(checked, boardFiles.length);
   }).pipe(Effect.provide(NodeServices.layer)),
 );
