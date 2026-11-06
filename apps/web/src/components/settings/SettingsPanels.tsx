@@ -1689,12 +1689,12 @@ export function ThreadsSettingsPanel() {
         <SettingsRow
           serverScoped
           settingKeys={["ghqCloneLayout"]}
-          {...searchableSetting("ghq-clone-layout")}
-          description="Clones go to github.com/owner/repo under the folder above, like ghq."
+          {...searchableSetting("ghq-clone-layout", t)}
+          description={t("settings.text.clonesGoToGithubComOwnerRepo")}
           resetAction={
             settings.ghqCloneLayout !== DEFAULT_UNIFIED_SETTINGS.ghqCloneLayout ? (
               <TranslatedSettingResetButton
-                label="clone into host folders"
+                label={t("settings.text.cloneIntoHostFolders2")}
                 onClick={() =>
                   updateSettings({ ghqCloneLayout: DEFAULT_UNIFIED_SETTINGS.ghqCloneLayout })
                 }
@@ -1706,7 +1706,7 @@ export function ThreadsSettingsPanel() {
               settingKeys={["ghqCloneLayout"]}
               checked={settings.ghqCloneLayout}
               onCheckedChange={(checked) => updateSettings({ ghqCloneLayout: Boolean(checked) })}
-              aria-label="Clone into host folders"
+              aria-label={t("settings.text.cloneIntoHostFolders")}
             />
           }
         />
@@ -1796,7 +1796,7 @@ export function ThreadsSettingsPanel() {
               settings.sidebarAutoSettleAfterDays !==
               DEFAULT_UNIFIED_SETTINGS.sidebarAutoSettleAfterDays ? (
                 <TranslatedSettingResetButton
-                  label={t("settings.text.autoSettleInactiveThreads")}
+                  label={t("settings.text.autoSettle2")}
                   onClick={() =>
                     updateSettings({
                       sidebarAutoSettleAfterDays:
