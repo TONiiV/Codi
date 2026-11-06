@@ -67,13 +67,16 @@ const parseServer = (lines: ReadonlyArray<string>): McpServer => {
 };
 
 // Codex passes `env` values literally, so env names become `env_vars`, which it forwards.
+// It rejects `env_vars` on URL servers and then refuses to load the whole config.
 const renderServer = (name: string, server: McpServer) =>
   [
     `[mcp_servers.${keyOf(name)}]`,
     ...(["command", "args", "url"] as const).flatMap((key) =>
       server[key] === undefined ? [] : [`${key} = ${JSON.stringify(server[key])}`],
     ),
-    ...(server.env?.length ? [`env_vars = ${JSON.stringify(server.env)}`] : []),
+    ...(server.url === undefined && server.env?.length
+      ? [`env_vars = ${JSON.stringify(server.env)}`]
+      : []),
     ...(server.bearerTokenEnv === undefined
       ? []
       : [`bearer_token_env_var = ${JSON.stringify(server.bearerTokenEnv)}`]),

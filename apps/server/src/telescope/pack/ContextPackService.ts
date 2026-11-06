@@ -13,6 +13,7 @@ import { cursor } from "./harnesses/cursor.ts";
 import { opencode } from "./harnesses/opencode.ts";
 import {
   type ContextPackFormatError,
+  type ContextPackOverlapError,
   type ContextPackPathError,
   type Harness,
   type HarnessName,
@@ -36,7 +37,7 @@ export class ContextPackNoHarnessError extends Schema.TaggedError<ContextPackNoH
   }
 }
 
-type PackError = PlatformError | ContextPackFormatError;
+type PackError = PlatformError | ContextPackFormatError | ContextPackOverlapError;
 
 export class ContextPackService extends Context.Service<
   ContextPackService,

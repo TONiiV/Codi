@@ -172,6 +172,8 @@ describe("ContextPackService", () => {
           theme: "dark",
           mcp: { mine: { type: "local" } },
         }),
+        "sync/CLAUDE.md": "@AGENTS.md\nClaude only.\n",
+        "sync/AGENTS.md": "# Rules\nUse pnpm.\n",
       });
       yield* service.export(dir.at("project"), dir.at("pack"));
 
@@ -204,6 +206,29 @@ describe("ContextPackService", () => {
       yield* service.import(dir.at("pack"), dir.at("codex"), "codex", true);
       yield* service.export(dir.at("codex"), dir.at("pack2"));
       expect(yield* dir.read("pack2/instructions.md")).not.toContain("context-pack:");
+
+      for (const [harness, file] of [
+        ["claude", "CLAUDE.md"],
+        ["codex", "AGENTS.md"],
+        ["opencode", "AGENTS.md"],
+      ] as const) {
+        yield* service.import(dir.at("pack"), dir.at(`fresh-${harness}`), harness, true);
+        yield* service.import(dir.at("pack"), dir.at(`fresh-${harness}`), harness, true);
+        const text = yield* dir.read(`fresh-${harness}/${file}`);
+        expect(text.match(/Run the tests\./g)).toHaveLength(1);
+        expect(text.match(/context-pack:begin/g)).toHaveLength(1);
+      }
+
+      // Syncing a project into another harness in place reaches a fixed point.
+      const snapshots: Array<string> = [];
+      for (let cycle = 0; cycle < 3; cycle++) {
+        yield* service.export(dir.at("sync"), dir.at("sync-pack"));
+        yield* service.import(dir.at("sync-pack"), dir.at("sync"), "codex", true);
+        const files = ["sync-pack/pack.json", "sync-pack/instructions.md", "sync/AGENTS.md"];
+        snapshots.push((yield* Effect.forEach(files, dir.read)).join("\0"));
+      }
+      expect(snapshots[2]).toBe(snapshots[1]);
+      expect((yield* dir.read("sync/AGENTS.md")).match(/Use pnpm\./g)).toHaveLength(2);
     }).pipe(Effect.scoped, Effect.provide(TestLayer)),
   );
 
@@ -318,12 +343,19 @@ describe("ContextPackService", () => {
       const dir = yield* fixture(
         {
           "outside-secret.md": "PRIVATE_KEY_MATERIAL\n",
-          "project/CLAUDE.md": "Rules\n",
+          "project/CLAUDE.md": "Rules\n@../outside-secret.md\n",
           "project/.env": "TOKEN=sk-dotenv\n",
           "project/.agents/skills/lint/SKILL.md": "Lint it.\n",
+          "project/.claude/skills/outer/SKILL.md": "Outer.\n",
+          "project/tools/skills/outer/inner/SKILL.md": "Inner.\n",
+          "outside-skill/SKILL.md": "Outside.\n",
+          "private-skill/SKILL.md": "Private.\n",
+          "private-skill/key.pem": "PRIVATE_KEY_MATERIAL\n",
         },
         {
           "project/.claude/skills/lint": "../../.agents/skills/lint",
+          "project/.claude/skills/ext": "../../../outside-skill",
+          "project/.claude/skills/inner": "../../tools/skills/outer/inner",
           "project/.agents/skills/lint/creds": "../../../.env",
           "project/.agents/skills/lint/self": ".",
         },
@@ -333,6 +365,28 @@ describe("ContextPackService", () => {
       expect(yield* dir.read("pack/skills/lint/SKILL.md")).toBe("Lint it.\n");
       expect(yield* dir.exists(dir.at("pack/skills/lint/creds"))).toBe(false);
       expect(yield* dir.exists(dir.at("pack/skills/lint/self"))).toBe(false);
+      expect(yield* dir.exists(dir.at("pack/skills/ext"))).toBe(false);
+
+      const outs = [
+        "project/.claude",
+        "project/.agents",
+        "project/.agents/skills/lint/o",
+        "project/tools",
+      ];
+      for (const out of outs) {
+        const overlap = yield* Effect.flip(service.export(dir.at("project"), dir.at(out)));
+        expect(overlap._tag).toBe("ContextPackOverlapError");
+        expect(yield* dir.exists(dir.at(`${out}/pack.json`))).toBe(false);
+      }
+      expect(yield* dir.read("project/.agents/skills/lint/SKILL.md")).toBe("Lint it.\n");
+      expect(yield* dir.read("project/tools/skills/outer/inner/SKILL.md")).toBe("Inner.\n");
+      yield* service.export(dir.at("project"), dir.at("p2/.agents"));
+      const overlap = yield* Effect.flip(
+        service.import(dir.at("p2/.agents"), dir.at("p2"), "codex", false),
+      );
+      expect(overlap._tag).toBe("ContextPackOverlapError");
+      expect(yield* dir.read("p2/.agents/skills/lint/SKILL.md")).toBe("Lint it.\n");
+      expect(yield* dir.exists(dir.at("p2/AGENTS.md"))).toBe(false);
 
       for (let run = 0; run < 2; run++) {
         yield* service.import(dir.at("pack"), dir.at("target"), "claude", false);
@@ -342,12 +396,26 @@ describe("ContextPackService", () => {
 
       const manifest = JSON.parse(yield* dir.read("pack/pack.json"));
       const fs = yield* FileSystem.FileSystem;
+      yield* fs.symlink("../../private-skill", dir.at("pack/skills/evil"));
+      yield* fs.writeFileString(
+        dir.at("pack/pack.json"),
+        JSON.stringify({ ...manifest, skills: [...manifest.skills, "evil"] }),
+      );
+      yield* service.import(dir.at("pack"), dir.at("victim"), "claude", false);
+      expect(yield* dir.read("victim/.claude/skills/lint/SKILL.md")).toBe("Lint it.\n");
+      expect(yield* dir.exists(dir.at("victim/.claude/skills/evil"))).toBe(false);
+
       yield* fs.writeFileString(
         dir.at("pack/pack.json"),
         JSON.stringify({ ...manifest, instructions: "../outside-secret.md" }),
       );
+      yield* fs.writeFileString(
+        dir.at("pack/mcp.json"),
+        JSON.stringify({ servers: { remote: { url: "https://r.example", env: ["KEY"] } } }),
+      );
       yield* service.import(dir.at("pack"), dir.at("codex"), "codex", false);
-      expect(yield* dir.read("codex/AGENTS.md")).toBe("Rules\n");
+      expect(yield* dir.read("codex/AGENTS.md")).toBe("Rules\n@../outside-secret.md\n");
+      expect(yield* dir.read("codex/.codex/config.toml")).not.toContain("env_vars");
 
       yield* fs.remove(dir.at("pack/instructions.md"));
       yield* fs.symlink("../outside-secret.md", dir.at("pack/instructions.md"));

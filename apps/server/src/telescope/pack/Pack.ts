@@ -66,6 +66,15 @@ export class ContextPackPathError extends Schema.TaggedError<ContextPackPathErro
   }
 }
 
+export class ContextPackOverlapError extends Schema.TaggedError<ContextPackOverlapError>()(
+  "ContextPackOverlapError",
+  { path: Schema.String, source: Schema.String },
+) {
+  override get message(): string {
+    return `Writing ${this.path} would overwrite the skill at ${this.source}. Choose another directory.`;
+  }
+}
+
 const formatErrorAt = (path: string) =>
   Effect.mapError((cause: Schema.SchemaError) => new ContextPackFormatError({ path, cause }));
 
@@ -108,15 +117,15 @@ export const makeHarness = (spec: HarnessSpec) => {
         }
       }
       return {
-        instructions: (yield* spec.instructions.read(root)) ?? "",
+        instructions: ((yield* spec.instructions.read(root)) ?? "").replace(IMPORTED, "\n"),
         skills,
         mcp: mcpText === undefined ? {} : yield* parse(mcpFile, () => spec.mcp.read(mcpText)),
       } satisfies Pack;
     }),
     write: Effect.fnUntraced(function* (pack: Pack, dir: string, merge: boolean) {
       const path = yield* Path.Path;
-      yield* spec.instructions.write(dir, pack.instructions, merge);
       yield* writeSkills(pack.skills, path.join(dir, spec.skillsDirs[0]));
+      yield* spec.instructions.write(dir, pack.instructions, merge);
       const mcpFile = path.join(dir, spec.mcp.file);
       const existing = yield* readOptionalText(mcpFile);
       if (existing === undefined && Object.keys(pack.mcp).length === 0) return;
@@ -196,26 +205,44 @@ export const writeText = Effect.fnUntraced(function* (file: string, text: string
 });
 
 const BLOCK = /<!-- context-pack:begin -->[\s\S]*?<!-- context-pack:end -->/;
-const MARKER = /^<!-- context-pack:(?:begin|end) -->\n?/gm;
+// The block an earlier merge import wrote belongs to that pack, so export leaves it out.
+const IMPORTED = /\n*<!-- context-pack:begin -->[\s\S]*?<!-- context-pack:end -->\n?/g;
 
 // Merge keeps the harness file and swaps only the block a previous import wrote.
 const mergeInstructions = (existing: string | undefined, text: string, merge: boolean) => {
-  if (!merge || !existing?.trim()) return text;
+  if (!merge) return text;
   const block = `<!-- context-pack:begin -->\n${text.trim()}\n<!-- context-pack:end -->`;
-  if (BLOCK.test(existing)) return existing.replace(BLOCK, () => block);
-  return `${existing.trimEnd()}\n\n${block}\n`;
+  if (existing !== undefined && BLOCK.test(existing)) return existing.replace(BLOCK, () => block);
+  return existing?.trim() ? `${existing.trimEnd()}\n\n${block}\n` : `${block}\n`;
+};
+
+const isInside = (path: Path.Path, root: string, file: string) => {
+  const rel = path.relative(root, file);
+  return !(rel === ".." || rel.startsWith(`..${path.sep}`) || path.isAbsolute(rel));
 };
 
 // Resolves links; undefined when the target is missing or outside `root` (a real path).
-const realPathInside = Effect.fnUntraced(function* (root: string, file: string) {
+export const realPathInside = Effect.fnUntraced(function* (root: string, file: string) {
   const path = yield* Path.Path;
   const real = yield* (yield* FileSystem.FileSystem)
     .realPath(file)
     .pipe(Effect.orElseSucceed(() => undefined));
-  if (real === undefined) return undefined;
-  const rel = path.relative(root, real);
-  return rel === ".." || rel.startsWith(`..${path.sep}`) || path.isAbsolute(rel) ? undefined : real;
+  return real !== undefined && isInside(path, root, real) ? real : undefined;
 });
+
+// The real path `file` has or would have once created, resolving links in its existing parents.
+const plannedRealPath: (
+  file: string,
+) => Effect.Effect<string, never, FileSystem.FileSystem | Path.Path> = Effect.fnUntraced(
+  function* (file) {
+    const path = yield* Path.Path;
+    const real = yield* (yield* FileSystem.FileSystem)
+      .realPath(file)
+      .pipe(Effect.orElseSucceed(() => undefined));
+    if (real !== undefined || path.dirname(file) === file) return real ?? file;
+    return path.join(yield* plannedRealPath(path.dirname(file)), path.basename(file));
+  },
+);
 
 const readSkills = Effect.fnUntraced(function* (skillsDir: string, root: string) {
   const fs = yield* FileSystem.FileSystem;
@@ -224,7 +251,11 @@ const readSkills = Effect.fnUntraced(function* (skillsDir: string, root: string)
   const names = (yield* fs.readDirectory(skillsDir)).toSorted();
   const skills: Array<Pack["skills"][number]> = [];
   for (const name of names) {
-    const dir = yield* realPathInside(root, path.join(skillsDir, name));
+    const entry = path.join(skillsDir, name);
+    const dir = yield* realPathInside(root, entry);
+    if (dir === undefined && (yield* fs.exists(entry))) {
+      yield* Effect.logWarning(`Skipped skill ${entry}: it resolves outside ${root}.`);
+    }
     if (dir !== undefined && (yield* fs.exists(path.join(dir, "SKILL.md")))) {
       skills.push({ name, dir });
     }
@@ -259,6 +290,14 @@ const copyTree: (
 const writeSkills = Effect.fnUntraced(function* (skills: Pack["skills"], skillsDir: string) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
+  // Checked before any write: removing a target that holds a source would delete that skill.
+  for (const skill of skills) {
+    const target = yield* plannedRealPath(path.join(skillsDir, skill.name));
+    const source = skills.find(
+      (s) => isInside(path, s.dir, target) || isInside(path, target, s.dir),
+    );
+    if (source) return yield* new ContextPackOverlapError({ path: target, source: source.dir });
+  }
   for (const skill of skills) {
     const target = path.join(skillsDir, skill.name);
     yield* fs.remove(target, { recursive: true, force: true });
@@ -272,6 +311,7 @@ export const writePackDir = Effect.fn("ContextPack.writePackDir")(function* (
   meta: Pick<typeof Manifest.Type, "name" | "createdAt">,
 ) {
   const path = yield* Path.Path;
+  yield* writeSkills(pack.skills, path.join(outDir, "skills"));
   const manifest: typeof Manifest.Type = {
     version: 1,
     ...meta,
@@ -281,12 +321,7 @@ export const writePackDir = Effect.fn("ContextPack.writePackDir")(function* (
     path.join(outDir, PACK_FILES.manifest),
     yield* encodeManifest(manifest).pipe(Effect.orDie),
   );
-  // Markers from an earlier merge would nest on the next merge import.
-  yield* writeText(
-    path.join(outDir, PACK_FILES.instructions),
-    pack.instructions.replace(MARKER, ""),
-  );
-  yield* writeSkills(pack.skills, path.join(outDir, "skills"));
+  yield* writeText(path.join(outDir, PACK_FILES.instructions), pack.instructions);
   const mcp = yield* encodeMcpFile({ servers: pack.mcp }).pipe(Effect.orDie);
   yield* writeText(path.join(outDir, PACK_FILES.mcp), mcp);
 });
