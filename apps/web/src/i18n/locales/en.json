@@ -379,7 +379,7 @@
       "sameTimeAsAnOptionAbove": "Same time as an option above",
       "menusOfferOnlyCustom": "Menus offer only Custom…",
       "addOption": "Add option",
-      "upToMaxSnoozePresetsOptions": "Up to  {{MAX_SNOOZE_PRESETS}}  options",
+      "upToMaxSnoozePresetsOptions": "Up to {{MAX_SNOOZE_PRESETS}} options",
       "at": "at",
       "decrease": "Decrease",
       "amount": "Amount",

@@ -255,7 +255,7 @@
       "openPullRequestsInCodi": "在 Codi 中打开拉取请求",
       "openPullRequestsInCodi2": "在 Codi 中打开拉取请求",
       "agentBrowserAccess": "智能体浏览器访问",
-      "when": "条件",
+      "when": "何时",
       "resetToDefault": "恢复默认",
       "lastSelected": "上次选择",
       "thisProjectIsNoLongerAvailable": "此项目已不可用。",
@@ -473,7 +473,7 @@
         "summaryReadWrite": "{{labels}} 读取并执行"
       },
       "bgPause": {
-        "hostLocked": "主机锁屏时暂停",
+        "hostLocked": "主机锁定时暂停",
         "hostLowPower": "主机低功耗时暂停",
         "clientLowPower": "客户端低功耗时暂停",
         "battery": "使用电池时暂停"

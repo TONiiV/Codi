@@ -20,6 +20,7 @@ import {
   localizeSnoozeLabel,
   localizeSnoozeWhen,
   reconcileSnoozeDraft,
+  snoozeMenuOrder,
   sortSnoozeRows,
 } from "./SnoozePresetsSettings.logic";
 import { formatShortTimestamp } from "../../timestampFormat";
@@ -264,16 +265,12 @@ function SnoozePresetList(props: {
     } as const;
   });
 
-  const menuPresets = resolveSnoozePresets(now, { presets: props.presets, formatTime });
-  const repeatedLabels = new Set(
-    menuPresets
-      .map((preset) => preset.label)
-      .filter((label, index, labels) => labels.indexOf(label) !== index),
+  const menuOrder = snoozeMenuOrder(
+    resolveSnoozePresets(now, { presets: props.presets, formatTime }),
+    t,
+    formatTime,
+    i18n.language,
   );
-  const menuOrder = menuPresets.map((preset) => {
-    const label = localizeSnoozeLabel(preset.label, t);
-    return repeatedLabels.has(preset.label) ? `${label} ${preset.whenLabel}` : label;
-  });
 
   return (
     <div

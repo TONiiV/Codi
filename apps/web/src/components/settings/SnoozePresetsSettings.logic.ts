@@ -96,3 +96,27 @@ export function localizeSnoozeLabel(label: string, t: TFunction): string {
   const dayKey = next ? SNOOZE_DAY_KEYS[next[1]!] : undefined;
   return dayKey ? t("settings.parallelA.snoozeNextDay", { day: t(dayKey) }) : label;
 }
+
+/** Menu labels in menu order; a label several options share gets its wake appended. */
+export function snoozeMenuOrder(
+  presets: ReadonlyArray<{
+    readonly label: string;
+    readonly whenLabel: string;
+    readonly snoozedUntil: string;
+  }>,
+  t: TFunction,
+  formatTime: (date: Date) => string,
+  language: string,
+): ReadonlyArray<string> {
+  const repeatedLabels = new Set(
+    presets
+      .map((preset) => preset.label)
+      .filter((label, index, labels) => labels.indexOf(label) !== index),
+  );
+  return presets.map((preset) => {
+    const label = localizeSnoozeLabel(preset.label, t);
+    return repeatedLabels.has(preset.label)
+      ? `${label} ${localizeSnoozeWhen(preset, formatTime, language)}`
+      : label;
+  });
+}

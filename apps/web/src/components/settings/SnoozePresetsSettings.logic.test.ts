@@ -5,6 +5,7 @@ import {
   localizeSnoozeLabel,
   localizeSnoozeWhen,
   reconcileSnoozeDraft,
+  snoozeMenuOrder,
   sortSnoozeRows,
 } from "./SnoozePresetsSettings.logic";
 
@@ -79,5 +80,39 @@ describe("localizeSnoozeWhen", () => {
     const preset = { whenLabel: "Mon 9:00", snoozedUntil: monday };
     expect(localizeSnoozeWhen(preset, formatTime, "zh-CN")).toBe("周一 9:00");
     expect(localizeSnoozeWhen(preset, formatTime, "en")).toBe("Mon 9:00");
+  });
+});
+
+describe("snoozeMenuOrder", () => {
+  it("appends the wake in the app language only to a repeated label", () => {
+    const t = ((key: string) => key.split(".").pop()) as TFunction;
+    const formatTime = (date: Date) => `${date.getHours()}:00`;
+    const presets = [
+      {
+        label: "Monday",
+        whenLabel: "Mon 9:00",
+        snoozedUntil: new Date(2026, 10, 9, 9, 0).toISOString(),
+      },
+      {
+        label: "Monday",
+        whenLabel: "Mon 14:00",
+        snoozedUntil: new Date(2026, 10, 9, 14, 0).toISOString(),
+      },
+      {
+        label: "Tomorrow",
+        whenLabel: "Sun 9:00",
+        snoozedUntil: new Date(2026, 10, 8, 9, 0).toISOString(),
+      },
+    ];
+    expect(snoozeMenuOrder(presets, t, formatTime, "zh-CN")).toEqual([
+      "snoozeMonday 周一 9:00",
+      "snoozeMonday 周一 14:00",
+      "snoozeTomorrow",
+    ]);
+    expect(snoozeMenuOrder(presets, t, formatTime, "en")).toEqual([
+      "snoozeMonday Mon 9:00",
+      "snoozeMonday Mon 14:00",
+      "snoozeTomorrow",
+    ]);
   });
 });
