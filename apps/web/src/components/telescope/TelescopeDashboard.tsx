@@ -20,17 +20,8 @@ import {
 import { RefreshIcon } from "../ui/refresh-icon";
 import { Skeleton } from "../ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
+import { NoWorkspace, TASK_STATUS } from "./TasksParts";
 import { telescope, useTelescopeWorkspaces } from "./telescopeState";
-
-const STATUS: Record<
-  Telescope.OpenTaskStatus,
-  { label: string; badge: "outline" | "secondary" | "info" | "warning" }
-> = {
-  todo: { label: "待办", badge: "outline" },
-  in_progress: { label: "进行中", badge: "secondary" },
-  in_review: { label: "评审中", badge: "info" },
-  needs_decision: { label: "等你定", badge: "warning" },
-};
 
 const MINUTE = 60_000;
 /** How long from `since` to `now`, rounded down to the largest unit that fits. */
@@ -86,12 +77,12 @@ function SummaryView({ summary }: { summary: Telescope.DashboardSummary }) {
         <Kpi
           label="未完成任务"
           value={counts.tasks.total}
-          detail={`进行中 ${openTasks.in_progress} · 评审中 ${openTasks.in_review}`}
+          detail={`${TASK_STATUS.in_progress.label} ${openTasks.in_progress} · ${TASK_STATUS.in_review.label} ${openTasks.in_review}`}
         />
         <Kpi
           label="需要你定"
           value={summary.pendingDecisions}
-          detail={`${openTasks.needs_decision} 个任务等决定`}
+          detail={`${openTasks.needs_decision} 个任务${TASK_STATUS.needs_decision.label}`}
         />
         <Kpi
           label="运行中"
@@ -126,7 +117,9 @@ function SummaryView({ summary }: { summary: Telescope.DashboardSummary }) {
                 </TableCell>
                 <TableCell>
                   <span className="flex items-center gap-1">
-                    <Badge variant={STATUS[task.status].badge}>{STATUS[task.status].label}</Badge>
+                    <Badge variant={TASK_STATUS[task.status].badge}>
+                      {TASK_STATUS[task.status].label}
+                    </Badge>
                     {task.conflictDecisionId ? <Badge variant="warning">有冲突</Badge> : null}
                   </span>
                 </TableCell>
@@ -222,13 +215,7 @@ export function TelescopeDashboard() {
       ? null
       : telescope.dashboard({ environmentId, input: { workspaceId: current.id } }),
   );
-  if (current === null)
-    return (
-      <Notice
-        title="还没有工作区"
-        description="建好或加入一个工作区后，这里汇总它的任务、运行和排队。"
-      />
-    );
+  if (current === null) return <NoWorkspace />;
   const summary = query.data;
   const refresh = (
     <Button size="xs" variant="outline" disabled={query.isPending} onClick={query.refresh}>
