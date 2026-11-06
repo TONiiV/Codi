@@ -178,7 +178,9 @@ import {
 } from "./threadActionMenu.logic";
 import {
   applySidebarThreadDrop,
+  dropWorkspaceHiddenProjects,
   filterSidebarV2VisibleThreads,
+  filterSidebarWorkspaceProjects,
   groupSidebarThreadsByProject,
   sidebarFolderExpansionKeys,
   buildBulkTitleRegenerationContextMenuItem,
@@ -261,7 +263,7 @@ import {
   type SidebarSweepAction,
 } from "./sidebar/SidebarThreadRow";
 import { SidebarDraftBlock } from "./sidebar/SidebarDraftBlock";
-import { useWorkspaceProjectGroups } from "./telescope/telescopeState";
+import { useTelescopeWorkspaces } from "./telescope/telescopeState";
 import {
   SidebarProjectFolderHeader,
   sidebarFolderRowId,
@@ -805,7 +807,12 @@ function useSidebarLookups() {
   const environments = useEnvironmentIdentities();
   const serverConfigs = useServerConfigs();
   const providerEntriesByEnvironment = useAtomValue(sidebarProviderEntriesAtom);
-  const projectGroups = useWorkspaceProjectGroups(useSidebarProjectGroups());
+  const workspace = useTelescopeWorkspaces();
+  const { groups: projectGroups, hiddenProjectKeys } = filterSidebarWorkspaceProjects(
+    useSidebarProjectGroups(),
+    workspace.bindings,
+    workspace.current?.id ?? null,
+  );
   const environmentLabelById = new Map(
     environments.map((environment) => [environment.environmentId, environment.label] as const),
   );
@@ -833,6 +840,7 @@ function useSidebarLookups() {
     projects,
     serverConfigs,
     projectGroups,
+    hiddenProjectKeys,
     environmentLabelById,
     providerEntriesByEnvironment,
     projectByKey,
@@ -897,6 +905,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
     projects,
     serverConfigs,
     projectGroups,
+    hiddenProjectKeys,
     environmentLabelById,
     providerEntriesByEnvironment,
     projectByKey,
@@ -1097,7 +1106,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
             ),
           ),
         );
-  const threads = useQuietThreadShells();
+  const threads = dropWorkspaceHiddenProjects(useQuietThreadShells(), hiddenProjectKeys);
   const routeRowThreadKey =
     routeThreadRef === null
       ? null
@@ -1195,9 +1204,10 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
       if (!composerDraftHasUserContent(store.draftsByThreadKey[draftKey])) {
         continue;
       }
+      const projectKey = `${session.environmentId}:${session.projectId}`;
       if (
-        scopedProjectKeys !== null &&
-        !scopedProjectKeys.has(`${session.environmentId}:${session.projectId}`)
+        hiddenProjectKeys.has(projectKey) ||
+        (scopedProjectKeys !== null && !scopedProjectKeys.has(projectKey))
       ) {
         continue;
       }

@@ -1,6 +1,7 @@
 import { useAtomValue } from "@effect/atom-react";
 import { boundWorkspaceIds } from "@t3tools/client-runtime/telescope/workspaces";
 import type { Telescope } from "@t3tools/contracts";
+import { AsyncResult } from "effect/reactivity";
 import { useState, type ReactNode } from "react";
 
 import type { SidebarProjectSnapshot } from "../../sidebarProjectGrouping";
@@ -84,14 +85,22 @@ export function ProjectWorkspaceRow({ group }: { group: SidebarProjectSnapshot }
     workspace ? `${workspace.name} · ${WORKSPACE_KIND_LABEL[workspace.kind]}` : "未分配";
   const move = async (next: Telescope.WorkspaceId | null) => {
     setBusy(true);
-    const bound = boundWorkspaceIds(bindings, group.memberProjectRefs);
-    for (const { environmentId: projectEnvironmentId, projectId } of group.memberProjectRefs) {
-      const project = { environmentId: projectEnvironmentId, projectId };
-      for (const workspaceId of bound) {
-        if (workspaceId !== next)
-          await unbind({ environmentId, input: { workspaceId, ...project } });
-      }
-      if (next !== null) await bind({ environmentId, input: { workspaceId: next, ...project } });
+    const steps = group.memberProjectRefs.flatMap((ref) => {
+      const project = { environmentId: ref.environmentId, projectId: ref.projectId };
+      const bound = boundWorkspaceIds(bindings, [ref]);
+      const leave = [...bound]
+        .filter((workspaceId) => workspaceId !== next)
+        .map((workspaceId) => () => unbind({ environmentId, input: { workspaceId, ...project } }));
+      // Rebinding would reset the project's lead, so a kept binding is left alone.
+      const join =
+        next === null || bound.has(next)
+          ? []
+          : [() => bind({ environmentId, input: { workspaceId: next, ...project } })];
+      return [...leave, ...join];
+    });
+    // A refused unbind stops the move, so the project never lands in two workspaces.
+    for (const step of steps) {
+      if (AsyncResult.isFailure(await step())) break;
     }
     setBusy(false);
   };

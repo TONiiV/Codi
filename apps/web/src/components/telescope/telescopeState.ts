@@ -1,15 +1,10 @@
 import { useAtomValue } from "@effect/atom-react";
-import {
-  boundWorkspaceIds,
-  createTelescopeWorkspaceAtoms,
-  hiddenOutsideWorkspace,
-} from "@t3tools/client-runtime/telescope/workspaces";
+import { createTelescopeWorkspaceAtoms } from "@t3tools/client-runtime/telescope/workspaces";
 import { Telescope } from "@t3tools/contracts";
 import { Atom } from "effect/reactivity";
 
 import { connectionAtomRuntime } from "../../connection/runtime";
 import { getLocalStorageItem, setLocalStorageItem } from "../../hooks/useLocalStorage";
-import type { SidebarProjectSnapshot } from "../../sidebarProjectGrouping";
 import { usePrimaryEnvironmentId } from "../../state/environments";
 
 const CURRENT_WORKSPACE_KEY = "t3code:telescope:current-workspace:v1";
@@ -46,19 +41,4 @@ export function useTelescopeWorkspaces() {
     environmentId === null ? noBindingsAtom : telescope.allBindingsAtom(environmentId),
   );
   return { environmentId, current, bindings };
-}
-
-/** Code lists unbound projects and the current workspace's; the rest wait in their workspace. */
-export function useWorkspaceProjectGroups(
-  groups: readonly SidebarProjectSnapshot[],
-): readonly SidebarProjectSnapshot[] {
-  const { current, bindings } = useTelescopeWorkspaces();
-  if (bindings.length === 0) return groups;
-  return groups.filter(
-    (group) =>
-      !hiddenOutsideWorkspace(
-        boundWorkspaceIds(bindings, group.memberProjectRefs),
-        current?.id ?? null,
-      ),
-  );
 }

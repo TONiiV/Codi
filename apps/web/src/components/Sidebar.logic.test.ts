@@ -34,6 +34,8 @@ import {
   groupSidebarThreadsByProject,
   resolveSidebarFolderDot,
   sidebarFolderExpansionKeys,
+  dropWorkspaceHiddenProjects,
+  filterSidebarWorkspaceProjects,
 } from "./Sidebar.logic";
 import { scopeThreadRef, scopedThreadKey } from "@t3tools/client-runtime/environment";
 import {
@@ -42,7 +44,14 @@ import {
 } from "@t3tools/client-runtime/state/thread-sort";
 import { resolveProjectExpanded } from "../uiStateStore";
 import { threadSearchMatchKey } from "@t3tools/client-runtime/state/thread-search";
-import { EnvironmentId, ProjectId, ProviderInstanceId, RunId, ThreadId } from "@t3tools/contracts";
+import {
+  EnvironmentId,
+  ProjectId,
+  ProviderInstanceId,
+  RunId,
+  Telescope,
+  ThreadId,
+} from "@t3tools/contracts";
 
 import {
   DEFAULT_INTERACTION_MODE,
@@ -1627,5 +1636,74 @@ describe("shouldCreateNewThreadInCurrentProject", () => {
     expect(shouldCreateNewThreadInCurrentProject(false, 1, 3)).toBe(true);
     expect(shouldCreateNewThreadInCurrentProject(false, 0, 0)).toBe(true);
     expect(shouldCreateNewThreadInCurrentProject(true, 2, 2)).toBe(true);
+  });
+});
+
+describe("workspace filter", () => {
+  const local = EnvironmentId.make("environment-local");
+  const remote = EnvironmentId.make("environment-remote");
+  const ref = (environmentId: EnvironmentId, projectId: string) => ({
+    environmentId,
+    projectId: ProjectId.make(projectId),
+  });
+  // `app` is one group across two environments; only its local member carries the binding.
+  const groups = [
+    { name: "app", memberProjectRefs: [ref(local, "app"), ref(remote, "app")] },
+    { name: "site", memberProjectRefs: [ref(local, "site")] },
+    { name: "docs", memberProjectRefs: [ref(local, "docs")] },
+  ];
+  const threads = [
+    { title: "local app", ...ref(local, "app") },
+    { title: "remote app", ...ref(remote, "app") },
+    { title: "site", ...ref(local, "site") },
+    { title: "docs", ...ref(local, "docs") },
+  ];
+  const binding = (workspaceId: string, projectId: string) => ({
+    workspaceId: Telescope.WorkspaceId.make(workspaceId),
+    ...ref(local, projectId),
+  });
+  const bindings = [binding("alpha", "app"), binding("beta", "docs")];
+
+  it.each([
+    {
+      name: "keeps everything while nothing is bound",
+      bindings: [],
+      current: "alpha",
+      groups: ["app", "site", "docs"],
+      threads: ["local app", "remote app", "site", "docs"],
+    },
+    {
+      name: "drops another workspace's project with its threads and keeps unbound ones",
+      bindings,
+      current: "alpha",
+      groups: ["app", "site"],
+      threads: ["local app", "remote app", "site"],
+    },
+    {
+      name: "keeps nothing of a group bound elsewhere, in any environment",
+      bindings,
+      current: "beta",
+      groups: ["site", "docs"],
+      threads: ["site", "docs"],
+    },
+    {
+      name: "shows only unbound projects without a current workspace",
+      bindings,
+      current: null,
+      groups: ["site"],
+      threads: ["site"],
+    },
+  ])("$name", (row) => {
+    const filtered = filterSidebarWorkspaceProjects(
+      groups,
+      row.bindings,
+      row.current === null ? null : Telescope.WorkspaceId.make(row.current),
+    );
+    expect(filtered.groups.map((group) => group.name)).toEqual(row.groups);
+    expect(
+      dropWorkspaceHiddenProjects(threads, filtered.hiddenProjectKeys).map(
+        (thread) => thread.title,
+      ),
+    ).toEqual(row.threads);
   });
 });
