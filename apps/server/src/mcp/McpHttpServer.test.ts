@@ -1359,7 +1359,14 @@ it.effect("lists memory tools only to threads with an open Telescope run", () =>
         TelescopeDb.layer,
         WorkspaceService.layer,
         MemoryService.layer,
-      ).pipe(Layer.provideMerge(Layer.merge(database, NodeCrypto.layer)));
+      ).pipe(
+        Layer.provideMerge(Layer.merge(database, NodeCrypto.layer)),
+        Layer.provide(
+          Layer.succeed(ServerEnvironment.ServerEnvironmentIdentity, {
+            getEnvironmentId: Effect.succeed(environmentId),
+          }),
+        ),
+      );
       const telescopeContext = yield* Layer.build(telescope);
       const serverLayer = McpHttpServer.layerMcpTransport(McpHttpServer.layerMemoryToolkit).pipe(
         Layer.provide(ServerSettings.layerTest()),
