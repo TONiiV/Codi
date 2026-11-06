@@ -5,6 +5,7 @@ import {
   boundWorkspaceIds,
   hiddenOutsideWorkspace,
   resolveCurrentWorkspace,
+  workspacesToLeave,
 } from "./workspaces.ts";
 
 const workspace = (id: string): Telescope.Workspace => ({
@@ -56,5 +57,13 @@ describe("telescope project visibility", () => {
     expect(hiddenOutsideWorkspace(inA, null)).toBe(true);
     expect(hiddenOutsideWorkspace(unbound, b)).toBe(false);
     expect(hiddenOutsideWorkspace(unbound, null)).toBe(false);
+  });
+
+  it("a move leaves only the caller's own workspaces", () => {
+    const foreign = Telescope.WorkspaceId.make("foreign");
+    const both = new Set([a, b, foreign]);
+    const own = [workspace("a"), workspace("b")];
+    expect(workspacesToLeave(both, b, own)).toEqual([a]);
+    expect(workspacesToLeave(both, null, own)).toEqual([a, b]);
   });
 });

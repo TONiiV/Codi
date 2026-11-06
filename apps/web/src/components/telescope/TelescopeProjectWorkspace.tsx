@@ -1,5 +1,5 @@
 import { useAtomValue } from "@effect/atom-react";
-import { boundWorkspaceIds } from "@t3tools/client-runtime/telescope/workspaces";
+import { boundWorkspaceIds, workspacesToLeave } from "@t3tools/client-runtime/telescope/workspaces";
 import type { Telescope } from "@t3tools/contracts";
 import { AsyncResult } from "effect/reactivity";
 import { useState, type ReactNode } from "react";
@@ -100,9 +100,9 @@ export function ProjectWorkspaceRow({ group }: { group: SidebarProjectSnapshot }
     const steps = group.memberProjectRefs.flatMap((ref) => {
       const project = { environmentId: ref.environmentId, projectId: ref.projectId };
       const bound = boundWorkspaceIds(bindings, [ref]);
-      const leave = [...bound]
-        .filter((workspaceId) => workspaceId !== next)
-        .map((workspaceId) => () => unbind({ environmentId, input: { workspaceId, ...project } }));
+      const leave = workspacesToLeave(bound, next, workspaces).map(
+        (workspaceId) => () => unbind({ environmentId, input: { workspaceId, ...project } }),
+      );
       // Rebinding would reset the project's lead, so a kept binding is left alone.
       const join =
         next === null || bound.has(next)

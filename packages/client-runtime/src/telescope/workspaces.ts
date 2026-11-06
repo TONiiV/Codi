@@ -54,6 +54,15 @@ export function hiddenOutsideWorkspace(
   return bound.size > 0 && (currentId === null || !bound.has(currentId));
 }
 
+/** Bindings a move to `next` removes: only the caller's own, so a foreign one never strands it. */
+export function workspacesToLeave(
+  bound: ReadonlySet<Telescope.WorkspaceId>,
+  next: Telescope.WorkspaceId | null,
+  own: ReadonlyArray<Telescope.Workspace>,
+): ReadonlyArray<Telescope.WorkspaceId> {
+  return [...bound].filter((id) => id !== next && own.some((workspace) => workspace.id === id));
+}
+
 /** One binding per workspace a project is bound to, as `boundWorkspaceIds` reads them. */
 export function bindingsFromSummary(
   projects: ReadonlyArray<Telescope.ProjectBindingSummary>,
