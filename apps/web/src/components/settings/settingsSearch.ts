@@ -72,6 +72,9 @@ export interface SettingsSearchItem {
   readonly peerLinksOnly?: boolean;
   readonly secondary?: boolean;
   readonly requiresThreadAutoSettlement?: boolean;
+  /** For items whose title is built from a label, such as one per source control host. */
+  readonly titleKey?: string;
+  readonly titleValues?: Readonly<Record<string, string>>;
 }
 
 export interface SettingsSearchAvailability {
@@ -203,6 +206,10 @@ export function sourceControlHostSearchItems(
         title: credentials
           ? `${definition.label} accounts and token`
           : `${definition.label} credentials`,
+        titleKey: credentials
+          ? "settings.manual.searchItems.hostAccountsAndToken"
+          : "settings.manual.searchItems.hostCredentials",
+        titleValues: { label: definition.label },
         to: "/settings/source-control" as const,
         searchTerms: [
           credentials
@@ -1458,6 +1465,25 @@ export function searchableSetting(
 } {
   const { id: anchorId, title } = SEARCH_ITEMS_BY_ID.get(id)!;
   return { id: anchorId, title: t ? t(`settings.items.${id}`) : title };
+}
+
+/** Titles and keywords in the current language. English keywords stay searchable. */
+export function localizeSettingsSearchItem(
+  item: SettingsSearchItem,
+  t: TFunction,
+): SettingsSearchItem {
+  const section = settingsSectionLabel(item.to, t);
+  const keybindingCommand = item.id.startsWith("keybinding-")
+    ? (item.id.slice("keybinding-".length) as KeybindingCommand)
+    : null;
+  const title = item.titleKey
+    ? t(item.titleKey, item.titleValues ?? {})
+    : keybindingCommand
+      ? commandLabel(keybindingCommand, t)
+      : t(`settings.items.${item.id}`);
+  const catalogTerms = keybindingCommand === null && item.titleKey === undefined;
+  const terms = catalogTerms && item.searchTerms ? [t(`settings.itemTerms.${item.id}`)] : [];
+  return { ...item, title, searchTerms: [...(item.searchTerms ?? []), ...terms, section] };
 }
 
 export function filterAvailableSettingsSearchItems(
