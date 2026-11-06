@@ -57,7 +57,13 @@ import {
 } from "./taskBoard.ts";
 import { Decision, Lease, Task } from "./board.ts";
 import { TokenSaverReport, TokenSaverRunInput } from "./tokenSaver.ts";
-import { Budget, BudgetSetInput, KillSwitch, KillSwitchSetInput } from "./governance.ts";
+import {
+  Budget,
+  BudgetSetInput,
+  GovernanceState,
+  KillSwitch,
+  KillSwitchSetInput,
+} from "./governance.ts";
 import {
   GrantAuditListInput,
   GrantAuditListResult,
@@ -104,6 +110,7 @@ export const WS_METHODS = {
   grantAuditList: "telescope.grant.audit.list",
   budgetSet: "telescope.budget.set",
   killSwitchSet: "telescope.killSwitch.set",
+  governanceGet: "telescope.governance.get",
 } as const;
 
 const error = Schema.Union([WorkspaceError, EnvironmentAuthorizationError]);
@@ -180,4 +187,5 @@ export const GrantRpcs = [
   make(WS_METHODS.grantAuditList, GrantAuditListInput, GrantAuditListResult),
   make(WS_METHODS.budgetSet, BudgetSetInput, Budget),
   make(WS_METHODS.killSwitchSet, KillSwitchSetInput, KillSwitch),
+  make(WS_METHODS.governanceGet, WorkspaceScopedInput, GovernanceState),
 ] as const;

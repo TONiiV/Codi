@@ -35,9 +35,14 @@ const decodeRuns = Schema.decodeUnknownEffect(Schema.Array(RunRow));
 const decodeAgents = Schema.decodeUnknownEffect(
   Schema.Array(Schema.Struct({ agent_id: Telescope.AgentId })),
 );
-const decodeKillSwitches = Schema.decodeUnknownEffect(
-  Schema.Array(Schema.Struct({ state: Telescope.KillSwitch.fields.state })),
-);
+const KillSwitchRow = Schema.Struct({
+  workspace_id: Telescope.WorkspaceId,
+  agent_id: Telescope.AgentId,
+  state: Telescope.KillSwitch.fields.state,
+  by_subject_id: Telescope.SubjectId,
+  at: Schema.String,
+});
+const decodeKillSwitches = Schema.decodeUnknownEffect(Schema.Array(KillSwitchRow));
 const BudgetRow = Schema.Struct({
   workspace_id: Telescope.WorkspaceId,
   scope: Telescope.BudgetScope,
@@ -71,6 +76,14 @@ const toBudget = (row: typeof BudgetRow.Type): Telescope.Budget => ({
   ...(row.limit_tokens === null ? {} : { limitTokens: row.limit_tokens }),
   ...(row.limit_usd === null ? {} : { limitUsd: row.limit_usd }),
   ...(row.limit_calls === null ? {} : { limitCalls: row.limit_calls }),
+});
+
+const toKillSwitch = (row: typeof KillSwitchRow.Type): Telescope.KillSwitch => ({
+  workspaceId: row.workspace_id,
+  agentId: row.agent_id,
+  state: row.state,
+  by: row.by_subject_id,
+  at: row.at,
 });
 
 const redact = (value: Schema.Json): Schema.Json =>
@@ -141,6 +154,7 @@ export class ToolGateway extends Context.Service<
     ) => Effect.Effect<A, E | ToolGatewayDenied | Failure, R>;
     readonly setBudget: Method<"telescope.budget.set">;
     readonly setKillSwitch: Method<"telescope.killSwitch.set">;
+    readonly governance: Method<"telescope.governance.get">;
   }
 >()("t3/telescope/ToolGateway") {}
 
@@ -274,7 +288,7 @@ const make = Effect.gen(function* () {
     if (self.role !== "admin")
       return yield* new Telescope.WorkspaceError({
         reason: "forbidden",
-        message: "Only admins set budgets and stop agents.",
+        message: "Only admins manage budgets and stops.",
       });
     return self;
   });
@@ -315,11 +329,20 @@ const make = Effect.gen(function* () {
           .remove(workspaceId, "kill_switches", where)
           .pipe(Effect.andThen(db.insert(workspaceId, "kill_switches", row))),
       );
-      return { workspaceId, agentId, state, by: row.by_subject_id, at: row.at };
+      return toKillSwitch({ ...row, workspace_id: workspaceId });
     },
   );
 
-  return ToolGateway.of({ call, setBudget, setKillSwitch });
+  const governance: Method<"telescope.governance.get"> = Effect.fn("ToolGateway.governance")(
+    function* (caller, { workspaceId }) {
+      yield* requireAdmin(caller, workspaceId);
+      const budgets = yield* db.select(workspaceId, "budgets", decodeBudgets);
+      const killSwitches = yield* db.select(workspaceId, "kill_switches", decodeKillSwitches);
+      return { budgets: budgets.map(toBudget), killSwitches: killSwitches.map(toKillSwitch) };
+    },
+  );
+
+  return ToolGateway.of({ call, setBudget, setKillSwitch, governance });
 });
 
 export const layer = Layer.effect(ToolGateway, make).pipe(

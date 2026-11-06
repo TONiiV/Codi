@@ -265,6 +265,7 @@ const RPC_AGGREGATES = {
   [Telescope.WS_METHODS.grantAuditList]: "telescope",
   [Telescope.WS_METHODS.budgetSet]: "telescope",
   [Telescope.WS_METHODS.killSwitchSet]: "telescope",
+  [Telescope.WS_METHODS.governanceGet]: "telescope",
 } as const satisfies Readonly<Record<WsRpcMethod, string>>;
 
 const RPC_SPAN_PREFIX = "ws.rpc";

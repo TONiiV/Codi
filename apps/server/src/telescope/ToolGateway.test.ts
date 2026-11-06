@@ -169,14 +169,21 @@ it.layer(layer)("Telescope tool gateway", (it) => {
     }),
   );
 
-  it.effect("fails the next call after the member is revoked mid-run", () =>
+  it.effect("fails the next call after a grant is revoked mid-run", () =>
     Effect.gen(function* () {
       const { workspaceId, beaId, workspaces, call, denial, audit } = yield* setup;
+      const grants = yield* GrantService.GrantService;
+      const rule = (powers: Telescope.StandingPowers) =>
+        grants.setProjectRule(as.ann, { workspaceId, projectId: web, powers });
+      yield* call("open_ticket");
+      yield* rule({ ...ALL, openTickets: false });
+      assert.strictEqual(yield* denial("open_ticket"), "forbidden");
+      yield* rule(ALL);
       yield* call("open_ticket");
       yield* workspaces.revoke(as.ann, { workspaceId, subjectId: beaId });
       assert.strictEqual(yield* denial("open_ticket"), "forbidden");
       const outcomes = (yield* audit).map((entry) => entry.outcome);
-      assert.deepStrictEqual(outcomes, ["allowed", "denied"]);
+      assert.deepStrictEqual(outcomes, ["allowed", "denied", "allowed", "denied"]);
     }),
   );
 
@@ -197,6 +204,13 @@ it.layer(layer)("Telescope tool gateway", (it) => {
       assert.strictEqual(yield* denial("open_ticket"), "stopped");
       yield* gateway.setKillSwitch(as.ann, stop("terminated"));
       assert.strictEqual(yield* denial("open_ticket"), "stopped");
+      const { killSwitches } = yield* gateway.governance(as.ann, { workspaceId });
+      assert.deepStrictEqual(
+        killSwitches.map((row) => [row.agentId, row.state]),
+        [[chiefId, "terminated"]],
+      );
+      const hidden = yield* gateway.governance(as.bea, { workspaceId }).pipe(Effect.flip);
+      assert.strictEqual(hidden._tag === "TelescopeWorkspaceError" && hidden.reason, "forbidden");
       yield* gateway.setKillSwitch(as.ann, stop("running"));
       yield* call("open_ticket");
       const outcomes = (yield* audit).map((entry) => entry.outcome);
@@ -225,6 +239,8 @@ it.layer(layer)("Telescope tool gateway", (it) => {
 
         const lifted = yield* gateway.setBudget(as.ann, budget);
         assert.deepStrictEqual([lifted.usedCalls, lifted.limitCalls], [2, undefined]);
+        const { budgets } = yield* gateway.governance(as.ann, { workspaceId });
+        assert.deepStrictEqual(budgets, [lifted]);
         yield* call("open_ticket");
       }),
     ),

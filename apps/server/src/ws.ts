@@ -2463,6 +2463,8 @@ export const layerWsRpc = (
           telescopeStorage(telescopeGateway.setBudget(caller, input)),
         [Telescope.WS_METHODS.killSwitchSet]: (input) =>
           telescopeStorage(telescopeGateway.setKillSwitch(caller, input)),
+        [Telescope.WS_METHODS.governanceGet]: (input) =>
+          telescopeStorage(telescopeGateway.governance(caller, input)),
         [WS_METHODS.guestShareCreate]: (input) =>
           Effect.annotateCurrentSpan({ "orchestration_v2.thread_id": input.threadId }).pipe(
             Effect.andThen(guestShares.create(input)),

@@ -71,3 +71,8 @@ export const KillSwitchSetInput = Schema.Struct({
   agentId: AgentId,
   state: KillSwitch.fields.state,
 });
+
+export const GovernanceState = Schema.Struct({
+  budgets: Schema.Array(Budget),
+  killSwitches: Schema.Array(KillSwitch),
+});
