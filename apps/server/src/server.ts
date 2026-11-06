@@ -818,9 +818,8 @@ const layerMakeRoutes = Layer.mergeAll(
   Layer.provide(TelescopeWorkspaces.layer),
   Layer.provide(TelescopeBoard.layer),
   Layer.provide(TelescopeAgents.layer),
-  Layer.provide(TelescopeRuns.layer),
+  Layer.provide(Layer.mergeAll(TelescopeRuns.layer, TelescopeGrants.layer)),
   Layer.provide(TelescopeTokenSaver.layer.pipe(Layer.provide(UsageProjectResolver.layer))),
-  Layer.provide(TelescopeGrants.layer),
   // Share the service so HTTP/WS clients single-flight reads and invalidate each other's cached patches.
   Layer.provide(layerPullRequestService),
   // The same activity instance RunExecutionService reports to, by layer memoization.
