@@ -2435,6 +2435,12 @@ export const layerWsRpc = (
           telescopeStorage(telescopeRuns.get(caller, input)),
         [Telescope.WS_METHODS.runCalls]: (input) =>
           telescopeStorage(telescopeRuns.calls(caller, input)),
+        [Telescope.WS_METHODS.leaseAcquire]: (input) =>
+          telescopeStorage(board.acquireLease(actor, input)),
+        [Telescope.WS_METHODS.leaseHeartbeat]: (input) =>
+          telescopeStorage(board.heartbeatLease(actor, input)),
+        [Telescope.WS_METHODS.leaseRelease]: (input) =>
+          telescopeStorage(board.releaseLease(actor, input)),
         [WS_METHODS.guestShareCreate]: (input) =>
           Effect.annotateCurrentSpan({ "orchestration_v2.thread_id": input.threadId }).pipe(
             Effect.andThen(guestShares.create(input)),

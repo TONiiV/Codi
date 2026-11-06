@@ -43,6 +43,8 @@ import {
   DecisionCreateInput,
   DecisionListResult,
   FreeTextLimitError,
+  LeaseAcquireInput,
+  LeaseScopedInput,
   StaleTaskVersionError,
   TaskCreateInput,
   TaskGetInput,
@@ -50,7 +52,7 @@ import {
   TaskListResult,
   TaskUpdateInput,
 } from "./taskBoard.ts";
-import { Decision, Task } from "./board.ts";
+import { Decision, Lease, Task } from "./board.ts";
 
 export const WS_METHODS = {
   workspaceCreate: "telescope.workspace.create",
@@ -81,6 +83,9 @@ export const WS_METHODS = {
   runList: "telescope.run.list",
   runGet: "telescope.run.get",
   runCalls: "telescope.run.calls",
+  leaseAcquire: "telescope.lease.acquire",
+  leaseHeartbeat: "telescope.lease.heartbeat",
+  leaseRelease: "telescope.lease.release",
 } as const;
 
 const error = Schema.Union([WorkspaceError, EnvironmentAuthorizationError]);
@@ -125,6 +130,9 @@ export const TaskBoardRpcs = [
   makeBoard(WS_METHODS.decisionCreate, DecisionCreateInput, Decision),
   makeBoard(WS_METHODS.decisionList, WorkspaceScopedInput, DecisionListResult),
   makeBoard(WS_METHODS.commitList, CommitListInput, CommitListResult),
+  makeBoard(WS_METHODS.leaseAcquire, LeaseAcquireInput, Lease),
+  makeBoard(WS_METHODS.leaseHeartbeat, LeaseScopedInput, Lease),
+  makeBoard(WS_METHODS.leaseRelease, LeaseScopedInput, Schema.Struct({})),
 ] as const;
 
 export const AgentRpcs = [

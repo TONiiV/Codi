@@ -1,0 +1,94 @@
+import type { Telescope } from "@t3tools/contracts";
+import type * as Schema from "effect/Schema";
+
+type Fields = Record<string, Schema.Json>;
+
+export type MergeOutcome =
+  | {
+      readonly kind: "merged";
+      readonly fields: Fields;
+      readonly mergeLevel: 0 | 1;
+      readonly mergeReason?: string;
+    }
+  | { readonly kind: "conflict"; readonly fields: ReadonlyArray<string> };
+
+/** Field values a task has before any commit sets them. */
+const DEFAULTS: Fields = { status: "todo", goalChain: [] };
+const STATUS_RANK = new Map<Schema.Json, number>([
+  ["todo", 0],
+  ["in_progress", 1],
+  ["in_review", 2],
+  ["done", 3],
+]);
+
+const sameJson = (a: unknown, b: unknown) =>
+  JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+
+/** Status only moves forward and `dropped` is terminal. `undefined` when neither rule decides. */
+const statusWinner = (mine: Schema.Json, current: Schema.Json) => {
+  if (current === "dropped") return "theirs";
+  if (mine === "dropped") return current === "done" ? undefined : "mine";
+  const m = STATUS_RANK.get(mine);
+  const c = STATUS_RANK.get(current);
+  if (m === undefined || c === undefined) return undefined;
+  return m > c ? "mine" : "theirs";
+};
+
+/**
+ * Three-way merge of a write made against `baseVersion` onto `current`. `mine` holds the fields
+ * that differ from `current`; `history` is every commit of the task. The base value of a field is
+ * replayed from the commits before the base, so resending an unchanged field is not a conflict.
+ */
+export const mergeStale = (input: {
+  readonly current: Telescope.Task;
+  readonly mine: Fields;
+  readonly history: ReadonlyArray<Telescope.TaskCommit>;
+  readonly baseVersion: number;
+  readonly authorId: string;
+  readonly leaseHolder: string | undefined;
+}): MergeOutcome => {
+  const base: Fields = { ...DEFAULTS };
+  const touchedBy = new Map<string, Set<string>>();
+  for (const commit of input.history.toSorted((a, b) => a.baseVersion - b.baseVersion)) {
+    for (const [key, value] of Object.entries(commit.changedFields)) {
+      if (commit.baseVersion < input.baseVersion) base[key] = value;
+      else touchedBy.set(key, (touchedBy.get(key) ?? new Set()).add(commit.authorId));
+    }
+  }
+
+  const fields: Fields = {};
+  const reasons: string[] = [];
+  const conflicts: string[] = [];
+  const current: Readonly<Record<string, unknown>> = input.current;
+  for (const [key, value] of Object.entries(input.mine)) {
+    const theirs = touchedBy.get(key);
+    if (theirs === undefined) {
+      fields[key] = value;
+      continue;
+    }
+    if (sameJson(value, base[key])) continue;
+    const holder = input.leaseHolder;
+    const byLease = holder !== undefined && (input.authorId === holder || theirs.has(holder));
+    const winner = byLease
+      ? input.authorId === holder
+        ? "mine"
+        : "theirs"
+      : key === "status"
+        ? statusWinner(value, input.current.status)
+        : undefined;
+    if (winner === undefined) {
+      conflicts.push(key);
+      continue;
+    }
+    if (winner === "mine") fields[key] = value;
+    const kept = JSON.stringify(winner === "mine" ? value : (current[key] ?? null));
+    reasons.push(
+      `${key}: ${byLease ? "lease holder wins" : "status only moves forward"}, kept ${kept}`,
+    );
+  }
+  if (conflicts.length > 0) return { kind: "conflict", fields: conflicts };
+  const rebased = `rebased from version ${input.baseVersion}`;
+  return reasons.length === 0
+    ? { kind: "merged", fields, mergeLevel: 0, mergeReason: rebased }
+    : { kind: "merged", fields, mergeLevel: 1, mergeReason: [rebased, ...reasons].join("; ") };
+};
