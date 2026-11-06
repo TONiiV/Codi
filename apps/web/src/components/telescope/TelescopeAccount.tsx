@@ -1,7 +1,8 @@
-import { useAtomSet } from "@effect/atom-react";
+import { RegistryContext } from "@effect/atom-react";
 import type { EnvironmentId } from "@t3tools/contracts";
 import { ChevronsUpDownIcon, LogInIcon, PlusIcon, RotateCwIcon, UsersIcon } from "lucide-react";
-import { useState } from "react";
+import * as Effect from "effect/Effect";
+import { useContext, useState } from "react";
 
 import { useEnvironmentQuery } from "../../state/query";
 import { Badge } from "../ui/badge";
@@ -34,7 +35,7 @@ function AccountMenu({ environmentId }: { environmentId: EnvironmentId }) {
     current === null ? null : telescope.get({ environmentId, input: { workspaceId: current.id } }),
   );
   const self = selfQuery.data?.self ?? null;
-  const setCurrent = useAtomSet(telescope.storedWorkspaceIdAtom);
+  const registry = useContext(RegistryContext);
   const [dialog, setDialog] = useState<DialogKind | null>(null);
   const listFailed = listQuery.data === null && listQuery.error !== null;
   const loaded = listQuery.data !== null;
@@ -83,7 +84,9 @@ function AccountMenu({ environmentId }: { environmentId: EnvironmentId }) {
                 value={current.id}
                 onValueChange={(next) => {
                   const picked = workspaces.find((workspace) => workspace.id === next);
-                  if (picked) setCurrent(picked.id);
+                  if (picked) {
+                    Effect.runSync(telescope.switchTo({ environmentId }, registry, picked.id));
+                  }
                 }}
               >
                 {workspaces.map((workspace) => (

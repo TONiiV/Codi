@@ -1,4 +1,4 @@
-import { useAtomValue } from "@effect/atom-react";
+import { RegistryContext, useAtomValue } from "@effect/atom-react";
 import {
   failureText,
   isEnvironmentOwner,
@@ -7,7 +7,7 @@ import {
 } from "@t3tools/client-runtime/telescope/workspaces";
 import { type EnvironmentId, Telescope } from "@t3tools/contracts";
 import { PlusIcon } from "lucide-react";
-import { useId, useState, type ReactNode } from "react";
+import { useContext, useEffect, useId, useState, type ReactNode } from "react";
 
 import { requestConfirmDialog } from "../../confirmDialog";
 import { useCopyToClipboard } from "../../hooks/useCopyToClipboard";
@@ -245,7 +245,16 @@ export function MembersDialog(props: {
   onClose: () => void;
 }) {
   const target = { environmentId: props.environmentId, input: { workspaceId: props.workspace.id } };
-  const query = useEnvironmentQuery(telescope.members(target));
+  const members = telescope.members(target);
+  const query = useEnvironmentQuery(members);
+  const registry = useContext(RegistryContext);
+  const { refresh } = query;
+  // The query atom outlives the dialog, so reopening would show members as of the last open.
+  // A first open is already fetching; only a kept value needs the refresh.
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- refreshes the registry's kept members query once per open
+  useEffect(() => {
+    if (!registry.get(members).waiting) refresh();
+  }, [registry, members, refresh]);
   const mayInvite = useAtomValue(telescope.invite.permissionAtom(props.environmentId));
   const mayRevoke = useAtomValue(telescope.revoke.permissionAtom(props.environmentId));
   const isAdmin = props.self?.role === "admin";
