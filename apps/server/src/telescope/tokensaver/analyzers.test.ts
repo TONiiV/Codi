@@ -25,6 +25,9 @@ describe("token saver transcripts", () => {
       transcript.toolResult("s1", 3, "t1", 400),
       transcript.toolResult("s1", 3, "t2", 8),
       transcript.prompt("s1", 4, "and the tests"),
+      transcript.prompt("s1", 5, "Caveat: injected context", { isMeta: true }),
+      transcript.prompt("s1", 5, "subagent brief", { isSidechain: true }),
+      transcript.prompt("s1", 30, "at the window end"),
       "not json",
     ];
     for (const line of lines) collector.add(line);
@@ -50,20 +53,42 @@ describe("token saver analyzers", () => {
       cacheCreationTokens: 400_000,
     });
     const quiet = session("e", { cacheCreationTokens: 30_000, cachedInputTokens: 10_000 });
+    // Ratio 0.15: above 2 x median (0.1) but under the 0.2 floor; 100K total is measured.
+    const mild = session("f", { cacheCreationTokens: 15_000, cachedInputTokens: 85_000 });
     const finding = brokenCachePrefix(
-      [...normal, busted, quiet],
+      [...normal, busted, quiet, mild],
       [
         { cwd: "/repo", file: "CLAUDE.md", mtimeMs: 15_000 },
-        { cwd: "/elsewhere", file: "CLAUDE.md", mtimeMs: 15_000 },
+        { cwd: "/elsewhere", file: "AGENTS.md", mtimeMs: 15_000 },
+        { cwd: "/repo", file: ".mcp.json", mtimeMs: 9_999 },
+        { cwd: "/repo", file: "AGENTS.md", mtimeMs: 20_001 },
       ],
     );
     assert.strictEqual(finding?.pattern, "broken_cache_prefix");
     assert.strictEqual(finding?.confidence, "medium");
+    assert.strictEqual(finding?.evidence.sessions, 5);
     assert.strictEqual(finding?.evidence.outlierSessions, 1);
     assert.strictEqual(finding?.evidence.changedFiles, "CLAUDE.md");
     // 400K written against a typical 5% of 1M.
     assert.strictEqual(finding?.estimatedSavingTokens, 350_000);
     assert.strictEqual(brokenCachePrefix(normal, []), undefined);
+  });
+
+  it("uses twice the median as the outlier bar and ignores prefix files of other projects", () => {
+    const ratio = (id: string, writesPerMille: number) =>
+      session(id, {
+        cacheCreationTokens: writesPerMille * 1000,
+        cachedInputTokens: (1000 - writesPerMille) * 1000,
+      });
+    const week = [ratio("a", 150), ratio("b", 150), ratio("c", 150), ratio("d", 250)];
+    const finding = brokenCachePrefix(
+      [...week, ratio("e", 350)],
+      [{ cwd: "/elsewhere", file: "CLAUDE.md", mtimeMs: 1_500 }],
+    );
+    assert.strictEqual(finding?.evidence.outlierSessions, 1);
+    assert.strictEqual(finding?.evidence.sessionsWithConfigChange, 0);
+    assert.strictEqual(finding?.confidence, "low");
+    assert.strictEqual(finding?.estimatedSavingTokens, 200_000);
   });
 
   it("counts rereads of an unchanged file range and resets after an edit", () => {

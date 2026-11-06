@@ -4,13 +4,14 @@ const at = (minute: number) => `2026-11-02T09:${String(minute).padStart(2, "0")}
 
 /** Claude Code transcript lines in the shape it writes them. */
 export const transcript = {
-  prompt: (sessionId: string, minute: number, text: string) =>
+  prompt: (sessionId: string, minute: number, text: string, fields: Record<string, unknown> = {}) =>
     JSON.stringify({
       type: "user",
       sessionId,
       cwd: "/repo",
       timestamp: at(minute),
       message: { role: "user", content: text },
+      ...fields,
     }),
   toolUse: (
     sessionId: string,
