@@ -43,14 +43,17 @@ import {
   DecisionCreateInput,
   DecisionListResult,
   FreeTextLimitError,
+  LeaseAcquireInput,
+  LeaseScopedInput,
   StaleTaskVersionError,
   TaskCreateInput,
   TaskGetInput,
   TaskListInput,
   TaskListResult,
   TaskUpdateInput,
+  TaskUpdateResult,
 } from "./taskBoard.ts";
-import { Decision, Task } from "./board.ts";
+import { Decision, Lease, Task } from "./board.ts";
 
 export const WS_METHODS = {
   workspaceCreate: "telescope.workspace.create",
@@ -81,6 +84,9 @@ export const WS_METHODS = {
   runList: "telescope.run.list",
   runGet: "telescope.run.get",
   runCalls: "telescope.run.calls",
+  leaseAcquire: "telescope.lease.acquire",
+  leaseHeartbeat: "telescope.lease.heartbeat",
+  leaseRelease: "telescope.lease.release",
 } as const;
 
 const error = Schema.Union([WorkspaceError, EnvironmentAuthorizationError]);
@@ -119,12 +125,15 @@ const makeBoard = <const Tag extends string, P extends Schema.Top, S extends Sch
 
 export const TaskBoardRpcs = [
   makeBoard(WS_METHODS.taskCreate, TaskCreateInput, Task),
-  makeBoard(WS_METHODS.taskUpdate, TaskUpdateInput, Task),
+  makeBoard(WS_METHODS.taskUpdate, TaskUpdateInput, TaskUpdateResult),
   makeBoard(WS_METHODS.taskGet, TaskGetInput, Task),
   makeBoard(WS_METHODS.taskList, TaskListInput, TaskListResult),
   makeBoard(WS_METHODS.decisionCreate, DecisionCreateInput, Decision),
   makeBoard(WS_METHODS.decisionList, WorkspaceScopedInput, DecisionListResult),
   makeBoard(WS_METHODS.commitList, CommitListInput, CommitListResult),
+  makeBoard(WS_METHODS.leaseAcquire, LeaseAcquireInput, Lease),
+  makeBoard(WS_METHODS.leaseHeartbeat, LeaseScopedInput, Lease),
+  makeBoard(WS_METHODS.leaseRelease, LeaseScopedInput, Schema.Struct({})),
 ] as const;
 
 export const AgentRpcs = [

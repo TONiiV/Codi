@@ -48,6 +48,8 @@ export const Task = Schema.Struct({
   ownerSubjectId: Schema.optionalKey(SubjectId),
   ownerAgentId: Schema.optionalKey(AgentId),
   leaseId: Schema.optionalKey(LeaseId),
+  /** The proposed decision a stale write opened for fields no merge rule settles (需要你定). */
+  conflictDecisionId: Schema.optionalKey(DecisionId),
   forgeIssue: Schema.optionalKey(ForgeIssueRef),
   threadId: Schema.optionalKey(ThreadId),
   goalChain: Strings,
