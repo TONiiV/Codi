@@ -28,7 +28,12 @@ function TitleCell({ task, write }: { task: Telescope.Task; write: Write }) {
     if (title.length > 0 && title !== task.title) void write(task, { set: { title } });
   };
   return draft === null ? (
-    <Button variant="ghost" size="sm" onClick={() => setDraft(task.title)}>
+    <Button
+      variant="ghost"
+      size="sm"
+      className="min-w-0 shrink"
+      onClick={() => setDraft(task.title)}
+    >
       <span className="truncate">{task.title}</span>
     </Button>
   ) : (
@@ -160,7 +165,7 @@ export function TasksTable(props: { target: BoardTarget; tasks: ReadonlyArray<Te
   const write = useTaskWrite(props.target);
   const names = useBoardNames(props.target);
   return (
-    <Table>
+    <Table className="min-w-160 table-fixed">
       <TableHeader>
         <TableRow>
           <TableHead>任务</TableHead>
