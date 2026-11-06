@@ -263,6 +263,9 @@ const RPC_AGGREGATES = {
   [Telescope.WS_METHODS.tokenSaverRun]: "telescope",
   [Telescope.WS_METHODS.grantExplain]: "telescope",
   [Telescope.WS_METHODS.grantAuditList]: "telescope",
+  [Telescope.WS_METHODS.memorySearch]: "telescope",
+  [Telescope.WS_METHODS.memoryWrite]: "telescope",
+  [Telescope.WS_METHODS.memoryPin]: "telescope",
 } as const satisfies Readonly<Record<WsRpcMethod, string>>;
 
 const RPC_SPAN_PREFIX = "ws.rpc";

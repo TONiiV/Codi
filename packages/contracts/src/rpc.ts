@@ -42,6 +42,7 @@ import {
   RunRpcs as TelescopeRunRpcs,
   WakeRpcs as TelescopeWakeRpcs,
   TokenSaverRpcs as TelescopeTokenSaverRpcs,
+  MemoryRpcs as TelescopeMemoryRpcs,
   WorkspaceRpcs as TelescopeWorkspaceRpcs,
 } from "./telescope/rpc.ts";
 import * as RpcGroup from "effect/rpc/RpcGroup";
@@ -2227,4 +2228,5 @@ export const WsRpcGroup = RpcGroup.make(
   ...TelescopeWakeRpcs,
   ...TelescopeTokenSaverRpcs,
   ...TelescopeGrantRpcs,
+  ...TelescopeMemoryRpcs,
 ).middleware(RpcScopeAuthorization);

@@ -82,7 +82,18 @@ export class TelescopeDb extends Context.Service<
       table: TelescopeTable,
       where: Row,
     ) => Effect.Effect<void, PersistenceSqlError>;
+    /** Trigram full-text search over `telescope_memories`: pinned first, then by relevance. */
+    readonly searchMemories: <A, R>(
+      workspaceId: Telescope.WorkspaceId,
+      query: string,
+      decodeRows: RowsDecoder<A, R>,
+      options: { readonly where: Row; readonly validAt: string | undefined },
+    ) => Effect.Effect<A, PersistenceSqlError | PersistenceDecodeError, R>;
     /** Cross-workspace lookups, each keyed by something no workspace owns. */
+    readonly latestRunForThread: <A, R>(
+      threadId: string,
+      decodeRows: RowsDecoder<A, R>,
+    ) => Effect.Effect<A, PersistenceSqlError | PersistenceDecodeError, R>;
     readonly workspaceIdsOf: (
       deviceKey: string,
     ) => Effect.Effect<ReadonlyArray<Telescope.WorkspaceId>, PersistenceSqlError>;
@@ -192,6 +203,66 @@ const make = Effect.gen(function* () {
       Effect.mapError(toPersistenceSqlError(`TelescopeDb.remove.${table}`)),
     );
   });
+  const searchMemories = Effect.fn("TelescopeDb.searchMemories")(function* <A, R>(
+    workspaceId: Telescope.WorkspaceId,
+    query: string,
+    decodeRows: RowsDecoder<A, R>,
+    options: { readonly where: Row; readonly validAt: string | undefined },
+  ) {
+    const terms = query.split(/\s+/).filter((term) => term.length > 0);
+    const fts = yield* sql`
+      SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'telescope_memories_fts'
+    `.pipe(Effect.mapError(toPersistenceSqlError("TelescopeDb.searchMemories")));
+    // Trigram MATCH ignores terms under three characters (most Chinese words), so those use LIKE.
+    // Without FTS5 the index does not exist (migration 082 skips it) and every term uses LIKE.
+    const phrases = fts.length === 0 ? [] : terms.filter((term) => [...term].length >= 3);
+    const likes = terms
+      .filter((term) => !phrases.includes(term))
+      .map((term) => sql`text LIKE ${`%${term.replace(/[\\%_]/g, "\\$&")}%`} ESCAPE ${"\\"}`);
+    const { validAt } = options;
+    const filters = sql.and([
+      scoped(workspaceId, options.where),
+      ...(validAt === undefined
+        ? []
+        : [sql`valid_from <= ${validAt}`, sql`(invalid_at IS NULL OR invalid_at > ${validAt})`]),
+    ]);
+    const match = sql.and([
+      sql`workspace_id = ${workspaceId}`,
+      ...(phrases.length === 0
+        ? []
+        : [
+            sql`telescope_memories_fts MATCH ${phrases.map((term) => `"${term.replaceAll('"', '""')}"`).join(" ")}`,
+          ]),
+      ...likes,
+    ]);
+    const rows = yield* (
+      fts.length === 0
+        ? sql`
+      SELECT * FROM telescope_memories WHERE ${sql.and([filters, ...likes])}
+      ORDER BY pinned DESC, valid_from DESC
+    `
+        : sql`
+      WITH hits AS (SELECT memory_id, rank AS score FROM telescope_memories_fts WHERE ${match})
+      SELECT telescope_memories.* FROM telescope_memories JOIN hits USING (memory_id)
+      WHERE ${filters}
+      ORDER BY pinned DESC, score, valid_from DESC
+    `
+    ).pipe(Effect.mapError(toPersistenceSqlError("TelescopeDb.searchMemories")));
+    return yield* decodeRows(rows).pipe(
+      Effect.mapError(toPersistenceDecodeError("TelescopeDb.searchMemories")),
+    );
+  });
+  const latestRunForThread = Effect.fn("TelescopeDb.latestRunForThread")(function* <A, R>(
+    threadId: string,
+    decodeRows: RowsDecoder<A, R>,
+  ) {
+    const rows = yield* sql`
+      SELECT * FROM telescope_runs WHERE thread_id = ${threadId} ORDER BY started_at DESC LIMIT 1
+    `.pipe(Effect.mapError(toPersistenceSqlError("TelescopeDb.latestRunForThread")));
+    return yield* decodeRows(rows).pipe(
+      Effect.mapError(toPersistenceDecodeError("TelescopeDb.latestRunForThread")),
+    );
+  });
   const workspaceIdsOf = Effect.fn("TelescopeDb.workspaceIdsOf")(function* (deviceKey: string) {
     const rows = yield* sql<{ readonly workspace_id: string }>`
       SELECT s.workspace_id FROM telescope_member_sessions s
@@ -259,6 +330,8 @@ const make = Effect.gen(function* () {
     insert,
     update,
     remove,
+    searchMemories,
+    latestRunForThread,
     workspaceIdsOf,
     allWorkspaceIds,
     workspaceIdForInvitation,
