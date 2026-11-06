@@ -3,14 +3,13 @@ import type * as Schema from "effect/Schema";
 
 type Fields = Record<string, Schema.Json>;
 
-export type MergeOutcome =
-  | {
-      readonly kind: "merged";
-      readonly fields: Fields;
-      readonly mergeLevel: 0 | 1;
-      readonly mergeReason?: string;
-    }
-  | { readonly kind: "conflict"; readonly fields: ReadonlyArray<string> };
+/** `fields` merged cleanly or by rule; `conflicts` names the fields no rule settles. */
+export type MergeOutcome = {
+  readonly fields: Fields;
+  readonly conflicts: ReadonlyArray<string>;
+  readonly mergeLevel: 0 | 1;
+  readonly mergeReason: string;
+};
 
 /** Field values a task has before any commit sets them. */
 const DEFAULTS: Fields = { status: "todo", goalChain: [] };
@@ -91,9 +90,11 @@ export const mergeStale = (input: {
     const rule = byStatus === undefined ? "lease holder wins" : "status only moves forward";
     reasons.push(`${key}: ${rule}, kept ${kept}`);
   }
-  if (conflicts.length > 0) return { kind: "conflict", fields: conflicts };
   const rebased = `rebased from version ${input.baseVersion}`;
-  return reasons.length === 0
-    ? { kind: "merged", fields, mergeLevel: 0, mergeReason: rebased }
-    : { kind: "merged", fields, mergeLevel: 1, mergeReason: [rebased, ...reasons].join("; ") };
+  return {
+    fields,
+    conflicts,
+    mergeLevel: reasons.length === 0 ? 0 : 1,
+    mergeReason: [rebased, ...reasons].join("; "),
+  };
 };

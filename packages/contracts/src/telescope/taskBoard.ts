@@ -37,6 +37,8 @@ export const TaskFields = Schema.Struct({
   forgeIssue: Schema.optionalKey(Schema.NullOr(ForgeIssueRef)),
   threadId: Schema.optionalKey(Schema.NullOr(ThreadId)),
   goalChain: Schema.optionalKey(Strings),
+  /** Only a merge sets the conflict marker; a client can only clear it once settled. */
+  conflictDecisionId: Schema.optionalKey(Schema.Null),
 });
 export type TaskFields = typeof TaskFields.Type;
 
@@ -52,6 +54,11 @@ export const TaskUpdateInput = Schema.Struct({
   baseVersion: Count,
   set: Schema.optionalKey(TaskFields),
   note: Schema.optionalKey(Text.check(Schema.isMaxLength(BOARD_LIMITS.noteLength))),
+});
+/** `conflict` is set when this write opened a decision for fields no merge rule settles. */
+export const TaskUpdateResult = Schema.Struct({
+  ...Task.fields,
+  conflict: Schema.optionalKey(Schema.Struct({ decisionId: DecisionId })),
 });
 export const TaskGetInput = Schema.Struct({ ...InWorkspace, taskId: TaskId });
 export const TaskListInput = Schema.Struct({

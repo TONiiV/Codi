@@ -269,7 +269,7 @@ const make = Effect.gen(function* () {
     const where = { task_id: current.id };
     const history = yield* db.select(current.workspaceId, "task_commits", decodeCommits, where);
     const lease = yield* activeLease(current, at);
-    const merge = mergeStale({
+    const { fields, conflicts, ...merge } = mergeStale({
       current,
       mine,
       history,
@@ -277,19 +277,24 @@ const make = Effect.gen(function* () {
       authorId: author.authorId,
       leaseHolder: lease?.holderAgentId,
     });
-    if (merge.kind === "conflict") {
-      const decision = yield* proposeConflict(author, current, input, merge.fields, at);
-      return yield* applyCommit(author, current, { status: "needs_decision" }, notes, at, {
+    if (conflicts.length > 0) {
+      const decision = yield* proposeConflict(author, current, input, conflicts, at);
+      const marked = { ...fields, conflictDecisionId: decision.id };
+      const next = yield* applyCommit(author, current, marked, notes, at, {
         mergeLevel: 2,
-        mergeReason: `no rule settles ${merge.fields.join(", ")}; decision ${decision.id}`,
+        mergeReason: `${merge.mergeReason}; no rule settles ${conflicts.join(", ")}; decision ${decision.id}`,
       });
+      return { ...next, conflict: { decisionId: decision.id } };
     }
-    const unchanged = Object.keys(merge.fields).length === 0 && notes.length === 0;
+    const unchanged = Object.keys(fields).length === 0 && notes.length === 0;
     if (unchanged && merge.mergeLevel === 0) return current;
-    return yield* applyCommit(author, current, merge.fields, notes, at, merge);
+    return yield* applyCommit(author, current, fields, notes, at, merge);
   });
 
-  /** The proposed decision for a stale write that no rule settles; its text holds both sides. */
+  /**
+   * The proposed decision for the fields of a stale write no rule settles; its text holds both
+   * sides. The task points at it through `conflictDecisionId`.
+   */
   const proposeConflict = (
     author: Author,
     current: Telescope.Task,
@@ -312,7 +317,6 @@ const make = Effect.gen(function* () {
         text: JSON.stringify({
           taskId: current.id,
           version: current.version,
-          statusBefore: current.status,
           incoming: { authorId: author.authorId, baseVersion: input.baseVersion, set: incoming },
           conflicts: Object.fromEntries(fields.map((key) => [key, sides(key)])),
         }),

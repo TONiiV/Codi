@@ -386,23 +386,39 @@ it.layer(layer)("Telescope task board", (it) => {
         workspaceId: a,
         taskId: task.id,
         baseVersion: 1,
-        set: { title: "Plan B" },
+        set: { title: "Plan B", ownerAgentId: Telescope.AgentId.make("agent-bob") },
         note: "I renamed it first.",
       });
-      assert.deepStrictEqual(
-        [conflicted.title, conflicted.status, conflicted.freeText.map((e) => e.text)],
-        ["Plan v2", "needs_decision", ["I renamed it first."]],
-      );
       const [decision] = (yield* board.listDecisions(alice, { workspaceId: a })).decisions;
+      assert.deepStrictEqual(
+        [
+          conflicted.title,
+          conflicted.status,
+          conflicted.ownerAgentId,
+          conflicted.conflictDecisionId,
+          conflicted.conflict,
+          conflicted.freeText.map((e) => e.text),
+        ],
+        [
+          "Plan v2",
+          "done",
+          "agent-bob",
+          decision?.id,
+          { decisionId: decision?.id },
+          ["I renamed it first."],
+        ],
+      );
       assert.strictEqual(decision?.status, "proposed");
       assert.deepStrictEqual(JSON.parse(decision?.text ?? "{}").conflicts, {
         title: { current: "Plan v2", incoming: "Plan B" },
       });
       const escalated = yield* lastCommit;
       assert.deepStrictEqual(
-        [escalated?.changedFields.status, escalated?.mergeLevel, escalated?.mergeReason],
-        ["needs_decision", 2, `no rule settles title; decision ${decision?.id}`],
+        [escalated?.changedFields.ownerAgentId, escalated?.mergeLevel, escalated?.mergeReason],
+        ["agent-bob", 2, `rebased from version 1; no rule settles title; decision ${decision?.id}`],
       );
+      const settled = yield* update(alice, 4, { conflictDecisionId: null });
+      assert.strictEqual(settled.conflictDecisionId, undefined);
 
       const holder = { ...alice, authorId: "agent-h" };
       yield* board.acquireLease(alice, {
@@ -410,12 +426,12 @@ it.layer(layer)("Telescope task board", (it) => {
         taskId: task.id,
         agentId: Telescope.AgentId.make("agent-h"),
       });
-      yield* update(bob, 5, { title: "Bob's plan" });
-      const won = yield* update(holder, 5, { title: "Holder's plan" });
-      assert.deepStrictEqual([won.title, won.version], ["Holder's plan", 7]);
+      yield* update(bob, 6, { title: "Bob's plan" });
+      const won = yield* update(holder, 6, { title: "Holder's plan" });
+      assert.deepStrictEqual([won.title, won.version], ["Holder's plan", 8]);
       assert.strictEqual(
         (yield* lastCommit)?.mergeReason,
-        'rebased from version 5; title: lease holder wins, kept "Holder\'s plan"',
+        'rebased from version 6; title: lease holder wins, kept "Holder\'s plan"',
       );
 
       const race = yield* board.createTask(alice, { workspaceId: a, title: "Race" });

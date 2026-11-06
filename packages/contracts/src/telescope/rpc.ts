@@ -51,6 +51,7 @@ import {
   TaskListInput,
   TaskListResult,
   TaskUpdateInput,
+  TaskUpdateResult,
 } from "./taskBoard.ts";
 import { Decision, Lease, Task } from "./board.ts";
 
@@ -124,7 +125,7 @@ const makeBoard = <const Tag extends string, P extends Schema.Top, S extends Sch
 
 export const TaskBoardRpcs = [
   makeBoard(WS_METHODS.taskCreate, TaskCreateInput, Task),
-  makeBoard(WS_METHODS.taskUpdate, TaskUpdateInput, Task),
+  makeBoard(WS_METHODS.taskUpdate, TaskUpdateInput, TaskUpdateResult),
   makeBoard(WS_METHODS.taskGet, TaskGetInput, Task),
   makeBoard(WS_METHODS.taskList, TaskListInput, TaskListResult),
   makeBoard(WS_METHODS.decisionCreate, DecisionCreateInput, Decision),
