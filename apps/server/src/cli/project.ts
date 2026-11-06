@@ -43,6 +43,11 @@ import {
 } from "../serverRuntimeState.ts";
 import * as WorkspacePaths from "../workspace/WorkspacePaths.ts";
 import { type CliAuthLocationFlags, projectLocationFlags, resolveCliAuthConfig } from "./config.ts";
+import {
+  makeProjectBindCommand,
+  projectBindingsCommand,
+  projectUnbindCommand,
+} from "./telescope.ts";
 
 type ProjectMutationTarget = {
   readonly id: ProjectId;
@@ -389,27 +394,30 @@ const tryResolveLiveProjectExecutionMode = Effect.fn("tryResolveLiveProjectExecu
   },
 );
 
-const runProjectMutation = Effect.fn("runProjectMutation")(function* (
+type ProjectSnapshotRun<A> = (input: {
+  readonly snapshot: ProjectSnapshot;
+  readonly dispatch: (
+    command: ProjectCliDispatchCommand,
+  ) => Effect.Effect<void, Error, FileSystem.FileSystem | HttpClient.HttpClient | Path.Path>;
+  readonly mode: ProjectCommandExecutionMode;
+}) => Effect.Effect<
+  A,
+  Error,
+  | SecureRandom.SecureRandom
+  | FileSystem.FileSystem
+  | HttpClient.HttpClient
+  | Path.Path
+  | WorkspacePaths.WorkspacePaths
+>;
+
+const withProjectSnapshot = Effect.fn("runProjectMutation")(function* <A>(
   flags: CliAuthLocationFlags,
-  run: (input: {
-    readonly snapshot: ProjectSnapshot;
-    readonly dispatch: (
-      command: ProjectCliDispatchCommand,
-    ) => Effect.Effect<void, Error, FileSystem.FileSystem | HttpClient.HttpClient | Path.Path>;
-    readonly mode: ProjectCommandExecutionMode;
-  }) => Effect.Effect<
-    string,
-    Error,
-    | SecureRandom.SecureRandom
-    | FileSystem.FileSystem
-    | HttpClient.HttpClient
-    | Path.Path
-    | WorkspacePaths.WorkspacePaths
-  >,
+  run: ProjectSnapshotRun<A>,
+  options?: { readonly quietLogs?: boolean },
 ) {
   const logLevel = yield* GlobalFlag.LogLevel;
-  const config = yield* resolveCliAuthConfig(flags, logLevel);
-  const minimumLogLevel = config.logLevel;
+  const config = yield* resolveCliAuthConfig(flags, logLevel, options);
+  const minimumLogLevel = options?.quietLogs ? "Error" : config.logLevel;
 
   return yield* Effect.gen(function* () {
     const environmentAuth = yield* EnvironmentAuth.EnvironmentAuth;
@@ -419,13 +427,12 @@ const runProjectMutation = Effect.fn("runProjectMutation")(function* (
       return yield* withProjectCliSessionToken(environmentAuth, (token) =>
         Effect.gen(function* () {
           const snapshot = yield* fetchLiveOrchestrationSnapshot(liveMode.value.origin, token);
-          const output = yield* run({
+          return yield* run({
             snapshot,
             dispatch: (command) =>
               dispatchLiveOrchestrationCommand(liveMode.value.origin, token, command),
             mode: "live",
           });
-          yield* Console.log(output);
         }),
       );
     }
@@ -447,12 +454,11 @@ const runProjectMutation = Effect.fn("runProjectMutation")(function* (
     return yield* Effect.gen(function* () {
       const snapshot = yield* getOfflineSnapshot();
       const projects = yield* ProjectService.ProjectService;
-      const output = yield* run({
+      return yield* run({
         snapshot,
         dispatch: (command) => projectMutationOperation(projects, command).pipe(Effect.asVoid),
         mode: "offline",
       });
-      yield* Console.log(output);
     }).pipe(Effect.provide(layerOfflineRuntime));
   }).pipe(
     Effect.scoped,
@@ -465,6 +471,17 @@ const runProjectMutation = Effect.fn("runProjectMutation")(function* (
     ),
   );
 });
+
+const runProjectMutation = (flags: CliAuthLocationFlags, run: ProjectSnapshotRun<string>) =>
+  withProjectSnapshot(flags, run).pipe(Effect.flatMap(Console.log));
+
+const resolveActiveProjectId = (flags: CliAuthLocationFlags, identifier: string) =>
+  withProjectSnapshot(
+    flags,
+    ({ snapshot }) =>
+      findActiveProjectTarget({ snapshot, identifier }).pipe(Effect.map((project) => project.id)),
+    { quietLogs: true },
+  );
 
 const projectAddCommand = Command.make("add", {
   ...projectLocationFlags,
@@ -595,5 +612,12 @@ const projectRenameCommand = Command.make("rename", {
 
 export const projectCommand = Command.make("project").pipe(
   Command.withDescription("Manage projects."),
-  Command.withSubcommands([projectAddCommand, projectRemoveCommand, projectRenameCommand]),
+  Command.withSubcommands([
+    projectAddCommand,
+    projectRemoveCommand,
+    projectRenameCommand,
+    makeProjectBindCommand(resolveActiveProjectId),
+    projectUnbindCommand,
+    projectBindingsCommand,
+  ]),
 );
