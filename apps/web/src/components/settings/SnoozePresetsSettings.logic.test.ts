@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { reconcileSnoozeDraft, sortSnoozeRows } from "./SnoozePresetsSettings.logic";
+import type { TFunction } from "i18next";
+import {
+  localizeSnoozeLabel,
+  localizeSnoozeWhen,
+  reconcileSnoozeDraft,
+  snoozeMenuOrder,
+  sortSnoozeRows,
+} from "./SnoozePresetsSettings.logic";
 
 describe("reconcileSnoozeDraft", () => {
   it("keeps the draft while our own writes echo back in order", () => {
@@ -34,5 +41,78 @@ describe("sortSnoozeRows", () => {
       now,
     );
     expect(sorted.keys).toEqual(["1h", "evening", "20h", "passed"]);
+  });
+});
+
+describe("localizeSnoozeLabel", () => {
+  // Echoes the key and its values, so the test sees which translation was picked.
+  const t = ((key: string, values?: Record<string, unknown>) =>
+    values
+      ? `${key.split(".").pop()}:${JSON.stringify(values)}`
+      : key.split(".").pop()) as TFunction;
+
+  it("maps every label the shared resolver builds", () => {
+    expect(localizeSnoozeLabel("This evening", t)).toBe("snoozeThisEvening");
+    expect(localizeSnoozeLabel("Tomorrow", t)).toBe("snoozeTomorrow");
+    expect(localizeSnoozeLabel("Next week", t)).toBe("snoozeNextWeek");
+    expect(localizeSnoozeLabel("Friday", t)).toBe("snoozeFriday");
+    expect(localizeSnoozeLabel("In 1 hour", t)).toBe('snoozeInHour1:{"count":1}');
+    expect(localizeSnoozeLabel("In 90 minutes", t)).toBe('snoozeInMinutes:{"count":90}');
+    expect(localizeSnoozeLabel("Next Monday", t)).toBe('snoozeNextDay:{"day":"snoozeMonday"}');
+  });
+
+  it("leaves an unknown label alone", () => {
+    expect(localizeSnoozeLabel("Someday", t)).toBe("Someday");
+  });
+});
+
+describe("localizeSnoozeWhen", () => {
+  const formatTime = () => "9:00";
+  const monday = new Date(2026, 10, 9, 9, 0).toISOString();
+
+  it("shows only the time for a same-day wake", () => {
+    expect(
+      localizeSnoozeWhen({ whenLabel: "9:00", snoozedUntil: monday }, formatTime, "zh-CN"),
+    ).toBe("9:00");
+  });
+
+  it("prefixes the weekday in the app language, not the shared resolver's", () => {
+    const preset = { whenLabel: "Mon 9:00", snoozedUntil: monday };
+    expect(localizeSnoozeWhen(preset, formatTime, "zh-CN")).toBe("周一 9:00");
+    expect(localizeSnoozeWhen(preset, formatTime, "en")).toBe("Mon 9:00");
+  });
+});
+
+describe("snoozeMenuOrder", () => {
+  it("appends the wake in the app language only to a repeated label", () => {
+    const t = ((key: string) => key.split(".").pop()) as TFunction;
+    const formatTime = (date: Date) => `${date.getHours()}:00`;
+    const presets = [
+      {
+        label: "Monday",
+        whenLabel: "Mon 9:00",
+        snoozedUntil: new Date(2026, 10, 9, 9, 0).toISOString(),
+      },
+      {
+        label: "Monday",
+        whenLabel: "Mon 14:00",
+        snoozedUntil: new Date(2026, 10, 9, 14, 0).toISOString(),
+      },
+      {
+        label: "Tomorrow",
+        whenLabel: "Sun 9:00",
+        snoozedUntil: new Date(2026, 10, 8, 9, 0).toISOString(),
+      },
+    ];
+    expect(snoozeMenuOrder(presets, t, formatTime, "zh-CN")).toEqual([
+      "snoozeMonday 周一 9:00",
+      "snoozeMonday 周一 14:00",
+      "snoozeTomorrow",
+    ]);
+    expect(snoozeMenuOrder(presets, t, formatTime, "en")).toEqual([
+      "snoozeMonday Mon 9:00",
+      "snoozeMonday Mon 14:00",
+      "snoozeTomorrow",
+    ]);
   });
 });
