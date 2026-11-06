@@ -63,8 +63,9 @@ const runAsOwner = Effect.fn("cli.telescope.runAsOwner")(function* <A>(
   ) => Effect.Effect<A, Failure, Services>,
   human: (result: A) => string,
 ) {
+  // Logs share stdout with the printed value, which scripts capture (`ORG=$(t3 org init ...)`).
   const config = yield* resolveCliAuthConfig(flags, yield* GlobalFlag.LogLevel, {
-    quietLogs: flags.json,
+    quietLogs: true,
   });
   const result = yield* WorkspaceService.WorkspaceService.pipe(
     Effect.flatMap(run),
@@ -76,9 +77,7 @@ const runAsOwner = Effect.fn("cli.telescope.runAsOwner")(function* <A>(
       Layer.mergeAll(WorkspaceService.layer, ServerEnvironment.layerIdentity).pipe(
         Layer.provide(SqlitePersistence.layerConfig),
         Layer.provide(ServerConfig.layer(config)),
-        Layer.provide(
-          Layer.succeed(References.MinimumLogLevel, flags.json ? "Error" : config.logLevel),
-        ),
+        Layer.provide(Layer.succeed(References.MinimumLogLevel, "Error")),
       ),
     ),
   );
