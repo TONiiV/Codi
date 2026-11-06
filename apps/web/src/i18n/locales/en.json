@@ -200,7 +200,7 @@
       "titleRequiresASupportingEnvironmentChoose": "{{title}} requires a supporting environment. Choose one to continue.",
       "titleRequiresASupportingEnvironmentConnect": "{{title}} requires a supporting environment. Connect or update an environment to continue.",
       "titleIsNotAvailableForThe": "{{title}} is not available for the selected target. Choose its owning scope to continue.",
-      "reconnectLabelToChangeItsSettings": "Reconnect  {{label}}  to change its settings.",
+      "reconnectLabelToChangeItsSettings": "Reconnect {{label}} to change its settings.",
       "settings": "Settings",
       "selectAProjectToChooseOne": "Select a project to choose one of its checkouts.",
       "thisEnvironmentIsNoLongerAvailable2": "This environment is no longer available.",

@@ -183,7 +183,7 @@
       "continueThreadsAfterRestarts2": "重启后继续会话",
       "backgroundActivity3": "后台活动",
       "openAllEnvironments": "打开所有环境",
-      "applyingSettingsFor": "应用设置到",
+      "applyingSettingsFor": "设置适用于",
       "offline": "离线",
       "noMatchesFound": "未找到匹配项。",
       "environmentScope": "环境范围",
@@ -197,8 +197,8 @@
       "theSelectedEnvironment": "所选环境",
       "threadTitleInstructions2": "会话标题说明",
       "restoreDeviceDefaults": "恢复设备默认值",
-      "titleRequiresASupportingEnvironmentChoose": "{{title}}需要一个受支持的环境。请选择一个以继续。",
-      "titleRequiresASupportingEnvironmentConnect": "{{title}}需要一个受支持的环境。请连接或更新一个环境以继续。",
+      "titleRequiresASupportingEnvironmentChoose": "{{title}}需要支持此功能的环境。请选择一个环境以继续。",
+      "titleRequiresASupportingEnvironmentConnect": "{{title}}需要支持此功能的环境。请连接或更新一个环境以继续。",
       "titleIsNotAvailableForThe": "{{title}}不适用于所选目标。请选择其所属范围以继续。",
       "reconnectLabelToChangeItsSettings": "重新连接 {{label}} 以更改其设置。",
       "settings": "设置",
@@ -256,7 +256,7 @@
       "listSeparator": "、",
       "archivedBadge": "已归档",
       "scopeOn": "位于",
-      "scopeAcross": "跨"
+      "scopeAcross": "覆盖"
     },
     "parallelShared": {
       "copied": "已复制！",
