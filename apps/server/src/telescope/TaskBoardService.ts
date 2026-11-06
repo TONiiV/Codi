@@ -492,10 +492,15 @@ const make = Effect.gen(function* () {
     workspaceId: Telescope.WorkspaceId,
   ) {
     const at = yield* now;
-    const leases = yield* db.select(workspaceId, "leases", decodeLeases);
-    const expired = leases.filter((lease) => isExpired(lease, at));
-    if (expired.length === 0) return;
-    yield* db.transaction(Effect.forEach(expired, (lease) => dropLease(SERVER, lease, at)));
+    const leases = db.select(workspaceId, "leases", decodeLeases);
+    const expired = (all: ReadonlyArray<Telescope.Lease>) => all.filter((l) => isExpired(l, at));
+    if (expired(yield* leases).length === 0) return;
+    // Re-read under the writer lock so a heartbeat that committed after the first read survives.
+    yield* db.transaction(
+      Effect.flatMap(leases, (all) =>
+        Effect.forEach(expired(all), (lease) => dropLease(SERVER, lease, at)),
+      ),
+    );
   });
 
   const acquireLease = Effect.fn("TaskBoardService.acquireLease")(function* (
