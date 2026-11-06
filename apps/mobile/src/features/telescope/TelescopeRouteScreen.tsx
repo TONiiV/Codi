@@ -26,6 +26,7 @@ import { telescopeBoard } from "./telescopeAtoms";
 import {
   decideInput,
   formatBoardDate,
+  isDecisionConflict,
   isStaleTaskVersion,
   reviewQueue,
   reviewUpdateInput,
@@ -46,7 +47,7 @@ interface Target {
 const DECISION_STATUS_LABEL = { proposed: "待决定", decided: "已决定", superseded: "已被取代" };
 const TASK_STATUS_LABEL: Partial<Record<Telescope.TaskStatus, string>> = {
   needs_decision: "等你决定",
-  in_review: "等你验收",
+  in_review: "等你确认",
 };
 
 function rowClassName(index: number) {
@@ -73,6 +74,11 @@ function reportFailure(result: AtomCommandResult<unknown, unknown>, onStale: () 
   if (isStaleTaskVersion(error)) {
     onStale();
     Dialog.alert("任务已更新", "有人刚改过这条任务，列表已刷新，请再看一眼。");
+    return;
+  }
+  if (isDecisionConflict(error)) {
+    onStale();
+    Dialog.alert("决定已更新", "这条决定刚被处理过，列表已刷新，请再看一眼。");
     return;
   }
   Dialog.alert("操作没有完成", error instanceof Error ? error.message : String(error));
@@ -105,7 +111,7 @@ export function TelescopeRouteScreen() {
   );
   const workspaceName =
     workspaces.data?.workspaces.find((workspace) => workspace.id === target?.workspaceId)?.name ??
-    (workspaces.data ? "这个工作区已不可用" : "正在读取…");
+    (workspaces.data ? "这个工作区已不可用" : workspaces.error ? "读取工作区失败" : "正在读取…");
   const select = (next: Target) => {
     savePreferences({ telescopeWorkspace: next });
     setPicking(false);
@@ -152,7 +158,7 @@ export function TelescopeRouteScreen() {
               <Button size="compact" tone="text" label="切换" onPress={() => setPicking(true)} />
             }
           >
-            <StatusText text={workspaceName} />
+            <StatusText text={workspaceName} tone={workspaces.error ? "danger" : undefined} />
           </SettingsSection>
         )}
         {target && !showPicker ? (

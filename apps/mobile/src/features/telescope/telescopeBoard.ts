@@ -32,6 +32,18 @@ export function reviewUpdateInput(
   };
 }
 
+/** The proposal was already superseded, so the list the user acted on is stale. */
+export function isDecisionConflict(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "_tag" in error &&
+    error._tag === "TelescopeWorkspaceError" &&
+    "reason" in error &&
+    error.reason === "conflict"
+  );
+}
+
 export function formatBoardDate(iso: string): string {
   const date = new Date(iso);
   return Number.isNaN(date.getTime()) ? "" : `${date.getMonth() + 1}月${date.getDate()}日`;

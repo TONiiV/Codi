@@ -111,6 +111,7 @@ const SETTINGS_SEARCH_TERMS = {
     "zen",
     "final answers only",
   ],
+  SettingsTelescope: ["决定", "确认", "decisions", "review"],
   SettingsEnvironmentMaintenance: ["updates", "provider updates", "restart", "manage environments"],
   SettingsAbout: [
     "version",

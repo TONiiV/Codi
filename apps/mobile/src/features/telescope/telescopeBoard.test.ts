@@ -1,7 +1,7 @@
 import { Telescope } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
-import { reviewQueue, reviewUpdateInput } from "./telescopeBoard";
+import { isDecisionConflict, reviewQueue, reviewUpdateInput } from "./telescopeBoard";
 
 const workspaceId = Telescope.WorkspaceId.make("w1");
 
@@ -41,5 +41,16 @@ describe("review actions", () => {
     expect(
       reviewUpdateInput(task("t1", "in_review", "2026-11-04T00:00:00.000Z", 7), "done"),
     ).toEqual({ workspaceId, taskId: "t1", baseVersion: 7, set: { status: "done" } });
+  });
+});
+
+describe("isDecisionConflict", () => {
+  it("flags a superseded-proposal conflict so the list refreshes, not other workspace errors", () => {
+    const conflict = new Telescope.WorkspaceError({ reason: "conflict", message: "superseded" });
+    expect(isDecisionConflict(conflict)).toBe(true);
+    expect(
+      isDecisionConflict(new Telescope.WorkspaceError({ reason: "forbidden", message: "x" })),
+    ).toBe(false);
+    expect(isDecisionConflict(new Error("boom"))).toBe(false);
   });
 });
