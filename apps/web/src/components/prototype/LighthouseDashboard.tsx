@@ -20,6 +20,7 @@ import { Popover, PopoverPopup, PopoverTrigger } from "../ui/popover";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
 import { PROJECT_COS, PROJECTS, TASKS, projectsIn, type LighthouseViewer } from "./lighthouseData";
 import { projectName } from "./LighthouseWork";
+import { TokenFlow } from "./LighthouseTokenFlow";
 
 const STAGES = [
   { id: "created", label: "创建" },
@@ -607,6 +608,8 @@ export function DashboardPage({
               </div>
             </div>
           </div>
+
+          {overview ? <TokenFlow projects={open} /> : null}
 
           <div className="rounded-lg border bg-card">
             <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5">
