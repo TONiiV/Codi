@@ -21,6 +21,7 @@ export type TelescopeTable =
   | "member_sessions"
   | "invitations"
   | "project_bindings"
+  | "project_rules"
   | "agents"
   | "tasks"
   | "task_commits"

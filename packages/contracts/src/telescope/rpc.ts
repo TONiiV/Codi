@@ -57,6 +57,12 @@ import {
 } from "./taskBoard.ts";
 import { Decision, Lease, Task } from "./board.ts";
 import { TokenSaverReport, TokenSaverRunInput } from "./tokenSaver.ts";
+import {
+  GrantAuditListInput,
+  GrantAuditListResult,
+  GrantExplainInput,
+  GrantExplainResult,
+} from "./grant.ts";
 
 export const WS_METHODS = {
   workspaceCreate: "telescope.workspace.create",
@@ -93,6 +99,8 @@ export const WS_METHODS = {
   leaseRelease: "telescope.lease.release",
   wakeList: "telescope.wake.list",
   tokenSaverRun: "telescope.tokensaver.run",
+  grantExplain: "telescope.grant.explain",
+  grantAuditList: "telescope.grant.audit.list",
 } as const;
 
 const error = Schema.Union([WorkspaceError, EnvironmentAuthorizationError]);
@@ -162,4 +170,9 @@ export const WakeRpcs = [make(WS_METHODS.wakeList, WorkspaceScopedInput, WakeLis
 
 export const TokenSaverRpcs = [
   makeBoard(WS_METHODS.tokenSaverRun, TokenSaverRunInput, TokenSaverReport),
+] as const;
+
+export const GrantRpcs = [
+  make(WS_METHODS.grantExplain, GrantExplainInput, GrantExplainResult),
+  make(WS_METHODS.grantAuditList, GrantAuditListInput, GrantAuditListResult),
 ] as const;
