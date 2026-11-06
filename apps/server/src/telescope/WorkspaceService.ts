@@ -8,10 +8,19 @@ import * as Layer from "effect/Layer";
 import type * as Rpc from "effect/rpc/Rpc";
 import * as Schema from "effect/Schema";
 
+import { INTERNAL_ADMINISTRATIVE_BOOTSTRAP_SUBJECT } from "../auth/EnvironmentAuth.ts";
 import type { PersistenceDecodeError, PersistenceSqlError } from "../persistence/Errors.ts";
 import * as TelescopeDb from "./TelescopeDb.ts";
 
 const INVITATION_TTL_SECONDS = 7 * 24 * 60 * 60;
+/** The environment owner's member id: an admin of every workspace here, needing no device link. */
+export const OWNER_MEMBER_ID = "owner";
+// Only the owner holds these: the desktop app's bootstrap and the startup (or dev) admin link.
+const OWNER_SUBJECTS: ReadonlySet<string> = new Set([
+  "desktop-bootstrap",
+  INTERNAL_ADMINISTRATIVE_BOOTSTRAP_SUBJECT,
+  "reusable-dev-token",
+]);
 
 const WorkspaceRow = Schema.Struct({
   workspace_id: Telescope.WorkspaceId,
@@ -76,7 +85,14 @@ const toBinding = (row: typeof BindingRow.Type): Telescope.ProjectBinding => ({
 const fail = (reason: Telescope.WorkspaceError["reason"], message: string) =>
   Effect.fail(new Telescope.WorkspaceError({ reason, message }));
 
-type Caller = AuthSessionId;
+export interface Caller {
+  readonly sessionId: AuthSessionId;
+  readonly subject: string;
+  readonly proofKeyThumbprint?: string;
+}
+const isOwner = (caller: Caller) => OWNER_SUBJECTS.has(caller.subject);
+// A proof key outlives its hourly sessions and re-pairing; a cookie session moves on replacement.
+const deviceKey = (caller: Caller) => caller.proofKeyThumbprint ?? caller.sessionId;
 type Failure = Telescope.WorkspaceError | PersistenceSqlError | PersistenceDecodeError;
 type Rpcs = (typeof Telescope.WorkspaceRpcs)[number];
 type In<Tag extends Rpcs["_tag"]> = Rpc.Payload<Rpc.ExtractTag<Rpcs, Tag>>;
@@ -86,8 +102,8 @@ type Method<Tag extends Rpcs["_tag"]> = (
 ) => Effect.Effect<Rpc.Success<Rpc.ExtractTag<Rpcs, Tag>>, Failure>;
 
 /**
- * Workspaces, members, invitations and project bindings. `caller` is the auth session id; it acts
- * as the member it is linked to in `telescope_member_sessions`. Member ids fill `subjectId`.
+ * Workspaces, members, invitations and project bindings. The owner acts as `OWNER_MEMBER_ID`; any
+ * other caller acts as the member its device key is linked to. Member ids fill `subjectId`.
  */
 export class WorkspaceService extends Context.Service<
   WorkspaceService,
@@ -117,22 +133,23 @@ const make = Effect.gen(function* () {
       .select(workspaceId, "members", decodeMembers, { subject_id: memberId })
       .pipe(Effect.map((rows) => rows[0]));
 
-  const sessionMember = Effect.fn("WorkspaceService.sessionMember")(function* (
+  const callerMember = Effect.fn("WorkspaceService.callerMember")(function* (
     workspaceId: Telescope.WorkspaceId,
     caller: Caller,
   ) {
+    if (isOwner(caller)) return yield* memberById(workspaceId, OWNER_MEMBER_ID);
     const [link] = yield* db.select(workspaceId, "member_sessions", decodeSessionLinks, {
-      auth_session_id: caller,
+      device_key: deviceKey(caller),
     });
     return link === undefined ? undefined : yield* memberById(workspaceId, link.member_id);
   });
 
-  const linkSession = (workspaceId: Telescope.WorkspaceId, memberId: string, caller: Caller) =>
+  const linkDevice = (workspaceId: Telescope.WorkspaceId, memberId: string, caller: Caller) =>
     now.pipe(
       Effect.flatMap((at) =>
         db.insert(workspaceId, "member_sessions", {
           member_id: memberId,
-          auth_session_id: caller,
+          device_key: deviceKey(caller),
           linked_at: at,
         }),
       ),
@@ -144,7 +161,7 @@ const make = Effect.gen(function* () {
     caller: Caller,
     role?: "admin",
   ) {
-    const member = yield* sessionMember(workspaceId, caller);
+    const member = yield* callerMember(workspaceId, caller);
     if (member === undefined || member.revoked_at !== null)
       return yield* fail("forbidden", "You are not a member of this workspace.");
     if (role !== undefined && member.role !== role)
@@ -161,19 +178,24 @@ const make = Effect.gen(function* () {
       return yield* fail("not_found", "That person is not an active member.");
     return target;
   });
+  // Role changes, revocation and device links never apply to the owner.
+  const requireManagedTarget = (workspaceId: Telescope.WorkspaceId, subjectId: string) =>
+    subjectId === OWNER_MEMBER_ID
+      ? fail("conflict", "The environment owner is always an admin.")
+      : requireActiveTarget(workspaceId, subjectId);
 
-  /** `nextRole` undefined means the target is being revoked. */
-  const keepAnAdmin = Effect.fn("WorkspaceService.keepAnAdmin")(function* (
-    target: typeof MemberRow.Type,
-    nextRole?: Telescope.WorkspaceRole,
-  ) {
-    if (target.role !== "admin" || nextRole === "admin") return;
-    const admins = yield* db.select(target.workspace_id, "members", decodeMembers, {
-      role: "admin",
-      revoked_at: null,
-    });
-    if (admins.length <= 1) return yield* fail("conflict", "A workspace needs at least one admin.");
-  });
+  // A code dies with its issuer's admin role; promoting them again does not revive it.
+  const voidCodesOf = (issuer: typeof MemberRow.Type) =>
+    now.pipe(
+      Effect.flatMap((at) =>
+        db.update(
+          issuer.workspace_id,
+          "invitations",
+          { expires_at: at },
+          { invited_by: issuer.subject_id, accepted_at: null },
+        ),
+      ),
+    );
 
   const issueCode = Effect.fn("WorkspaceService.issueCode")(function* (
     admin: typeof MemberRow.Type,
@@ -208,26 +230,31 @@ const make = Effect.gen(function* () {
     input: In<"telescope.workspace.create">,
   ) {
     const workspaceId = Telescope.WorkspaceId.make(yield* random.uuidV4());
-    const memberId = yield* random.uuidV4();
+    const owner = isOwner(caller);
+    const memberId = owner ? OWNER_MEMBER_ID : yield* random.uuidV4();
     const createdAt = yield* now;
     const row = { kind: input.kind, name: input.name, created_at: createdAt, created_by: memberId };
+    const admin = (subjectId: string, displayName: string) =>
+      db.insert(workspaceId, "members", {
+        subject_id: subjectId,
+        display_name: displayName,
+        role: "admin",
+        joined_at: createdAt,
+      });
     yield* db.transaction(
       Effect.all([
         db.insert(workspaceId, "workspaces", row),
-        db.insert(workspaceId, "members", {
-          subject_id: memberId,
-          display_name: input.displayName,
-          role: "admin",
-          joined_at: createdAt,
-        }),
-        linkSession(workspaceId, memberId, caller),
+        admin(OWNER_MEMBER_ID, owner ? input.displayName : "所有者"),
+        ...(owner
+          ? []
+          : [admin(memberId, input.displayName), linkDevice(workspaceId, memberId, caller)]),
       ]),
     );
     return toWorkspace({ ...row, workspace_id: workspaceId });
   });
 
   const list = Effect.fn("WorkspaceService.list")(function* (caller: Caller) {
-    const ids = yield* db.workspaceIdsOf(caller);
+    const ids = yield* isOwner(caller) ? db.allWorkspaceIds : db.workspaceIdsOf(deviceKey(caller));
     const rows = yield* Effect.forEach(ids, (id) => db.select(id, "workspaces", decodeWorkspaces));
     return { workspaces: rows.flat().map(toWorkspace) };
   });
@@ -255,7 +282,7 @@ const make = Effect.gen(function* () {
     input: In<"telescope.member.linkCode">,
   ) {
     const admin = yield* requireMember(input.workspaceId, caller, "admin");
-    const target = yield* requireActiveTarget(input.workspaceId, input.subjectId);
+    const target = yield* requireManagedTarget(input.workspaceId, input.subjectId);
     return yield* issueCode(admin, target.role, input.expiresInSeconds, target.subject_id);
   });
 
@@ -292,11 +319,7 @@ const make = Effect.gen(function* () {
           return yield* fail("conflict", "This invitation has already been used.");
         if (invitation.expires_at <= at)
           return yield* fail("expired", "This invitation has expired.");
-        // A code dies with its issuer's admin role, so revoking or demoting them voids it.
-        const issuer = yield* memberById(workspaceId, invitation.invited_by);
-        if (issuer === undefined || issuer.revoked_at !== null || issuer.role !== "admin")
-          return yield* fail("expired", "This invitation is no longer valid.");
-        const existing = yield* sessionMember(workspaceId, caller);
+        const existing = yield* callerMember(workspaceId, caller);
         if (existing !== undefined)
           return yield* existing.revoked_at === null
             ? fail("conflict", "You are already a member of this workspace.")
@@ -305,7 +328,7 @@ const make = Effect.gen(function* () {
           invitation.for_member_id === null
             ? yield* addMember(workspaceId, input.displayName, invitation.role, at)
             : yield* requireActiveTarget(workspaceId, invitation.for_member_id);
-        yield* linkSession(workspaceId, member.subject_id, caller);
+        yield* linkDevice(workspaceId, member.subject_id, caller);
         yield* db.update(
           workspaceId,
           "invitations",
@@ -333,10 +356,10 @@ const make = Effect.gen(function* () {
     return yield* db.transaction(
       Effect.gen(function* () {
         yield* requireMember(input.workspaceId, caller, "admin");
-        const target = yield* requireActiveTarget(input.workspaceId, input.subjectId);
-        yield* keepAnAdmin(target, input.role);
+        const target = yield* requireManagedTarget(input.workspaceId, input.subjectId);
         const key = { subject_id: input.subjectId };
         yield* db.update(input.workspaceId, "members", { role: input.role }, key);
+        if (input.role !== "admin") yield* voidCodesOf(target);
         return toMember({ ...target, role: input.role });
       }),
     );
@@ -349,11 +372,13 @@ const make = Effect.gen(function* () {
     return yield* db.transaction(
       Effect.gen(function* () {
         yield* requireMember(input.workspaceId, caller, "admin");
-        const target = yield* requireActiveTarget(input.workspaceId, input.subjectId);
-        yield* keepAnAdmin(target);
+        const target = yield* requireManagedTarget(input.workspaceId, input.subjectId);
         const revokedAt = yield* now;
         const key = { subject_id: input.subjectId };
         yield* db.update(input.workspaceId, "members", { revoked_at: revokedAt }, key);
+        yield* voidCodesOf(target);
+        const lead = { lead_subject_id: input.subjectId };
+        yield* db.update(input.workspaceId, "project_bindings", { lead_subject_id: null }, lead);
         return toMember({ ...target, revoked_at: revokedAt });
       }),
     );

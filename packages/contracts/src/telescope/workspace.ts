@@ -21,7 +21,10 @@ export const Workspace = Schema.Struct({
 });
 export type Workspace = typeof Workspace.Type;
 
-/** `subjectId` is the Telescope member id; paired auth sessions all share one auth subject. */
+/**
+ * `subjectId` is the Telescope member id; paired auth sessions all share one auth subject.
+ * `owner` is this environment's owner, an admin of every workspace on it.
+ */
 export const Member = Schema.Struct({
   workspaceId: WorkspaceId,
   subjectId: SubjectId,

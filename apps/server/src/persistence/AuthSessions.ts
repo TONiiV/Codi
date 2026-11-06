@@ -369,6 +369,14 @@ export const make = Effect.gen(function* () {
               Effect.as(revokedRows.map((row) => row.sessionId)),
             ),
           ),
+          Effect.tap((replacedIds) =>
+            replacedIds.length === 0
+              ? Effect.void
+              : // A Telescope member linked to a replaced session id stays linked to the device.
+                sql`UPDATE OR IGNORE telescope_member_sessions
+                  SET device_key = ${input.session.sessionId}
+                  WHERE ${sql.in("device_key", replacedIds)}`,
+          ),
         ),
       )
       .pipe(
