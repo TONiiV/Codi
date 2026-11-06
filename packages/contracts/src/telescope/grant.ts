@@ -20,6 +20,15 @@ export const GrantPower = Schema.Literals([
 ]);
 export type GrantPower = typeof GrantPower.Type;
 
+/** MCP tools the Telescope tool gateway checks; each needs one power. */
+export const GatewayTool = Schema.Literals([
+  "open_ticket",
+  "dispatch_worker",
+  "answer_member",
+  "merge_pr",
+]);
+export type GatewayTool = typeof GatewayTool.Type;
+
 /** `role` is the member's workspace role, `agent` one agent in the chain, `project` its rule. */
 export const GrantLayer = Schema.Literals(["role", "agent", "project"]);
 export type GrantLayer = typeof GrantLayer.Type;
