@@ -87,7 +87,7 @@ function AccountMenu({ environmentId }: { environmentId: EnvironmentId }) {
                 }}
               >
                 {workspaces.map((workspace) => (
-                  <MenuRadioItem key={workspace.id} value={workspace.id}>
+                  <MenuRadioItem key={workspace.id} value={workspace.id} closeOnClick>
                     {workspace.name}
                     <MenuItemDetail>{WORKSPACE_KIND_LABEL[workspace.kind]}</MenuItemDetail>
                   </MenuRadioItem>

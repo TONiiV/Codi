@@ -1,9 +1,14 @@
 import { EnvironmentId, ProjectId, Telescope } from "@t3tools/contracts";
 import * as Cause from "effect/Cause";
-import { AsyncResult } from "effect/reactivity";
-import { describe, expect, it } from "vite-plus/test";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { AsyncResult, Atom, AtomRegistry } from "effect/reactivity";
+import { describe, expect, it } from "@effect/vitest";
+import { vi } from "vite-plus/test";
 
+import { EnvironmentRegistry } from "../connection/registry.ts";
 import {
+  createTelescopeWorkspaceAtoms,
   boundWorkspaceIds,
   failureText,
   hiddenOutsideWorkspace,
@@ -106,4 +111,23 @@ describe("telescope command failure text", () => {
   ] as const)("%s", (_name, result, text, expected) => {
     expect(failureText(result, text)).toBe(expected);
   });
+});
+
+describe("telescope switchTo", () => {
+  it.effect("refreshes the workspace list and binding summary, then remembers the workspace", () =>
+    Effect.gen(function* () {
+      const runtime = Atom.runtime(
+        Layer.succeed(EnvironmentRegistry, {} as EnvironmentRegistry["Service"]),
+      );
+      const atoms = createTelescopeWorkspaceAtoms(runtime, { read: () => null, write: () => {} });
+      const registry = AtomRegistry.make();
+      const refresh = vi.spyOn(registry, "refresh").mockImplementation(() => {});
+      const target = { environmentId: local, input: {} };
+      yield* atoms.switchTo(target, registry, Telescope.WorkspaceId.make("b"));
+      expect(refresh).toHaveBeenCalledWith(atoms.list(target));
+      expect(refresh).toHaveBeenCalledWith(atoms.bindingSummary(target));
+      expect(registry.get(atoms.storedWorkspaceIdAtom)).toBe("b");
+      registry.dispose();
+    }),
+  );
 });

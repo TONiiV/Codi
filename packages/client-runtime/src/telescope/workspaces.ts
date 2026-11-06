@@ -121,6 +121,8 @@ export function createTelescopeWorkspaceAtoms<R, E>(
   const members = createEnvironmentRpcQueryAtomFamily(runtime, {
     label: "telescope:member:list",
     tag: WS_METHODS.memberList,
+    // Opening the members dialog must show a member added a moment ago.
+    staleTimeMs: 0,
   });
   const bindingSummary = createEnvironmentRpcQueryAtomFamily(runtime, {
     label: "telescope:project:binding-summary",
@@ -191,6 +193,8 @@ export function createTelescopeWorkspaceAtoms<R, E>(
     list,
     get,
     members,
+    bindingSummary,
+    switchTo,
     storedWorkspaceIdAtom,
     currentWorkspaceAtom,
     allBindingsAtom,
