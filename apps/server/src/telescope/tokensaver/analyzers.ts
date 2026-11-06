@@ -96,18 +96,25 @@ export const brokenCachePrefix = (
   });
 };
 
-/** A Read of a file range already read in the same session, with no edit to the file between. */
+/**
+ * A Read of a file range the same agent (the session, or one subagent) already read, with no edit
+ * to the file between.
+ */
 export const repeatedReads = (sessions: ReadonlyArray<SessionActivity>): Finding | undefined => {
   const repeats = new Map<string, { path: string; count: number; tokens: number }>();
   for (const session of sessions) {
-    const seen = new Set<string>();
+    const seenByAgent = new Map<string, Set<string>>();
     for (const call of session.toolCalls) {
       if (call.filePath === undefined) continue;
       if (EDIT_TOOLS.has(call.name)) {
-        for (const key of seen) if (key.startsWith(`${call.filePath}#`)) seen.delete(key);
+        for (const seen of seenByAgent.values())
+          for (const key of seen) if (key.startsWith(`${call.filePath}#`)) seen.delete(key);
         continue;
       }
       if (call.name !== "Read") continue;
+      const agent = call.agentId ?? session.sessionId;
+      const seen = seenByAgent.get(agent) ?? new Set<string>();
+      seenByAgent.set(agent, seen);
       const key = `${call.filePath}#${call.range ?? ""}`;
       if (!seen.has(key)) {
         seen.add(key);
@@ -115,7 +122,7 @@ export const repeatedReads = (sessions: ReadonlyArray<SessionActivity>): Finding
       }
       // Image results carry no text tokens; rereading a regenerated screenshot is not waste.
       if (call.resultTokens === 0) continue;
-      const group = `${session.sessionId}\0${call.filePath}`;
+      const group = `${agent}\0${call.filePath}`;
       const path = relative(session.cwd, call.filePath);
       const entry = repeats.get(group) ?? { path, count: 0, tokens: 0 };
       repeats.set(group, {

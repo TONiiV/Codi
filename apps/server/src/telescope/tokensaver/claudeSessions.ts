@@ -10,6 +10,8 @@ export interface ToolCall {
   readonly filePath?: string;
   /** Read's offset and limit, so reading another part of a file is not a repeat. */
   readonly range?: string;
+  /** Set on a subagent's calls, which share the parent's session id. */
+  readonly agentId?: string;
   resultTokens: number;
 }
 
@@ -63,6 +65,8 @@ export const makeSessionCollector = (window: {
   const sessions = new Map<string, SessionActivity>();
   const pendingResults = new Map<string, ToolCall>();
   const countedMessages = new Set<string>();
+  const seenRecords = new Set<string>();
+  const calledAt = new Map<ToolCall, number>();
 
   const add = (line: string) => {
     let record: Json | undefined;
@@ -77,6 +81,10 @@ export const makeSessionCollector = (window: {
     if (record === undefined || sessionId === undefined || at === null || message === undefined)
       return;
     if (at < window.sinceMs || at >= window.untilMs) return;
+    // A resumed session can leave copies of the same records in two project directories.
+    const uuid = asString(record["uuid"]);
+    if (uuid !== undefined && seenRecords.has(uuid)) return;
+    if (uuid !== undefined) seenRecords.add(uuid);
     let session = sessions.get(sessionId);
     if (session === undefined) {
       session = {
@@ -117,13 +125,16 @@ export const makeSessionCollector = (window: {
           input["offset"] === undefined && input["limit"] === undefined
             ? undefined
             : `${String(input["offset"] ?? "")}:${String(input["limit"] ?? "")}`;
+        const agentId = asString(record["agentId"]);
         const call: ToolCall = {
           name,
           resultTokens: 0,
           ...(filePath === undefined ? {} : { filePath }),
           ...(range === undefined ? {} : { range }),
+          ...(agentId === undefined ? {} : { agentId }),
         };
         session.toolCalls.push(call);
+        calledAt.set(call, at);
         pendingResults.set(id, call);
       }
     } else if (record["type"] === "user") {
@@ -147,7 +158,13 @@ export const makeSessionCollector = (window: {
     }
   };
 
-  return { add, sessions: (): ReadonlyArray<SessionActivity> => [...sessions.values()] };
+  // One session spans several files, so calls are put back in time order.
+  const sessionsInOrder = (): ReadonlyArray<SessionActivity> =>
+    [...sessions.values()].map((session) => {
+      session.toolCalls.sort((a, b) => calledAt.get(a)! - calledAt.get(b)!);
+      return session;
+    });
+  return { add, sessions: sessionsInOrder };
 };
 
 /** Resolves false when the file cannot be read; a partial read keeps the lines it got. */
