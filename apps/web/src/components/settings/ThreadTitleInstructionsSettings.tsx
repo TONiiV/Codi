@@ -1,7 +1,7 @@
 import { useRef } from "react";
 
 import { Textarea } from "../ui/textarea";
-import { SettingsRow, SettingResetButton } from "./settingsLayout";
+import { SettingsRow, TranslatedSettingResetButton } from "./settingsLayout";
 import { useSettingsScope } from "./SettingsScopeContext";
 import { searchableSetting } from "./settingsSearch";
 import {
@@ -9,8 +9,10 @@ import {
   useScopedSettingsMixed,
   useUpdateScopedSettings,
 } from "./useScopedSettings";
+import { useTranslation } from "react-i18next";
 
 export function ThreadTitleInstructionsSettings() {
+  const { t } = useTranslation();
   const settings = useScopedSettings();
   const { targets } = useSettingsScope();
   const scopeKey = targets.map((target) => `${target.environmentId}:${target.projectId}`).join(",");
@@ -22,12 +24,12 @@ export function ThreadTitleInstructionsSettings() {
     <SettingsRow
       serverScoped
       settingKeys={["threadTitleInstructions"]}
-      {...searchableSetting("thread-title-instructions")}
-      description="Appended to the prompt for new and regenerated thread titles."
+      {...searchableSetting("thread-title-instructions", t)}
+      description={t("settings.text.appendedToThePromptForNew")}
       resetAction={
         mixed || settings.threadTitleInstructions !== "" ? (
-          <SettingResetButton
-            label="thread title instructions"
+          <TranslatedSettingResetButton
+            label={t("settings.text.threadTitleInstructions")}
             onClick={() => updateSettings({ threadTitleInstructions: "" })}
           />
         ) : null
@@ -36,7 +38,7 @@ export function ThreadTitleInstructionsSettings() {
       <div className="mt-3 max-w-2xl pb-3.5">
         <Textarea
           key={`${scopeKey}:${mixed}:${settings.threadTitleInstructions}`}
-          aria-label="Thread title instructions"
+          aria-label={t("settings.text.threadTitleInstructions2")}
           onChange={() => {
             edited.current = true;
           }}
@@ -44,8 +46,8 @@ export function ThreadTitleInstructionsSettings() {
           defaultValue={mixed ? "" : settings.threadTitleInstructions}
           placeholder={
             mixed
-              ? "Mixed. Enter instructions to apply to all selected targets."
-              : "Keep titles to a few words. Lead with the main subject."
+              ? t("settings.text.mixedEnterInstructionsToApplyTo")
+              : t("settings.text.keepTitlesToAFewWords")
           }
           onBlur={(event) => {
             const value = event.target.value.trim();

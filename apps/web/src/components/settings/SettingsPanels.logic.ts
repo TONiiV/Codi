@@ -8,7 +8,7 @@ import type {
   SidebarProjectGroupingMode,
   UnifiedSettings,
 } from "@t3tools/contracts";
-import { DEFAULT_UNIFIED_SETTINGS } from "@t3tools/contracts/settings";
+import { DEFAULT_UNIFIED_SETTINGS, type ResponseStreamingMode } from "@t3tools/contracts/settings";
 import {
   getBackgroundActivityBaseProfile,
   normalizeBackgroundActivitySettings,
@@ -280,4 +280,21 @@ export function backgroundActivityOverrideSettings(
       overrides: nextOverrides as BackgroundActivitySettings["overrides"],
     },
   };
+}
+
+const RESPONSE_STREAMING_MODE_KEYS = {
+  turn: {
+    label: "settings.parallelA.streamTurn",
+    description: "settings.parallelA.streamTurnDesc",
+  },
+  paragraph: {
+    label: "settings.parallelA.streamParagraph",
+    description: "settings.parallelA.streamParagraphDesc",
+  },
+} as const satisfies Record<ResponseStreamingMode, { label: string; description: string }>;
+
+/** Resolves the copy here so callers cannot render a key map's raw keys. */
+export function responseStreamingModeCopy(mode: ResponseStreamingMode, t: TFunction = englishT) {
+  const keys = RESPONSE_STREAMING_MODE_KEYS[mode];
+  return { label: t(keys.label), description: t(keys.description) };
 }
