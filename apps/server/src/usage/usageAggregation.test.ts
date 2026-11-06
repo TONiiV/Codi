@@ -3,6 +3,7 @@ import { describe, expect, it } from "@effect/vitest";
 import { resolveModelAliases, UsageAggregator } from "./usageAggregation.ts";
 import type { RateTable } from "./usagePricing.ts";
 import type { UsageRecord } from "@t3tools/provider-core/server/usage";
+import { ProjectId } from "@t3tools/contracts";
 
 const rates: RateTable = new Map([
   [
@@ -47,6 +48,7 @@ function aggregate(
   records: readonly UsageRecord[],
   timeZone = "UTC",
   resolution: "day" | "hour" = "day",
+  projectBySession?: ReadonlyMap<string, ProjectId>,
 ) {
   const hourlyBounds =
     resolution === "hour"
@@ -62,6 +64,7 @@ function aggregate(
     resolution,
     ...hourlyBounds,
     rates,
+    ...(projectBySession === undefined ? {} : { projectBySession }),
   });
   for (const item of records) aggregator.add(item);
   return aggregator.finish();
@@ -83,6 +86,31 @@ describe("UsageAggregator", () => {
       speedPremiumUsd: expect.closeTo(0.005625),
     });
     expect(bucket).not.toHaveProperty("ultrafastCostUsd");
+  });
+
+  it("splits a cell by the project each session resolves to, leaving unresolved sessions apart", () => {
+    const projects = new Map([
+      ["session-a", ProjectId.make("project-1")],
+      ["session-b", ProjectId.make("project-2")],
+      ["session-c", ProjectId.make("project-1")],
+    ]);
+    const { buckets } = aggregate(
+      ["session-a", "session-b", "cli-session", "session-c", "session-a"].map((sessionId) =>
+        record({ sessionId }),
+      ),
+      "UTC",
+      "day",
+      projects,
+    );
+
+    expect(
+      buckets.map(({ projectId, records, sessions }) => ({ projectId, records, sessions })),
+    ).toEqual([
+      { projectId: undefined, records: 1, sessions: 1 },
+      { projectId: "project-1", records: 3, sessions: 2 },
+      { projectId: "project-2", records: 1, sessions: 1 },
+    ]);
+    expect(buckets[0]).not.toHaveProperty("projectId");
   });
 
   it("keeps only the first record for a repeated dedupe key", () => {

@@ -1,9 +1,10 @@
-import type {
-  EnvironmentId,
-  ServerProvider,
-  UsageModelFilter,
-  UsageSummary,
-  UsageSummaryInput,
+import {
+  USAGE_CONTRACT_VERSION,
+  type EnvironmentId,
+  type ServerProvider,
+  type UsageModelFilter,
+  type UsageSummary,
+  type UsageSummaryInput,
 } from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
 import type { AtomRegistry } from "effect/reactivity";
@@ -49,7 +50,8 @@ export function usageSummaryInput(
   input: UsageSummaryInput,
   modelFilter: UsageModelFilter | undefined,
 ): UsageSummaryInput {
-  return modelFilter === undefined ? input : { ...input, modelFilter };
+  const versioned = { ...input, contractVersion: USAGE_CONTRACT_VERSION };
+  return modelFilter === undefined ? versioned : { ...versioned, modelFilter };
 }
 
 const limitsRefreshAfter = new Map<EnvironmentId, number>();

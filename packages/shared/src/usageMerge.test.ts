@@ -2,6 +2,7 @@ import {
   USAGE_CONTRACT_VERSION,
   USAGE_MERGE_COMPATIBLE_SINCE,
   type EnvironmentId,
+  type ProjectId,
   type UsageBucket,
   type UsageDay,
   type UsageProviderKind,
@@ -312,6 +313,77 @@ describe("mergeUsage", () => {
     expect(merged.records).toBe(5);
     expect(merged.sessions).toBe(1);
     expect(merged.contributingEnvironments).toEqual(["old"]);
+  });
+
+  it("totals each project per environment and provider, with unattributed usage apart", () => {
+    const p1 = "project-1" as ProjectId;
+    const category = { input: 1, cacheRead: 2, cacheWrite: 3, output: 4 };
+    const merged = mergeUsage(
+      [
+        environment(
+          "env-a",
+          summary(
+            [
+              bucket({ projectId: p1, categoryCostUsd: category }),
+              bucket({ projectId: p1, day: "2026-08-08" as UsageDay, categoryCostUsd: category }),
+              bucket({ costUsd: 3 }),
+            ],
+            [{ provider: "claude", hostId: "mac", homePath: "/a" }],
+          ),
+        ),
+        environment(
+          "env-b",
+          summary(
+            [bucket({ projectId: p1, provider: "codex", costUsd: 1 })],
+            [{ provider: "codex", hostId: "linux", homePath: "/b" }],
+          ),
+        ),
+      ],
+      USAGE_CONTRACT_VERSION,
+    );
+
+    expect(
+      merged.projectProviders.map(
+        ({ environmentId, projectId, provider, costUsd, totalTokens }) => [
+          environmentId,
+          projectId,
+          provider,
+          costUsd,
+          totalTokens,
+        ],
+      ),
+    ).toEqual([
+      ["env-a", p1, "claude", 20, 2320],
+      ["env-a", null, "claude", 3, 1160],
+      ["env-b", p1, "codex", 1, 1160],
+    ]);
+    expect(merged.projectProviders[0]?.categoryCost).toEqual({
+      input: 2,
+      cacheRead: 4,
+      cacheWrite: 6,
+      output: 8,
+      unsplit: 0,
+    });
+    expect(merged.projectProviders[1]?.categoryCost.unsplit).toBe(3);
+  });
+
+  it("keeps a newer partial scan's cell for another project of a claimed cell", () => {
+    const source = { provider: "claude" as const, hostId: "mac", homePath: "/home/theo/.claude" };
+    const p1 = "project-1" as ProjectId;
+    const complete = environment("old", summary([bucket({ projectId: p1 })], [source]));
+    const partialSummary = summary(
+      [bucket({ projectId: p1 }), bucket({ projectId: "project-2" as ProjectId, costUsd: 4 })],
+      [source],
+    );
+    const partial = environment("new", {
+      ...partialSummary,
+      readAt: "2026-08-07T01:00:00.000Z",
+      sources: partialSummary.sources.map((entry) => ({ ...entry, status: "partial" as const })),
+    });
+
+    const merged = mergeUsage([complete, partial], USAGE_CONTRACT_VERSION);
+    expect(merged.costUsd).toBe(14);
+    expect(merged.projectProviders.map(({ projectId }) => projectId)).toEqual([p1, "project-2"]);
   });
 
   it("identifies an environment reporting an older contract version", () => {

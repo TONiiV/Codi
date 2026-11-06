@@ -1,6 +1,7 @@
 import {
   USAGE_MERGE_COMPATIBLE_SINCE,
   type EnvironmentId,
+  type ProjectId,
   type UsageBucket,
   type UsageProviderKind,
   type UsageSource,
@@ -41,6 +42,17 @@ export interface ModelTotals {
 /** When every record lacks rates, costUsd is unknown and must not be displayed as a dollar figure. */
 export function isModelCostUnknown(model: ModelTotals): boolean {
   return model.records > 0 && model.unpricedRecords >= model.records;
+}
+
+/** One project's usage on one provider; a null project ran outside Codi. */
+export interface ProjectProviderTotals {
+  readonly environmentId: EnvironmentId;
+  readonly projectId: ProjectId | null;
+  readonly provider: UsageProviderKind;
+  readonly costUsd: number;
+  readonly totalTokens: number;
+  readonly tokens: UsageTokenTotals;
+  readonly categoryCost: CategoryCost;
 }
 
 export interface DailyTotals {
@@ -98,6 +110,7 @@ export interface MergedUsage {
   readonly sessions: number;
   readonly providers: readonly ProviderTotals[];
   readonly models: readonly ModelTotals[];
+  readonly projectProviders: readonly ProjectProviderTotals[];
   readonly daily: readonly DailyTotals[];
   readonly hourly: readonly HourlyTotals[];
   readonly costQuality: CostQuality;
@@ -131,7 +144,13 @@ function bucketsForSource(summary: UsageSummary, source: UsageSource): readonly 
 }
 
 function bucketKey(bucket: UsageBucket): string {
-  return JSON.stringify([bucket.day, bucket.hourStart ?? null, bucket.provider, bucket.model]);
+  return JSON.stringify([
+    bucket.day,
+    bucket.hourStart ?? null,
+    bucket.provider,
+    bucket.model,
+    bucket.projectId ?? null,
+  ]);
 }
 
 function claimSources(environments: readonly EnvironmentUsage[]): {
@@ -284,6 +303,7 @@ const EMPTY_MERGED: MergedUsage = {
   sessions: 0,
   providers: [],
   models: [],
+  projectProviders: [],
   daily: [],
   hourly: [],
   costQuality: {
@@ -359,6 +379,17 @@ export function mergeUsage(
       records: number;
       unpricedRecords: number;
       unpricedTokens: number;
+    }
+  >();
+  const projectProviderAccumulator = new Map<
+    string,
+    {
+      environmentId: EnvironmentId;
+      projectId: ProjectId | null;
+      provider: UsageProviderKind;
+      costUsd: number;
+      tokens: { -readonly [K in keyof UsageTokenTotals]: number };
+      categoryCost: { input: number; cacheRead: number; cacheWrite: number; output: number };
     }
   >();
   const dailyAccumulator = new Map<
@@ -469,6 +500,37 @@ export function mergeUsage(
       }
       modelAccumulator.set(modelKey, model);
 
+      const projectId = bucket.projectId ?? null;
+      const projectKey = JSON.stringify([environment.environmentId, projectId, bucket.provider]);
+      let project = projectProviderAccumulator.get(projectKey);
+      if (project === undefined) {
+        project = {
+          environmentId: environment.environmentId,
+          projectId,
+          provider: bucket.provider,
+          costUsd: 0,
+          tokens: {
+            uncachedInputTokens: 0,
+            cachedInputTokens: 0,
+            cacheCreationTokens: 0,
+            outputTokens: 0,
+            reasoningTokens: 0,
+          },
+          categoryCost: { input: 0, cacheRead: 0, cacheWrite: 0, output: 0 },
+        };
+        projectProviderAccumulator.set(projectKey, project);
+      }
+      project.costUsd += bucket.costUsd;
+      for (const key of Object.keys(project.tokens) as (keyof UsageTokenTotals)[]) {
+        project.tokens[key] += bucket.totals[key];
+      }
+      if (bucket.categoryCostUsd !== undefined) {
+        project.categoryCost.input += bucket.categoryCostUsd.input;
+        project.categoryCost.cacheRead += bucket.categoryCostUsd.cacheRead;
+        project.categoryCost.cacheWrite += bucket.categoryCostUsd.cacheWrite;
+        project.categoryCost.output += bucket.categoryCostUsd.output;
+      }
+
       const day = dailyAccumulator.get(bucket.day) ?? {
         costUsd: 0,
         totalTokens: 0,
@@ -533,6 +595,25 @@ export function mergeUsage(
     }))
     .sort((a, b) => b.costUsd - a.costUsd || b.totalTokens - a.totalTokens);
 
+  const projectProviders: ProjectProviderTotals[] = [...projectProviderAccumulator.values()]
+    .map(({ tokens, categoryCost: split, ...project }) => ({
+      ...project,
+      totalTokens:
+        tokens.uncachedInputTokens +
+        tokens.cachedInputTokens +
+        tokens.cacheCreationTokens +
+        tokens.outputTokens,
+      tokens,
+      categoryCost: {
+        ...split,
+        unsplit: Math.max(
+          0,
+          project.costUsd - split.input - split.cacheRead - split.cacheWrite - split.output,
+        ),
+      },
+    }))
+    .sort((a, b) => b.costUsd - a.costUsd || b.totalTokens - a.totalTokens);
+
   const daily: DailyTotals[] = [...dailyAccumulator.entries()]
     .map(([day, totals]) => ({
       day,
@@ -558,6 +639,7 @@ export function mergeUsage(
     sessions,
     providers,
     models,
+    projectProviders,
     daily,
     hourly,
     costQuality: {

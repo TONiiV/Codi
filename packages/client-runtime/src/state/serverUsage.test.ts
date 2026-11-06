@@ -100,9 +100,9 @@ const makeHarness = Effect.fn("ServerUsageTest.makeHarness")(function* (
         const price = settings.usagePriceOverrides["custom-model"]?.inputCostPerMillionTokens ?? 0;
         yield* beforeRead(requests, input);
         return {
-          contractVersion: USAGE_CONTRACT_VERSION,
           readAt: "2026-09-04T12:00:00Z",
           ...input,
+          contractVersion: USAGE_CONTRACT_VERSION,
           buckets: [
             {
               day: input.sinceDay,

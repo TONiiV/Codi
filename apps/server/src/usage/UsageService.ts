@@ -2,6 +2,7 @@ import {
   type ProviderInstanceConfig,
   ProviderInstanceId,
   USAGE_CONTRACT_VERSION,
+  USAGE_UNVERSIONED_CLIENT_CONTRACT_VERSION,
   type ServerSettings as ServerSettingsValue,
   type UsageProviderKind,
   type UsageSource,
@@ -40,6 +41,7 @@ import type {
   UsageRecord,
 } from "@t3tools/provider-core/server/usage";
 import { canonicalModelFilter, resolveModelAliases, UsageAggregator } from "./usageAggregation.ts";
+import { UsageProjectResolver } from "./UsageProjectResolver.ts";
 import { createOverrideRateTable, parseRateTable, type RateTable } from "./usagePricing.ts";
 import {
   listTranscriptFiles,
@@ -156,6 +158,7 @@ export const make = Effect.gen(function* () {
   const hostEnvironment = yield* HostProcess.Environment;
   const hostname = yield* HostProcess.Hostname;
   const readerContext = yield* Effect.context<BuiltInUsageReadersEnv>();
+  const projectResolver = yield* UsageProjectResolver;
 
   const fileCache: ScanCache = new Map();
   // Reads from concurrent windows can still hold the original record after it is corrected.
@@ -715,18 +718,6 @@ export const make = Effect.gen(function* () {
       { concurrency: 2 },
     );
 
-    const aggregator = new UsageAggregator({
-      timeZone: input.timeZone,
-      sinceDay: input.sinceDay,
-      untilDay: input.untilDay,
-      resolution: input.resolution ?? "day",
-      ...hourlyWindow,
-      rates,
-      priceOverrides: createOverrideRateTable(settings.usagePriceOverrides),
-      modelAliases: resolveModelAliases(settings.usageModelAliases),
-      ...(input.modelFilter === undefined ? {} : { modelFilter: input.modelFilter }),
-    });
-
     const sources: UsageSource[] = [];
 
     // Deleted transcripts' saved usage still aggregates and deduplicates normally.
@@ -794,6 +785,29 @@ export const make = Effect.gen(function* () {
       }
     }
     const crossFileSessions = sharedSessions(filesByDir.flat());
+
+    const windowSessions = new Set<string>();
+    for (const file of filesByDir.flat()) {
+      for (const { sessionId, timestampMs } of file.records) {
+        if (sessionId.length > 0 && timestampMs >= windowStartMs && timestampMs < windowEndMs) {
+          windowSessions.add(sessionId);
+        }
+      }
+    }
+    const projectBySession = yield* projectResolver.resolve(windowSessions);
+
+    const aggregator = new UsageAggregator({
+      timeZone: input.timeZone,
+      sinceDay: input.sinceDay,
+      untilDay: input.untilDay,
+      resolution: input.resolution ?? "day",
+      ...hourlyWindow,
+      rates,
+      priceOverrides: createOverrideRateTable(settings.usagePriceOverrides),
+      modelAliases: resolveModelAliases(settings.usageModelAliases),
+      projectBySession,
+      ...(input.modelFilter === undefined ? {} : { modelFilter: input.modelFilter }),
+    });
 
     for (const [
       index,
@@ -902,10 +916,17 @@ export const make = Effect.gen(function* () {
       input.modelFilter ?? null,
     ]);
 
+  // Shared scans keep one answer object per summary for every caller.
+  const olderClientSummaries = new WeakMap<UsageSummary, UsageSummary>();
+
   const readSummary = Effect.fn("UsageService.readSummary")(function* (
     requested: UsageSummaryInput,
   ) {
-    const { modelFilter: requestedFilter, ...unfiltered } = requested;
+    const {
+      modelFilter: requestedFilter,
+      contractVersion: clientVersion,
+      ...unfiltered
+    } = requested;
     const modelFilter = canonicalModelFilter(requestedFilter);
     const input = modelFilter === undefined ? unfiltered : { ...unfiltered, modelFilter };
     const settings = yield* readSettings;
@@ -932,7 +953,19 @@ export const make = Effect.gen(function* () {
         return created;
       }),
     );
-    return yield* Deferred.await(deferred);
+    const summary = yield* Deferred.await(deferred);
+    // Later versions only add optional fields, so unversioned clients read the newer shape.
+    const contractVersion = Math.min(
+      USAGE_CONTRACT_VERSION,
+      clientVersion ?? USAGE_UNVERSIONED_CLIENT_CONTRACT_VERSION,
+    );
+    if (contractVersion === summary.contractVersion) return summary;
+    let answer = olderClientSummaries.get(summary);
+    if (answer?.contractVersion !== contractVersion) {
+      answer = { ...summary, contractVersion };
+      olderClientSummaries.set(summary, answer);
+    }
+    return answer;
   });
 
   return { readSummary, refreshRates, awaitPersisted } as const;
