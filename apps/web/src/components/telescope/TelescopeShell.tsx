@@ -113,7 +113,7 @@ export function TelescopeSidebar({
   );
 }
 
-function TelescopeEmptyState({ view }: { view: TelescopeView }) {
+export function TelescopeEmptyState({ view }: { view: TelescopeView }) {
   const entry = telescopeViewEntry(view);
   return (
     <Empty>
