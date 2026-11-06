@@ -113,7 +113,14 @@ export type ProjectBindingSummary = (typeof ProjectBindingSummaryResult.Type)["p
 export class WorkspaceError extends Schema.TaggedError<WorkspaceError>()(
   "TelescopeWorkspaceError",
   {
-    reason: Schema.Literals(["not_found", "forbidden", "expired", "conflict", "storage"]),
+    reason: Schema.Literals([
+      "not_found",
+      "forbidden",
+      "expired",
+      "conflict",
+      "invalid",
+      "storage",
+    ]),
     message: Schema.String,
     cause: Schema.optionalKey(Schema.Defect()),
   },
