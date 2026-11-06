@@ -7,6 +7,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import type * as SqlClient from "effect/sql/SqlClient";
 
+import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
 import { runMigrations } from "../persistence/Migrations.ts";
 import type { PersistenceDecodeError, PersistenceSqlError } from "../persistence/Errors.ts";
 import * as SqlitePersistence from "../persistence/Sqlite.ts";
@@ -20,6 +21,11 @@ const services = <E>(persistence: Layer.Layer<SqlClient.SqlClient, E>) =>
         Layer.effectDiscard(runMigrations()).pipe(Layer.provideMerge(persistence)),
         NodeCrypto.layer,
       ),
+    ),
+    Layer.provide(
+      Layer.succeed(ServerEnvironment.ServerEnvironmentIdentity, {
+        getEnvironmentId: Effect.succeed(EnvironmentId.make("env-elsewhere")),
+      }),
     ),
   );
 const layer = services(SqlitePersistence.layerMemory);

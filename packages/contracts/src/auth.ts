@@ -48,6 +48,19 @@ export const AuthRelayReadScope = "relay:read" as const;
 export const AuthRelayWriteScope = "relay:write" as const;
 export const AuthTelescopeMemberScope = "telescope:member" as const;
 export const AuthTelescopeAdminScope = "telescope:admin" as const;
+
+export const AuthDesktopBootstrapSubject = "desktop-bootstrap" as const;
+export const AuthAdministrativeBootstrapSubject = "administrative-bootstrap" as const;
+export const AuthReusableDevTokenSubject = "reusable-dev-token" as const;
+export const AuthReusableDevTokenChildSubject = "reusable-dev-token-child" as const;
+/** Session subjects only the environment owner holds: desktop app, startup link, dev token. */
+export const AuthEnvironmentOwnerSubjects = [
+  AuthDesktopBootstrapSubject,
+  AuthAdministrativeBootstrapSubject,
+  AuthReusableDevTokenSubject,
+  AuthReusableDevTokenChildSubject,
+] as const;
+
 export const AuthEnvironmentScope = Schema.Literals([
   AuthOrchestrationReadScope,
   AuthOrchestrationOperateScope,

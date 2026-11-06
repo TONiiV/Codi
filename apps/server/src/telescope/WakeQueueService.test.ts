@@ -1,7 +1,7 @@
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, it } from "@effect/vitest";
-import { AuthSessionId, ProjectId, Telescope, ThreadId } from "@t3tools/contracts";
+import { AuthSessionId, EnvironmentId, ProjectId, Telescope, ThreadId } from "@t3tools/contracts";
 import * as DateTime from "effect/DateTime";
 import * as Deferred from "effect/Deferred";
 import * as Duration from "effect/Duration";
@@ -12,6 +12,7 @@ import * as Queue from "effect/Queue";
 import * as Schema from "effect/Schema";
 import * as TestClock from "effect/testing/TestClock";
 
+import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
 import { runMigrations } from "../persistence/Migrations.ts";
 import * as SqlitePersistence from "../persistence/Sqlite.ts";
 import * as TelescopeDb from "./TelescopeDb.ts";
@@ -23,6 +24,11 @@ const database = Layer.effectDiscard(runMigrations()).pipe(
 );
 const layer = Layer.mergeAll(WakeQueue.layer, TelescopeDb.layer, WorkspaceService.layer).pipe(
   Layer.provideMerge(Layer.merge(database, NodeCrypto.layer)),
+  Layer.provide(
+    Layer.succeed(ServerEnvironment.ServerEnvironmentIdentity, {
+      getEnvironmentId: Effect.succeed(EnvironmentId.make("env-elsewhere")),
+    }),
+  ),
 );
 const worker = (run: (wakeRun: WakeQueue.WakeRun) => Effect.Effect<void>) =>
   Layer.build(WakeQueue.layerWorker.pipe(Layer.provide(Layer.succeed(WakeQueue.WakeRunner, run))));

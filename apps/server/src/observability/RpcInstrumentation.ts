@@ -236,6 +236,7 @@ const RPC_AGGREGATES = {
   [Telescope.WS_METHODS.memberList]: "telescope",
   [Telescope.WS_METHODS.memberSetRole]: "telescope",
   [Telescope.WS_METHODS.memberRevoke]: "telescope",
+  [Telescope.WS_METHODS.memberRestore]: "telescope",
   [Telescope.WS_METHODS.projectBind]: "telescope",
   [Telescope.WS_METHODS.projectUnbind]: "telescope",
   [Telescope.WS_METHODS.projectListBindings]: "telescope",

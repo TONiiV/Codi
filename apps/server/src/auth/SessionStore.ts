@@ -2,6 +2,7 @@ import {
   AuthSessionId,
   AuthStandardClientScopes,
   AuthEnvironmentScopes,
+  AuthReusableDevTokenSubject,
   type AuthClientMetadata,
   type AuthClientSession,
   type AuthEnvironmentScope,
@@ -518,7 +519,7 @@ const make = Effect.gen(function* () {
     yield* authSessions
       .createIfAbsent({
         sessionId: devAuth.sessionId,
-        subject: "reusable-dev-token",
+        subject: AuthReusableDevTokenSubject,
         scopes: AuthStandardClientScopes,
         method: "browser-session-cookie",
         client: {

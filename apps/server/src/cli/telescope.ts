@@ -74,7 +74,8 @@ const runAsOwner = Effect.fn("cli.telescope.runAsOwner")(function* <A>(
         Effect.fail(new CliError.UserError({ cause: error, userMessage: error.message })),
     }),
     Effect.provide(
-      Layer.mergeAll(WorkspaceService.layer, ServerEnvironment.layerIdentity).pipe(
+      WorkspaceService.layer.pipe(
+        Layer.provideMerge(ServerEnvironment.layerIdentity),
         Layer.provide(SqlitePersistence.layerConfig),
         Layer.provide(ServerConfig.layer(config)),
         Layer.provide(Layer.succeed(References.MinimumLogLevel, "Error")),
