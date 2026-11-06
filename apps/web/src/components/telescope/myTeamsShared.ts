@@ -2,8 +2,12 @@ import { createTelescopeAgentAtoms } from "@t3tools/client-runtime/telescope/age
 import type { Telescope } from "@t3tools/contracts";
 
 import { connectionAtomRuntime } from "../../connection/runtime";
+import { telescope } from "./telescopeState";
 
-export const telescopeAgents = createTelescopeAgentAtoms(connectionAtomRuntime);
+export const telescopeAgents = createTelescopeAgentAtoms(
+  connectionAtomRuntime,
+  telescope.bindingsRevisionAtom,
+);
 
 export const KIND_LABEL: Record<Telescope.AgentKind, string> = {
   chief_of_staff: "首席幕僚",

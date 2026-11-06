@@ -36,10 +36,13 @@ export function cappedPowers(
 
 export function createTelescopeAgentAtoms<R, E>(
   runtime: Atom.AtomRuntime<EnvironmentRegistry | R, E>,
+  bindingsRevision: Atom.Atom<number>,
 ) {
+  // The server creates a project's Chief Agent inside listMine, so a bind must re-read it.
   const listMine = createEnvironmentRpcQueryAtomFamily(runtime, {
     label: "telescope:agent:list-mine",
     tag: WS_METHODS.agentListMine,
+    refreshTrigger: () => bindingsRevision,
   });
   const listCompany = createEnvironmentRpcQueryAtomFamily(runtime, {
     label: "telescope:agent:list-company",
@@ -52,6 +55,7 @@ export function createTelescopeAgentAtoms<R, E>(
   const bindings = createEnvironmentRpcQueryAtomFamily(runtime, {
     label: "telescope:project:list-bindings",
     tag: WS_METHODS.projectListBindings,
+    refreshTrigger: () => bindingsRevision,
   });
 
   const refreshLists = (

@@ -54,7 +54,9 @@ function AgentRow({ agent, powers }: { agent: Telescope.Agent; powers: Telescope
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-baseline gap-x-2">
           <span className="font-medium">{agent.name}</span>
-          <span className="text-xs text-muted-foreground">{KIND_LABEL[agent.kind]}</span>
+          {agent.name === KIND_LABEL[agent.kind] ? null : (
+            <span className="text-xs text-muted-foreground">{KIND_LABEL[agent.kind]}</span>
+          )}
         </div>
         <div className="mt-1 flex flex-wrap gap-1.5">
           {agent.ownerSubjectId === null ? null : (
