@@ -5,9 +5,21 @@ export type WizardNavigation =
 const IDENTITY_STEP = 1;
 const ACP_REGISTRY_IDENTITY_STEP = 1;
 
-export const ADD_PROVIDER_WIZARD_STEPS = ["Provider", "Identity", "Config"] as const;
-export const ACP_REGISTRY_WIZARD_STEPS = ["Provider", "Identity", "Sign in"] as const;
-export const LOCAL_ACP_WIZARD_STEPS = ["Provider", "Identity"] as const;
+// Entries are i18n keys; the wizard renders their translations.
+export const ADD_PROVIDER_WIZARD_STEPS = [
+  "settings.parallelProviders.stepProvider",
+  "settings.parallelProviders.stepIdentity",
+  "settings.parallelProviders.stepConfig",
+] as const;
+export const ACP_REGISTRY_WIZARD_STEPS = [
+  "settings.parallelProviders.stepProvider",
+  "settings.parallelProviders.stepIdentity",
+  "settings.parallelProviders.stepSignIn",
+] as const;
+export const LOCAL_ACP_WIZARD_STEPS = [
+  "settings.parallelProviders.stepProvider",
+  "settings.parallelProviders.stepIdentity",
+] as const;
 
 export interface ProviderIdentityDraft {
   readonly label: string;
