@@ -19,6 +19,7 @@ import {
   settingsScopeEnvironmentLabels,
   settingsScopeProjectMachines,
 } from "./settingsScopeAxis";
+import { useTranslation } from "react-i18next";
 
 interface ScopeChoice {
   label: string;
@@ -41,6 +42,7 @@ export function SettingsScopeNotice({
   targetId?: string;
   eligibleEnvironmentIds?: readonly EnvironmentId[];
 }) {
+  const { t } = useTranslation();
   const { selectScope, search, groups } = useSettingsScope();
   const navigate = useNavigate({ from: "/settings" });
   const pathname = useLocation({ select: (location) => location.pathname });
@@ -66,7 +68,7 @@ export function SettingsScopeNotice({
           const { primary, secondary } = environment
             ? settingsScopeEnvironmentLabels(environment, environments)
             : {
-                primary: member.environmentLabel ?? "Environment",
+                primary: member.environmentLabel ?? t("settings.text.environment"),
                 secondary: member.environmentId,
               };
           return {
@@ -84,7 +86,7 @@ export function SettingsScopeNotice({
         ? groups.map((group) => ({
             label: group.displayName,
             secondary: [
-              ...(group.archived ? ["Archived"] : []),
+              ...(group.archived ? [t("settings.parallelA.archivedBadge")] : []),
               ...(groups.some(
                 (other) =>
                   other.projectKey !== group.projectKey && other.displayName === group.displayName,
@@ -114,7 +116,7 @@ export function SettingsScopeNotice({
               })
           : [
               {
-                label: "Open all environments",
+                label: t("settings.text.openAllEnvironments"),
                 icon: <LayersIcon aria-hidden className="size-4 shrink-0 text-muted-foreground" />,
                 search: {},
               },
