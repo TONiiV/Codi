@@ -1,7 +1,14 @@
 import { describe, expect, it } from "vite-plus/test";
 import * as Schema from "effect/Schema";
 
-import { Agent, BoardItem, Delegation, MemberSetRoleInput, TaskCommit } from "./index.ts";
+import {
+  Agent,
+  BoardItem,
+  Delegation,
+  MemberSetRoleInput,
+  MemoryWrite,
+  TaskCommit,
+} from "./index.ts";
 
 const at = "2026-11-06T12:00:00.000Z";
 const decodeBoardItem = Schema.decodeSync(BoardItem);
@@ -9,6 +16,7 @@ const decodeAgent = Schema.decodeSync(Agent);
 const decodeTaskCommit = Schema.decodeUnknownSync(TaskCommit);
 const decodeSetRole = Schema.decodeUnknownSync(MemberSetRoleInput);
 const decodeDelegation = Schema.decodeUnknownSync(Delegation);
+const decodeMemoryWrite = Schema.decodeUnknownSync(MemoryWrite);
 
 describe("telescope contracts", () => {
   it("decodes the shapes later tasks persist and rejects values outside the contract", () => {
@@ -114,5 +122,7 @@ describe("telescope contracts", () => {
       expect(decodeDelegation({ ...delegation, state }).state).toBe(state);
     }
     expect(() => decodeDelegation({ ...delegation, state: "working" })).toThrow();
+    expect(decodeMemoryWrite({ op: "add", text: "长".repeat(20_000) }).text).toHaveLength(20_000);
+    expect(() => decodeMemoryWrite({ op: "add", text: "长".repeat(20_001) })).toThrow();
   });
 });

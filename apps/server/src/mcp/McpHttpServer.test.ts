@@ -1426,6 +1426,10 @@ it.effect("lists memory tools only to threads with an open Telescope run", () =>
         );
       const write = (rpc: Effect.Success<ReturnType<typeof rpcAs>>) =>
         rpc("tools/call", { name: "memory_write", arguments: { op: "add", text: "样机周五交付" } });
+      const search = (rpc: Effect.Success<ReturnType<typeof rpcAs>>) =>
+        rpc("tools/call", { name: "memory_search", arguments: { query: "样机周五" } }).pipe(
+          Effect.map((body) => body.result?.structuredContent),
+        );
 
       const plain = yield* rpcAs("plain");
       expect(yield* listed(plain)).toEqual([]);
@@ -1439,32 +1443,44 @@ it.effect("lists memory tools only to threads with an open Telescope run", () =>
         )
         .pipe(Effect.orDie);
       const at = "2026-11-06T00:00:00.000Z";
-      yield* db.insert(workspace.id, "agents", {
-        agent_id: "agent-alice",
-        owner_subject_id: workspace.createdBy,
-        kind: "chief_of_staff",
-        name: "agent-alice",
-        standing_powers_json: "{}",
-        exposure: "hidden",
-        sync_with_board: 0,
-        dispatch_mode: "inbox",
-        channels_json: "[]",
-        created_at: at,
-        updated_at: at,
-      });
-      yield* db.insert(workspace.id, "runs", {
-        run_id: "run-1",
-        agent_id: "agent-alice",
-        on_behalf_of_json: JSON.stringify([workspace.createdBy]),
-        input_snapshot_json: "{}",
-        started_at: at,
-        thread_id: "thread-telescope",
-      });
+      const addAgent = (agentId: string) =>
+        db.insert(workspace.id, "agents", {
+          agent_id: agentId,
+          owner_subject_id: workspace.createdBy,
+          kind: "chief_of_staff",
+          name: agentId,
+          standing_powers_json: "{}",
+          exposure: "hidden",
+          sync_with_board: 0,
+          dispatch_mode: "inbox",
+          channels_json: "[]",
+          created_at: at,
+          updated_at: at,
+        });
+      const openRun = (runId: string, agentId: string, threadId: string) =>
+        db.insert(workspace.id, "runs", {
+          run_id: runId,
+          agent_id: agentId,
+          on_behalf_of_json: JSON.stringify([workspace.createdBy]),
+          input_snapshot_json: "{}",
+          started_at: at,
+          thread_id: threadId,
+        });
+      yield* addAgent("agent-alice");
+      yield* openRun("run-1", "agent-alice", "thread-telescope");
       const telescopeRun = yield* rpcAs("telescope");
       expect(yield* listed(telescopeRun)).toEqual(["memory_search", "memory_write"]);
       expect((yield* write(telescopeRun)).result?.structuredContent).toMatchObject({
         memory: { agentId: "agent-alice", text: "样机周五交付" },
       });
+
+      yield* openRun("run-2", "agent-alice", "thread-alice-elsewhere");
+      expect(yield* search(yield* rpcAs("alice-elsewhere"))).toMatchObject({
+        memories: [{ agentId: "agent-alice", text: "样机周五交付" }],
+      });
+      yield* addAgent("agent-alice-other");
+      yield* openRun("run-3", "agent-alice-other", "thread-alice-other");
+      expect(yield* search(yield* rpcAs("alice-other"))).toEqual({ memories: [] });
 
       yield* db.update(workspace.id, "runs", { finished_at: at }, { run_id: "run-1" });
       expect(yield* listed(telescopeRun)).toEqual([]);

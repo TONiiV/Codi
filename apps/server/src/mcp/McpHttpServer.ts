@@ -1254,7 +1254,10 @@ export const layerMcpTransport = <RA, RE, RR>(registrations: Layer.Layer<RA, RE,
     registrations,
   }).pipe(Layer.provide(layerMcpAuthMiddleware));
 
-/** Every tool the T3 MCP server advertises. AgentContextBudget.test.ts measures this set. */
+/**
+ * Every tool an ordinary thread sees; AgentContextBudget.test.ts measures this set.
+ * `layer` adds `layerMemoryToolkit` for threads with an open Telescope run.
+ */
 export const layerTools = Layer.mergeAll(
   layerPreviewToolkit,
   layerOrchestratorToolkit,
