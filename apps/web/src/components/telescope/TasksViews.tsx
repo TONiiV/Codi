@@ -36,6 +36,7 @@ function TitleCell({ task, write }: { task: Telescope.Task; write: Write }) {
       size="sm"
       autoFocus
       aria-label="任务标题"
+      maxLength={Telescope.BOARD_LIMITS.titleLength}
       value={draft}
       onChange={(event) => setDraft(event.target.value)}
       onBlur={save}
@@ -78,6 +79,7 @@ function TaskNotes({
       <Textarea
         aria-label="新备注"
         placeholder="写一条备注，所有成员都看得到"
+        maxLength={Telescope.BOARD_LIMITS.noteLength}
         value={note}
         onChange={(event) => setNote(event.target.value)}
       />

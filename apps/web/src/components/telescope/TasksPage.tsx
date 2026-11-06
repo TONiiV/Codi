@@ -1,3 +1,4 @@
+import { Telescope } from "@t3tools/contracts";
 import { PlusIcon } from "lucide-react";
 import { useState } from "react";
 
@@ -53,6 +54,7 @@ function NewTaskDialog({ target }: { target: BoardTarget }) {
               autoFocus
               aria-label="任务标题"
               placeholder="要做什么"
+              maxLength={Telescope.BOARD_LIMITS.titleLength}
               value={title}
               onChange={(event) => setTitle(event.target.value)}
             />
