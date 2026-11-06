@@ -181,8 +181,9 @@ const make = Effect.gen(function* () {
   const selectWakes = Effect.fn("WakeQueueService.selectWakes")(function* (
     workspaceId: Telescope.WorkspaceId,
     where: Readonly<Record<string, string>>,
+    options?: { readonly orderBy: ReadonlyArray<string> },
   ) {
-    const rows = yield* db.select(workspaceId, "wakes", decodeRawRows, where);
+    const rows = yield* db.select(workspaceId, "wakes", decodeRawRows, where, options);
     const wakes: Array<WakeRow> = [];
     for (const raw of rows) {
       const decoded = yield* Effect.result(decodeWake(raw));
@@ -205,10 +206,9 @@ const make = Effect.gen(function* () {
     }
     return wakes;
   });
+  // Arrival order: `created_at` ties within a millisecond. VACUUM renumbers rowids in order.
   const decodeMerged = (workspaceId: Telescope.WorkspaceId, wakeId: Telescope.Wake["id"]) =>
-    selectWakes(workspaceId, { merged_into: wakeId, status: "merged" }).pipe(
-      Effect.map((rows) => rows.toSorted(byAge)),
-    );
+    selectWakes(workspaceId, { merged_into: wakeId, status: "merged" }, { orderBy: ["rowid"] });
 
   const active = Effect.fn("WakeQueueService.active")(function* () {
     const ids = yield* db.workspaceIdsWithActiveWakes;

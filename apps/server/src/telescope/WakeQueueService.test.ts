@@ -49,7 +49,6 @@ const request = (
 const StatusRow = Schema.Struct({
   wake_id: Schema.String,
   status: Schema.String,
-  merged_into: Schema.NullOr(Schema.String),
 });
 const decodeStatuses = Schema.decodeUnknownEffect(Schema.Array(StatusRow));
 const statuses = (where: Readonly<Record<string, string>> = {}) =>
@@ -89,16 +88,19 @@ it.effect("five emails to an idle agent within the hold window produce one run a
     assert.strictEqual(run.wake.id, first.id);
     assert.strictEqual(sinceCreated(first, run.wake), 90);
     assert.deepStrictEqual(run.payloads, [{ n: 1 }, { n: 2 }, { n: 3 }, { n: 4 }, { n: 5 }]);
-    const merged = yield* mergedInto(first.id);
-    assert.strictEqual(merged.length, 4);
-    assert.isTrue(merged.every((row) => row.merged_into === first.id));
+    assert.strictEqual((yield* mergedInto(first.id)).length, 4);
 
     const late = yield* email(6);
     assert.notStrictEqual(late.id, first.id);
+    const burst = [7, 8, 9, 10, 11, 12, 13, 14];
+    for (const n of burst) yield* email(n);
     yield* TestClock.adjust("90 seconds");
     const lateRun = yield* Queue.take(started);
     assert.strictEqual(lateRun.wake.id, late.id);
-    assert.deepStrictEqual(lateRun.payloads, [{ n: 6 }]);
+    assert.deepStrictEqual(
+      lateRun.payloads,
+      [6, ...burst].map((n) => ({ n })),
+    );
   }).pipe(Effect.scoped, Effect.provide(layer)),
 );
 
