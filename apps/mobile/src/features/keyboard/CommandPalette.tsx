@@ -340,6 +340,13 @@ export function CommandPalette(props: {
         run: () => openSettings(navigation, "SettingsUsage"),
       },
       {
+        key: "telescope",
+        kind: "action",
+        title: "Telescope",
+        searchTerms: ["decisions", "review", "决定", "确认"],
+        run: () => openSettings(navigation, "SettingsTelescope"),
+      },
+      {
         key: "archive",
         kind: "action",
         title: "Archived threads",
