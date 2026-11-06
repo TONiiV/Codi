@@ -38,6 +38,9 @@ import {
   usePanelNavigationSuppression,
 } from "../panelAnimations";
 import { BackgroundThreadAnnouncer } from "./BackgroundThreadAnnouncer";
+import { TelescopeModeSwitch } from "./telescope/TelescopeModeSwitch";
+import { TelescopeSidebar } from "./telescope/TelescopeShell";
+import { useTelescopeView } from "./telescope/telescopeViews";
 import { HistorySwipeNavigation } from "./HistorySwipeNavigation";
 import ThreadSidebar from "./Sidebar";
 import { SidebarBrandWidthProbe } from "./sidebar/SidebarChrome";
@@ -410,6 +413,7 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
   const { active: panelAnimationsActive, durationMs: panelAnimationDurationMs } =
     usePanelAnimationSettings();
   const pathname = useLocation({ select: (location) => location.pathname });
+  const telescopeView = useTelescopeView();
   const panelAnimationsSuppressed = usePanelNavigationSuppression(pathname);
   const routePanelAnimationsActive = panelAnimationsActive && !panelAnimationsSuppressed;
   const isMacosDesktop = isElectron && isMacPlatform(navigator.platform);
@@ -453,7 +457,7 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
         <SidebarBrandWidthProbe isElectron={isElectron} onWidthChange={setBrandWidth} />
         <Sidebar
           side="left"
-          collapsible="offcanvas"
+          collapsible={telescopeView === null ? "offcanvas" : "icon"}
           data-app-sidebar=""
           {...sidebarArea}
           role="navigation"
@@ -469,12 +473,17 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
           }}
           style={windowControlsInsetStyle}
         >
-          <ThreadSidebar routeReveal={sidebarRouteReveal} />
+          {telescopeView === null ? (
+            <ThreadSidebar routeReveal={sidebarRouteReveal} />
+          ) : (
+            <TelescopeSidebar view={telescopeView} />
+          )}
           <SidebarRail onDoubleClick={resetSidebarWidth} />
         </Sidebar>
         {children}
         <BackgroundThreadAnnouncer />
         <SidebarControl />
+        <TelescopeModeSwitch />
         {isElectron ? <HistorySwipeNavigation /> : null}
       </SidebarProvider>
     </PanelAnimationSuppressionProvider>

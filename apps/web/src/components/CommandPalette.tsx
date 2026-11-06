@@ -74,6 +74,7 @@ import {
   PinIcon,
   PinOffIcon,
   SquarePenIcon,
+  TelescopeIcon,
   TextSearchIcon,
   UserPlusIcon,
 } from "lucide-react";
@@ -1604,6 +1605,17 @@ function OpenCommandPaletteDialog(props: {
     shortcutCommand: "usage.open",
     run: async () => {
       await navigate({ to: "/usage" });
+    },
+  });
+
+  actionItems.push({
+    kind: "action",
+    value: "action:telescope",
+    searchTerms: ["telescope", "team", "tasks", "decisions", "dashboard"],
+    title: "Open Telescope",
+    icon: <TelescopeIcon className={ITEM_ICON_CLASS} />,
+    run: async () => {
+      await navigate({ to: "/telescope", search: { view: "chats" } });
     },
   });
 
