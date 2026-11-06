@@ -1,3 +1,8 @@
+// @effect-diagnostics nodeBuiltinImport:off
+// Transcripts reach hundreds of MB; node:readline streams them a line at a time.
+import * as NodeFS from "node:fs";
+import * as NodeReadline from "node:readline";
+
 import { parseTimestampMs, tokenCount } from "@t3tools/provider-core/server/usage";
 
 export interface ToolCall {
@@ -143,4 +148,18 @@ export const makeSessionCollector = (window: {
   };
 
   return { add, sessions: (): ReadonlyArray<SessionActivity> => [...sessions.values()] };
+};
+
+/** Resolves false when the file cannot be read; a partial read keeps the lines it got. */
+export const readLines = async (filePath: string, onLine: (line: string) => void) => {
+  const input = NodeFS.createReadStream(filePath, { encoding: "utf8" });
+  try {
+    for await (const line of NodeReadline.createInterface({ input, crlfDelay: Infinity }))
+      onLine(line);
+    return true;
+  } catch {
+    return false;
+  } finally {
+    input.destroy();
+  }
 };
