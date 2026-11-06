@@ -1,7 +1,7 @@
 import { Telescope } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
-import { isDecisionConflict, reviewQueue, reviewUpdateInput } from "./telescopeBoard";
+import { describeFailure, reviewQueue, reviewUpdateInput } from "./telescopeBoard";
 
 const workspaceId = Telescope.WorkspaceId.make("w1");
 
@@ -44,13 +44,17 @@ describe("review actions", () => {
   });
 });
 
-describe("isDecisionConflict", () => {
-  it("flags a superseded-proposal conflict so the list refreshes, not other workspace errors", () => {
+describe("describeFailure", () => {
+  it("refreshes on a conflict, not on other errors", () => {
     const conflict = new Telescope.WorkspaceError({ reason: "conflict", message: "superseded" });
-    expect(isDecisionConflict(conflict)).toBe(true);
+    expect(describeFailure(conflict)).toMatchObject({ refresh: true, title: "内容已更新" });
     expect(
-      isDecisionConflict(new Telescope.WorkspaceError({ reason: "forbidden", message: "x" })),
-    ).toBe(false);
-    expect(isDecisionConflict(new Error("boom"))).toBe(false);
+      describeFailure(new Telescope.WorkspaceError({ reason: "forbidden", message: "nope" })),
+    ).toEqual({ refresh: false, title: "操作没有完成", message: "nope" });
+    expect(describeFailure(new Error("boom"))).toEqual({
+      refresh: false,
+      title: "操作没有完成",
+      message: "boom",
+    });
   });
 });

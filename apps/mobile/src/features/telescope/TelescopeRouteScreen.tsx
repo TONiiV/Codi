@@ -25,9 +25,8 @@ import { SettingsSection } from "../settings/components/SettingsSection";
 import { telescopeBoard } from "./telescopeAtoms";
 import {
   decideInput,
+  describeFailure,
   formatBoardDate,
-  isDecisionConflict,
-  isStaleTaskVersion,
   reviewQueue,
   reviewUpdateInput,
   sortDecisions,
@@ -70,18 +69,9 @@ function StatusText(props: { readonly text: string; readonly tone?: "danger" }) 
 
 function reportFailure(result: AtomCommandResult<unknown, unknown>, onStale: () => void) {
   if (result._tag !== "Failure" || isAtomCommandInterrupted(result)) return;
-  const error = squashAtomCommandFailure(result);
-  if (isStaleTaskVersion(error)) {
-    onStale();
-    Dialog.alert("任务已更新", "有人刚改过这条任务，列表已刷新，请再看一眼。");
-    return;
-  }
-  if (isDecisionConflict(error)) {
-    onStale();
-    Dialog.alert("决定已更新", "这条决定刚被处理过，列表已刷新，请再看一眼。");
-    return;
-  }
-  Dialog.alert("操作没有完成", error instanceof Error ? error.message : String(error));
+  const outcome = describeFailure(squashAtomCommandFailure(result));
+  if (outcome.refresh) onStale();
+  Dialog.alert(outcome.title, outcome.message);
 }
 
 export function TelescopeRouteScreen() {
@@ -158,7 +148,10 @@ export function TelescopeRouteScreen() {
               <Button size="compact" tone="text" label="切换" onPress={() => setPicking(true)} />
             }
           >
-            <StatusText text={workspaceName} tone={workspaces.error ? "danger" : undefined} />
+            <StatusText
+              text={workspaceName}
+              tone={!workspaces.data && workspaces.error ? "danger" : undefined}
+            />
           </SettingsSection>
         )}
         {target && !showPicker ? (
