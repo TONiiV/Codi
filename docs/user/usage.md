@@ -15,6 +15,11 @@ cost, split by token type and by speed. These estimates are not your subscriptio
 split, such as a provider-reported cost for a model without public rates, shows as **Other**.
 Select a model under **Breakdown** to see its trend, cache hit rate, and cost per million tokens.
 
+**Usage → Flow** (`f`) traces the selected period from projects to providers to token types,
+in tokens or estimated cost; hover a project to follow only its usage. Sessions run outside Codi,
+such as a provider CLI started in a terminal, count as **Codi 之外**, as does all usage from a
+server that needs an update. Mobile lists the same totals by project and provider.
+
 Totals depend on the history available on each server. Grok turns without a saved completed-turn
 record are missing from the totals.
 Text generation (thread titles, commit messages, PR text, branch names and review guides) is not in

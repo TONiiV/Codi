@@ -37,7 +37,7 @@ export function costPerMillionTokens(model: ModelTotals): number | null {
 const ink = (percent: number) =>
   `color-mix(in oklab, var(--foreground) ${percent}%, var(--background))`;
 
-const TYPE_COLORS = {
+export const TYPE_COLORS = {
   input: ink(60),
   cacheRead: ink(30),
   cacheWrite: ink(72),
