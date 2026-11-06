@@ -35,7 +35,10 @@ import {
 } from "./providerSetup.ts";
 import * as Schema from "effect/Schema";
 import * as Rpc from "effect/rpc/Rpc";
-import { WorkspaceRpcs as TelescopeWorkspaceRpcs } from "./telescope/rpc.ts";
+import {
+  TaskBoardRpcs as TelescopeTaskBoardRpcs,
+  WorkspaceRpcs as TelescopeWorkspaceRpcs,
+} from "./telescope/rpc.ts";
 import * as RpcGroup from "effect/rpc/RpcGroup";
 import * as RpcMiddleware from "effect/rpc/RpcMiddleware";
 import { NonNegativeInt, TrimmedNonEmptyString } from "./baseSchemas.ts";
@@ -2213,4 +2216,5 @@ export const WsRpcGroup = RpcGroup.make(
   WsOrchestrationV2SubscribeThreadRpc,
   WsOrchestrationV2SubscribeCommandOutputRpc,
   ...TelescopeWorkspaceRpcs,
+  ...TelescopeTaskBoardRpcs,
 ).middleware(RpcScopeAuthorization);

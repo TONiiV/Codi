@@ -85,6 +85,17 @@ describe("RPC authorization scopes", () => {
     ]) {
       expect(requiredScopeForRpcMethod(method)).toBe(AuthTelescopeAdminScope);
     }
+    for (const method of [
+      Telescope.WS_METHODS.taskCreate,
+      Telescope.WS_METHODS.taskUpdate,
+      Telescope.WS_METHODS.taskGet,
+      Telescope.WS_METHODS.taskList,
+      Telescope.WS_METHODS.decisionCreate,
+      Telescope.WS_METHODS.decisionList,
+      Telescope.WS_METHODS.commitList,
+    ]) {
+      expect(requiredScopeForRpcMethod(method)).toBe(AuthTelescopeMemberScope);
+    }
   });
 
   it("rejects unknown RPC method names", () => {

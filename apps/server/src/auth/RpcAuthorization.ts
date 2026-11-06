@@ -218,6 +218,13 @@ export const RPC_REQUIRED_SCOPES = {
   [Telescope.WS_METHODS.memberAccept]: AuthTelescopeMemberScope,
   [Telescope.WS_METHODS.memberList]: AuthTelescopeMemberScope,
   [Telescope.WS_METHODS.projectListBindings]: AuthTelescopeMemberScope,
+  [Telescope.WS_METHODS.taskCreate]: AuthTelescopeMemberScope,
+  [Telescope.WS_METHODS.taskUpdate]: AuthTelescopeMemberScope,
+  [Telescope.WS_METHODS.taskGet]: AuthTelescopeMemberScope,
+  [Telescope.WS_METHODS.taskList]: AuthTelescopeMemberScope,
+  [Telescope.WS_METHODS.decisionCreate]: AuthTelescopeMemberScope,
+  [Telescope.WS_METHODS.decisionList]: AuthTelescopeMemberScope,
+  [Telescope.WS_METHODS.commitList]: AuthTelescopeMemberScope,
 } as const satisfies Readonly<Record<WsRpcMethod, AuthEnvironmentScope>>;
 
 export function requiredScopeForRpcMethod(method: string): AuthEnvironmentScope {
