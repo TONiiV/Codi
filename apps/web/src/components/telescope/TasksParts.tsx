@@ -15,6 +15,8 @@ import { RefreshCwIcon } from "lucide-react";
 import { AsyncResult } from "effect/reactivity";
 import type { ReactNode } from "react";
 
+import { usePrimaryEnvironmentId } from "../../state/environments";
+import { useEnvironmentQuery } from "../../state/query";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { TELESCOPE_PATH } from "../sidebar/mainAppLocation";
 import { Badge } from "../ui/badge";
@@ -170,7 +172,31 @@ export function BoardFrame(props: {
   );
 }
 
+/** Shown while there is no current workspace, which until the list arrives may only mean "not yet". */
 export function NoWorkspace() {
+  const environmentId = usePrimaryEnvironmentId();
+  const list = useEnvironmentQuery(
+    environmentId === null ? null : telescope.list({ environmentId, input: {} }),
+  );
+  if (list.data === null && list.error !== null)
+    return (
+      <Empty>
+        <EmptyHeader>
+          <EmptyTitle>工作区加载失败</EmptyTitle>
+          <EmptyDescription>没能读到这个环境里的工作区，请检查连接后重试。</EmptyDescription>
+        </EmptyHeader>
+        <Button size="xs" variant="outline" onClick={list.refresh}>
+          重试
+        </Button>
+      </Empty>
+    );
+  if (environmentId !== null && list.data === null)
+    return (
+      <Empty>
+        <Spinner />
+        <EmptyDescription>正在加载…</EmptyDescription>
+      </Empty>
+    );
   return (
     <Empty>
       <EmptyHeader>
