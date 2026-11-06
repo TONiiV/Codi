@@ -3,6 +3,7 @@ import { DeviceToolVersions } from "../device/DeviceToolVersions";
 import { useScopedSettings, useUpdateScopedSettings } from "./useScopedSettings";
 import { ScopedSwitch } from "./ScopedSwitch";
 import { DeviceSourcesSettings } from "./DeviceSourcesSettings";
+import { useTranslation } from "react-i18next";
 import {
   AuthSettingsWriteScope,
   BrowserImportFailureReason,
@@ -109,6 +110,7 @@ import {
 import {
   SettingsUnavailableGroup,
   SettingResetButton,
+  TranslatedSettingResetButton,
   SettingsPageContainer,
   SettingsRow,
   SettingsSection,
@@ -779,17 +781,18 @@ function BrowserSearchEngineSetting() {
 }
 
 export function PullRequestLinksOpenInAppSetting() {
+  const { t } = useTranslation();
   const openInApp = useClientSettings((settings) => settings.pullRequestLinksOpenInApp);
   const updateSettings = useUpdatePrimarySettings();
 
   return (
     <SettingsRow
-      {...searchableSetting("pull-request-links-open-in-app")}
-      description="Clicking a pull request link opens it in Codi. Turn off to open pull request links like any other link, on your git host."
+      {...searchableSetting("pull-request-links-open-in-app", t)}
+      description={t("settings.text.clickingAPullRequestLinkOpens")}
       resetAction={
         openInApp ? null : (
-          <SettingResetButton
-            label="open pull requests in Codi"
+          <TranslatedSettingResetButton
+            label={t("settings.text.openPullRequestsInCodi")}
             onClick={() => updateSettings({ pullRequestLinksOpenInApp: true })}
           />
         )
@@ -800,7 +803,7 @@ export function PullRequestLinksOpenInAppSetting() {
           onCheckedChange={(checked) =>
             updateSettings({ pullRequestLinksOpenInApp: Boolean(checked) })
           }
-          aria-label="Open pull requests in Codi"
+          aria-label={t("settings.text.openPullRequestsInCodi2")}
         />
       }
     />
