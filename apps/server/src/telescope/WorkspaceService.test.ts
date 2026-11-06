@@ -1,7 +1,6 @@
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import { assert, it } from "@effect/vitest";
 import {
-  AuthEnvironmentOwnerSubjects,
   AuthSessionId,
   AuthStandardClientScopes,
   EnvironmentId,
@@ -236,6 +235,12 @@ it.layer(layer)("WorkspaceService", (it) => {
         ],
         ["conflict", "conflict", "not_found"],
       );
+      const carol = yield* service
+        .invite(a, { workspaceId, role: "member" })
+        .pipe(Effect.flatMap(({ code }) => service.accept(c, { code, displayName: "Carol" })));
+      const carolKey = { workspaceId, subjectId: carol.subjectId };
+      yield* service.revoke(a, carolKey);
+      assert.strictEqual(yield* reasonOf(service.restore(b, carolKey)), "forbidden");
     }),
   );
 
@@ -312,7 +317,12 @@ it.layer(layer)("WorkspaceService", (it) => {
         displayName: "Pat",
       });
       assert.strictEqual(desk.createdBy, OWNER);
-      for (const subject of AuthEnvironmentOwnerSubjects) {
+      for (const subject of [
+        "desktop-bootstrap",
+        "administrative-bootstrap",
+        "reusable-dev-token",
+        "reusable-dev-token-child",
+      ]) {
         const { self } = yield* service.get(desktop(subject, subject), { workspaceId: desk.id });
         assert.deepStrictEqual([subject, self.subjectId], [subject, OWNER]);
       }
@@ -418,6 +428,9 @@ it.layer(layer)("WorkspaceService", (it) => {
       ];
       for (const who of [third, fourth]) yield* sessions.create(record(who.sessionId));
       const others = [yield* join(third, "Xia"), yield* join(fourth, "Yan")];
+      const kept = session("browser-kept");
+      yield* sessions.create({ ...record(kept.sessionId), subject: "other-subject" });
+      const keptMember = yield* join(kept, "Zoe");
       const folded = yield* sessions.createReplacingActive({
         session: record(fifth.sessionId),
         revokedAt: issuedAt,
@@ -432,6 +445,8 @@ it.layer(layer)("WorkspaceService", (it) => {
         self,
       );
       assert.deepStrictEqual((yield* service.get(fifth, { workspaceId: sideId })).self, side);
+      assert.deepStrictEqual((yield* service.get(kept, { workspaceId })).self, keptMember);
+      assert.deepStrictEqual((yield* service.get(repaired, { workspaceId })).self, phone);
       const decodeKeys = Schema.decodeUnknownEffect(
         Schema.Array(Schema.Struct({ device_key: Schema.String })),
       );
