@@ -35,14 +35,15 @@ const AuditRow = Schema.Struct({
   on_behalf_of_json: Schema.fromJsonString(Telescope.OnBehalfOf),
   project_id: Schema.NullOr(ProjectId),
   power: Telescope.GrantPower,
-  tool: Schema.NullOr(Schema.String),
+  tool: Schema.NullOr(Telescope.Text),
   args_redacted_json: Schema.NullOr(Schema.fromJsonString(Schema.Json)),
   outcome: Telescope.AuditOutcome,
   reason: Schema.NullOr(Schema.String),
   created_at: Schema.String,
 });
 const decodeAudit = Schema.decodeUnknownEffect(Schema.Array(AuditRow));
-// The repository writes workspace_id itself and refuses rows that carry it.
+// The repository writes workspace_id itself and refuses rows that carry it. Encoding checks the
+// contract's non-blank `tool` and `onBehalfOf`, so a bad row dies here instead of poisoning the list.
 const encodeAudit = Schema.encodeSync(AuditRow.mapFields(Struct.omit(["workspace_id"])));
 
 const toAuditEntry = (row: typeof AuditRow.Type): Telescope.AuditEntry => ({
@@ -95,10 +96,10 @@ export interface ProjectRuleInput {
 export interface AuditInput {
   readonly runId?: Telescope.AgentRunId;
   readonly agentId: Telescope.AgentId;
-  readonly onBehalfOf: ReadonlyArray<string>;
+  readonly onBehalfOf: typeof Telescope.OnBehalfOf.Type;
   readonly projectId?: ProjectId;
   readonly power: Telescope.GrantPower;
-  readonly tool?: string;
+  readonly tool?: typeof Telescope.Text.Type;
   readonly argsRedacted?: Schema.Json;
   readonly outcome: Telescope.AuditEntry["outcome"];
   readonly reason?: string;

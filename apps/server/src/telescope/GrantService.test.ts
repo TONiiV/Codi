@@ -1,7 +1,9 @@
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import { assert, it } from "@effect/vitest";
 import { AuthSessionId, EnvironmentId, ProjectId, Telescope } from "@t3tools/contracts";
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as TestClock from "effect/testing/TestClock";
 
@@ -283,6 +285,20 @@ it.layer(layer)("Telescope grants", (it) => {
           }),
         );
       }
+
+      const blank = yield* Effect.exit(
+        grants.audit(workspaceId, {
+          agentId: chief.id,
+          onBehalfOf: [beaId],
+          power: "mergePRs",
+          tool: " ",
+          outcome: "denied",
+        }),
+      );
+      assert.isTrue(
+        Exit.isFailure(blank) && Cause.hasDies(blank.cause),
+        "a blank tool is never stored",
+      );
 
       const workspaces = yield* WorkspaceService.WorkspaceService;
       const other = yield* workspaces.create(as.zed, {
