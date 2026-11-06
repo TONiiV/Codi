@@ -10,6 +10,7 @@ import {
   authScopeResponse,
   AuthSessionState,
   sessionGrantsScope,
+  sessionHasLegacyPermissions,
 } from "./auth.ts";
 
 describe("authorization grants", () => {
@@ -126,7 +127,23 @@ describe("authorization grants", () => {
       scope: "access:write",
       expected: false,
     },
+    {
+      label: "no telescope:admin from access:write on a server that predates Telescope",
+      session: { authenticated: true, scopes: ["access:write"], auth: {} },
+      scope: "telescope:admin",
+      expected: false,
+    },
   ] as const)("sessionGrantsScope accepts $label", ({ session, scope, expected }) => {
     expect(sessionGrantsScope(session, scope)).toBe(expected);
   });
+
+  it.each([
+    { permissions: ["access:read", "access:write"], expected: false },
+    { permissions: ["orchestration:read"], expected: true },
+  ] as const)(
+    "sessionHasLegacyPermissions is $expected for $permissions",
+    ({ permissions, expected }) => {
+      expect(sessionHasLegacyPermissions({ authenticated: true, permissions })).toBe(expected);
+    },
+  );
 });

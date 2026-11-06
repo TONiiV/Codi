@@ -46,6 +46,8 @@ export const AuthAccessReadScope = "access:read" as const;
 export const AuthAccessWriteScope = "access:write" as const;
 export const AuthRelayReadScope = "relay:read" as const;
 export const AuthRelayWriteScope = "relay:write" as const;
+export const AuthTelescopeMemberScope = "telescope:member" as const;
+export const AuthTelescopeAdminScope = "telescope:admin" as const;
 export const AuthEnvironmentScope = Schema.Literals([
   AuthOrchestrationReadScope,
   AuthOrchestrationOperateScope,
@@ -64,6 +66,8 @@ export const AuthEnvironmentScope = Schema.Literals([
   AuthAccessWriteScope,
   AuthRelayReadScope,
   AuthRelayWriteScope,
+  AuthTelescopeMemberScope,
+  AuthTelescopeAdminScope,
 ]);
 export type AuthEnvironmentScope = typeof AuthEnvironmentScope.Type;
 export const AuthEnvironmentScopes = Schema.Array(AuthEnvironmentScope);
@@ -109,10 +113,17 @@ const legacyParents: Partial<Record<AuthEnvironmentScope, AuthEnvironmentScope>>
   [AuthTerminalReadScope]: AuthTerminalOperateScope,
 };
 
+// Denial-only mapping: these scopes were never split from a parent, so old servers do not grant them.
+const legacyRequiredScopes: Partial<Record<AuthEnvironmentScope, AuthEnvironmentScope>> = {
+  ...legacyParents,
+  [AuthTelescopeMemberScope]: AuthOrchestrationReadScope,
+  [AuthTelescopeAdminScope]: AuthAccessWriteScope,
+};
+
 /** Keep permission denials decodable by clients with the original scope enum. */
 export function authScopeRequiredResponse(requiredPermission: AuthEnvironmentScope) {
   return {
-    requiredScope: legacyParents[requiredPermission] ?? requiredPermission,
+    requiredScope: legacyRequiredScopes[requiredPermission] ?? requiredPermission,
     requiredPermission,
   };
 }
@@ -164,6 +175,8 @@ export const AuthStandardClientScopes = [
   AuthAccessReadScope,
   AuthAccessWriteScope,
   AuthRelayWriteScope,
+  AuthTelescopeMemberScope,
+  AuthTelescopeAdminScope,
 ] as const;
 
 export const AuthTokenExchangeGrantType =

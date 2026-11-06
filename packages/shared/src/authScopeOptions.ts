@@ -6,6 +6,8 @@ import {
   AuthFilesystemReadScope,
   AuthFilesystemWriteScope,
   type AuthGrantScope,
+  AuthTelescopeAdminScope,
+  AuthTelescopeMemberScope,
   AuthOrchestrationOperateScope,
   AuthOrchestrationReadScope,
   AuthPreviewOperateScope,
@@ -102,6 +104,16 @@ export const AUTH_SCOPE_OPTIONS: ReadonlyArray<{
     scope: AuthRelayWriteScope,
     title: "Manage relay",
     description: "Change managed tunnel connectivity.",
+  },
+  {
+    scope: AuthTelescopeMemberScope,
+    title: "Join Telescope workspaces",
+    description: "Accept invitations and work in the Telescope workspaces you belong to.",
+  },
+  {
+    scope: AuthTelescopeAdminScope,
+    title: "Administer Telescope workspaces",
+    description: "Invite and remove members, change roles, and bind projects.",
   },
 ];
 

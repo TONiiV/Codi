@@ -243,7 +243,9 @@ const knownTags = (
   return tags;
 };
 
-const makeEntityId = <Brand extends string>(brand: Parameters<typeof Schema.brand<Brand>>[0]) => {
+export const makeEntityId = <Brand extends string>(
+  brand: Parameters<typeof Schema.brand<Brand>>[0],
+) => {
   return TrimmedNonEmptyString.pipe(Schema.brand<Brand>(brand));
 };
 
