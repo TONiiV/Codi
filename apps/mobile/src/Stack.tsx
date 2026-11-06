@@ -123,6 +123,7 @@ import { SettingsProjectGroupingRouteScreen } from "./features/settings/Settings
 import { SettingsProjectOverviewRouteScreen } from "./features/settings/SettingsProjectOverviewRouteScreen";
 import { UsageLimitAccountScreen } from "./features/usage/UsageLimitsPooled";
 import { UsageRouteScreen } from "./features/usage/UsageRouteScreen";
+import { TelescopeRouteScreen } from "./features/telescope/TelescopeRouteScreen";
 import { SettingsAboutRouteScreen } from "./features/settings/SettingsAboutRouteScreen";
 import { SettingsNotificationsRouteScreen } from "./features/settings/SettingsNotificationsRouteScreen";
 import { SettingsRouteScreen } from "./features/settings/SettingsRouteScreen";
@@ -335,6 +336,11 @@ const SETTINGS_SCREENS = {
     screen: UsageRouteScreen,
     linking: "settings/usage",
     options: settingsPage("Usage"),
+  }),
+  SettingsTelescope: createNativeStackScreen({
+    screen: TelescopeRouteScreen,
+    linking: "settings/telescope",
+    options: settingsPage("Telescope"),
   }),
   SettingsAuth: createNativeStackScreen({
     screen: SettingsAuthRouteScreen,
