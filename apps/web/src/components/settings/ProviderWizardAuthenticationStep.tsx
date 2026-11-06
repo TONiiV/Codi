@@ -8,6 +8,7 @@ import { WizardFooter, WizardPanel } from "../ui/wizard";
 import { ProviderAuthenticationSection } from "./ProviderAuthenticationSection";
 import { SettingsGroup } from "./SettingsGroup";
 import { SettingsRow } from "./settingsLayout";
+import { useTranslation } from "react-i18next";
 
 export function ProviderWizardAuthenticationStep({
   environmentId,
@@ -20,6 +21,7 @@ export function ProviderWizardAuthenticationStep({
   readonly instanceId: ProviderInstanceId;
   readonly onFinish: () => void;
 }) {
+  const { t } = useTranslation();
   const providers =
     useAtomValue(serverEnvironment.providersValueAtom(environmentId)) ?? EMPTY_SERVER_PROVIDERS;
   const provider = providers.find((candidate) => candidate.instanceId === instanceId);
@@ -56,18 +58,16 @@ export function ProviderWizardAuthenticationStep({
             />
           ) : (
             <SettingsRow
-              title="Account"
+              title={t("settings.text.account")}
               description={
                 isDiscovering
-                  ? "Discovering sign-in methods…"
-                  : (query.error ??
-                    auth?.message ??
-                    "No in-app sign-in advertised. Follow the provider's docs to finish setup.")
+                  ? t("settings.text.discoveringSignInMethods")
+                  : (query.error ?? auth?.message ?? t("settings.text.noInAppSignInAdvertised"))
               }
               control={
                 isDiscovering ? (
                   <Button disabled size="sm" variant="outline">
-                    Sign in
+                    {t("settings.text.signIn")}
                   </Button>
                 ) : provider?.setup?.documentationUrl ? (
                   <Button
@@ -77,7 +77,7 @@ export function ProviderWizardAuthenticationStep({
                       <a href={provider.setup.documentationUrl} target="_blank" rel="noreferrer" />
                     }
                   >
-                    Open docs
+                    {t("settings.text.openDocs")}
                   </Button>
                 ) : undefined
               }
@@ -92,7 +92,7 @@ export function ProviderWizardAuthenticationStep({
           disabled={active}
           onClick={onFinish}
         >
-          {signedIn ? "Done" : "Skip for now"}
+          {signedIn ? t("settings.text.done") : t("settings.text.skipForNow")}
         </Button>
       </WizardFooter>
     </>
