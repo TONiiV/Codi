@@ -8,7 +8,7 @@ import * as SqlError from "effect/sql/SqlError";
 
 import {
   type PersistenceDecodeError,
-  type PersistenceSqlError,
+  PersistenceSqlError,
   toPersistenceDecodeError,
   toPersistenceSqlError,
 } from "../persistence/Errors.ts";
@@ -53,7 +53,7 @@ export class TelescopeDb extends Context.Service<
       decodeRows: RowsDecoder<A, R>,
       where?: Row,
     ) => Effect.Effect<A, PersistenceSqlError | PersistenceDecodeError, R>;
-    /** The row's own `workspace_id`, if any, is replaced by `workspaceId`. */
+    /** Keys of `row` and `set` must not name `workspace_id`; the repository writes it. */
     readonly insert: (
       workspaceId: Telescope.WorkspaceId,
       table: TelescopeTable,
@@ -83,6 +83,19 @@ export class TelescopeDb extends Context.Service<
   }
 >()("t3/telescope/TelescopeDb") {}
 
+// SQLite matches column names case-insensitively, so only canonical names pass.
+const COLUMN = /^[a-z][a-z0-9_]*$/;
+const checkColumns = (operation: string, row: Row, owner: "repository" | "caller") => {
+  const column = Object.keys(row).find(
+    (key) => !COLUMN.test(key) || (owner === "repository" && key === "workspace_id"),
+  );
+  return column === undefined
+    ? Effect.void
+    : Effect.fail(
+        new PersistenceSqlError({ operation, detail: `Column ${JSON.stringify(column)} refused` }),
+      );
+};
+
 const make = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
   const tableName = (table: TelescopeTable) => sql(`telescope_${table}`);
@@ -100,6 +113,7 @@ const make = Effect.gen(function* () {
     decodeRows: RowsDecoder<A, R>,
     where: Row = {},
   ) {
+    yield* checkColumns(`TelescopeDb.select.${table}`, where, "caller");
     const rows =
       yield* sql`SELECT * FROM ${tableName(table)} WHERE ${scoped(workspaceId, where)}`.pipe(
         Effect.mapError(toPersistenceSqlError(`TelescopeDb.select.${table}`)),
@@ -113,6 +127,7 @@ const make = Effect.gen(function* () {
     table: TelescopeTable,
     row: Row,
   ) {
+    yield* checkColumns(`TelescopeDb.insert.${table}`, row, "repository");
     yield* sql`INSERT INTO ${tableName(table)} ${sql.insert({ ...row, workspace_id: workspaceId })}`.pipe(
       Effect.mapError(toPersistenceSqlError(`TelescopeDb.insert.${table}`)),
     );
@@ -123,7 +138,9 @@ const make = Effect.gen(function* () {
     set: Row,
     where: Row,
   ) {
-    yield* sql`UPDATE ${tableName(table)} SET ${sql.update(set, ["workspace_id"])} WHERE ${scoped(workspaceId, where)}`.pipe(
+    yield* checkColumns(`TelescopeDb.update.${table}`, set, "repository");
+    yield* checkColumns(`TelescopeDb.update.${table}`, where, "caller");
+    yield* sql`UPDATE ${tableName(table)} SET ${sql.update(set)} WHERE ${scoped(workspaceId, where)}`.pipe(
       Effect.mapError(toPersistenceSqlError(`TelescopeDb.update.${table}`)),
     );
   });
@@ -132,6 +149,7 @@ const make = Effect.gen(function* () {
     table: TelescopeTable,
     where: Row,
   ) {
+    yield* checkColumns(`TelescopeDb.remove.${table}`, where, "caller");
     yield* sql`DELETE FROM ${tableName(table)} WHERE ${scoped(workspaceId, where)}`.pipe(
       Effect.mapError(toPersistenceSqlError(`TelescopeDb.remove.${table}`)),
     );

@@ -1,4 +1,5 @@
 import * as Effect from "effect/Effect";
+import * as Predicate from "effect/Predicate";
 import * as SqlClient from "effect/sql/SqlClient";
 
 /**
@@ -111,23 +112,36 @@ export default Effect.gen(function* () {
     last_retrieved_at TEXT, uses INTEGER NOT NULL DEFAULT 0, rev INTEGER NOT NULL DEFAULT 0,
     deleted INTEGER NOT NULL DEFAULT 0
   )`;
+  // Builds without FTS5 or the trigram tokenizer fail with SQLITE_ERROR; memory search scans then.
   // Keyed by memory_id rather than rowid, which VACUUM may renumber.
-  yield* sql`CREATE VIRTUAL TABLE telescope_memories_fts USING fts5(
+  const fts = yield* sql`CREATE VIRTUAL TABLE telescope_memories_fts USING fts5(
     memory_id UNINDEXED,
     workspace_id UNINDEXED,
     text,
     tokenize = 'trigram'
-  )`;
-  yield* sql`CREATE TRIGGER telescope_memories_fts_insert AFTER INSERT ON telescope_memories BEGIN
-    INSERT INTO telescope_memories_fts (memory_id, workspace_id, text)
-    VALUES (new.memory_id, new.workspace_id, new.text);
-  END`;
-  yield* sql`CREATE TRIGGER telescope_memories_fts_update AFTER UPDATE OF text ON telescope_memories BEGIN
-    UPDATE telescope_memories_fts SET text = new.text WHERE memory_id = old.memory_id;
-  END`;
-  yield* sql`CREATE TRIGGER telescope_memories_fts_delete AFTER DELETE ON telescope_memories BEGIN
-    DELETE FROM telescope_memories_fts WHERE memory_id = old.memory_id;
-  END`;
+  )`.pipe(
+    Effect.as(true),
+    Effect.catchIf(
+      (cause) =>
+        Predicate.hasProperty(cause.reason.cause, "errcode") && cause.reason.cause.errcode === 1,
+      (cause) =>
+        Effect.logWarning("Telescope memory index unavailable; search will scan.", cause).pipe(
+          Effect.as(false),
+        ),
+    ),
+  );
+  if (fts) {
+    yield* sql`CREATE TRIGGER telescope_memories_fts_insert AFTER INSERT ON telescope_memories BEGIN
+      INSERT INTO telescope_memories_fts (memory_id, workspace_id, text)
+      VALUES (new.memory_id, new.workspace_id, new.text);
+    END`;
+    yield* sql`CREATE TRIGGER telescope_memories_fts_update AFTER UPDATE OF text ON telescope_memories BEGIN
+      UPDATE telescope_memories_fts SET text = new.text WHERE memory_id = old.memory_id;
+    END`;
+    yield* sql`CREATE TRIGGER telescope_memories_fts_delete AFTER DELETE ON telescope_memories BEGIN
+      DELETE FROM telescope_memories_fts WHERE memory_id = old.memory_id;
+    END`;
+  }
   yield* sql`CREATE TABLE telescope_routing_rules (
     rule_id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL, project_id TEXT,
     task_type TEXT NOT NULL, harness TEXT NOT NULL, model TEXT NOT NULL,
