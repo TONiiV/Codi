@@ -30,7 +30,7 @@ const OWNER: WorkspaceService.Caller = {
 const common = {
   ...projectLocationFlags,
   json: Flag.Boolean("json").pipe(
-    Flag.withDescription("Emit JSON instead of a table."),
+    Flag.withDescription("Emit JSON instead of human-readable output."),
     Flag.withDefault(false),
   ),
 };
