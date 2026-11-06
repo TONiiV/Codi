@@ -3,6 +3,9 @@ import type {
   ServerProviderVersionAdvisory,
   ServerProviderCompatibilityAdvisory,
 } from "@t3tools/contracts";
+import type { TFunction } from "i18next";
+
+import { englishT } from "~/i18n/englishT";
 
 export const PROVIDER_STATUS_STYLES = {
   disabled: {
@@ -44,61 +47,63 @@ export function getProviderStatusKey(provider: ServerProvider | undefined): Prov
   return provider?.status ?? "warning";
 }
 
-export function getProviderSummary(provider: ServerProvider | undefined) {
+export function getProviderSummary(provider: ServerProvider | undefined, t: TFunction = englishT) {
   if (!provider) {
     return {
-      headline: "Checking provider status",
-      detail: "Waiting for the server to report installation and authentication details.",
+      headline: t("settings.text.checkingProviderStatus"),
+      detail: t("settings.text.waitingForTheServerToReport"),
     };
   }
   if (!provider.enabled || provider.status === "disabled") {
     return {
-      headline: "Disabled",
-      detail:
-        provider.message ?? "This provider is installed but disabled for new sessions in Codi.",
+      headline: t("settings.text.disabled"),
+      detail: provider.message ?? t("settings.text.thisProviderIsInstalledButDisabled"),
     };
   }
   if (!provider.installed) {
     return {
-      headline: "Not found",
-      detail: provider.message ?? "CLI not detected on PATH.",
+      headline: t("settings.text.notFound"),
+      detail: provider.message ?? t("settings.text.cliNotDetectedOnPath"),
     };
   }
   if (provider.auth.status === "unauthenticated") {
     const authLabel = provider.auth.label ?? provider.auth.type;
     return {
-      headline: authLabel ? `Not authenticated · ${authLabel}` : "Not authenticated",
+      headline: authLabel
+        ? t("settings.manual.providerStatus.notAuthenticatedWith", { authLabel })
+        : t("settings.manual.providerStatus.notAuthenticated"),
       detail: provider.message ?? null,
     };
   }
   if (isAntigravitySignInUnchecked(provider)) {
     return {
-      headline: "Installed · Sign-in not checked",
+      headline: t("settings.text.installedSignInNotChecked"),
       detail: provider.message ?? null,
     };
   }
   if (provider.status === "warning") {
     return {
-      headline: "Needs attention",
-      detail:
-        provider.message ?? "The provider is installed, but the server could not fully verify it.",
+      headline: t("settings.text.needsAttention"),
+      detail: provider.message ?? t("settings.text.theProviderIsInstalledButThe"),
     };
   }
   if (provider.status === "error") {
     return {
-      headline: "Unavailable",
-      detail: provider.message ?? "The provider failed its startup checks.",
+      headline: t("settings.text.unavailable"),
+      detail: provider.message ?? t("settings.text.theProviderFailedItsStartupChecks"),
     };
   }
   if (provider.auth.status === "authenticated") {
     const authLabel = provider.auth.label ?? provider.auth.type;
     return {
-      headline: authLabel ? `Authenticated · ${authLabel}` : "Authenticated",
+      headline: authLabel
+        ? t("settings.manual.providerStatus.authenticatedWith", { authLabel })
+        : t("settings.manual.providerStatus.authenticated"),
       detail: provider.message ?? null,
     };
   }
   return {
-    headline: "Available",
+    headline: t("settings.text.available"),
     detail: provider.message ?? null,
   };
 }
@@ -114,15 +119,16 @@ export function getProviderVersionLabel(version: string | null | undefined) {
 }
 
 const COMPATIBILITY_TITLES = {
-  graceful: "Limited support",
-  unsupported: "Unsupported version",
-  broken: "Known broken version",
+  graceful: "settings.manual.providerStatus.limitedSupport",
+  unsupported: "settings.manual.providerStatus.unsupportedVersion",
+  broken: "settings.manual.providerStatus.brokenVersion",
 } as const;
 
 export function getProviderVersionAdvisoryPresentation(
   advisory: ServerProviderVersionAdvisory | undefined,
   compatibility?: ServerProviderCompatibilityAdvisory | undefined,
   showCompatibility = true,
+  t: TFunction = englishT,
 ): {
   readonly title: string;
   readonly detail: string;
@@ -145,10 +151,12 @@ export function getProviderVersionAdvisoryPresentation(
     // Latest package versions cannot be updated into recommendations requiring another package.
     const isAlreadyLatest = advisory?.status === "current";
     return {
-      title: COMPATIBILITY_TITLES[compatibility.status],
+      title: t(COMPATIBILITY_TITLES[compatibility.status]),
       detail:
         compatibility.message ??
-        (recommendation ? `Use ${recommendation} for full support.` : "Update for full support."),
+        (recommendation
+          ? t("settings.manual.providerStatus.useForFullSupport", { recommendation })
+          : t("settings.manual.providerStatus.updateForFullSupport")),
       updateCommand:
         targetVersion || latestIsIncompatible || isAlreadyLatest
           ? null
@@ -166,7 +174,7 @@ export function getProviderVersionAdvisoryPresentation(
     return null;
   }
 
-  const label = "Update available";
+  const label = t("settings.manual.providerStatus.updateAvailable");
   const version = advisory.latestVersion;
   const versionLabel = getProviderVersionLabel(version);
 
@@ -175,8 +183,8 @@ export function getProviderVersionAdvisoryPresentation(
     detail:
       advisory.message ??
       (versionLabel
-        ? `${label}: install ${versionLabel}.`
-        : `${label}: install the latest provider version.`),
+        ? t("settings.manual.providerStatus.installVersion", { label, versionLabel })
+        : t("settings.manual.providerStatus.installLatest", { label })),
     updateCommand: advisory.updateCommand,
     emphasis: "normal" as const,
     targetVersion: null,

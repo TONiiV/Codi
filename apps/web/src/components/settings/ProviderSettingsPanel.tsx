@@ -112,7 +112,7 @@ import {
 } from "./SettingsPanels.logic";
 import {
   PolicyTooltip,
-  SettingResetButton,
+  TranslatedSettingResetButton,
   SettingsPageContainer,
   SettingsRow,
   SettingsSection,
@@ -128,6 +128,9 @@ import {
   resolveRemoteOperateAccess,
   resolveSelectedProviderEnvironmentId,
 } from "./ProviderSettingsPanel.logic";
+import { Trans, useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
+import { englishT } from "~/i18n/englishT";
 
 function providerInstanceName(instance: ProviderInstanceConfig): string {
   return (
@@ -174,6 +177,7 @@ function configuredBinaryPath(config: unknown): string {
 
 // Subscribe only in the label because every status push restamps all providers' checkedAt.
 function ProviderLastChecked({ environmentId }: { environmentId: EnvironmentId }) {
+  const { t } = useTranslation();
   const serverProviders =
     useAtomValue(serverEnvironment.providersValueAtom(environmentId)) ?? EMPTY_SERVER_PROVIDERS;
   const lastCheckedAt =
@@ -190,29 +194,35 @@ function ProviderLastChecked({ environmentId }: { environmentId: EnvironmentId }
   }
 
   if (lastCheckedRelative.status === "invalid") {
-    return <span>Checked unavailable</span>;
+    return <span>{t("settings.text.checkedUnavailable")}</span>;
   }
 
   return (
     <span>
       {lastCheckedRelative.suffix ? (
-        <>
-          Checked <span className="font-mono tabular-nums">{lastCheckedRelative.value}</span>{" "}
-          {lastCheckedRelative.suffix}
-        </>
+        <Trans
+          i18nKey="settings.parallelProviders.checkedAgo"
+          values={{ value: lastCheckedRelative.value }}
+          components={{ value: <span className="font-mono tabular-nums" /> }}
+        />
       ) : (
-        <>Checked {lastCheckedRelative.value}</>
+        <>{t("settings.text.checkedValue", { value: lastCheckedRelative.value })}</>
       )}
     </span>
   );
 }
 
-function providerEnvironmentDetail(environment: EnvironmentPresentation): string {
-  if (environment.entry.target._tag === "PrimaryConnectionTarget") return "Primary device";
+function providerEnvironmentDetail(
+  environment: EnvironmentPresentation,
+  t: TFunction = englishT,
+): string {
+  if (environment.entry.target._tag === "PrimaryConnectionTarget")
+    return t("settings.text.primaryDevice");
   if (environment.relayManaged) return "T3 Connect";
   if (environment.entry.target._tag === "SshConnectionTarget") return "SSH";
-  if (isDesktopLocalConnectionTarget(environment.entry.target)) return "Local device";
-  return environment.displayUrl ?? "Remote device";
+  if (isDesktopLocalConnectionTarget(environment.entry.target))
+    return t("settings.text.localDevice");
+  return environment.displayUrl ?? t("settings.text.remoteDevice");
 }
 
 const providerCardHeightClassName =
@@ -231,8 +241,9 @@ function ProviderSettingsPlaceholder({
   readonly description: string;
   readonly children?: ReactNode;
 }) {
+  const { t } = useTranslation();
   return (
-    <SettingsSection {...searchableSetting("providers")} variant="plain">
+    <SettingsSection {...searchableSetting("providers", t)} variant="plain">
       {deviceTabs ? (
         <div className="flex min-h-11 min-w-0 items-center px-3 sm:px-4">{deviceTabs}</div>
       ) : null}
@@ -265,16 +276,17 @@ function EnvironmentUnavailablePlaceholder({
   readonly access: Exclude<ProviderEnvironmentAccess, { kind: "editable" | "read-only" }>;
   readonly deviceTabs?: ReactNode;
 }) {
+  const { t } = useTranslation();
   const isLoading = access.kind === "loading";
   const title = isLoading
-    ? "Loading provider settings"
+    ? t("settings.text.loadingProviderSettings")
     : access.kind === "error"
-      ? "Could not connect to this device"
-      : "Provider settings are unavailable";
+      ? t("settings.text.couldNotConnectToThisDevice")
+      : t("settings.text.providerSettingsAreUnavailable");
   const description = isLoading
     ? access.reason === "permissions"
-      ? "Checking what this session is allowed to change."
-      : `Waiting for ${environment.label}'s configuration.`
+      ? t("settings.text.checkingWhatThisSessionIsAllowed")
+      : t("settings.text.waitingForLabelSConfiguration", { label: environment.label })
     : connectionStatusTitle(environment.connection);
   const error = isLoading ? null : environment.connection.error;
   // Wedged devices can remain here indefinitely; a spinner would continuously repaint.
@@ -318,6 +330,7 @@ export function ProviderSettingsPanel(target: ProviderSettingsTarget) {
 }
 
 function ProviderSettingsPanelContent(target: ProviderSettingsTarget) {
+  const { t } = useTranslation();
   const { environments, isReady } = useEnvironments();
   const primaryEnvironmentId = usePrimaryEnvironmentId();
   const searchTargetId = useSettingsSearchTargetId();
@@ -363,7 +376,7 @@ function ProviderSettingsPanelContent(target: ProviderSettingsTarget) {
   {
     if (
       !target.scoped &&
-      searchTargetId === searchableSetting("cursor-keychain-usage").id &&
+      searchTargetId === searchableSetting("cursor-keychain-usage", t).id &&
       (!selectedEnvironmentCanRenderSettings ||
         selectedEnvironment?.serverConfig?.environment.platform.os !== "darwin") &&
       searchableCursorEnvironmentId !== undefined
@@ -371,8 +384,8 @@ function ProviderSettingsPanelContent(target: ProviderSettingsTarget) {
       searchRedirectEnvironmentId = searchableCursorEnvironmentId;
     } else if (
       !target.scoped &&
-      (searchTargetId === searchableSetting("provider-health-check-interval").id ||
-        searchTargetId === searchableSetting("usage-providers").id) &&
+      (searchTargetId === searchableSetting("provider-health-check-interval", t).id ||
+        searchTargetId === searchableSetting("usage-providers", t).id) &&
       !selectedEnvironmentCanRenderSettings &&
       searchableEnvironmentId !== undefined
     ) {
@@ -391,7 +404,7 @@ function ProviderSettingsPanelContent(target: ProviderSettingsTarget) {
     !target.scoped && !onlyPrimaryDevice && options.length > 0 ? (
       <ScrollArea radius="none" hideScrollbars scrollFade className="h-11 min-w-0 flex-1">
         <ToggleGroup
-          aria-label="Devices"
+          aria-label={t("settings.text.devices")}
           variant="segmented"
           className="my-2"
           value={effectiveEnvironmentId ? [effectiveEnvironmentId] : []}
@@ -402,7 +415,7 @@ function ProviderSettingsPanelContent(target: ProviderSettingsTarget) {
         >
           {options.map((environment) => {
             const machine = resolveEnvironmentMachineKind(environment.serverConfig);
-            const detail = providerEnvironmentDetail(environment);
+            const detail = providerEnvironmentDetail(environment, t);
             const statusText = connectionStatusTitle(environment.connection);
             return (
               <Tooltip key={environment.environmentId}>
@@ -443,18 +456,20 @@ function ProviderSettingsPanelContent(target: ProviderSettingsTarget) {
         <ProviderSettingsPlaceholder
           deviceTabs={deviceTabs}
           icon={<EnvironmentMachineIcon kind={resolveEnvironmentMachineKind(null)} />}
-          title="Device unavailable"
-          description="Reconnect this device to set up its provider, or select another device."
+          title={t("settings.text.deviceUnavailable")}
+          description={t("settings.text.reconnectThisDeviceToSetUp")}
         />
       ) : null}
       {options.length === 0 && !targetEnvironmentMissing ? (
         <ProviderSettingsPlaceholder
           icon={<EnvironmentMachineIcon kind={resolveEnvironmentMachineKind(null)} />}
-          title={isReady ? "No connected devices" : "Loading devices"}
+          title={
+            isReady ? t("settings.text.noConnectedDevices") : t("settings.text.loadingDevices")
+          }
           description={
             isReady
-              ? "Connect an execution environment before configuring providers."
-              : "Reading connected execution environments."
+              ? t("settings.text.connectAnExecutionEnvironmentBeforeConfiguring")
+              : t("settings.text.readingConnectedExecutionEnvironments")
           }
         />
       ) : null}
@@ -562,6 +577,7 @@ export function EnvironmentProviderSettings({
   readonly projectIds?: readonly ProjectId[];
   readonly readOnly?: boolean;
 }) {
+  const { t } = useTranslation();
   const settings = useEnvironmentSettings(environmentId);
   const managedPolicy = useManagedPolicy(environmentId);
   // A policy that allows no provider leaves nothing to add.
@@ -612,8 +628,8 @@ export function EnvironmentProviderSettings({
         if (result._tag === "Success" && !result.value.accepted) {
           toastManager.add({
             type: "warning",
-            title: "Authentication request expired",
-            description: "Refresh the provider and start the authentication flow again.",
+            title: t("settings.text.authenticationRequestExpired"),
+            description: t("settings.text.refreshTheProviderAndStartThe"),
           });
           return;
         }
@@ -621,9 +637,11 @@ export function EnvironmentProviderSettings({
           const error = squashAtomCommandFailure(result);
           toastManager.add({
             type: "error",
-            title: "Could not continue authentication",
+            title: t("settings.text.couldNotContinueAuthentication"),
             description:
-              error instanceof Error ? error.message : "The authentication request expired.",
+              error instanceof Error
+                ? error.message
+                : t("settings.text.theAuthenticationRequestExpired"),
           });
         }
       });
@@ -695,11 +713,13 @@ export function EnvironmentProviderSettings({
         toastManager.add(
           stackedThreadToast({
             type: "error",
-            title: `Could not update ${PROVIDER_DISPLAY_NAMES[candidate.driver] ?? candidate.driver}`,
+            title: t("settings.parallelProviders.couldNotUpdateProvider", {
+              provider: PROVIDER_DISPLAY_NAMES[candidate.driver] ?? candidate.driver,
+            }),
             description:
               error instanceof Error
                 ? error.message
-                : "The provider update command could not be started.",
+                : t("settings.text.theProviderUpdateCommandCouldNot"),
           }),
         );
       }
@@ -819,8 +839,9 @@ export function EnvironmentProviderSettings({
       const error = squashAtomCommandFailure(result);
       toastManager.add({
         type: "error",
-        title: "Could not update provider instance",
-        description: error instanceof Error ? error.message : "The settings update failed.",
+        title: t("settings.text.couldNotUpdateProviderInstance"),
+        description:
+          error instanceof Error ? error.message : t("settings.text.theSettingsUpdateFailed"),
       });
     }
   };
@@ -863,8 +884,9 @@ export function EnvironmentProviderSettings({
         const error = squashAtomCommandFailure(updateResult);
         toastManager.add({
           type: "error",
-          title: "Could not delete provider instance",
-          description: error instanceof Error ? error.message : "The settings update failed.",
+          title: t("settings.text.couldNotDeleteProviderInstance"),
+          description:
+            error instanceof Error ? error.message : t("settings.text.theSettingsUpdateFailed"),
         });
         return;
       }
@@ -883,8 +905,9 @@ export function EnvironmentProviderSettings({
         const error = squashAtomCommandFailure(uninstallResult);
         toastManager.add({
           type: "warning",
-          title: "Provider deleted, but managed files remain",
-          description: error instanceof Error ? error.message : "Managed binary cleanup failed.",
+          title: t("settings.text.providerDeletedButManagedFilesRemain"),
+          description:
+            error instanceof Error ? error.message : t("settings.text.managedBinaryCleanupFailed"),
         });
       }
     },
@@ -906,8 +929,9 @@ export function EnvironmentProviderSettings({
       const error = squashAtomCommandFailure(result);
       toastManager.add({
         type: "error",
-        title: "Could not reset provider instance",
-        description: error instanceof Error ? error.message : "The settings update failed.",
+        title: t("settings.text.couldNotResetProviderInstance"),
+        description:
+          error instanceof Error ? error.message : t("settings.text.theSettingsUpdateFailed"),
       });
     }
   });
@@ -989,7 +1013,7 @@ export function EnvironmentProviderSettings({
   return (
     <>
       <SettingsSection
-        {...searchableSetting("providers")}
+        {...searchableSetting("providers", t)}
         variant="plain"
         titleAction={
           canAddProvider ? (
@@ -1000,13 +1024,13 @@ export function EnvironmentProviderSettings({
                     size="icon-xs"
                     variant="ghost-muted"
                     onClick={() => setIsAddInstanceDialogOpen(true)}
-                    aria-label="Add provider"
+                    aria-label={t("settings.text.addProvider")}
                   >
                     <PlusIcon />
                   </Button>
                 }
               />
-              <TooltipPopup side="top">Add provider</TooltipPopup>
+              <TooltipPopup side="top">{t("settings.text.addProvider")}</TooltipPopup>
             </Tooltip>
           ) : null
         }
@@ -1025,10 +1049,10 @@ export function EnvironmentProviderSettings({
                     onClick={() => void refreshProviders()}
                   >
                     <RefreshIcon refreshing={isRefreshingProviders} />
-                    <span className="sr-only">Refresh provider status</span>
+                    <span className="sr-only">{t("settings.text.refreshProviderStatus")}</span>
                     <span className="hidden min-w-0 truncate sm:inline">
                       {isRefreshingProviders ? (
-                        "Refreshing providers"
+                        t("settings.text.refreshingProviders")
                       ) : (
                         <ProviderLastChecked environmentId={environmentId} />
                       )}
@@ -1036,7 +1060,7 @@ export function EnvironmentProviderSettings({
                   </Button>
                 }
               />
-              <TooltipPopup side="top">Refresh provider status</TooltipPopup>
+              <TooltipPopup side="top">{t("settings.text.refreshProviderStatus")}</TooltipPopup>
             </Tooltip>
           </div>
         }
@@ -1047,8 +1071,10 @@ export function EnvironmentProviderSettings({
         {readOnly ? (
           <SettingsGroup divided={false} className="overflow-hidden">
             <SettingsRow
-              title="Limited permissions"
-              description={`This session can view ${environmentLabel}'s providers but can't change their settings.`}
+              title={t("settings.text.limitedPermissions")}
+              description={t("settings.text.thisSessionCanViewEnvironmentlabelS", {
+                environmentLabel,
+              })}
             />
           </SettingsGroup>
         ) : null}
@@ -1074,7 +1100,7 @@ export function EnvironmentProviderSettings({
                     onClick={() => setIsAddInstanceDialogOpen(true)}
                   >
                     <PlusIcon className="size-4 shrink-0" />
-                    Add provider
+                    {t("settings.text.addProvider")}
                   </button>
                 ) : null}
               </div>
@@ -1092,8 +1118,8 @@ export function EnvironmentProviderSettings({
             ) : (
               <div className="p-6 text-sm text-muted-foreground">
                 {targetInstanceMissing
-                  ? "This provider instance is no longer available on this device."
-                  : "No providers configured."}
+                  ? t("settings.text.thisProviderInstanceIsNoLonger")
+                  : t("settings.text.noProvidersConfigured")}
               </div>
             )}
           </div>
@@ -1109,28 +1135,24 @@ export function EnvironmentProviderSettings({
         readOnly={readOnly}
       />
 
-      <SettingsSection title="Advanced">
+      <SettingsSection title={t("settings.text.advanced")}>
         <SettingsRow
-          id={searchableSetting("provider-health-check-interval").id}
+          id={searchableSetting("provider-health-check-interval", t).id}
           title={
             <span className="inline-flex items-center gap-1.5">
-              {searchableSetting("provider-health-check-interval").title}
-              <PolicyTooltip>
-                This interval is configured here, then the shared Background activity policy decides
-                whether provider probes may run when the timer fires. Custom intervals appear as
-                Advanced in Maintenance settings.
-              </PolicyTooltip>
+              {searchableSetting("provider-health-check-interval", t).title}
+              <PolicyTooltip>{t("settings.text.thisIntervalIsConfiguredHereThen")}</PolicyTooltip>
             </span>
           }
-          description="Refresh provider status, versions, and models in the background. Set to 0 to disable."
+          description={t("settings.text.refreshProviderStatusVersionsAndModels")}
           resetAction={
             providerHealthRefreshIntervalSeconds !== defaultProviderHealthRefreshIntervalSeconds ? (
               <span
                 inert={!canWriteSettings}
                 className={!canWriteSettings ? "opacity-50" : undefined}
               >
-                <SettingResetButton
-                  label="provider health check interval"
+                <TranslatedSettingResetButton
+                  label={t("settings.text.providerHealthCheckInterval")}
                   onClick={() =>
                     updateSettings(
                       backgroundActivityOverrideSettings(
@@ -1154,7 +1176,7 @@ export function EnvironmentProviderSettings({
               )}
             >
               <IntervalSecondsField
-                label="provider health check interval"
+                label={t("settings.text.providerHealthCheckInterval")}
                 value={providerHealthRefreshIntervalSeconds}
                 min={0}
                 step={PROVIDER_HEALTH_INTERVAL_STEP_SECONDS}
@@ -1169,7 +1191,7 @@ export function EnvironmentProviderSettings({
                   )
                 }
               />
-              <span className="text-xs text-muted-foreground">seconds</span>
+              <span className="text-xs text-muted-foreground">{t("settings.text.seconds")}</span>
             </div>
           }
         />
@@ -1267,6 +1289,7 @@ function ProviderInstanceRow({
   readonly favorites: UnifiedSettings["favorites"];
   readonly actions: ProviderInstanceRowActions;
 }) {
+  const { t } = useTranslation();
   const allProjects = useProjects();
   const secretSources = useSecretSources(environmentId);
   const acpProjects =
@@ -1384,8 +1407,8 @@ function ProviderInstanceRow({
           driver === "cursor" &&
           liveProvider?.setup?.canAuthenticate === false ? (
           <SettingsRow
-            title="Cursor account"
-            description="Using CURSOR_API_KEY. Remove it from this provider's environment to use browser sign-in."
+            title={t("settings.text.cursorAccount")}
+            description={t("settings.text.usingCursorApiKeyRemoveIt")}
           />
         ) : null
       }
@@ -1397,8 +1420,8 @@ function ProviderInstanceRow({
       }
       headerAction={
         mode === "editor" && isDefault && isDirty ? (
-          <SettingResetButton
-            label={`${resetLabel} provider settings`}
+          <TranslatedSettingResetButton
+            label={t("settings.text.resetlabelProviderSettings", { resetLabel })}
             onClick={() => actions.resetDefaultInstance(driver)}
           />
         ) : null
