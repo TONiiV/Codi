@@ -4,6 +4,7 @@ import { useState } from "react";
 
 import { ThreadRouteView } from "../components/ThreadRouteView";
 import { isAppModalPage } from "../components/sidebar/mainAppLocation";
+import { telescopeBoardBody } from "../components/telescope/TelescopeBoardBody";
 import { TelescopePage } from "../components/telescope/TelescopeShell";
 import { useTelescopeView } from "../components/telescope/telescopeViews";
 import { SidebarInset } from "../components/ui/sidebar";
@@ -39,7 +40,9 @@ function ChatRouteLayout() {
       {shownTarget ? (
         <ThreadRouteView target={shownTarget} background={modalOpen} />
       ) : modalOpen && telescopeView !== null ? (
-        <TelescopePage view={telescopeView} background />
+        <TelescopePage view={telescopeView} background>
+          {telescopeBoardBody(telescopeView)}
+        </TelescopePage>
       ) : modalOpen ? (
         <SidebarInset className="h-dvh" />
       ) : (

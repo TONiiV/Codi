@@ -235,6 +235,10 @@
       "types": "./src/telescope/workspaces.ts",
       "default": "./src/telescope/workspaces.ts"
     },
+    "./telescope/taskBoard": {
+      "types": "./src/telescope/taskBoard.ts",
+      "default": "./src/telescope/taskBoard.ts"
+    },
     "./state/environmentHttpAuth": {
       "types": "./src/state/environmentHttpAuth.ts",
       "default": "./src/state/environmentHttpAuth.ts"
