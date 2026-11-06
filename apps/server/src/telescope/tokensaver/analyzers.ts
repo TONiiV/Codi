@@ -73,12 +73,12 @@ export const brokenCachePrefix = (
   const correlated = outliers.filter(({ changed }) => changed.length > 0);
   const counted = correlated.length > 0 ? correlated : outliers;
   const files = [...new Set(correlated.flatMap(({ changed }) => changed.map(({ file }) => file)))];
-  const fileList = files.length > 0 ? files.join(", ") : "CLAUDE.md / .mcp.json";
+  const fileList = files.join("、");
   const excess = counted.reduce((sum, entry) => sum + entry.excess, 0);
-  const cause =
+  const advice =
     files.length > 0
-      ? `${fileList} 在 agent 工作期间被改过，之后每一轮都重写了缓存的提示前缀。`
-      : `${outliers.length} 个会话的缓存写入比例远高于本周中位数，常见原因是 ${fileList} 在会话中途被改。`;
+      ? `${fileList} 在智能体工作期间被改过，之后每一轮都重写了缓存的提示前缀。一周内保持 ${fileList} 不动`
+      : `${outliers.length} 个会话的缓存写入比例远高于本周中位数，常见原因是 CLAUDE.md、AGENTS.md 或 .mcp.json 在会话中途被改。一周内保持这些文件不动`;
   return reportable({
     pattern: "broken_cache_prefix",
     evidence: {
@@ -87,12 +87,9 @@ export const brokenCachePrefix = (
       sessionsWithConfigChange: correlated.length,
       medianCacheWriteRatio: Number(typical.toFixed(3)),
       excessCacheWriteTokens: excess,
-      changedFiles: fileList,
+      ...(files.length > 0 ? { changedFiles: files.join(", ") } : {}),
     },
-    suggestion:
-      cause +
-      "一周内保持这些文件不动：常改的笔记移到按需读取的文件里，MCP 工具列表只在周与周之间调整。\n" +
-      claudeMdDiff(["See docs/notes.md for current work notes; read it when the task needs it."]),
+    suggestion: `${advice}：常改的笔记移到按需读取的文件里，MCP 工具列表只在周与周之间调整。`,
     estimatedSavingTokens: excess,
     confidence: correlated.length >= 2 ? "high" : correlated.length === 1 ? "medium" : "low",
   });
@@ -142,10 +139,10 @@ export const repeatedReads = (sessions: ReadonlyArray<SessionActivity>): Finding
       topFileRepeatsInOneSession: top.count,
     },
     suggestion:
-      "同一个 thread 里反复读没有改过的文件。在 CLAUDE.md 里写下这些文件的要点：\n" +
+      "同一个会话里反复读没有改过的文件。把它们列进 CLAUDE.md，并给每个文件补一行要点：\n" +
       claudeMdDiff([
         "## Files agents re-read",
-        ...topPaths.map((path) => `- \`${path}\`: <one-line summary of what agents look up here>`),
+        ...topPaths.map((path) => `- \`${path}\``),
         "Read a file once per task; reread only after it changes.",
       ]),
     estimatedSavingTokens: saving,

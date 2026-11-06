@@ -78,6 +78,8 @@ describe("token saver analyzers", () => {
     assert.strictEqual(finding?.evidence.sessions, 5);
     assert.strictEqual(finding?.evidence.outlierSessions, 1);
     assert.strictEqual(finding?.evidence.changedFiles, "CLAUDE.md");
+    assert.include(finding?.suggestion, "保持 CLAUDE.md 不动");
+    assert.notInclude(finding?.suggestion, "```diff");
     // 400K written against a typical 5% of 1M.
     assert.strictEqual(finding?.estimatedSavingTokens, 350_000);
     assert.strictEqual(brokenCachePrefix(normal, []), undefined);
@@ -102,6 +104,7 @@ describe("token saver analyzers", () => {
     );
     assert.strictEqual(finding?.evidence.outlierSessions, 1);
     assert.strictEqual(finding?.evidence.sessionsWithConfigChange, 0);
+    assert.notProperty(finding?.evidence, "changedFiles");
     assert.strictEqual(finding?.confidence, "low");
     assert.strictEqual(finding?.estimatedSavingTokens, 200_000);
   });
