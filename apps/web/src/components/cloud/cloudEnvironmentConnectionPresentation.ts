@@ -2,6 +2,7 @@ import {
   connectionStatusText,
   type EnvironmentConnectionPresentation,
 } from "@t3tools/client-runtime/connection";
+import i18n from "i18next";
 
 export interface SavedCloudEnvironmentConnectionPresentation {
   readonly buttonLabel: string;
@@ -9,51 +10,24 @@ export interface SavedCloudEnvironmentConnectionPresentation {
   readonly tone: "connected" | "connecting" | "error" | "idle";
 }
 
+type Phase = EnvironmentConnectionPresentation["phase"];
+
+const PHASE_TONE: Record<Phase, SavedCloudEnvironmentConnectionPresentation["tone"]> = {
+  connected: "connected",
+  connecting: "connecting",
+  reconnecting: "connecting",
+  unsupported: "idle",
+  error: "error",
+  offline: "idle",
+  available: "idle",
+};
+
 export function presentSavedCloudEnvironmentConnection(
   connection: EnvironmentConnectionPresentation,
 ): SavedCloudEnvironmentConnectionPresentation {
-  switch (connection.phase) {
-    case "connected":
-      return {
-        buttonLabel: "Connected",
-        statusText: connectionStatusText(connection),
-        tone: "connected",
-      };
-    case "connecting":
-      return {
-        buttonLabel: "Connecting…",
-        statusText: connectionStatusText(connection),
-        tone: "connecting",
-      };
-    case "reconnecting":
-      return {
-        buttonLabel: "Reconnecting…",
-        statusText: connectionStatusText(connection),
-        tone: "connecting",
-      };
-    case "unsupported":
-      return {
-        buttonLabel: "Client not supported",
-        statusText: connectionStatusText(connection),
-        tone: "idle",
-      };
-    case "error":
-      return {
-        buttonLabel: "Connection failed",
-        statusText: connectionStatusText(connection),
-        tone: "error",
-      };
-    case "offline":
-      return {
-        buttonLabel: "Offline",
-        statusText: connectionStatusText(connection),
-        tone: "idle",
-      };
-    case "available":
-      return {
-        buttonLabel: "Not connected",
-        statusText: connectionStatusText(connection),
-        tone: "idle",
-      };
-  }
+  return {
+    buttonLabel: i18n.t(`settings.parallelShared.cloudPhase_${connection.phase}`),
+    statusText: connectionStatusText(connection),
+    tone: PHASE_TONE[connection.phase],
+  };
 }

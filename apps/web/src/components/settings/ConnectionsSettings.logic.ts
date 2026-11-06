@@ -25,6 +25,8 @@ import {
   getDesktopUpdateDownloadedVersion,
   resolveDesktopUpdateButtonAction,
 } from "../desktopUpdate.logic";
+import type { TFunction } from "i18next";
+import { englishT } from "~/i18n/englishT";
 
 /** Keep terminal:read with terminal:operate to avoid creating unseen shells on every script run. */
 export function togglePairingScopeSelection(
@@ -62,10 +64,11 @@ export function isQrShareableEndpoint(endpoint: AdvertisedEndpoint): boolean {
  * means unchecked. */
 export function missingTailscaleEndpointDescription(
   state: Pick<DesktopServerExposureState, "mode" | "tailscaleServeEnabled"> | null,
+  t: TFunction = englishT,
 ): string {
   return state && state.mode !== "network-accessible" && !state.tailscaleServeEnabled
-    ? "Turn on Network access to detect Tailscale."
-    : "Start Tailscale to set up HTTPS access through MagicDNS.";
+    ? t("settings.text.turnOnNetworkAccessToDetect")
+    : t("settings.text.startTailscaleToSetUpHttps");
 }
 
 export function resolveTailscaleServeBaseUrl(
@@ -96,12 +99,17 @@ export function isWslSettingsRowVisible(input: {
  * Once client/server versions match, this passive Version label follows the sidebar update action,
  * including retryable failures. Rechecks retain downloaded-update labels; `state` is null outside desktop.
  */
-export function resolveLocalVersionStatusLabel(state: DesktopUpdateState | null): string {
-  if (!state) return "Up to date";
+export function resolveLocalVersionStatusLabel(
+  state: DesktopUpdateState | null,
+  t: TFunction = englishT,
+): string {
+  if (!state) return t("settings.parallelConnections.upToDate");
   if (state.status === "downloading") {
     return state.availableVersion
-      ? `Downloading update ${state.availableVersion}`
-      : "Downloading update";
+      ? t("settings.text.downloadingUpdateAvailableversion", {
+          availableVersion: state.availableVersion,
+        })
+      : t("settings.text.downloadingUpdate");
   }
   const action = resolveDesktopUpdateButtonAction(state);
   if (
@@ -110,14 +118,18 @@ export function resolveLocalVersionStatusLabel(state: DesktopUpdateState | null)
     (state.status === "checking" && state.downloadedVersion !== null)
   ) {
     const version = getDesktopUpdateDownloadedVersion(state);
-    return version ? `Update ${version} downloaded` : "Update downloaded";
+    return version
+      ? t("settings.parallelConnections.updateDownloadedVersion", { version })
+      : t("settings.text.updateDownloaded");
   }
   if (action === "download") {
     return state.availableVersion
-      ? `Update ${state.availableVersion} available`
-      : "Update available";
+      ? t("settings.parallelConnections.updateAvailableVersion", {
+          version: state.availableVersion,
+        })
+      : t("settings.text.updateAvailable2");
   }
-  return "Up to date";
+  return t("settings.parallelConnections.upToDate");
 }
 
 export type QrEndpointOption = {
@@ -172,14 +184,17 @@ export function formatAccessTimestamp(value: string): string {
   return accessTimestampFormatter.format(parsed);
 }
 
-export function parseManualDesktopSshTarget(input: {
-  readonly host: string;
-  readonly username: string;
-  readonly port: string;
-}): DesktopSshEnvironmentTarget {
+export function parseManualDesktopSshTarget(
+  input: {
+    readonly host: string;
+    readonly username: string;
+    readonly port: string;
+  },
+  t: TFunction = englishT,
+): DesktopSshEnvironmentTarget {
   const rawHost = input.host.trim();
   if (rawHost.length === 0) {
-    throw new Error("SSH host or alias is required.");
+    throw new Error(t("settings.text.sshHostOrAliasIsRequired"));
   }
 
   let hostname = rawHost;
@@ -215,11 +230,11 @@ export function parseManualDesktopSshTarget(input: {
   }
 
   if (hostname.length === 0) {
-    throw new Error("SSH host or alias is required.");
+    throw new Error(t("settings.text.sshHostOrAliasIsRequired"));
   }
 
   if (port !== null && (!Number.isInteger(port) || port <= 0 || port > 65_535)) {
-    throw new Error("SSH port must be between 1 and 65535.");
+    throw new Error(t("settings.text.sshPortMustBeBetween1"));
   }
 
   return {
@@ -261,10 +276,13 @@ export function parsePairingUrlFields(
   }
 }
 
-export function parseRemotePairingFields(input: {
-  readonly host: string;
-  readonly pairingCode: string;
-}): {
+export function parseRemotePairingFields(
+  input: {
+    readonly host: string;
+    readonly pairingCode: string;
+  },
+  t: TFunction = englishT,
+): {
   readonly host: string;
   readonly pairingCode: string;
 } {
@@ -274,16 +292,16 @@ export function parseRemotePairingFields(input: {
   const host = input.host.trim();
   const pairingCode = input.pairingCode.trim();
   if (!host) {
-    throw new Error("Enter a backend host.");
+    throw new Error(t("settings.text.enterABackendHost"));
   }
   if (!pairingCode) {
-    throw new Error("Enter a pairing code.");
+    throw new Error(t("settings.text.enterAPairingCode"));
   }
   return { host, pairingCode };
 }
 
-export function formatDesktopSshConnectionError(error: unknown): string {
-  const fallback = "Failed to connect SSH host.";
+export function formatDesktopSshConnectionError(error: unknown, t: TFunction = englishT): string {
+  const fallback = t("settings.text.failedToConnectSshHost");
   const rawMessage = error instanceof Error ? error.message : fallback;
   const withoutIpcPrefix = rawMessage.replace(
     /^Error invoking remote method 'desktop:ensure-ssh-environment':\s*/u,
@@ -302,11 +320,12 @@ export function sortDesktopPairingLinks(links: ReadonlyArray<ServerPairingLinkRe
 export function summarizeAuthorizedClients(
   sessions: ReadonlyArray<ServerClientSessionRecord>,
   links: ReadonlyArray<ServerPairingLinkRecord>,
+  t: TFunction = englishT,
 ): string {
   const parts = [
-    `${sessions.length} ${sessions.length === 1 ? "client" : "clients"}`,
+    t("settings.parallelConnections.clientCount", { count: sessions.length }),
     links.length > 0
-      ? `${links.length} ${links.length === 1 ? "pairing link" : "pairing links"}`
+      ? t("settings.parallelConnections.pairingLinkCount", { count: links.length })
       : null,
   ];
   return parts.filter((part): part is string => part !== null).join(" · ");
@@ -422,19 +441,23 @@ export function isHostedAppPairingUrl(value: string): boolean {
   }
 }
 
-export function endpointShareHint(endpoint: AdvertisedEndpoint, url: string): string {
+export function endpointShareHint(
+  endpoint: AdvertisedEndpoint,
+  url: string,
+  t: TFunction = englishT,
+): string {
   if (isHostedAppPairingUrl(url)) {
-    return "Opens the hosted app, no install needed";
+    return t("settings.text.opensTheHostedAppNoInstall");
   }
   switch (endpoint.reachability) {
     case "lan":
-      return "Devices on the same network";
+      return t("settings.parallelConnections.devicesOnSameNetwork");
     case "private-network":
-      return "Devices on your private network";
+      return t("settings.parallelConnections.devicesOnPrivateNetwork");
     case "public":
-      return "Reachable from anywhere";
+      return t("settings.parallelConnections.reachableFromAnywhere");
     case "loopback":
-      return "Clients on this machine";
+      return t("settings.parallelConnections.clientsOnThisMachine");
   }
 }
 

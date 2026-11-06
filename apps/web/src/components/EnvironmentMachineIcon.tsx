@@ -1,6 +1,8 @@
 import type { EnvironmentMachineKind } from "@t3tools/contracts";
 import { CloudIcon, LaptopIcon, MonitorIcon, ServerIcon, type LucideProps } from "lucide-react";
 import type { FunctionComponent, SVGProps } from "react";
+import type { TFunction } from "i18next";
+import { englishT } from "~/i18n/englishT";
 import { LinuxIcon } from "./Icons";
 
 function LucideLike(props: SVGProps<SVGSVGElement>) {
@@ -48,7 +50,7 @@ const ICON_BY_KIND: Record<EnvironmentMachineKind, FunctionComponent<LucideProps
   "mac-studio": MacStudioIcon,
 };
 
-export const ENVIRONMENT_MACHINE_KIND_LABELS: Record<EnvironmentMachineKind, string> = {
+const ENVIRONMENT_MACHINE_KIND_LABELS: Record<EnvironmentMachineKind, string> = {
   server: "Server",
   cloud: "Cloud VM",
   linux: "Linux/WSL",
@@ -57,6 +59,25 @@ export const ENVIRONMENT_MACHINE_KIND_LABELS: Record<EnvironmentMachineKind, str
   "mac-mini": "Mini PC",
   "mac-studio": "Workstation",
 };
+
+const MACHINE_KIND_KEYS: Record<EnvironmentMachineKind, string> = {
+  server: "machineServer",
+  cloud: "machineCloud",
+  linux: "machineLinux",
+  desktop: "machineDesktop",
+  laptop: "machineLaptop",
+  "mac-mini": "machineMacMini",
+  "mac-studio": "machineMacStudio",
+};
+
+export function environmentMachineKindLabel(
+  kind: EnvironmentMachineKind,
+  t: TFunction = englishT,
+): string {
+  return t(`settings.parallelShared.${MACHINE_KIND_KEYS[kind]}`, {
+    defaultValue: ENVIRONMENT_MACHINE_KIND_LABELS[kind],
+  });
+}
 
 export function environmentMachineIcon(
   kind: EnvironmentMachineKind,
