@@ -3,6 +3,7 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, it } from "@effect/vitest";
 import { AuthSessionId, Telescope } from "@t3tools/contracts";
 import * as NetService from "@t3tools/shared/Net";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
@@ -100,17 +101,27 @@ it.layer(layer)("telescope CLI", (it) => {
         "1h",
         "--json",
       ).pipe(Effect.flatMap(decodeJson(Telescope.Invitation)));
-      assert.strictEqual(invitation.role, "member");
+      assert.deepEqual(
+        [invitation.role, invitation.expiresAt],
+        ["member", DateTime.formatIso(DateTime.add(yield* DateTime.now, { hours: 1 }))],
+      );
       const code = yield* t3("member", "invite", "--org", org, "--role", "project_lead");
       assert.notStrictEqual(code, invitation.code);
       const bob = yield* join(code, "Bob");
 
       const listed = yield* t3("member", "list", "--org", org);
       assert.match(listed, /^ID\s+ROLE\s+JOINED\s+STATUS\s+NAME\n/);
-      assert.include(listed, "project_lead");
+      assert.match(
+        listed,
+        new RegExp(`${bob.subjectId}\\s+project_lead\\s+\\S+\\s+active\\s+Bob$`, "m"),
+      );
       assert.strictEqual(
         yield* t3("member", "revoke", "--org", org, "--member", bob.subjectId),
         `Revoked Bob (${bob.subjectId}).`,
+      );
+      assert.match(
+        yield* t3("member", "list", "--org", org),
+        new RegExp(`${bob.subjectId}\\s+project_lead\\s+\\S+\\s+revoked \\S+\\s+Bob$`, "m"),
       );
       const { members } = yield* t3("member", "list", "--org", org, "--json").pipe(
         Effect.flatMap(decodeJson(Telescope.MemberListResult)),
