@@ -37,6 +37,10 @@ const layer = Layer.mergeAll(
       Layer.mock(ServerEnvironment.ServerEnvironment)({
         getEnvironmentId: Effect.succeed(environmentId),
       }),
+      // Its projects are not in the project store, so bindings skip the local project check.
+      Layer.succeed(ServerEnvironment.ServerEnvironmentIdentity, {
+        getEnvironmentId: Effect.succeed(EnvironmentId.make("env-elsewhere")),
+      }),
       Layer.succeed(UsageProjectResolver, {
         resolve: (ids) =>
           Effect.succeed(new Map([...owners].filter(([sessionId]) => ids.has(sessionId)))),

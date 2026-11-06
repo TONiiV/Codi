@@ -1,25 +1,28 @@
-import { type AuthSessionId, EnvironmentId, ProjectId, Telescope } from "@t3tools/contracts";
+import {
+  AuthEnvironmentOwnerSubjects,
+  type AuthSessionId,
+  EnvironmentId,
+  ProjectId,
+  Telescope,
+} from "@t3tools/contracts";
 import * as Context from "effect/Context";
 import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Base64Url from "effect/encoding/Base64Url";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import type * as Rpc from "effect/rpc/Rpc";
 import * as Schema from "effect/Schema";
 
-import { INTERNAL_ADMINISTRATIVE_BOOTSTRAP_SUBJECT } from "../auth/EnvironmentAuth.ts";
+import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
+import * as ProjectStore from "../orchestration-v2/ProjectStore.ts";
 import type { PersistenceDecodeError, PersistenceSqlError } from "../persistence/Errors.ts";
 import * as TelescopeDb from "./TelescopeDb.ts";
 
 const INVITATION_TTL_SECONDS = 7 * 24 * 60 * 60;
 export const OWNER_MEMBER_ID = Telescope.OWNER_MEMBER_ID;
-// Only the owner holds these: the desktop app's bootstrap and the startup (or dev) admin link.
-const OWNER_SUBJECTS: ReadonlySet<string> = new Set([
-  "desktop-bootstrap",
-  INTERNAL_ADMINISTRATIVE_BOOTSTRAP_SUBJECT,
-  "reusable-dev-token",
-]);
+const OWNER_SUBJECTS: ReadonlySet<string> = new Set(AuthEnvironmentOwnerSubjects);
 
 const WorkspaceRow = Schema.Struct({
   workspace_id: Telescope.WorkspaceId,
@@ -116,6 +119,7 @@ export class WorkspaceService extends Context.Service<
     readonly members: Method<"telescope.member.list">;
     readonly setRole: Method<"telescope.member.setRole">;
     readonly revoke: Method<"telescope.member.revoke">;
+    readonly restore: Method<"telescope.member.restore">;
     readonly bind: Method<"telescope.project.bind">;
     readonly unbind: Method<"telescope.project.unbind">;
     readonly bindings: Method<"telescope.project.listBindings">;
@@ -126,6 +130,8 @@ export class WorkspaceService extends Context.Service<
 const make = Effect.gen(function* () {
   const db = yield* TelescopeDb.TelescopeDb;
   const random = yield* SecureRandom.SecureRandom;
+  const projects = yield* ProjectStore.ProjectStoreV2;
+  const environment = yield* ServerEnvironment.ServerEnvironmentIdentity;
   const now = DateTime.now.pipe(Effect.map(DateTime.formatIso));
 
   const memberById = (workspaceId: Telescope.WorkspaceId, memberId: string) =>
@@ -384,6 +390,47 @@ const make = Effect.gen(function* () {
     );
   });
 
+  // Agents and device links stay keyed by the member id, so restoring it brings them back.
+  const restore = Effect.fn("WorkspaceService.restore")(function* (
+    caller: Caller,
+    input: In<"telescope.member.restore">,
+  ) {
+    return yield* db.transaction(
+      Effect.gen(function* () {
+        yield* requireMember(input.workspaceId, caller, "admin");
+        if (input.subjectId === OWNER_MEMBER_ID)
+          return yield* fail("conflict", "The environment owner is always an admin.");
+        const target = yield* memberById(input.workspaceId, input.subjectId);
+        if (target === undefined)
+          return yield* fail("not_found", "That person was never a member of this workspace.");
+        if (target.revoked_at === null)
+          return yield* fail("conflict", "That person is already an active member.");
+        const key = { subject_id: input.subjectId };
+        yield* db.update(input.workspaceId, "members", { revoked_at: null }, key);
+        return toMember({ ...target, revoked_at: null });
+      }),
+    );
+  });
+
+  // Projects on other environments cannot be looked up here, so only local ids are checked.
+  const requireLocalProject = Effect.fn("WorkspaceService.requireLocalProject")(function* (
+    environmentId: EnvironmentId,
+    projectId: ProjectId,
+  ) {
+    if (environmentId !== (yield* environment.getEnvironmentId)) return;
+    const project = yield* projects.get(projectId).pipe(
+      Effect.mapError(
+        () =>
+          new Telescope.WorkspaceError({
+            reason: "storage",
+            message: "Projects are unavailable.",
+          }),
+      ),
+    );
+    if (Option.isNone(project))
+      return yield* fail("not_found", "That project does not exist on this environment.");
+  });
+
   const bindingKey = (input: In<"telescope.project.unbind">) => ({
     environment_id: input.environmentId,
     project_id: input.projectId,
@@ -396,6 +443,7 @@ const make = Effect.gen(function* () {
     return yield* db.transaction(
       Effect.gen(function* () {
         yield* requireMember(input.workspaceId, caller, "admin");
+        yield* requireLocalProject(input.environmentId, input.projectId);
         if (input.leadSubjectId !== undefined)
           yield* requireActiveTarget(input.workspaceId, input.leadSubjectId);
         yield* db.remove(input.workspaceId, "project_bindings", bindingKey(input));
@@ -457,6 +505,7 @@ const make = Effect.gen(function* () {
     members,
     setRole,
     revoke,
+    restore,
     bind,
     unbind,
     bindings,
@@ -464,4 +513,6 @@ const make = Effect.gen(function* () {
   });
 });
 
-export const layer = Layer.effect(WorkspaceService, make).pipe(Layer.provide(TelescopeDb.layer));
+export const layer = Layer.effect(WorkspaceService, make).pipe(
+  Layer.provide(Layer.merge(TelescopeDb.layer, ProjectStore.layer)),
+);

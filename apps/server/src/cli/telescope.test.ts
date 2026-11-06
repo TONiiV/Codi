@@ -1,7 +1,7 @@
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, it } from "@effect/vitest";
-import { AuthSessionId, Telescope } from "@t3tools/contracts";
+import { AuthSessionId, EnvironmentId, Telescope } from "@t3tools/contracts";
 import * as NetService from "@t3tools/shared/Net";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
@@ -13,6 +13,7 @@ import * as TestConsole from "effect/testing/TestConsole";
 import { Command } from "effect/cli";
 
 import { cli } from "../binCli.ts";
+import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
 import * as SqlitePersistence from "../persistence/Sqlite.ts";
 import * as WorkspaceService from "../telescope/WorkspaceService.ts";
 
@@ -49,6 +50,11 @@ const makeHome = Effect.gen(function* () {
         WorkspaceService.layer.pipe(
           Layer.provide(
             SqlitePersistence.layerFromPath(path.join(baseDir, "userdata", "statev2.sqlite")),
+          ),
+          Layer.provide(
+            Layer.succeed(ServerEnvironment.ServerEnvironmentIdentity, {
+              getEnvironmentId: Effect.succeed(EnvironmentId.make("env-unused")),
+            }),
           ),
         ),
       ),
