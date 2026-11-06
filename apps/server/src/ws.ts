@@ -2407,6 +2407,8 @@ export const layerWsRpc = (
           telescopeStorage(telescope.unbind(caller, input)),
         [Telescope.WS_METHODS.projectListBindings]: (input) =>
           telescopeStorage(telescope.bindings(caller, input)),
+        [Telescope.WS_METHODS.projectBindingSummary]: (input) =>
+          telescopeStorage(telescope.bindingSummary(caller, input)),
         [Telescope.WS_METHODS.taskCreate]: (input) =>
           telescopeStorage(board.createTask(actor, input)),
         [Telescope.WS_METHODS.taskUpdate]: (input) =>

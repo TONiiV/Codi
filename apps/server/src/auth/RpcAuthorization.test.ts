@@ -74,6 +74,7 @@ describe("RPC authorization scopes", () => {
   it("keeps telescope membership and project binding changes behind admin scope", () => {
     for (const method of [
       Telescope.WS_METHODS.memberAccept,
+      Telescope.WS_METHODS.projectBindingSummary,
       Telescope.WS_METHODS.runList,
       Telescope.WS_METHODS.runGet,
       Telescope.WS_METHODS.runCalls,

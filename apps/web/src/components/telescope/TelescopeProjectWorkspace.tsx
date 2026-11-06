@@ -26,7 +26,9 @@ function useProjectWorkspaces() {
     if (current !== null && bound.has(current.id)) return current;
     return workspaces.find((workspace) => bound.has(workspace.id)) ?? null;
   };
-  return { environmentId, current, bindings, workspaces, workspaceOf };
+  const isUnbound = (group: SidebarProjectSnapshot) =>
+    boundWorkspaceIds(bindings, group.memberProjectRefs).size === 0;
+  return { environmentId, current, bindings, workspaces, workspaceOf, isUnbound };
 }
 
 /** Settings → Projects: projects grouped by workspace, unbound ones last. */
@@ -35,9 +37,10 @@ export function WorkspaceProjectSections(props: {
   render: (groups: readonly SidebarProjectSnapshot[]) => ReactNode;
   fallback: ReactNode;
 }) {
-  const { current, workspaces, workspaceOf } = useProjectWorkspaces();
+  const { current, workspaces, workspaceOf, isUnbound } = useProjectWorkspaces();
   if (workspaces.length === 0) return props.fallback;
-  const unbound = props.groups.filter((group) => workspaceOf(group) === null);
+  const unbound = props.groups.filter((group) => isUnbound(group));
+  const foreign = props.groups.filter((group) => !isUnbound(group) && workspaceOf(group) === null);
   return (
     <>
       {workspaces.map((workspace) => {
@@ -69,20 +72,29 @@ export function WorkspaceProjectSections(props: {
       {unbound.length > 0 ? (
         <SettingsSection title="未分配工作区">{props.render(unbound)}</SettingsSection>
       ) : null}
+      {foreign.length > 0 ? (
+        <SettingsSection title="其他工作区">{props.render(foreign)}</SettingsSection>
+      ) : null}
     </>
   );
 }
 
 export function ProjectWorkspaceRow({ group }: { group: SidebarProjectSnapshot }) {
-  const { environmentId, bindings, workspaces, workspaceOf } = useProjectWorkspaces();
+  const { environmentId, bindings, workspaces, workspaceOf, isUnbound } = useProjectWorkspaces();
   const mayBind = useAtomValue(telescope.bind.permissionAtom(environmentId));
   const bind = useAtomCommand(telescope.bind, "分配工作区");
   const unbind = useAtomCommand(telescope.unbind, "移出工作区");
   const [busy, setBusy] = useState(false);
   if (environmentId === null || workspaces.length === 0) return null;
   const value = workspaceOf(group);
+  // Bound only to workspaces this caller is not in: only their admins can move it.
+  const foreign = value === null && !isUnbound(group);
   const label = (workspace: Telescope.Workspace | null) =>
-    workspace ? `${workspace.name} · ${WORKSPACE_KIND_LABEL[workspace.kind]}` : "未分配";
+    workspace
+      ? `${workspace.name} · ${WORKSPACE_KIND_LABEL[workspace.kind]}`
+      : foreign
+        ? "其他工作区"
+        : "未分配";
   const move = async (next: Telescope.WorkspaceId | null) => {
     setBusy(true);
     const steps = group.memberProjectRefs.flatMap((ref) => {
@@ -112,7 +124,7 @@ export function ProjectWorkspaceRow({ group }: { group: SidebarProjectSnapshot }
         <div className="w-full sm:w-48">
           <Select
             value={value?.id ?? UNBOUND}
-            disabled={!mayBind || busy}
+            disabled={!mayBind || busy || foreign}
             onValueChange={(next) => {
               if (next === UNBOUND) void move(null);
               else {

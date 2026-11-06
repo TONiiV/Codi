@@ -96,6 +96,17 @@ export const ProjectUnbindInput = Schema.Struct({
 export const ProjectListBindingsResult = Schema.Struct({
   bindings: Schema.Array(ProjectBinding),
 });
+/** Where each bound project on this environment is bound, with no names, members or leads. */
+export const ProjectBindingSummaryResult = Schema.Struct({
+  projects: Schema.Array(
+    Schema.Struct({
+      environmentId: EnvironmentId,
+      projectId: ProjectId,
+      workspaceIds: Schema.Array(WorkspaceId),
+    }),
+  ),
+});
+export type ProjectBindingSummary = (typeof ProjectBindingSummaryResult.Type)["projects"][number];
 
 export class WorkspaceError extends Schema.TaggedError<WorkspaceError>()(
   "TelescopeWorkspaceError",

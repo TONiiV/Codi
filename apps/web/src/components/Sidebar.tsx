@@ -801,6 +801,12 @@ function isOptimisticDropReleased(input: {
   return membershipChanged || foreignKeyLanded || allAssignmentsLanded;
 }
 
+// A hook of its own so the compiler caches the filtered list on its two inputs.
+function useWorkspaceVisibleThreads(hiddenProjectKeys: ReadonlySet<string>) {
+  const shells = useQuietThreadShells();
+  return dropWorkspaceHiddenProjects(shells, hiddenProjectKeys);
+}
+
 // Build maps in a hook so the compiler can prove they are frozen and cache them.
 function useSidebarLookups() {
   const projects = useProjects();
@@ -808,8 +814,9 @@ function useSidebarLookups() {
   const serverConfigs = useServerConfigs();
   const providerEntriesByEnvironment = useAtomValue(sidebarProviderEntriesAtom);
   const workspace = useTelescopeWorkspaces();
+  const allProjectGroups = useSidebarProjectGroups();
   const { groups: projectGroups, hiddenProjectKeys } = filterSidebarWorkspaceProjects(
-    useSidebarProjectGroups(),
+    allProjectGroups,
     workspace.bindings,
     workspace.current?.id ?? null,
   );
@@ -1106,7 +1113,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
             ),
           ),
         );
-  const threads = dropWorkspaceHiddenProjects(useQuietThreadShells(), hiddenProjectKeys);
+  const threads = useWorkspaceVisibleThreads(hiddenProjectKeys);
   const routeRowThreadKey =
     routeThreadRef === null
       ? null

@@ -120,6 +120,7 @@ export class WorkspaceService extends Context.Service<
     readonly bind: Method<"telescope.project.bind">;
     readonly unbind: Method<"telescope.project.unbind">;
     readonly bindings: Method<"telescope.project.listBindings">;
+    readonly bindingSummary: Method<"telescope.project.bindingSummary">;
   }
 >()("t3/telescope/WorkspaceService") {}
 
@@ -426,6 +427,25 @@ const make = Effect.gen(function* () {
     return { bindings: rows.map(toBinding) };
   });
 
+  // Any member may see where projects are bound, so every sidebar can hide them (D16).
+  const bindingSummary = Effect.fn("WorkspaceService.bindingSummary")(function* () {
+    const ids = yield* db.allWorkspaceIds;
+    const rows = yield* Effect.forEach(ids, (id) =>
+      db.select(id, "project_bindings", decodeBindings),
+    );
+    const projects = new Map<string, Telescope.ProjectBindingSummary>();
+    for (const row of rows.flat()) {
+      const key = `${row.environment_id}:${row.project_id}`;
+      const project = projects.get(key);
+      projects.set(key, {
+        environmentId: row.environment_id,
+        projectId: row.project_id,
+        workspaceIds: [...(project?.workspaceIds ?? []), row.workspace_id],
+      });
+    }
+    return { projects: [...projects.values()] };
+  });
+
   return WorkspaceService.of({
     create,
     list,
@@ -439,6 +459,7 @@ const make = Effect.gen(function* () {
     bind,
     unbind,
     bindings,
+    bindingSummary,
   });
 });
 

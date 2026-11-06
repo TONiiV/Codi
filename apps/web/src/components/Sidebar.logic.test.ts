@@ -44,6 +44,7 @@ import {
 } from "@t3tools/client-runtime/state/thread-sort";
 import { resolveProjectExpanded } from "../uiStateStore";
 import { threadSearchMatchKey } from "@t3tools/client-runtime/state/thread-search";
+import { bindingsFromSummary } from "@t3tools/client-runtime/telescope/workspaces";
 import {
   EnvironmentId,
   ProjectId,
@@ -1663,6 +1664,7 @@ describe("workspace filter", () => {
     ...ref(local, projectId),
   });
   const bindings = [binding("alpha", "app"), binding("beta", "docs")];
+  const alpha = Telescope.WorkspaceId.make("alpha");
 
   it.each([
     {
@@ -1683,6 +1685,13 @@ describe("workspace filter", () => {
       name: "keeps nothing of a group bound elsewhere, in any environment",
       bindings,
       current: "beta",
+      groups: ["site", "docs"],
+      threads: ["site", "docs"],
+    },
+    {
+      name: "hides a project bound to a workspace the caller is not in",
+      bindings: bindingsFromSummary([{ ...ref(local, "app"), workspaceIds: [alpha] }]),
+      current: "gamma",
       groups: ["site", "docs"],
       threads: ["site", "docs"],
     },

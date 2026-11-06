@@ -115,6 +115,24 @@ it.layer(layer)("WorkspaceService", (it) => {
       assert.deepStrictEqual((yield* service.bindings(b, { workspaceId })).bindings, [
         { ...binding, leadSubjectId: bob.subjectId },
       ]);
+      const elsewhere = { ...binding, workspaceId: personal.id };
+      yield* service.bind(a, elsewhere);
+      yield* service.bind(a, { ...elsewhere, projectId: ProjectId.make("project-2") });
+      assert.strictEqual(
+        yield* reasonOf(service.bindings(b, { workspaceId: personal.id })),
+        "forbidden",
+      );
+      assert.deepStrictEqual(
+        (yield* service.bindingSummary(b, {})).projects
+          .map((p) => ({ ...p, workspaceIds: p.workspaceIds.toSorted() }))
+          .toSorted((x, y) => x.projectId.localeCompare(y.projectId)),
+        [
+          { environmentId, projectId, workspaceIds: [company.id, personal.id].toSorted() },
+          { environmentId, projectId: ProjectId.make("project-2"), workspaceIds: [personal.id] },
+        ],
+      );
+      yield* service.unbind(a, { ...elsewhere, projectId: ProjectId.make("project-2") });
+      yield* service.unbind(a, elsewhere);
       assert.strictEqual(
         yield* reasonOf(service.unbind(b, { workspaceId, environmentId, projectId })),
         "forbidden",

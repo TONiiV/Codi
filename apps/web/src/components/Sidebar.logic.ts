@@ -24,6 +24,7 @@ import {
   isListedThreadLineage,
   type ContextMenuItem,
   type EnvironmentId,
+  type ProjectId,
   type Telescope,
   type ThreadId,
 } from "@t3tools/contracts";
@@ -619,8 +620,8 @@ export function filterSidebarV2VisibleThreads<
 }
 
 interface SidebarProjectRef {
-  readonly environmentId: string;
-  readonly projectId: string;
+  readonly environmentId: EnvironmentId;
+  readonly projectId: ProjectId;
 }
 
 const sidebarProjectRefKey = (ref: SidebarProjectRef) => `${ref.environmentId}:${ref.projectId}`;

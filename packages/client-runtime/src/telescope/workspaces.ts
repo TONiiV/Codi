@@ -54,6 +54,15 @@ export function hiddenOutsideWorkspace(
   return bound.size > 0 && (currentId === null || !bound.has(currentId));
 }
 
+/** One binding per workspace a project is bound to, as `boundWorkspaceIds` reads them. */
+export function bindingsFromSummary(
+  projects: ReadonlyArray<Telescope.ProjectBindingSummary>,
+): ReadonlyArray<Telescope.ProjectBinding> {
+  return projects.flatMap(({ workspaceIds, ...project }) =>
+    workspaceIds.map((workspaceId) => ({ workspaceId, ...project })),
+  );
+}
+
 export function createTelescopeWorkspaceAtoms<R, E>(
   runtime: Atom.AtomRuntime<EnvironmentRegistry | R, E>,
   storage: CurrentWorkspaceStorage,
@@ -70,9 +79,9 @@ export function createTelescopeWorkspaceAtoms<R, E>(
     label: "telescope:member:list",
     tag: WS_METHODS.memberList,
   });
-  const bindings = createEnvironmentRpcQueryAtomFamily(runtime, {
-    label: "telescope:project:list-bindings",
-    tag: WS_METHODS.projectListBindings,
+  const bindingSummary = createEnvironmentRpcQueryAtomFamily(runtime, {
+    label: "telescope:project:binding-summary",
+    tag: WS_METHODS.projectBindingSummary,
   });
 
   const storedWorkspaceIdAtom = Atom.writable(
@@ -93,15 +102,12 @@ export function createTelescopeWorkspaceAtoms<R, E>(
     ).pipe(Atom.withLabel(`telescope:current-workspace:${environmentId}`)),
   );
 
-  /** Bindings across every workspace the caller belongs to; each workspace lists its own. */
+  /** Every binding on the environment, including workspaces the caller is not in (D16). */
   const allBindingsAtom = Atom.family((environmentId: EnvironmentId) =>
     Atom.make((getAtom) =>
-      workspacesOf(getAtom, environmentId).flatMap(
-        (workspace) =>
-          AsyncResult.getOrElse(
-            getAtom(bindings({ environmentId, input: { workspaceId: workspace.id } })),
-            () => null,
-          )?.bindings ?? [],
+      bindingsFromSummary(
+        AsyncResult.getOrElse(getAtom(bindingSummary({ environmentId, input: {} })), () => null)
+          ?.projects ?? [],
       ),
     ).pipe(Atom.withLabel(`telescope:all-bindings:${environmentId}`)),
   );
@@ -124,15 +130,14 @@ export function createTelescopeWorkspaceAtoms<R, E>(
     registry: AtomRegistry.AtomRegistry,
   ) => Effect.sync(() => registry.refresh(members(inWorkspace(target))));
   const refreshBindings = (
-    target: Parameters<typeof inWorkspace>[0],
+    { environmentId }: { environmentId: EnvironmentId },
     registry: AtomRegistry.AtomRegistry,
-  ) => Effect.sync(() => registry.refresh(bindings(inWorkspace(target))));
+  ) => Effect.sync(() => registry.refresh(bindingSummary({ environmentId, input: {} })));
 
   return {
     list,
     get,
     members,
-    bindings,
     storedWorkspaceIdAtom,
     currentWorkspaceAtom,
     allBindingsAtom,
