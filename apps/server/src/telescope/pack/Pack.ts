@@ -59,10 +59,11 @@ export class ContextPackFormatError extends Schema.TaggedError<ContextPackFormat
 
 export class ContextPackPathError extends Schema.TaggedError<ContextPackPathError>()(
   "ContextPackPathError",
-  { path: Schema.String, root: Schema.String },
+  { path: Schema.String, root: Schema.String, target: Schema.optional(Schema.String) },
 ) {
   override get message(): string {
-    return `${this.path} resolves outside ${this.root}.`;
+    const to = this.target === undefined ? "" : ` (it resolves to ${this.target})`;
+    return `${this.path} does not resolve to a path inside ${this.root}${to}. Any files written before it are kept.`;
   }
 }
 
@@ -256,17 +257,35 @@ const plannedRealPath: (
   },
 );
 
-// A write follows links in its target, so what must stay inside the directory being written to
-// is the resolved path, including the target a dangling link names.
-const writeTargetInside = Effect.fnUntraced(function* (root: string, file: string) {
+// 40 follows the platform's own SYMLOOP_MAX; a cycle or a longer chain names no path at all.
+const LINK_HOPS = 40;
+
+// The path at the end of a link chain, undefined once the hop cap is spent.
+const linkChainTarget = Effect.fnUntraced(function* (file: string) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
-  const link = yield* fs.readLink(file).pipe(Effect.orElseSucceed(() => undefined));
-  const real = yield* plannedRealPath(
-    link === undefined ? file : path.resolve(path.dirname(file), link),
-  );
-  if (!isInside(path, yield* plannedRealPath(root), real)) {
-    return yield* new ContextPackPathError({ path: file, root });
+  let current = file;
+  for (let hop = 0; hop < LINK_HOPS; hop++) {
+    const link = yield* fs.readLink(current).pipe(Effect.orElseSucceed(() => undefined));
+    if (link === undefined) return current;
+    // A relative link target is relative to the directory the link itself lives in.
+    current = path.resolve(path.dirname(current), link);
+  }
+  return undefined;
+});
+
+// A write follows every link in its target, so what must stay inside the directory being written
+// to is the end of that chain, including the path a dangling link names.
+const writeTargetInside = Effect.fnUntraced(function* (root: string, file: string) {
+  const path = yield* Path.Path;
+  const realRoot = yield* plannedRealPath(root);
+  const named = yield* linkChainTarget(file);
+  const real = named === undefined ? undefined : yield* plannedRealPath(named);
+  if (real === undefined || !isInside(path, realRoot, real)) {
+    // One directory spelled two ways in one sentence reads like a tool bug, so the refused path is
+    // resolved through its parents, without following the link itself.
+    const at = path.join(yield* plannedRealPath(path.dirname(file)), path.basename(file));
+    return yield* new ContextPackPathError({ path: at, root: realRoot, target: real });
   }
   return real;
 });
