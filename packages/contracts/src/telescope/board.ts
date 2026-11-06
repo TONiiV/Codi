@@ -61,6 +61,7 @@ export const Task = Schema.Struct({
 export type Task = typeof Task.Type;
 
 export const DecisionStatus = Schema.Literals(["proposed", "decided", "superseded"]);
+export type DecisionStatus = typeof DecisionStatus.Type;
 
 /** What a conflict proposal settles: deciding it with `chosen: "incoming"` applies `incoming`. */
 export const TaskConflict = Schema.Struct({

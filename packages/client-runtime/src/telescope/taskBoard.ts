@@ -70,6 +70,18 @@ export function decideInput(
   };
 }
 
+/**
+ * From a decide being sent until a list fetched after it lands, the options stay off (D47).
+ * A failed send clears `sentAt`; `dataUpdatedAt` is the client clock of the last success.
+ */
+export function decisionOptionsLocked(state: {
+  readonly sentAt: number | null;
+  readonly isPending: boolean;
+  readonly dataUpdatedAt: number;
+}): boolean {
+  return state.sentAt !== null && (state.isPending || state.dataUpdatedAt <= state.sentAt);
+}
+
 /** Pins the write to the version the user saw, so a concurrent change is merged, not lost. */
 export function taskUpdateInput(
   task: Telescope.Task,

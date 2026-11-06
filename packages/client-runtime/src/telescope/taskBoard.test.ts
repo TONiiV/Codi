@@ -4,6 +4,7 @@ import { describe, expect, it } from "vite-plus/test";
 import {
   DECISION_STATUSES,
   decideInput,
+  decisionOptionsLocked,
   isStaleTaskVersion,
   sortDecisions,
   TASK_STATUSES,
@@ -101,6 +102,22 @@ describe("decideInput", () => {
       options,
       chosen: "b",
     });
+  });
+});
+
+describe("decisionOptionsLocked", () => {
+  it.each([
+    ["nothing sent", { sentAt: null, isPending: false, dataUpdatedAt: 100 }, false],
+    ["sent, refetch in flight", { sentAt: 200, isPending: true, dataUpdatedAt: 100 }, true],
+    [
+      "sent, list not newer than the send",
+      { sentAt: 200, isPending: false, dataUpdatedAt: 200 },
+      true,
+    ],
+    ["sent, refetch landed", { sentAt: 200, isPending: false, dataUpdatedAt: 201 }, false],
+    ["send failed, sentAt cleared", { sentAt: null, isPending: true, dataUpdatedAt: 100 }, false],
+  ])("%s", (_name, state, locked) => {
+    expect(decisionOptionsLocked(state)).toBe(locked);
   });
 });
 

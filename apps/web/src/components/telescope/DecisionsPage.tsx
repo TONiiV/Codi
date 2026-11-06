@@ -1,6 +1,7 @@
 import {
   DECISION_STATUSES,
   decideInput,
+  decisionOptionsLocked,
   sortDecisions,
 } from "@t3tools/client-runtime/telescope/taskBoard";
 import type { Telescope } from "@t3tools/contracts";
@@ -144,9 +145,12 @@ function DecisionsBody({ target }: { target: BoardTarget }) {
   const hash = useLocation({ select: (location) => location.hash.replace(/^#/, "") });
   const [choice, setChoice] = useState<Choice | null>(null);
   const [confirming, setConfirming] = useState(false);
-  // From sending a decision until a list fetched after it arrives, the options stay off.
   const [sentAt, setSentAt] = useState<number | null>(null);
-  const busy = sentAt !== null && (query.isPending || query.dataUpdatedAt <= sentAt);
+  const busy = decisionOptionsLocked({
+    sentAt,
+    isPending: query.isPending,
+    dataUpdatedAt: query.dataUpdatedAt,
+  });
   const decisions = sortDecisions(query.data?.decisions ?? []);
   const confirm = async ({ proposal, option }: Choice) => {
     setConfirming(false);
