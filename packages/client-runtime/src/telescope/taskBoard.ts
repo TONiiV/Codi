@@ -35,15 +35,22 @@ export function tasksByStatus(
   return columns;
 }
 
-const DECISION_ORDER = { proposed: 0, decided: 1, superseded: 2 } as const;
+/** Decision groups: proposals waiting on someone first, then the record. */
+export const DECISION_STATUSES = [
+  "proposed",
+  "decided",
+  "superseded",
+] as const satisfies ReadonlyArray<Telescope.DecisionStatus>;
 
-/** Proposals waiting on someone first, then the record, newest first within each group. */
+/** By group, newest first within each; a decision and the one it retires can share a timestamp. */
 export function sortDecisions(
   decisions: ReadonlyArray<Telescope.Decision>,
 ): ReadonlyArray<Telescope.Decision> {
   return [...decisions].sort(
     (a, b) =>
-      DECISION_ORDER[a.status] - DECISION_ORDER[b.status] || b.updatedAt.localeCompare(a.updatedAt),
+      DECISION_STATUSES.indexOf(a.status) - DECISION_STATUSES.indexOf(b.status) ||
+      b.updatedAt.localeCompare(a.updatedAt) ||
+      a.id.localeCompare(b.id),
   );
 }
 

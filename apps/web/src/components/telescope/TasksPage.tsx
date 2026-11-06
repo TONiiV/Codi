@@ -1,4 +1,5 @@
 import { Telescope } from "@t3tools/contracts";
+import { useNavigate } from "@tanstack/react-router";
 import { Columns3Icon, PlusIcon, TableIcon } from "lucide-react";
 import { useState } from "react";
 
@@ -13,6 +14,7 @@ import {
   DialogPopup,
   DialogTitle,
 } from "../ui/dialog";
+import { TELESCOPE_PATH } from "../sidebar/mainAppLocation";
 import { Input } from "../ui/input";
 import { TelescopeEmptyState } from "./TelescopeShell";
 import { telescopeBoard } from "./telescopeState";
@@ -24,6 +26,7 @@ import {
   useBoardTarget,
 } from "./TasksParts";
 import { TasksBoard, TasksTable } from "./TasksViews";
+import { type TasksLayout, useTasksLayout } from "./telescopeViews";
 
 function NewTaskDialog({ target }: { target: BoardTarget }) {
   const [open, setOpen] = useState(false);
@@ -72,19 +75,26 @@ function NewTaskDialog({ target }: { target: BoardTarget }) {
 }
 
 function TasksBody({ target }: { target: BoardTarget }) {
-  const [layout, setLayout] = useState<"table" | "board">("table");
+  const layout = useTasksLayout();
+  const navigate = useNavigate();
   const input = { workspaceId: target.workspaceId };
   const query = useEnvironmentQuery(
     telescopeBoard.tasks({ environmentId: target.environmentId, input }),
   );
   const tasks = query.data?.tasks ?? [];
   const View = layout === "table" ? TasksTable : TasksBoard;
-  const layoutButton = (id: typeof layout, label: string, Icon: typeof TableIcon) => (
+  const layoutButton = (id: TasksLayout, label: string, Icon: typeof TableIcon) => (
     <Button
       size="xs"
       variant={layout === id ? "secondary" : "ghost-muted"}
       aria-pressed={layout === id}
-      onClick={() => setLayout(id)}
+      onClick={() =>
+        void navigate({
+          to: TELESCOPE_PATH,
+          search: { view: "tasks", ...(id === "board" ? { layout: id } : {}) },
+          replace: true,
+        })
+      }
     >
       <Icon /> {label}
     </Button>

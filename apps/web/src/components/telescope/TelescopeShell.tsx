@@ -17,12 +17,18 @@ import {
 } from "../WorkspaceBreadcrumb";
 import { WorkspacePageHeader } from "../WorkspacePageHeader";
 import { TelescopeAccountFooter } from "./TelescopeAccount";
-import { TELESCOPE_VIEWS, telescopeViewEntry, type TelescopeView } from "./telescopeViews";
+import {
+  TELESCOPE_VIEWS,
+  telescopeViewEntry,
+  type TelescopeView,
+  useTasksLayout,
+} from "./telescopeViews";
 
 function TelescopeRail({ view, collapsed }: { view: TelescopeView; collapsed: boolean }) {
   const navigate = useNavigate();
   const navigateToAppMode = useNavigateToAppMode();
   const { isMobile, setOpenMobile } = useSidebar();
+  const layout = useTasksLayout();
   return (
     <nav
       aria-label="Telescope"
@@ -42,7 +48,10 @@ function TelescopeRail({ view, collapsed }: { view: TelescopeView; collapsed: bo
                 variant={item.id === view ? "secondary" : "ghost-muted"}
                 onClick={() => {
                   if (isMobile) setOpenMobile(false);
-                  void navigate({ to: TELESCOPE_PATH, search: { view: item.id } });
+                  void navigate({
+                    to: TELESCOPE_PATH,
+                    search: { view: item.id, ...(layout === "board" ? { layout } : {}) },
+                  });
                 }}
               />
             }

@@ -2,9 +2,11 @@ import { Telescope } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
 import {
+  DECISION_STATUSES,
   decideInput,
   isStaleTaskVersion,
   sortDecisions,
+  TASK_STATUSES,
   tasksByStatus,
   taskUpdateInput,
   taskUpdateOutcome,
@@ -47,21 +49,14 @@ function task(id: string, status: Telescope.TaskStatus, version = 1): Telescope.
 }
 
 describe("tasksByStatus", () => {
-  it("puts every task in its status column and keeps empty columns", () => {
+  it("has a column for every status and puts every task in its column", () => {
     const columns = tasksByStatus([
       task("a", "todo"),
       task("b", "done"),
       task("c", "todo"),
       task("d", "needs_decision"),
     ]);
-    expect(Object.keys(columns)).toEqual([
-      "todo",
-      "in_progress",
-      "in_review",
-      "done",
-      "needs_decision",
-      "dropped",
-    ]);
+    expect(new Set(TASK_STATUSES)).toEqual(new Set(Telescope.TaskStatus.literals));
     expect(columns.todo.map((item) => item.id)).toEqual(["a", "c"]);
     expect(columns.needs_decision.map((item) => item.id)).toEqual(["d"]);
     expect(columns.in_progress).toEqual([]);
@@ -69,8 +64,9 @@ describe("tasksByStatus", () => {
 });
 
 describe("sortDecisions", () => {
-  it("puts proposals first, then decided, then superseded, newest first in each", () => {
+  it("puts proposals first, then decided, then superseded, newest first, then by id", () => {
     const sorted = sortDecisions([
+      decision("superseded-b", "superseded", "2026-11-05T00:00:00.000Z"),
       decision("old-decided", "decided", "2026-11-02T00:00:00.000Z"),
       decision("superseded", "superseded", "2026-11-05T00:00:00.000Z"),
       decision("old-proposal", "proposed", "2026-11-01T00:00:00.000Z"),
@@ -83,7 +79,9 @@ describe("sortDecisions", () => {
       "new-decided",
       "old-decided",
       "superseded",
+      "superseded-b",
     ]);
+    expect(new Set(DECISION_STATUSES)).toEqual(new Set(Telescope.DecisionStatus.literals));
   });
 });
 

@@ -237,7 +237,7 @@ export function TasksBoard(props: { target: BoardTarget; tasks: ReadonlyArray<Te
               }}
               className="flex cursor-grab flex-col gap-1.5 rounded-lg border bg-card p-3 text-sm shadow-xs"
             >
-              <span className="font-medium">{task.title}</span>
+              <span className="font-medium wrap-anywhere">{task.title}</span>
               <span className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                 <NeedsYouBadge task={task} />
                 {task.ownerAgentId && (names(task.ownerAgentId) ?? "其他成员的 agent")}
