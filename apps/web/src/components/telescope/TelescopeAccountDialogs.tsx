@@ -1,12 +1,11 @@
 import { useAtomValue } from "@effect/atom-react";
 import {
-  type AtomCommandResult,
-  isAtomCommandInterrupted,
-  squashAtomCommandFailure,
-} from "@t3tools/client-runtime/state/runtime";
-import { isEnvironmentOwner } from "@t3tools/client-runtime/telescope/workspaces";
+  failureText,
+  isEnvironmentOwner,
+  WORKSPACE_ERROR_TEXT,
+  type WorkspaceErrorText,
+} from "@t3tools/client-runtime/telescope/workspaces";
 import { type EnvironmentId, Telescope } from "@t3tools/contracts";
-import * as Schema from "effect/Schema";
 import { PlusIcon } from "lucide-react";
 import { useId, useState, type ReactNode } from "react";
 
@@ -42,27 +41,14 @@ const KIND_HINT = {
   personal: "只有你自己，适合个人项目。",
 } as const;
 
-type ErrorText = Record<Telescope.WorkspaceError["reason"], string>;
-
-const ERROR_TEXT: ErrorText = {
-  not_found: "找不到这个工作区或成员，请刷新后再试。",
-  forbidden: "你没有权限做这件事。",
-  expired: "已经过期，请刷新后再试。",
-  conflict: "和当前状态冲突，请刷新后再试。",
-  storage: "保存失败，请稍后再试。",
-  invalid: "请求内容无效，请检查后重试。",
-};
-
-const JOIN_ERROR_TEXT: ErrorText = {
+const JOIN_ERROR_TEXT: WorkspaceErrorText = {
   not_found: "邀请码无效。",
   forbidden: "你已被移出该工作区。",
   expired: "邀请码已过期。",
   conflict: "邀请码已被使用，或你已是该工作区成员。",
-  storage: ERROR_TEXT.storage,
+  storage: WORKSPACE_ERROR_TEXT.storage,
   invalid: "邀请码格式无效。",
 };
-
-const isWorkspaceError = Schema.is(Telescope.WorkspaceError);
 
 const expiryFormatter = new Intl.DateTimeFormat("zh-CN", {
   month: "long",
@@ -71,17 +57,7 @@ const expiryFormatter = new Intl.DateTimeFormat("zh-CN", {
   minute: "2-digit",
 });
 
-/** Null on success or interruption; otherwise Chinese copy for the server's reason. */
-function failureText(
-  result: AtomCommandResult<unknown, unknown>,
-  text: ErrorText = ERROR_TEXT,
-): string | null {
-  if (result._tag === "Success" || isAtomCommandInterrupted(result)) return null;
-  const error = squashAtomCommandFailure(result);
-  return isWorkspaceError(error) ? text[error.reason] : "请求失败，请检查连接后再试。";
-}
-
-function ErrorNote({ text, onRetry }: { text: string; onRetry?: () => void }) {
+export function ErrorNote({ text, onRetry }: { text: string; onRetry?: () => void }) {
   return (
     <div role="alert" className="flex items-center gap-2 text-sm text-destructive">
       <span className="min-w-0 flex-1">{text}</span>

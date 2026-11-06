@@ -3,6 +3,7 @@ import {
   ownerCanMergePRs,
   selectableExposures,
 } from "@t3tools/client-runtime/telescope/agents";
+import { failureText } from "@t3tools/client-runtime/telescope/workspaces";
 import type { EnvironmentId, Telescope } from "@t3tools/contracts";
 import { AsyncResult } from "effect/reactivity";
 import { useId, useState, type FormEvent, type ReactNode } from "react";
@@ -24,6 +25,7 @@ import { Label } from "../ui/label";
 import { Switch } from "../ui/switch";
 import { Toggle, ToggleGroup } from "../ui/toggle-group";
 import { EXPOSURE_LABEL, KIND_LABEL, POWERS, telescopeAgents } from "./myTeamsShared";
+import { ErrorNote } from "./TelescopeAccountDialogs";
 
 const isExposure = (value: unknown): value is Telescope.AgentExposure =>
   typeof value === "string" && value in EXPOSURE_LABEL;
@@ -40,6 +42,7 @@ function SettingsDialog(props: {
   submitLabel: string;
   canSubmit: boolean;
   busy: boolean;
+  error: string | null;
   onSubmit: () => void;
   onClose: () => void;
   children: ReactNode;
@@ -59,7 +62,10 @@ function SettingsDialog(props: {
             <DialogDescription>{props.description}</DialogDescription>
           </DialogHeader>
           <DialogPanel>
-            <div className="flex flex-col gap-4">{props.children}</div>
+            <div className="flex flex-col gap-4">
+              {props.children}
+              {props.error === null ? null : <ErrorNote text={props.error} />}
+            </div>
           </DialogPanel>
           <DialogFooter>
             <Button type="button" variant="ghost-muted" onClick={props.onClose}>
@@ -105,12 +111,14 @@ export function AgentSettingsDialog({
   const [syncWithBoard, setSyncWithBoard] = useState(agent.syncWithBoard);
   const [dispatchMode, setDispatchMode] = useState(agent.dispatchMode);
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const selectable = selectableExposures(agent.exposure, workspace.kind);
   const enterprise = workspace.kind === "enterprise";
 
   const save = async () => {
     const changed = POWERS.some(({ id: power }) => powers[power] !== shownPowers[power]);
     setBusy(true);
+    setError(null);
     const result = await update({
       environmentId,
       input: {
@@ -126,6 +134,7 @@ export function AgentSettingsDialog({
     });
     setBusy(false);
     if (AsyncResult.isSuccess(result)) onClose();
+    else setError(failureText(result));
   };
 
   return (
@@ -135,6 +144,7 @@ export function AgentSettingsDialog({
       submitLabel="保存"
       canSubmit={name.trim().length > 0}
       busy={busy}
+      error={error}
       onSubmit={() => void save()}
       onClose={onClose}
     >
@@ -244,11 +254,14 @@ export function CreateCustomAgentDialog({
   const create = useAtomCommand(telescopeAgents.createCustom, "新建自定义 agent");
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const submit = async () => {
     setBusy(true);
+    setError(null);
     const result = await create({ environmentId, input: { workspaceId, name: name.trim() } });
     setBusy(false);
     if (AsyncResult.isSuccess(result)) onClose();
+    else setError(failureText(result));
   };
   return (
     <SettingsDialog
@@ -257,6 +270,7 @@ export function CreateCustomAgentDialog({
       submitLabel="新建"
       canSubmit={name.trim().length > 0}
       busy={busy}
+      error={error}
       onSubmit={() => void submit()}
       onClose={onClose}
     >

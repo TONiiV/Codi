@@ -1,14 +1,41 @@
 import { type EnvironmentId, type ProjectId, Telescope } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
 import { AsyncResult, Atom, type AtomRegistry } from "effect/reactivity";
 
 import type { EnvironmentRegistry } from "../connection/registry.ts";
 import {
+  type AtomCommandResult,
   createEnvironmentRpcCommand,
   createEnvironmentRpcQueryAtomFamily,
+  isAtomCommandInterrupted,
+  squashAtomCommandFailure,
 } from "../state/runtime.ts";
 
 const { WS_METHODS } = Telescope;
+
+export type WorkspaceErrorText = Record<Telescope.WorkspaceError["reason"], string>;
+
+export const WORKSPACE_ERROR_TEXT: WorkspaceErrorText = {
+  not_found: "找不到这个工作区或成员，请刷新后再试。",
+  forbidden: "你没有权限做这件事。",
+  expired: "已经过期，请刷新后再试。",
+  conflict: "和当前状态冲突，请刷新后再试。",
+  storage: "保存失败，请稍后再试。",
+  invalid: "请求内容无效，请检查后重试。",
+};
+
+const isWorkspaceError = Schema.is(Telescope.WorkspaceError);
+
+/** Null on success or interruption; otherwise Chinese copy for the server's reason. */
+export function failureText(
+  result: AtomCommandResult<unknown, unknown>,
+  text: WorkspaceErrorText = WORKSPACE_ERROR_TEXT,
+): string | null {
+  if (result._tag === "Success" || isAtomCommandInterrupted(result)) return null;
+  const error = squashAtomCommandFailure(result);
+  return isWorkspaceError(error) ? text[error.reason] : "请求失败，请检查连接后再试。";
+}
 
 /** Where this device remembers its current workspace. */
 export interface CurrentWorkspaceStorage {
