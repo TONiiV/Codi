@@ -91,6 +91,7 @@ export const brokenCachePrefix = (
     },
     suggestion: `${advice}：常改的笔记移到按需读取的文件里，MCP 工具列表只在周与周之间调整。`,
     estimatedSavingTokens: excess,
+    savingKind: "cost",
     confidence: correlated.length >= 2 ? "high" : correlated.length === 1 ? "medium" : "low",
   });
 };
@@ -146,6 +147,7 @@ export const repeatedReads = (sessions: ReadonlyArray<SessionActivity>): Finding
         "Read a file once per task; reread only after it changes.",
       ]),
     estimatedSavingTokens: saving,
+    savingKind: "tokens",
     confidence: top.count >= 5 ? "high" : "medium",
   });
 };
@@ -199,6 +201,7 @@ export const oversizedToolOutputs = (
           ),
       ]),
     estimatedSavingTokens: sum("excess"),
+    savingKind: "tokens",
     confidence: "high",
   });
 };

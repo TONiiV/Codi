@@ -82,6 +82,7 @@ describe("token saver analyzers", () => {
     assert.notInclude(finding?.suggestion, "```diff");
     // 400K written against a typical 5% of 1M.
     assert.strictEqual(finding?.estimatedSavingTokens, 350_000);
+    assert.strictEqual(finding?.savingKind, "cost");
     assert.strictEqual(brokenCachePrefix(normal, []), undefined);
     const short = session("g", {
       turns: 9,
@@ -127,6 +128,7 @@ describe("token saver analyzers", () => {
       }),
     ]);
     assert.strictEqual(finding?.estimatedSavingTokens, 2200);
+    assert.strictEqual(finding?.savingKind, "tokens");
     assert.strictEqual(finding?.evidence.repeatedReads, 2);
     assert.strictEqual(finding?.evidence.topFile, "src/a.ts");
     assert.strictEqual(finding?.confidence, "medium");
