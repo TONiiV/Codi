@@ -238,6 +238,7 @@ export const RPC_REQUIRED_SCOPES = {
   [Telescope.WS_METHODS.leaseHeartbeat]: AuthTelescopeMemberScope,
   [Telescope.WS_METHODS.leaseRelease]: AuthTelescopeMemberScope,
   [Telescope.WS_METHODS.wakeList]: AuthTelescopeMemberScope,
+  [Telescope.WS_METHODS.dashboardSummary]: AuthTelescopeMemberScope,
   [Telescope.WS_METHODS.tokenSaverRun]: AuthTelescopeMemberScope,
   [Telescope.WS_METHODS.grantExplain]: AuthTelescopeMemberScope,
   [Telescope.WS_METHODS.memorySearch]: AuthTelescopeMemberScope,

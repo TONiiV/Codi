@@ -77,6 +77,7 @@ import {
   GrantExplainInput,
   GrantExplainResult,
 } from "./grant.ts";
+import { DashboardSummary } from "./dashboard.ts";
 
 export const WS_METHODS = {
   workspaceCreate: "telescope.workspace.create",
@@ -122,6 +123,7 @@ export const WS_METHODS = {
   memorySearch: "telescope.memory.search",
   memoryWrite: "telescope.memory.write",
   memoryPin: "telescope.memory.pin",
+  dashboardSummary: "telescope.dashboard.summary",
 } as const;
 
 const error = Schema.Union([WorkspaceError, EnvironmentAuthorizationError]);
@@ -206,4 +208,8 @@ export const MemoryRpcs = [
   make(WS_METHODS.memorySearch, MemorySearchInput, MemorySearchResult),
   make(WS_METHODS.memoryWrite, MemoryWriteInput, Memory),
   make(WS_METHODS.memoryPin, MemoryPinInput, Memory),
+] as const;
+
+export const DashboardRpcs = [
+  make(WS_METHODS.dashboardSummary, WorkspaceScopedInput, DashboardSummary),
 ] as const;

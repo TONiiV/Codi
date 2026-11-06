@@ -81,6 +81,7 @@ import * as TelescopeTokenSaver from "./telescope/tokensaver/TokenSaverService.t
 import * as TelescopeGrants from "./telescope/GrantService.ts";
 import * as TelescopeToolGateway from "./telescope/ToolGateway.ts";
 import * as TelescopeMemory from "./telescope/MemoryService.ts";
+import * as TelescopeAttribution from "./telescope/AttributionService.ts";
 import * as PeerLinks from "./peer/PeerLinks.ts";
 import * as PortScanner from "./preview/PortScanner.ts";
 import * as PreviewManager from "./preview/Manager.ts";
@@ -811,6 +812,7 @@ const layerUnusedConfigRpcServices = Layer.mergeAll(
   Layer.mock(TelescopeGrants.GrantService)({}),
   Layer.mock(TelescopeToolGateway.ToolGateway)({}),
   Layer.mock(TelescopeMemory.MemoryService)({}),
+  Layer.mock(TelescopeAttribution.AttributionService)({}),
   Layer.mock(PortScanner.PortDiscovery)({ trackAgent: () => () => undefined }),
   Layer.mock(PreviewManager.PreviewManager)({}),
   Layer.mock(ProcessDiagnostics.ProcessDiagnostics)({}),

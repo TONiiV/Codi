@@ -43,7 +43,9 @@ type Row = Readonly<Record<string, string | number | null>>;
 export type RowsDecoder<A, R> = (rows: unknown) => Effect.Effect<A, Schema.SchemaError, R>;
 
 /** `filter` is parenthesised and ANDed with the workspace filter, so it cannot widen a select. */
-interface SelectOptions {
+export interface SelectOptions {
+  /** Defaults to every column. */
+  readonly columns?: ReadonlyArray<string>;
   readonly filter?: Statement.Fragment;
   readonly orderBy?: ReadonlyArray<string>;
   readonly descending?: boolean;
@@ -162,6 +164,14 @@ const make = Effect.gen(function* () {
     options: SelectOptions = {},
   ) {
     yield* checkColumns(`TelescopeDb.select.${table}`, where, "caller");
+    const columns = options.columns ?? [];
+    yield* checkColumns(
+      `TelescopeDb.select.${table}`,
+      Object.fromEntries(columns.map((column) => [column, null])),
+      "caller",
+    );
+    const selected =
+      columns.length === 0 ? sql`*` : sql.csv(columns.map((column) => sql`${sql(column)}`));
     const filter = options.filter === undefined ? sql`` : sql` AND (${options.filter})`;
     const direction = sql.literal(options.descending ? "DESC" : "ASC");
     const order =
@@ -170,7 +180,7 @@ const make = Effect.gen(function* () {
         : sql` ORDER BY ${sql.csv(options.orderBy.map((column) => sql`${sql(column)} ${direction}`))}`;
     const limit = options.limit === undefined ? sql`` : sql` LIMIT ${options.limit}`;
     const rows =
-      yield* sql`SELECT * FROM ${tableName(table)} WHERE ${scoped(workspaceId, where)}${filter}${order}${limit}`.pipe(
+      yield* sql`SELECT ${selected} FROM ${tableName(table)} WHERE ${scoped(workspaceId, where)}${filter}${order}${limit}`.pipe(
         Effect.mapError(toPersistenceSqlError(`TelescopeDb.select.${table}`)),
       );
     return yield* decodeRows(rows).pipe(

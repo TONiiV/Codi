@@ -88,6 +88,7 @@ import * as TelescopeGrants from "./telescope/GrantService.ts";
 import * as TelescopeToolGateway from "./telescope/ToolGateway.ts";
 import * as TelescopeThreadTurnTokens from "./telescope/ThreadTurnTokens.ts";
 import * as TelescopeWakeQueue from "./telescope/WakeQueueService.ts";
+import * as TelescopeAttribution from "./telescope/AttributionService.ts";
 import * as TelescopeTokenSaver from "./telescope/tokensaver/TokenSaverService.ts";
 import * as TelescopeMemory from "./telescope/MemoryService.ts";
 import * as PeerLinks from "./peer/PeerLinks.ts";
@@ -807,7 +808,7 @@ const layerMakeRoutes = Layer.mergeAll(
     RemoteDelegation.RemoteDelegation.pipe(Effect.flatMap((remote) => remote.start())),
   ),
   TelescopeWakeQueue.layerWorker,
-  TelescopeTokenSaver.layerWeekly,
+  Layer.merge(TelescopeTokenSaver.layerWeekly, TelescopeRuns.layerRetention),
 ).pipe(
   Layer.provide(
     PullRequestReviewGuideService.layer.pipe(Layer.provide(PullRequestReviewGuides.layer)),
@@ -826,6 +827,7 @@ const layerMakeRoutes = Layer.mergeAll(
       TelescopeGrants.layer,
       TelescopeMemory.layer,
       TelescopeToolGateway.layer,
+      TelescopeAttribution.layer,
     ),
   ),
   Layer.provide(TelescopeTokenSaver.layer.pipe(Layer.provide(UsageProjectResolver.layer))),

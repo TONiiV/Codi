@@ -1229,6 +1229,12 @@ export const StorageCleanupSettings = Schema.Struct({
 });
 export type StorageCleanupSettings = typeof StorageCleanupSettings.Type;
 
+const RunRetentionDays = Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 3650 }));
+export const TelescopeServerSettings = Schema.Struct({
+  /** Telescope run records, with their tool calls, are deleted after this many days. */
+  runRetentionDays: RunRetentionDays.pipe(Schema.withDecodingDefault(Effect.succeed(90))),
+});
+
 export const ServerSettings = Schema.Struct({
   // Null means unmigrated; empty is authoritative and must not resurrect cleared preferences.
   favorites: Schema.NullOr(ModelFavorites).pipe(Schema.withDecodingDefault(Effect.succeed(null))),
@@ -1238,6 +1244,9 @@ export const ServerSettings = Schema.Struct({
   worktreeCleanup: WorktreeCleanup.pipe(Schema.withDecodingDefault(Effect.succeed(null))),
   storageCleanup: StorageCleanupSettings.pipe(
     Schema.withDecodingDefault(Effect.succeed(Schema.decodeSync(StorageCleanupSettings)({}))),
+  ),
+  telescope: TelescopeServerSettings.pipe(
+    Schema.withDecodingDefault(Effect.succeed(Schema.decodeSync(TelescopeServerSettings)({}))),
   ),
 
   worktreesDirectory: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
@@ -1655,6 +1664,9 @@ export const ServerSettingsPatch = Schema.Struct({
         }),
       ]),
     ),
+  ),
+  telescope: Schema.optionalKey(
+    Schema.Struct({ runRetentionDays: Schema.optionalKey(RunRetentionDays) }),
   ),
   storageCleanup: Schema.optionalKey(
     Schema.Struct({

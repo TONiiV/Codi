@@ -88,7 +88,7 @@ const turn = (
 });
 
 it.layer(layer)("ThreadTurnTokens", (it) => {
-  it.effect("adds each finished model turn's tokens once to the open runs on its thread", () =>
+  it.effect("adds each finished turn's tokens, subagents too, once to its thread's open runs", () =>
     Effect.gen(function* () {
       const workspaces = yield* WorkspaceService.WorkspaceService;
       const runs = yield* RunRecordService.RunRecordService;
@@ -113,7 +113,7 @@ it.layer(layer)("ThreadTurnTokens", (it) => {
         turn("a", "running", usage(50, 10)),
         turn("a", "completed", usage(100, 20, 6)),
         turn("a", "completed", usage(100, 20, 6)),
-        turn("b", "failed", usage(10, 2)),
+        turn("b", "failed", { ...usage(10, 2), otherUsage: { inputTokens: 3, outputTokens: 4 } }),
         turn("c", "completed", { ...usage(1000, 1000), localCommand: true }),
         turn("d", "completed", {
           usageScope: "main_agent",
@@ -144,16 +144,16 @@ it.layer(layer)("ThreadTurnTokens", (it) => {
 
       assert.deepStrictEqual(recorded, [
         [threadId, 100],
-        [threadId, 10],
+        [threadId, 13],
         [otherThreadId, 7],
       ]);
       const tokens = (runId: Telescope.AgentRunId) =>
         runs.get(alice, { workspaceId, runId }).pipe(Effect.map((run) => run.tokens));
       assert.deepStrictEqual(yield* tokens(open.id), {
-        input: 110,
+        input: 113,
         cachedInput: 6,
         cacheCreation: 0,
-        output: 22,
+        output: 26,
       });
       assert.deepStrictEqual(yield* tokens(finished.id), noTokens);
     }),
