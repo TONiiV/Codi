@@ -174,6 +174,8 @@ describe("ContextPackService", () => {
         }),
         "sync/CLAUDE.md": "@AGENTS.md\nClaude only.\n",
         "sync/AGENTS.md": "# Rules\nUse pnpm.\n",
+        "sync-opencode/CLAUDE.md": "@AGENTS.md\nClaude only.\n",
+        "sync-opencode/AGENTS.md": "# Rules\nUse pnpm.\n",
         "sync-cursor/.cursor/rules/style.mdc": "---\nalwaysApply: true\n---\nBe concise.\n",
         "sync-cursor-replace/.cursor/rules/style.mdc": "---\nalwaysApply: true\n---\nBe concise.\n",
       });
@@ -221,10 +223,11 @@ describe("ContextPackService", () => {
         expect(text.match(/context-pack:begin/g)).toHaveLength(1);
       }
 
-      // Syncing a project into another harness in place reaches a fixed point.
+      // Syncing a project in place reaches a fixed point; markdown harnesses need merge for it.
       const rules = ".cursor/rules";
       for (const [project, harness, merge, phrase, files] of [
         ["sync", "codex", true, /Use pnpm\./g, ["AGENTS.md"]],
+        ["sync-opencode", "opencode", true, /Use pnpm\./g, ["AGENTS.md"]],
         [
           "sync-cursor",
           "cursor",
@@ -252,16 +255,18 @@ describe("ContextPackService", () => {
         expect(snapshots[2]).toBe(snapshots[1]);
         expect((yield* dir.read(`${pack}/instructions.md`)).match(phrase)).toHaveLength(1);
       }
-      expect((yield* dir.read("sync/AGENTS.md")).match(/Use pnpm\./g)).toHaveLength(2);
+      for (const project of ["sync", "sync-opencode"]) {
+        expect((yield* dir.read(`${project}/AGENTS.md`)).match(/Use pnpm\./g)).toHaveLength(2);
+      }
       for (const project of ["sync-cursor", "sync-cursor-replace"]) {
         expect(yield* dir.read(`${project}/${rules}/style.mdc`)).toContain("Be concise.");
       }
       expect(yield* dir.read(`sync-cursor/${rules}/context-pack.mdc`)).toContain(
         "context-pack:begin",
       );
-      expect(yield* dir.read(`sync-cursor-replace/${rules}/context-pack.mdc`)).not.toContain(
-        "context-pack:begin",
-      );
+      const packRule = yield* dir.read(`sync-cursor-replace/${rules}/context-pack.mdc`);
+      expect(packRule).not.toContain("context-pack:begin");
+      expect(packRule.endsWith("\nBe concise.\n")).toBe(true);
     }).pipe(Effect.scoped, Effect.provide(TestLayer)),
   );
 
@@ -320,6 +325,7 @@ describe("ContextPackService", () => {
         }),
         "mixed/.codex/config.toml": '[mcp_servers.cx]\ncommand = "cx"\n',
         "empty/.claude/settings.local.json": "{}",
+        "other/README.md": "Not a pack.\n",
       });
 
       const cases = [
@@ -367,6 +373,11 @@ describe("ContextPackService", () => {
       const empty = yield* Effect.exit(runCli(["export", dir.at("empty"), "--out", dir.at("p")]));
       expect(Exit.isFailure(empty)).toBe(true);
       expect(yield* dir.exists(dir.at("p"))).toBe(false);
+      const notPack = yield* Effect.exit(
+        runCli(["export", dir.at("codex"), "--out", dir.at("other")]),
+      );
+      expect(Exit.isFailure(notPack)).toBe(true);
+      expect(yield* dir.exists(dir.at("other/pack.json"))).toBe(false);
     }).pipe(Effect.scoped, Effect.provide(TestLayer)),
   );
 
@@ -388,6 +399,10 @@ describe("ContextPackService", () => {
           "outside-skill/SKILL.md": "Outside.\n",
           "private-skill/SKILL.md": "Private.\n",
           "private-skill/key.pem": "PRIVATE_KEY_MATERIAL\n",
+          "out-linked/pack.json": "{}",
+          "keep/.claude/skills/lint/notes.md": "Local notes.\n",
+          "keep-review/SKILL.md": "Kept review.\n",
+          "shared/.agents/skills/lint/scripts/custom.sh": "echo custom\n",
         },
         {
           "project/.claude/skills/lint": "../../.agents/skills/lint",
@@ -399,6 +414,9 @@ describe("ContextPackService", () => {
           "skill-link": "project/.agents/skills/lint",
           "out-linked/skills": "../project/.agents/skills",
           "linked/.claude": "../pack",
+          "cursor-alias": "project/.cursor",
+          "keep/.claude/skills/review": "../../../keep-review",
+          "shared/.claude/skills": "../.agents/skills",
         },
       );
       const fs = yield* FileSystem.FileSystem;
@@ -426,11 +444,12 @@ describe("ContextPackService", () => {
         "alias",
         "skill-link/new/deeper",
         "out-linked",
+        "cursor-alias",
       ];
       for (const out of outs) {
         const overlap = yield* Effect.flip(service.export(dir.at("project"), dir.at(out)));
         expect(overlap._tag).toBe("ContextPackOverlapError");
-        expect(yield* dir.exists(dir.at(`${out}/pack.json`))).toBe(false);
+        expect(yield* dir.exists(dir.at(`${out}/instructions.md`))).toBe(false);
       }
       expect(yield* dir.read("project/.agents/skills/lint/SKILL.md")).toBe("Lint it.\n");
       expect(yield* dir.read("project/tools/skills/outer/inner/SKILL.md")).toBe("Inner.\n");
@@ -465,6 +484,16 @@ describe("ContextPackService", () => {
       }
       expect(yield* dir.isLink("target/.claude/skills/lint")).toBe(false);
       expect(yield* dir.read("target/.claude/skills/lint/SKILL.md")).toBe("Lint it.\n");
+      for (const merge of [false, true]) {
+        yield* service.import(dir.at("pack"), dir.at("keep"), "claude", merge);
+        yield* service.import(dir.at("pack"), dir.at("shared"), "claude", merge);
+      }
+      expect(yield* dir.read("keep/.claude/skills/lint/SKILL.md")).toBe("Lint it.\n");
+      expect(yield* dir.read("keep/.claude/skills/lint/notes.md")).toBe("Local notes.\n");
+      expect(yield* dir.isLink("keep/.claude/skills/review")).toBe(false);
+      expect(yield* dir.read("keep-review/SKILL.md")).toBe("Kept review.\n");
+      expect(yield* dir.read("shared/.agents/skills/lint/SKILL.md")).toBe("Lint it.\n");
+      expect(yield* dir.read("shared/.agents/skills/lint/scripts/custom.sh")).toBe("echo custom\n");
 
       const manifest = JSON.parse(yield* dir.read("pack/pack.json"));
       yield* fs.symlink("../../private-skill", dir.at("pack/skills/evil"));

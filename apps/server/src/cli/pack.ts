@@ -33,7 +33,7 @@ const importCommand = Command.make("import", {
   ),
   merge: Flag.Boolean("merge").pipe(
     Flag.withDescription(
-      "Keeps the project's own content; pack servers replace same-name servers.",
+      "Keeps the project's own content; pack servers replace same-name servers. Needed to sync a project in place.",
     ),
     Flag.withDefault(false),
   ),

@@ -14,6 +14,7 @@ import { opencode } from "./harnesses/opencode.ts";
 import {
   assertSeparate,
   type ContextPackFormatError,
+  type ContextPackOutDirError,
   type ContextPackOverlapError,
   type ContextPackPathError,
   type Harness,
@@ -48,7 +49,7 @@ export class ContextPackService extends Context.Service<
       outDir: string,
     ) => Effect.Effect<
       { readonly instructions: boolean; readonly skills: number; readonly servers: number },
-      PackError | ContextPackNoHarnessError
+      PackError | ContextPackNoHarnessError | ContextPackOutDirError
     >;
     readonly import: (
       packDir: string,

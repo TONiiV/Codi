@@ -75,6 +75,15 @@ export class ContextPackOverlapError extends Schema.TaggedError<ContextPackOverl
   }
 }
 
+export class ContextPackOutDirError extends Schema.TaggedError<ContextPackOutDirError>()(
+  "ContextPackOutDirError",
+  { path: Schema.String },
+) {
+  override get message(): string {
+    return `${this.path} is not empty and is not a context pack. Choose a new or empty directory.`;
+  }
+}
+
 const formatErrorAt = (path: string) =>
   Effect.mapError((cause: Schema.SchemaError) => new ContextPackFormatError({ path, cause }));
 
@@ -126,7 +135,7 @@ export const makeHarness = (spec: HarnessSpec) => {
     }),
     write: Effect.fnUntraced(function* (pack: Pack, dir: string, merge: boolean) {
       const path = yield* Path.Path;
-      yield* writeSkills(pack.skills, path.join(dir, spec.skillsDirs[0]));
+      yield* writeSkills(pack.skills, path.join(dir, spec.skillsDirs[0]), false);
       yield* spec.instructions.write(dir, pack.instructions, merge);
       const mcpFile = path.join(dir, spec.mcp.file);
       const existing = yield* readOptionalText(mcpFile);
@@ -299,7 +308,11 @@ const copyTree: (
   },
 );
 
-const writeSkills = Effect.fnUntraced(function* (skills: Pack["skills"], skillsDir: string) {
+const writeSkills = Effect.fnUntraced(function* (
+  skills: Pack["skills"],
+  skillsDir: string,
+  replace: boolean,
+) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   // Second guard behind assertSeparate, for harness dirs that link into the pack or the project.
@@ -312,7 +325,10 @@ const writeSkills = Effect.fnUntraced(function* (skills: Pack["skills"], skillsD
   }
   for (const skill of skills) {
     const target = path.join(skillsDir, skill.name);
-    yield* fs.remove(target, { recursive: true, force: true });
+    // An import never deletes project files: it writes over a same-name skill, unlinking only a link.
+    if (replace || (yield* Effect.isSuccess(fs.readLink(target)))) {
+      yield* fs.remove(target, { recursive: true, force: true });
+    }
     yield* copyTree(skill.dir, target, skill.dir, [skill.dir]);
   }
 });
@@ -322,8 +338,16 @@ export const writePackDir = Effect.fn("ContextPack.writePackDir")(function* (
   outDir: string,
   meta: Pick<typeof Manifest.Type, "name" | "createdAt">,
 ) {
+  const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
-  yield* writeSkills(pack.skills, path.join(outDir, "skills"));
+  if (
+    (yield* fs.exists(outDir)) &&
+    !(yield* fs.exists(path.join(outDir, PACK_FILES.manifest))) &&
+    (yield* fs.readDirectory(outDir)).length > 0
+  ) {
+    return yield* new ContextPackOutDirError({ path: outDir });
+  }
+  yield* writeSkills(pack.skills, path.join(outDir, "skills"), true);
   const manifest: typeof Manifest.Type = {
     version: 1,
     ...meta,

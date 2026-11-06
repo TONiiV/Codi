@@ -52,7 +52,8 @@ export const cursor = makeHarness({
       const existing = (yield* fs.exists(target))
         ? (yield* fs.readFileString(target)).replace(FRONTMATTER, "")
         : undefined;
-      yield* writeText(target, PACK_RULE_HEADER + mergeInstructions(existing, text, merge));
+      const body = mergeInstructions(existing, text, merge).trimEnd();
+      yield* writeText(target, `${PACK_RULE_HEADER}${body}\n`);
     }),
   },
   skillsDirs: [".cursor/skills"],
