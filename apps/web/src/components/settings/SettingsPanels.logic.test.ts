@@ -5,6 +5,7 @@ import {
   backgroundActivitySharedPolicySettings,
   getChangedBrowserSettingLabels,
   hasChangedBackgroundActivitySettings,
+  responseStreamingModeCopy,
 } from "./SettingsPanels.logic";
 
 describe("background activity settings restore", () => {
@@ -86,5 +87,18 @@ describe("getChangedBrowserSettingLabels", () => {
         browserCustomSearchUrl: "https://search.example/?q=%s",
       }),
     ).toEqual(["Search engine"]);
+  });
+});
+
+describe("responseStreamingModeCopy", () => {
+  it("resolves the label and description instead of returning raw keys", () => {
+    expect(responseStreamingModeCopy("turn")).toEqual({
+      label: "Wait for the full response",
+      description: "Text appears once the agent finishes its turn.",
+    });
+    expect(responseStreamingModeCopy("paragraph")).toEqual({
+      label: "Show finished paragraphs",
+      description: "Each paragraph or code block appears as soon as it is complete.",
+    });
   });
 });
