@@ -126,14 +126,15 @@ it.layer(layer)("Telescope token saver", (it) => {
         });
         const home = yield* writeTranscripts();
 
-        const run = tokenSaver
-          .runWeekly(alice, {
-            workspaceId,
-            since: "2026-11-01T00:00:00.000Z",
-            until: "2026-11-08T00:00:00.000Z",
-          })
-          .pipe(withHome(home));
-        const report = yield* run;
+        const run = (claudeHome: string) =>
+          tokenSaver
+            .runWeekly(alice, {
+              workspaceId,
+              since: "2026-11-01T00:00:00.000Z",
+              until: "2026-11-08T00:00:00.000Z",
+            })
+            .pipe(withHome(claudeHome));
+        const report = yield* run(home);
 
         assert.strictEqual(report.sessionsAnalyzed, 1);
         assert.deepStrictEqual(
@@ -154,7 +155,7 @@ it.layer(layer)("Telescope token saver", (it) => {
         });
         assert.include(report.markdown, "## 1. 巨大的工具输出");
         assert.include(report.markdown, "只统计在 Codi 线程中运行的会话，其他 provider 暂不支持");
-        assert.include(report.markdown, "超过阈值的结果 2，这些结果共计 token 35000");
+        assert.include(report.markdown, "超过阈值的结果 2 次，这些结果共计 35K token");
         assert.include(report.markdown, "- 测试通过率：未测量");
 
         const { decisions } = yield* board.listDecisions(alice, { workspaceId });
@@ -170,8 +171,11 @@ it.layer(layer)("Telescope token saver", (it) => {
         );
         assert.include(decision?.text, report.markdown);
 
-        const again = yield* run;
+        // The open proposal answers a rerun before any transcript is read: an empty home would
+        // otherwise find nothing and return no decision id.
+        const again = yield* run(yield* (yield* FileSystem.FileSystem).makeTempDirectoryScoped());
         assert.strictEqual(again.decisionId, report.decisionId);
+        assert.strictEqual(again.markdown, decision?.text);
         assert.strictEqual(
           (yield* board.listDecisions(alice, { workspaceId })).decisions.length,
           1,

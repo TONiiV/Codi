@@ -34,24 +34,28 @@ const PATTERN_LABELS: Record<Telescope.TokenSaverPattern, string> = {
   repeated_reads: "同一文件反复读",
   oversized_tool_outputs: "巨大的工具输出",
 };
-const EVIDENCE_LABELS: Readonly<Record<string, string>> = {
-  sessions: "统计的会话",
-  outlierSessions: "缓存写入异常的会话",
-  sessionsWithConfigChange: "期间改过配置文件的会话",
-  medianCacheWriteRatio: "缓存写入比例中位数",
-  excessCacheWriteTokens: "多写入的缓存 token",
-  changedFiles: "改过的文件",
-  repeatedReads: "重复读取次数",
-  repeatedReadTokens: "重复读取的 token",
-  sessionFilePairs: "涉及的会话和文件组合",
-  topFile: "重复最多的文件",
-  topFileRepeatsInOneSession: "该文件在一个会话里重复读",
-  oversizedResults: "超过阈值的结果",
-  oversizedResultTokens: "这些结果共计 token",
-  topToolThresholdTokens: "主要工具的阈值 token",
-  topTool: "主要来自",
-  topToolResults: "主要工具超过阈值的次数",
+const TOKEN = " token";
+const TIMES = " 次";
+/** Evidence key to its label and the unit that follows the number: "共计 35K token". */
+const EVIDENCE_LABELS: Readonly<Record<string, readonly [label: string, unit?: string]>> = {
+  sessions: ["统计的会话"],
+  outlierSessions: ["缓存写入异常的会话"],
+  sessionsWithConfigChange: ["期间改过配置文件的会话"],
+  medianCacheWriteRatio: ["缓存写入比例中位数"],
+  excessCacheWriteTokens: ["多写入的缓存", TOKEN],
+  changedFiles: ["改过的文件"],
+  repeatedReads: ["重复读取", TIMES],
+  repeatedReadTokens: ["重复读取共计", TOKEN],
+  sessionFilePairs: ["涉及的智能体和文件组合"],
+  topFile: ["重复最多的文件"],
+  topFileRepeatsInOneSession: ["该文件在一个智能体里重复读", TIMES],
+  oversizedResults: ["超过阈值的结果", TIMES],
+  oversizedResultTokens: ["这些结果共计", TOKEN],
+  topToolThresholdTokens: ["主要工具的阈值", TOKEN],
+  topTool: ["主要来自"],
+  topToolResults: ["主要工具超过阈值", TIMES],
 };
+const compact = new Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 1 });
 const CONFIDENCE_LABELS = { high: "高", medium: "中", low: "低" } as const;
 const SAVING_LABELS: Record<Telescope.TokenSaverFinding["savingKind"], (tokens: string) => string> =
   {
@@ -89,9 +93,10 @@ const renderMarkdown = (report: Omit<Telescope.TokenSaverReport, "markdown">) =>
     "节省数字是估算，先列省费用的，再列省 token 的，各自按预计节省排序。",
   ];
   for (const [index, finding] of report.findings.entries()) {
-    const evidence = Object.entries(finding.evidence).map(
-      ([key, value]) => `${EVIDENCE_LABELS[key] ?? key} ${value}`,
-    );
+    const evidence = Object.entries(finding.evidence).map(([key, value]) => {
+      const [label, unit = ""] = EVIDENCE_LABELS[key] ?? [key];
+      return `${label} ${unit && typeof value === "number" ? compact.format(value) : value}${unit}`;
+    });
     lines.push(
       "",
       `## ${index + 1}. ${PATTERN_LABELS[finding.pattern]}`,
@@ -202,6 +207,22 @@ const make = Effect.gen(function* () {
         .filter((binding) => binding.environmentId === environmentId)
         .map(({ projectId }) => projectId),
     );
+    // A proposal nobody has decided yet is the report for this workspace (D31): skip the transcripts.
+    const { decisions } = yield* board.listDecisions(actor, { workspaceId });
+    const open = decisions.find(
+      ({ authorId, status }) => authorId === AGENT_ID && status === "proposed",
+    );
+    if (open !== undefined)
+      return {
+        workspaceId,
+        since: iso(sinceMs),
+        until: iso(untilMs),
+        sessionsAnalyzed: 0,
+        findings: [],
+        quality: { testPassRate: null, followUpPrompts: null, rollbacks: null },
+        markdown: open.text,
+        decisionId: open.id,
+      };
     const sessions = projects.size === 0 ? [] : yield* readSessions(projects, { sinceMs, untilMs });
     const changes = yield* configChanges(sessions);
     const findings = [
@@ -228,11 +249,6 @@ const make = Effect.gen(function* () {
     };
     const report = { ...body, markdown: renderMarkdown(body) };
     if (findings.length === 0) return report;
-    const { decisions } = yield* board.listDecisions(actor, { workspaceId });
-    const open = decisions.find(
-      ({ authorId, status }) => authorId === AGENT_ID && status === "proposed",
-    );
-    if (open !== undefined) return { ...report, decisionId: open.id };
     const decision = yield* board.createDecision(
       { ...actor, authorId: AGENT_ID },
       {
