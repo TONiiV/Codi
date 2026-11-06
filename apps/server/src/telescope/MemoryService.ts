@@ -214,18 +214,14 @@ const make = Effect.gen(function* () {
       (row.level !== "private" || ownsPrivate(row)) &&
       (row.scope !== "person" || asCompanyAgent || row.about_subject_id === self.memberId);
     const found = rows.filter(visible).slice(0, input.limit ?? DEFAULT_LIMIT);
-    const retrieved = found.map((row) => ({ ...row, last_retrieved_at: at, uses: row.uses + 1 }));
-    yield* db.transaction(
-      Effect.forEach(retrieved, (row) =>
-        db.update(
-          workspaceId,
-          "memories",
-          { last_retrieved_at: at, uses: row.uses },
-          { memory_id: row.memory_id },
-        ),
-      ),
+    yield* db.markMemoriesRetrieved(
+      workspaceId,
+      found.map((row) => row.memory_id),
+      at,
     );
-    return { memories: retrieved.map(toMemory) };
+    return {
+      memories: found.map((row) => toMemory({ ...row, last_retrieved_at: at, uses: row.uses + 1 })),
+    };
   });
 
   const write = Effect.fn("MemoryService.write")(function* (

@@ -89,6 +89,12 @@ export class TelescopeDb extends Context.Service<
       decodeRows: RowsDecoder<A, R>,
       options: { readonly where: Row; readonly validAt: string | undefined },
     ) => Effect.Effect<A, PersistenceSqlError | PersistenceDecodeError, R>;
+    /** Adds one to `uses` in SQL, so concurrent searches do not overwrite each other's counts. */
+    readonly markMemoriesRetrieved: (
+      workspaceId: Telescope.WorkspaceId,
+      memoryIds: ReadonlyArray<string>,
+      at: string,
+    ) => Effect.Effect<void, PersistenceSqlError>;
     /** Cross-workspace lookups, each keyed by something no workspace owns. */
     readonly latestRunForThread: <A, R>(
       threadId: string,
@@ -252,6 +258,17 @@ const make = Effect.gen(function* () {
       Effect.mapError(toPersistenceDecodeError("TelescopeDb.searchMemories")),
     );
   });
+  const markMemoriesRetrieved = Effect.fn("TelescopeDb.markMemoriesRetrieved")(function* (
+    workspaceId: Telescope.WorkspaceId,
+    memoryIds: ReadonlyArray<string>,
+    at: string,
+  ) {
+    if (memoryIds.length === 0) return;
+    yield* sql`
+      UPDATE telescope_memories SET uses = uses + 1, last_retrieved_at = ${at}
+      WHERE workspace_id = ${workspaceId} AND ${sql.in("memory_id", memoryIds)}
+    `.pipe(Effect.mapError(toPersistenceSqlError("TelescopeDb.markMemoriesRetrieved")));
+  });
   const latestRunForThread = Effect.fn("TelescopeDb.latestRunForThread")(function* <A, R>(
     threadId: string,
     decodeRows: RowsDecoder<A, R>,
@@ -332,6 +349,7 @@ const make = Effect.gen(function* () {
     update,
     remove,
     searchMemories,
+    markMemoriesRetrieved,
     latestRunForThread,
     workspaceIdsOf,
     allWorkspaceIds,

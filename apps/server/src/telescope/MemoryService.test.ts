@@ -3,6 +3,7 @@ import { assert, it } from "@effect/vitest";
 import { AuthSessionId, Telescope, ThreadId } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Scheduler from "effect/Scheduler";
 import * as SqlClient from "effect/sql/SqlClient";
 
 import { runMigrations } from "../persistence/Migrations.ts";
@@ -297,6 +298,13 @@ it.layer(layer)("Telescope memories", (it) => {
         second.map((m) => [m.id, m.uses, m.lastRetrievedAt !== undefined]),
         [[later.id, 2, true]],
       );
+      // A small yield budget interleaves the searches, so some read before others write.
+      yield* Effect.all(
+        Array.from({ length: 4 }, () => search("alice", "周会", { limit: 1 })),
+        { concurrency: "unbounded" },
+      ).pipe(Effect.provideService(Scheduler.MaxOpsBeforeYield, 50));
+      const [counted] = yield* search("alice", "周会", { limit: 1 });
+      assert.strictEqual(counted?.uses, 7);
     }),
   );
 });
