@@ -34,7 +34,7 @@ export const transcript = {
         content: [{ type: "tool_use", id, name, input }],
       },
     }),
-  toolResult: (sessionId: string, minute: number, id: string, chars: number) =>
+  toolResult: (sessionId: string, minute: number, id: string, chars: number, plain = false) =>
     JSON.stringify({
       type: "user",
       sessionId,
@@ -46,7 +46,7 @@ export const transcript = {
           {
             type: "tool_result",
             tool_use_id: id,
-            content: [{ type: "text", text: "x".repeat(chars) }],
+            content: plain ? "x".repeat(chars) : [{ type: "text", text: "x".repeat(chars) }],
           },
         ],
       },

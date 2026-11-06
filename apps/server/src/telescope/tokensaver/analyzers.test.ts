@@ -24,6 +24,8 @@ describe("token saver transcripts", () => {
       transcript.toolUse("s1", 2, "m1", "t2", "Read", { file_path: "/repo/b.ts", offset: 10 }),
       transcript.toolResult("s1", 3, "t1", 400),
       transcript.toolResult("s1", 3, "t2", 8),
+      transcript.toolUse("s1", 2, "m1", "t3", "Bash", { command: "ls" }),
+      transcript.toolResult("s1", 3, "t3", 40, true),
       transcript.prompt("s1", 4, "and the tests"),
       transcript.prompt("s1", 5, "Caveat: injected context", { isMeta: true }),
       transcript.prompt("s1", 5, "subagent brief", { isSidechain: true }),
@@ -45,6 +47,7 @@ describe("token saver transcripts", () => {
     assert.deepStrictEqual(activity?.toolCalls, [
       { name: "Read", filePath: "/repo/a.ts", resultTokens: 100 },
       { name: "Read", filePath: "/repo/b.ts", range: "10:", resultTokens: 2 },
+      { name: "Bash", resultTokens: 10 },
     ]);
   });
 });
@@ -139,17 +142,21 @@ describe("token saver analyzers", () => {
     const finding = oversizedToolOutputs([
       session("s1", {
         toolCalls: [
-          { name: "Bash", resultTokens: 50_000 },
-          { name: "Bash", resultTokens: 25_000 },
-          { name: "mcp__db__query", resultTokens: 21_000 },
-          { name: "Read", resultTokens: 20_000 },
+          { name: "Bash", resultTokens: 6_000 },
+          { name: "Bash", resultTokens: 4_000 },
+          { name: "mcp__db__query", resultTokens: 9_000 },
+          { name: "Read", resultTokens: 8_000 },
+          { name: "Read", resultTokens: 7_000 },
         ],
       }),
     ]);
-    assert.strictEqual(finding?.estimatedSavingTokens, 36_000);
-    assert.strictEqual(finding?.evidence.oversizedResults, 3);
+    assert.strictEqual(finding?.estimatedSavingTokens, 3_000);
+    assert.strictEqual(finding?.evidence.oversizedResults, 2);
     assert.strictEqual(finding?.evidence.topTool, "Bash");
-    assert.include(finding?.suggestion, "tail -n 200");
+    assert.strictEqual(finding?.evidence.topToolThresholdTokens, 4_000);
+    assert.include(finding?.suggestion, "head -n 100");
     assert.include(finding?.suggestion, "Ask mcp__db__query for a page");
+    const capped = session("s2", { toolCalls: [{ name: "Bash", resultTokens: 4_900 }] });
+    assert.strictEqual(oversizedToolOutputs([capped]), undefined);
   });
 });

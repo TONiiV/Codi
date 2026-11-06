@@ -11,7 +11,9 @@ export interface ConfigChange {
   readonly mtimeMs: number;
 }
 
-const OVERSIZED_RESULT_TOKENS = 20_000;
+// Claude Code caps Bash output near 30K chars (about 7.5K tokens) and Read/MCP results at 25K.
+const OVERSIZED_BASH_TOKENS = 4_000;
+const OVERSIZED_RESULT_TOKENS = 8_000;
 // Below this a session's cache traffic is mostly the first prompt write, which is not waste.
 const MIN_CACHE_TOKENS = 50_000;
 // A short session's cold prefix write (about 25K for Claude Code) dominates its ratio.
@@ -152,17 +154,20 @@ export const repeatedReads = (sessions: ReadonlyArray<SessionActivity>): Finding
 };
 
 const OUTPUT_ADVICE: Readonly<Record<string, string>> = {
-  Bash: "Pipe long command output through `| tail -n 200` or `grep`; run tests with a reporter that prints only failures.",
+  Bash: "Pipe long command output through `| head -n 100` or `grep`; run tests with a reporter that prints only failures.",
   Read: "Read large files with `offset` and `limit` instead of whole.",
 };
+
+const oversizedThreshold = (tool: string) =>
+  tool === "Bash" ? OVERSIZED_BASH_TOKENS : OVERSIZED_RESULT_TOKENS;
 
 /** Single tool results above the threshold; the saving counts only the part above it. */
 export const oversizedToolOutputs = (
   sessions: ReadonlyArray<SessionActivity>,
-  thresholdTokens = OVERSIZED_RESULT_TOKENS,
 ): Finding | undefined => {
   const byTool = new Map<string, { count: number; tokens: number; excess: number }>();
   for (const call of sessions.flatMap(({ toolCalls }) => toolCalls)) {
+    const thresholdTokens = oversizedThreshold(call.name);
     if (call.resultTokens <= thresholdTokens) continue;
     const entry = byTool.get(call.name) ?? { count: 0, tokens: 0, excess: 0 };
     byTool.set(call.name, {
@@ -181,12 +186,12 @@ export const oversizedToolOutputs = (
     evidence: {
       oversizedResults: sum("count"),
       oversizedResultTokens: sum("tokens"),
-      thresholdTokens,
+      topToolThresholdTokens: oversizedThreshold(topTool),
       topTool,
       topToolResults: top.count,
     },
     suggestion:
-      `单次工具结果超过 ${thresholdTokens} token，主要来自 ${topTool}。让工具少输出：\n` +
+      `单次工具结果过大（Bash 超过 ${OVERSIZED_BASH_TOKENS} token，其他工具超过 ${OVERSIZED_RESULT_TOKENS} token），主要来自 ${topTool}。让工具少输出：\n` +
       claudeMdDiff([
         "## Tool output",
         ...ranked
