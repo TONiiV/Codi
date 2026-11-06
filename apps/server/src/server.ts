@@ -83,6 +83,8 @@ import * as PeerLinkRequests from "./peer/PeerLinkRequests.ts";
 import * as TelescopeWorkspaces from "./telescope/WorkspaceService.ts";
 import * as TelescopeBoard from "./telescope/TaskBoardService.ts";
 import * as TelescopeAgents from "./telescope/AgentService.ts";
+import * as TelescopeRuns from "./telescope/RunRecordService.ts";
+import * as TelescopeThreadTurnTokens from "./telescope/ThreadTurnTokens.ts";
 import * as PeerLinks from "./peer/PeerLinks.ts";
 import * as PeerMcpClient from "./peer/PeerMcpClient.ts";
 import * as McpSessionRegistry from "./mcp/McpSessionRegistry.ts";
@@ -668,6 +670,7 @@ const layerRuntimeCoreDependenciesBase = Layer.mergeAll(
       yield* service.start();
     }),
   ).pipe(Layer.provide(DelegatedTaskQuestionReactor.layer), Layer.provide(ProjectionStoreV2.layer)),
+  TelescopeThreadTurnTokens.layer.pipe(Layer.provide(TelescopeRuns.layer)),
   ProviderUsageLimitsIngestion.layer,
   layerProviderInstallationRefresh,
   ReplayMarkers.layer,
@@ -809,6 +812,7 @@ const layerMakeRoutes = Layer.mergeAll(
   Layer.provide(TelescopeWorkspaces.layer),
   Layer.provide(TelescopeBoard.layer),
   Layer.provide(TelescopeAgents.layer),
+  Layer.provide(TelescopeRuns.layer),
   // Share the service so HTTP/WS clients single-flight reads and invalidate each other's cached patches.
   Layer.provide(layerPullRequestService),
   // The same activity instance RunExecutionService reports to, by layer memoization.

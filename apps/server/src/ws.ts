@@ -128,6 +128,7 @@ import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
 import * as ScheduledTasks from "./scheduledTasks/ScheduledTaskService.ts";
 import * as TelescopeWorkspaces from "./telescope/WorkspaceService.ts";
 import * as TelescopeBoard from "./telescope/TaskBoardService.ts";
+import * as TelescopeRuns from "./telescope/RunRecordService.ts";
 import { PersistenceDecodeError, PersistenceSqlError } from "./persistence/Errors.ts";
 import * as TelescopeAgents from "./telescope/AgentService.ts";
 import * as SecretRequests from "./secrets/SecretRequests.ts";
@@ -1468,6 +1469,7 @@ export const layerWsRpc = (
       const scheduledTasks = yield* ScheduledTasks.ScheduledTaskService;
       const telescope = yield* TelescopeWorkspaces.WorkspaceService;
       const telescopeAgents = yield* TelescopeAgents.AgentService;
+      const telescopeRuns = yield* TelescopeRuns.RunRecordService;
       const caller = currentSession;
       const board = yield* TelescopeBoard.TaskBoardService;
       const actor = { caller };
@@ -2427,6 +2429,12 @@ export const layerWsRpc = (
           telescopeStorage(telescopeAgents.listCompany(caller, input)),
         [Telescope.WS_METHODS.agentUpdateCompany]: (input) =>
           telescopeStorage(telescopeAgents.updateCompany(caller, input)),
+        [Telescope.WS_METHODS.runList]: (input) =>
+          telescopeStorage(telescopeRuns.list(caller, input)),
+        [Telescope.WS_METHODS.runGet]: (input) =>
+          telescopeStorage(telescopeRuns.get(caller, input)),
+        [Telescope.WS_METHODS.runCalls]: (input) =>
+          telescopeStorage(telescopeRuns.calls(caller, input)),
         [WS_METHODS.guestShareCreate]: (input) =>
           Effect.annotateCurrentSpan({ "orchestration_v2.thread_id": input.threadId }).pipe(
             Effect.andThen(guestShares.create(input)),
@@ -3585,6 +3593,7 @@ export const layer = Layer.unwrap(
     const telescopeWorkspaces = yield* TelescopeWorkspaces.WorkspaceService;
     const telescopeBoard = yield* TelescopeBoard.TaskBoardService;
     const telescopeAgents = yield* TelescopeAgents.AgentService;
+    const telescopeRuns = yield* TelescopeRuns.RunRecordService;
     const sql = yield* SqlClient.SqlClient;
     return HttpRouter.add(
       "GET",
@@ -3679,6 +3688,7 @@ export const layer = Layer.unwrap(
               ),
               Layer.provide(Layer.succeed(TelescopeBoard.TaskBoardService, telescopeBoard)),
               Layer.provide(Layer.succeed(TelescopeAgents.AgentService, telescopeAgents)),
+              Layer.provide(Layer.succeed(TelescopeRuns.RunRecordService, telescopeRuns)),
               Layer.provide(
                 SourceControlDiscovery.layer.pipe(
                   Layer.provide(

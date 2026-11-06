@@ -72,9 +72,14 @@ describe("RPC authorization scopes", () => {
   });
 
   it("keeps telescope membership and project binding changes behind admin scope", () => {
-    expect(requiredScopeForRpcMethod(Telescope.WS_METHODS.memberAccept)).toBe(
-      AuthTelescopeMemberScope,
-    );
+    for (const method of [
+      Telescope.WS_METHODS.memberAccept,
+      Telescope.WS_METHODS.runList,
+      Telescope.WS_METHODS.runGet,
+      Telescope.WS_METHODS.runCalls,
+    ]) {
+      expect(requiredScopeForRpcMethod(method)).toBe(AuthTelescopeMemberScope);
+    }
     for (const method of [
       Telescope.WS_METHODS.memberInvite,
       Telescope.WS_METHODS.memberLinkCode,
