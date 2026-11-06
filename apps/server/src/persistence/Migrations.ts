@@ -85,6 +85,7 @@ import Migration0079 from "./Migrations/079_DelegatedRecoveryIndexes.ts";
 import Migration0080 from "./Migrations/080_ScheduledTaskThreadMode.ts";
 import Migration0081 from "./Migrations/081_RunAttemptNativeThreadIndex.ts";
 import Migration0082 from "./Migrations/082_Telescope.ts";
+import Migration0083 from "./Migrations/083_TelescopeMemberSessions.ts";
 
 const migrationEntries = [
   [1, "OrchestrationEvents", Migration0001],
@@ -170,6 +171,7 @@ const migrationEntries = [
   [80, "ScheduledTaskThreadMode", Migration0080],
   [81, "RunAttemptNativeThreadIndex", Migration0081],
   [82, "Telescope", Migration0082],
+  [83, "TelescopeMemberSessions", Migration0083],
 ] as const;
 
 export const migrationManifest = migrationEntries.map(([id, name]) => [id, name] as const);

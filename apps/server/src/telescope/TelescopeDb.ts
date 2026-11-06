@@ -17,6 +17,7 @@ import {
 export type TelescopeTable =
   | "workspaces"
   | "members"
+  | "member_sessions"
   | "invitations"
   | "project_bindings"
   | "agents"
@@ -72,8 +73,12 @@ export class TelescopeDb extends Context.Service<
     ) => Effect.Effect<void, PersistenceSqlError>;
     /** Cross-workspace lookups, each keyed by something no workspace owns. */
     readonly workspaceIdsOf: (
-      subjectId: Telescope.SubjectId,
+      deviceKey: string,
     ) => Effect.Effect<ReadonlyArray<Telescope.WorkspaceId>, PersistenceSqlError>;
+    readonly allWorkspaceIds: Effect.Effect<
+      ReadonlyArray<Telescope.WorkspaceId>,
+      PersistenceSqlError
+    >;
     readonly workspaceIdForInvitation: (
       code: string,
     ) => Effect.Effect<Telescope.WorkspaceId | undefined, PersistenceSqlError>;
@@ -154,13 +159,21 @@ const make = Effect.gen(function* () {
       Effect.mapError(toPersistenceSqlError(`TelescopeDb.remove.${table}`)),
     );
   });
-  const workspaceIdsOf = Effect.fn("TelescopeDb.workspaceIdsOf")(function* (subjectId: string) {
+  const workspaceIdsOf = Effect.fn("TelescopeDb.workspaceIdsOf")(function* (deviceKey: string) {
     const rows = yield* sql<{ readonly workspace_id: string }>`
-      SELECT workspace_id FROM telescope_members
-      WHERE subject_id = ${subjectId} AND revoked_at IS NULL
+      SELECT s.workspace_id FROM telescope_member_sessions s
+      JOIN telescope_members m ON m.workspace_id = s.workspace_id AND m.subject_id = s.member_id
+      WHERE s.device_key = ${deviceKey} AND m.revoked_at IS NULL
     `.pipe(Effect.mapError(toPersistenceSqlError("TelescopeDb.workspaceIdsOf")));
     return rows.map((row) => Telescope.WorkspaceId.make(row.workspace_id));
   });
+  const allWorkspaceIds = sql<{ readonly workspace_id: string }>`
+    SELECT workspace_id FROM telescope_workspaces
+  `.pipe(
+    Effect.mapError(toPersistenceSqlError("TelescopeDb.allWorkspaceIds")),
+    Effect.map((rows) => rows.map((row) => Telescope.WorkspaceId.make(row.workspace_id))),
+    Effect.withSpan("TelescopeDb.allWorkspaceIds"),
+  );
   const workspaceIdForInvitation = Effect.fn("TelescopeDb.workspaceIdForInvitation")(function* (
     code: string,
   ) {
@@ -186,6 +199,7 @@ const make = Effect.gen(function* () {
     update,
     remove,
     workspaceIdsOf,
+    allWorkspaceIds,
     workspaceIdForInvitation,
     transaction,
   });

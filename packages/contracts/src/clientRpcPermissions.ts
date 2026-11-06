@@ -7,11 +7,13 @@ import {
   AuthPreviewOperateScope,
   AuthSettingsWriteScope,
   AuthSourceControlWriteScope,
+  AuthTelescopeAdminScope,
   AuthTerminalOperateScope,
   type AuthEnvironmentScope,
 } from "./auth.ts";
 import { ORCHESTRATION_V2_WS_METHODS } from "./orchestrationV2.ts";
 import { WS_METHODS } from "./rpc.ts";
+import { WS_METHODS as TELESCOPE_WS_METHODS } from "./telescope/rpc.ts";
 
 /** Incremental client enforcement; the server still authorizes every request. */
 export const CLIENT_GUARDED_RPC_SCOPES = {
@@ -70,6 +72,13 @@ export const CLIENT_GUARDED_RPC_SCOPES = {
   [WS_METHODS.peerLinksUnlink]: AuthAccessWriteScope,
   // A link lets every agent here reach the other environment: Settings' bar.
   [WS_METHODS.peerLinksAnswerRequest]: AuthAccessWriteScope,
+  // Workspace roles are checked by the service; this scope is the environment's ceiling.
+  [TELESCOPE_WS_METHODS.memberInvite]: AuthTelescopeAdminScope,
+  [TELESCOPE_WS_METHODS.memberLinkCode]: AuthTelescopeAdminScope,
+  [TELESCOPE_WS_METHODS.memberSetRole]: AuthTelescopeAdminScope,
+  [TELESCOPE_WS_METHODS.memberRevoke]: AuthTelescopeAdminScope,
+  [TELESCOPE_WS_METHODS.projectBind]: AuthTelescopeAdminScope,
+  [TELESCOPE_WS_METHODS.projectUnbind]: AuthTelescopeAdminScope,
 } as const;
 export type ClientGuardedRpcTag = keyof typeof CLIENT_GUARDED_RPC_SCOPES;
 
