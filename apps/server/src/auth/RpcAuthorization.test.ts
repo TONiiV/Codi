@@ -83,6 +83,7 @@ describe("RPC authorization scopes", () => {
       Telescope.WS_METHODS.memorySearch,
       Telescope.WS_METHODS.memoryWrite,
       Telescope.WS_METHODS.memoryPin,
+      Telescope.WS_METHODS.dashboardSummary,
     ]) {
       expect(requiredScopeForRpcMethod(method)).toBe(AuthTelescopeMemberScope);
     }

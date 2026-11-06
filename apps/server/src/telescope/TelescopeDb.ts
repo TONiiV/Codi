@@ -43,7 +43,9 @@ type Row = Readonly<Record<string, string | number | null>>;
 export type RowsDecoder<A, R> = (rows: unknown) => Effect.Effect<A, Schema.SchemaError, R>;
 
 /** `filter` is parenthesised and ANDed with the workspace filter, so it cannot widen a select. */
-interface SelectOptions {
+export interface SelectOptions {
+  /** Defaults to every column. */
+  readonly columns?: ReadonlyArray<string>;
   readonly filter?: Statement.Fragment;
   readonly orderBy?: ReadonlyArray<string>;
   readonly descending?: boolean;
@@ -65,6 +67,12 @@ export class TelescopeDb extends Context.Service<
       where?: Row,
       options?: SelectOptions,
     ) => Effect.Effect<A, PersistenceSqlError | PersistenceDecodeError, R>;
+    /** The number of rows `select` returns for the same `where`, without reading them. */
+    readonly count: (
+      workspaceId: Telescope.WorkspaceId,
+      table: TelescopeTable,
+      where?: Row,
+    ) => Effect.Effect<number, PersistenceSqlError>;
     /** Keys of `row` and `set` must not name `workspace_id`; the repository writes it. */
     readonly insert: (
       workspaceId: Telescope.WorkspaceId,
@@ -117,7 +125,7 @@ export class TelescopeDb extends Context.Service<
       }>,
       PersistenceSqlError
     >;
-    /** Retention: drops every workspace's runs started before `cutoff`, with their calls. */
+    /** Retention: drops every workspace's runs that finished before `cutoff`, with their calls. */
     readonly pruneRunsBefore: (cutoff: string) => Effect.Effect<void, PersistenceSqlError>;
     /** The wake queue is shared by the whole machine. */
     readonly workspaceIdsWithActiveWakes: Effect.Effect<
@@ -162,6 +170,14 @@ const make = Effect.gen(function* () {
     options: SelectOptions = {},
   ) {
     yield* checkColumns(`TelescopeDb.select.${table}`, where, "caller");
+    const columns = options.columns ?? [];
+    yield* checkColumns(
+      `TelescopeDb.select.${table}`,
+      Object.fromEntries(columns.map((column) => [column, null])),
+      "caller",
+    );
+    const selected =
+      columns.length === 0 ? sql`*` : sql.csv(columns.map((column) => sql`${sql(column)}`));
     const filter = options.filter === undefined ? sql`` : sql` AND (${options.filter})`;
     const direction = sql.literal(options.descending ? "DESC" : "ASC");
     const order =
@@ -170,12 +186,25 @@ const make = Effect.gen(function* () {
         : sql` ORDER BY ${sql.csv(options.orderBy.map((column) => sql`${sql(column)} ${direction}`))}`;
     const limit = options.limit === undefined ? sql`` : sql` LIMIT ${options.limit}`;
     const rows =
-      yield* sql`SELECT * FROM ${tableName(table)} WHERE ${scoped(workspaceId, where)}${filter}${order}${limit}`.pipe(
+      yield* sql`SELECT ${selected} FROM ${tableName(table)} WHERE ${scoped(workspaceId, where)}${filter}${order}${limit}`.pipe(
         Effect.mapError(toPersistenceSqlError(`TelescopeDb.select.${table}`)),
       );
     return yield* decodeRows(rows).pipe(
       Effect.mapError(toPersistenceDecodeError(`TelescopeDb.select.${table}`)),
     );
+  });
+  const count = Effect.fn("TelescopeDb.count")(function* (
+    workspaceId: Telescope.WorkspaceId,
+    table: TelescopeTable,
+    where: Row = {},
+  ) {
+    yield* checkColumns(`TelescopeDb.count.${table}`, where, "caller");
+    const rows = yield* sql<{
+      readonly n: number;
+    }>`SELECT COUNT(*) AS n FROM ${tableName(table)} WHERE ${scoped(workspaceId, where)}`.pipe(
+      Effect.mapError(toPersistenceSqlError(`TelescopeDb.count.${table}`)),
+    );
+    return rows[0]?.n ?? 0;
   });
   const insert = Effect.fn("TelescopeDb.insert")(function* (
     workspaceId: Telescope.WorkspaceId,
@@ -319,8 +348,9 @@ const make = Effect.gen(function* () {
       .withTransaction(
         Effect.all([
           sql`DELETE FROM telescope_run_calls WHERE run_id IN
-          (SELECT run_id FROM telescope_runs WHERE started_at < ${cutoff})`,
-          sql`DELETE FROM telescope_runs WHERE started_at < ${cutoff}`,
+          (SELECT run_id FROM telescope_runs
+          WHERE finished_at IS NOT NULL AND finished_at < ${cutoff})`,
+          sql`DELETE FROM telescope_runs WHERE finished_at IS NOT NULL AND finished_at < ${cutoff}`,
         ]),
       )
       .pipe(Effect.mapError(toPersistenceSqlError("TelescopeDb.pruneRunsBefore")));
@@ -345,6 +375,7 @@ const make = Effect.gen(function* () {
 
   return TelescopeDb.of({
     select,
+    count,
     insert,
     update,
     remove,

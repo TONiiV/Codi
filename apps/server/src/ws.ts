@@ -136,6 +136,7 @@ import { PersistenceDecodeError, PersistenceSqlError } from "./persistence/Error
 import * as TelescopeAgents from "./telescope/AgentService.ts";
 import * as TelescopeWakeQueue from "./telescope/WakeQueueService.ts";
 import * as TelescopeMemory from "./telescope/MemoryService.ts";
+import * as TelescopeAttribution from "./telescope/AttributionService.ts";
 import * as SecretRequests from "./secrets/SecretRequests.ts";
 import * as GuestShareService from "./guest/GuestShareService.ts";
 import {
@@ -1479,6 +1480,7 @@ export const layerWsRpc = (
       const telescopeGrants = yield* TelescopeGrants.GrantService;
       const telescopeGateway = yield* TelescopeToolGateway.ToolGateway;
       const telescopeMemory = yield* TelescopeMemory.MemoryService;
+      const telescopeAttribution = yield* TelescopeAttribution.AttributionService;
       const caller = currentSession;
       const board = yield* TelescopeBoard.TaskBoardService;
       const tokenSaver = yield* TelescopeTokenSaver.TokenSaverService;
@@ -2475,6 +2477,8 @@ export const layerWsRpc = (
           telescopeStorage(telescopeMemory.write({ session: caller }, input)),
         [Telescope.WS_METHODS.memoryPin]: (input) =>
           telescopeStorage(telescopeMemory.pin({ session: caller }, input)),
+        [Telescope.WS_METHODS.dashboardSummary]: (input) =>
+          telescopeStorage(telescopeAttribution.summary(caller, input)),
         [WS_METHODS.guestShareCreate]: (input) =>
           Effect.annotateCurrentSpan({ "orchestration_v2.thread_id": input.threadId }).pipe(
             Effect.andThen(guestShares.create(input)),
@@ -3639,6 +3643,7 @@ export const layer = Layer.unwrap(
     const telescopeGrants = yield* TelescopeGrants.GrantService;
     const telescopeGateway = yield* TelescopeToolGateway.ToolGateway;
     const telescopeMemory = yield* TelescopeMemory.MemoryService;
+    const telescopeAttribution = yield* TelescopeAttribution.AttributionService;
     const sql = yield* SqlClient.SqlClient;
     return HttpRouter.add(
       "GET",
@@ -3736,7 +3741,10 @@ export const layer = Layer.unwrap(
               Layer.provide(Layer.succeed(TelescopeRuns.RunRecordService, telescopeRuns)),
               Layer.provide(Layer.succeed(TelescopeWakeQueue.WakeQueueService, telescopeWakes)),
               Layer.provide(
-                Layer.succeed(TelescopeTokenSaver.TokenSaverService, telescopeTokenSaver),
+                Layer.mergeAll(
+                  Layer.succeed(TelescopeTokenSaver.TokenSaverService, telescopeTokenSaver),
+                  Layer.succeed(TelescopeAttribution.AttributionService, telescopeAttribution),
+                ),
               ),
               Layer.provide(
                 Layer.mergeAll(

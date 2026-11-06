@@ -7,10 +7,12 @@ import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 import * as SqlClient from "effect/sql/SqlClient";
 import * as TestClock from "effect/testing/TestClock";
+import * as Tracer from "effect/Tracer";
 
 import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
 import { runMigrations } from "../persistence/Migrations.ts";
 import * as SqlitePersistence from "../persistence/Sqlite.ts";
+import * as ServerSettings from "../serverSettings.ts";
 import * as RunRecordService from "./RunRecordService.ts";
 import * as WorkspaceService from "./WorkspaceService.ts";
 
@@ -188,22 +190,26 @@ it.layer(layer)("Telescope run records", (it) => {
     }),
   );
 
-  it.effect("prunes runs and their calls started before the cutoff", () =>
+  it.effect("prunes finished runs and their calls ended before the cutoff, never open ones", () =>
     Effect.gen(function* () {
       const { runs, workspaceId } = yield* setup;
       const start = runs.start(alice, workspaceId, {
         agentId,
         inputSnapshot: snapshot([]),
       });
+      const call = {
+        tool: "board.read",
+        argsRedacted: {},
+        grantCheck: "allowed" as const,
+        durationMs: 3,
+      };
       const old = yield* start;
-      yield* runs.recordCall(
+      const stillOpen = yield* start;
+      yield* runs.recordCall({ workspaceId, runId: old.id }, call);
+      yield* runs.recordCall({ workspaceId, runId: stillOpen.id }, call);
+      yield* runs.finish(
         { workspaceId, runId: old.id },
-        {
-          tool: "board.read",
-          argsRedacted: {},
-          grantCheck: "allowed",
-          durationMs: 3,
-        },
+        { outputSummary: "done", tokens: noTokens, resultLabels: [] },
       );
       yield* TestClock.adjust("2 days");
       const recent = yield* start;
@@ -216,6 +222,78 @@ it.layer(layer)("Telescope run records", (it) => {
       const calls = yield* sql`SELECT 1 FROM telescope_run_calls WHERE run_id = ${old.id}`;
       assert.strictEqual(calls.length, 0);
       assert.strictEqual((yield* runs.get(alice, { workspaceId, runId: recent.id })).id, recent.id);
+      const open = { workspaceId, runId: stillOpen.id };
+      assert.lengthOf((yield* runs.calls(alice, open)).calls, 1);
+      yield* runs.recordCall(open, call);
+      yield* runs.finish(open, { outputSummary: "late", tokens: noTokens, resultLabels: [] });
+    }),
+  );
+
+  it.effect("lists a run's memories in manifest order with the run each came from", () =>
+    Effect.gen(function* () {
+      const { runs, workspaceId } = yield* setup;
+      const writer = yield* runs.start(alice, workspaceId, {
+        agentId,
+        inputSnapshot: snapshot([]),
+      });
+      const sql = yield* SqlClient.SqlClient;
+      const memory = (id: string, source: object) =>
+        sql`INSERT INTO telescope_memories (memory_id, workspace_id, agent_id, scope, layer, level,
+          kind, text, source_json, valid_from)
+          VALUES (${id}, ${workspaceId}, ${agentId}, 'personal', 'long_term', 'internal', 'fact',
+          'text', ${JSON.stringify(source)}, '2026-01-01T00:00:00.000Z')`;
+      yield* memory("memory-2", { runId: writer.id });
+      yield* memory(memoryId, { threadId: "thread-x" });
+      const reader = yield* runs.start(alice, workspaceId, {
+        agentId,
+        inputSnapshot: snapshot(["memory-2", "memory-gone", memoryId]),
+      });
+
+      const { memories } = yield* runs.memoriesForRun(alice, { workspaceId, runId: reader.id });
+      assert.deepStrictEqual(memories, [
+        {
+          memoryId: Telescope.MemoryId.make("memory-2"),
+          hash: "h-memory-2",
+          stored: true,
+          sourceRunId: writer.id,
+        },
+        { memoryId: Telescope.MemoryId.make("memory-gone"), hash: "h-memory-gone", stored: false },
+        { memoryId, hash: `h-${memoryId}`, stored: true },
+      ]);
+      const none = yield* runs.memoriesForRun(alice, { workspaceId, runId: writer.id });
+      assert.deepStrictEqual(none.memories, []);
+    }),
+  );
+
+  it.effect("exports the provider name on the run span only when the snapshot has one", () =>
+    Effect.gen(function* () {
+      const { runs, workspaceId } = yield* setup;
+      const providers: Array<unknown> = [];
+      const tracer = Tracer.make({
+        span: (options) => {
+          const span = new Tracer.NativeSpan(options);
+          const end = span.end.bind(span);
+          span.end = (endTime, exit) => {
+            end(endTime, exit);
+            if (options.name === "invoke_agent")
+              providers.push(span.attributes.get("gen_ai.provider.name"));
+          };
+          return span;
+        },
+      });
+      for (const provider of ["anthropic", undefined]) {
+        const run = yield* runs.start(alice, workspaceId, {
+          agentId,
+          inputSnapshot: { ...snapshot([]), ...(provider === undefined ? {} : { provider }) },
+        });
+        yield* runs
+          .finish(
+            { workspaceId, runId: run.id },
+            { outputSummary: "done", tokens: noTokens, resultLabels: [] },
+          )
+          .pipe(Effect.withTracer(tracer));
+      }
+      assert.deepStrictEqual(providers, ["anthropic", undefined]);
     }),
   );
 
@@ -232,6 +310,7 @@ it.layer(layer)("Telescope run records", (it) => {
         runs.calls(mallory, scoped),
         runs.list(mallory, { workspaceId }),
         runs.runsForMemory(mallory, { workspaceId, memoryId }),
+        runs.memoriesForRun(mallory, scoped),
         runs.start(mallory, workspaceId, { agentId, inputSnapshot: snapshot([]) }),
       ];
       for (const read of reads) {
@@ -240,3 +319,66 @@ it.layer(layer)("Telescope run records", (it) => {
     }),
   );
 });
+
+it.effect("the retention pass prunes runs past the configured days once a day", () =>
+  Effect.gen(function* () {
+    const { runs, workspaceId } = yield* setup;
+    const day = 24 * 60 * 60 * 1000;
+    const exists = (runId: Telescope.AgentRunId) =>
+      runs
+        .get(alice, { workspaceId, runId })
+        .pipe(
+          Effect.as(true),
+          Effect.catchTags({ TelescopeWorkspaceError: () => Effect.succeed(false) }),
+        );
+    const start = runs.start(alice, workspaceId, { agentId, inputSnapshot: snapshot([]) });
+    const finish = (runId: Telescope.AgentRunId) =>
+      runs.finish(
+        { workspaceId, runId },
+        { outputSummary: "done", tokens: noTokens, resultLabels: [] },
+      );
+    yield* TestClock.setTime(0);
+    const old = yield* start;
+    yield* finish(old.id);
+    const stillOpen = yield* start;
+    yield* TestClock.setTime(5 * day);
+    const recent = yield* start;
+    yield* finish(recent.id);
+    const pass = yield* RunRecordService.makeRetentionPass;
+
+    yield* TestClock.setTime(7 * day);
+    yield* pass;
+    assert.deepStrictEqual(
+      [yield* exists(old.id), yield* exists(stillOpen.id), yield* exists(recent.id)],
+      [false, true, true],
+    );
+
+    // The next check waits a day, so a run that ages out meanwhile survives until then.
+    yield* TestClock.setTime(8 * day - 1);
+    const late = yield* start;
+    yield* pass;
+    assert.isTrue(yield* exists(recent.id));
+    yield* TestClock.setTime(9 * day);
+    yield* pass;
+    assert.deepStrictEqual(
+      [yield* exists(recent.id), yield* exists(late.id), yield* exists(stillOpen.id)],
+      [false, true, true],
+    );
+
+    // Retention counts from the finish: a run open longer than the window survives its finish.
+    yield* TestClock.setTime(10 * day);
+    yield* finish(stillOpen.id);
+    yield* TestClock.setTime(10 * day + 60_000);
+    yield* pass;
+    assert.isTrue(yield* exists(stillOpen.id));
+    yield* TestClock.setTime(12 * day + 60_000);
+    yield* pass;
+    assert.isFalse(yield* exists(stillOpen.id));
+  }).pipe(
+    Effect.provide(
+      layer.pipe(
+        Layer.provideMerge(ServerSettings.layerTest({ telescope: { runRetentionDays: 2 } })),
+      ),
+    ),
+  ),
+);
