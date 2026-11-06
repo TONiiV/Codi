@@ -95,7 +95,6 @@ import {
 } from "./SettingsPanels.logic";
 import {
   SETTINGS_PICKER_TRIGGER_CLASSNAME,
-  SettingResetButton,
   TranslatedSettingResetButton,
   SettingsPageContainer,
   SettingsRow,
@@ -111,7 +110,7 @@ import { environmentIdsKey } from "~/state/environmentAtomList";
 import { environmentSessionStatesAtom } from "~/state/session";
 import { canUpdateServer } from "../ServerUpdateAction";
 import { useUpdateEverythingRun } from "../sidebar/updateEverythingRun";
-import { awaitsTrackSwitch, channelSwitchLabel } from "../sidebar/updateEverything.logic";
+import { awaitsTrackSwitch } from "../sidebar/updateEverything.logic";
 import { isHostedByThisApp } from "../sidebar/useUpdateEverything";
 
 const isSidebarProjectSortOrder = Schema.is(SidebarProjectSortOrder);
@@ -124,6 +123,7 @@ const DIFF_LAYOUT_LABELS: Record<DiffLayout, string> = {
 
 const DEFAULT_DRIVER_KIND = ProviderDriverKind.make("codex");
 function AboutVersionSection() {
+  const { t } = useTranslation();
   const updateState = useDesktopUpdateState();
   const [switchChannel, setSwitchChannel] = useState<DesktopUpdateChannel | null>(null);
   const [isUpdateActionPending, setIsUpdateActionPending] = useState(false);
@@ -176,8 +176,8 @@ function AboutVersionSection() {
         toastManager.add(
           stackedThreadToast({
             type: "error",
-            title: "Could not download update",
-            description: error instanceof Error ? error.message : "Download failed.",
+            title: t("settings.text.couldNotDownloadUpdate"),
+            description: error instanceof Error ? error.message : t("settings.text.downloadFailed"),
           }),
         );
       });
@@ -199,8 +199,9 @@ function AboutVersionSection() {
         toastManager.add(
           stackedThreadToast({
             type: "error",
-            title: "Could not confirm update",
-            description: error instanceof Error ? error.message : "Update confirmation failed.",
+            title: t("settings.text.couldNotConfirmUpdate"),
+            description:
+              error instanceof Error ? error.message : t("settings.text.updateConfirmationFailed"),
           }),
         );
         return;
@@ -215,8 +216,9 @@ function AboutVersionSection() {
           toastManager.add(
             stackedThreadToast({
               type: "error",
-              title: "Could not install update",
-              description: error instanceof Error ? error.message : "Install failed.",
+              title: t("settings.text.couldNotInstallUpdate"),
+              description:
+                error instanceof Error ? error.message : t("settings.text.installFailed"),
             }),
           );
         })
@@ -232,11 +234,11 @@ function AboutVersionSection() {
           toastManager.add(
             stackedThreadToast({
               type: "error",
-              title: "Could not check for updates",
+              title: t("settings.text.couldNotCheckForUpdates"),
               description:
                 updatesDenial ??
                 result.state.message ??
-                "Automatic updates are not available in this build.",
+                t("settings.text.automaticUpdatesAreNotAvailableIn"),
             }),
           );
         }
@@ -245,8 +247,9 @@ function AboutVersionSection() {
         toastManager.add(
           stackedThreadToast({
             type: "error",
-            title: "Could not check for updates",
-            description: error instanceof Error ? error.message : "Update check failed.",
+            title: t("settings.text.couldNotCheckForUpdates"),
+            description:
+              error instanceof Error ? error.message : t("settings.text.updateCheckFailed"),
           }),
         );
       });
@@ -259,25 +262,30 @@ function AboutVersionSection() {
       ? !canCheckForUpdate(updateState)
       : isDesktopUpdateButtonDisabled(updateState);
 
-  const actionLabel: Record<string, string> = { download: "Download", install: "Install" };
+  const actionLabel: Record<string, string> = {
+    download: t("settings.parallelA.updateDownload"),
+    install: t("settings.text.install"),
+  };
   const statusLabel: Record<string, string> = {
-    checking: "Checking…",
-    downloading: "Downloading…",
+    checking: t("settings.text.checking"),
+    downloading: t("settings.parallelA.updateDownloading"),
     // Off its track, "up to date" only means no switch is pending; Review moves it.
-    ...(appOffTrack ? {} : { "up-to-date": "Up to Date" }),
+    ...(appOffTrack ? {} : { "up-to-date": t("settings.parallelA.updateUpToDate") }),
   };
   const buttonLabel =
-    actionLabel[action] ?? statusLabel[updateState?.status ?? ""] ?? "Check for Updates";
+    actionLabel[action] ??
+    statusLabel[updateState?.status ?? ""] ??
+    t("settings.text.checkForUpdates");
   const description =
     action === "download" || action === "install"
-      ? "Update available."
+      ? t("settings.text.updateAvailable")
       : (getDesktopUpdateDisabledReason(updateState, updatesDenial) ??
-        "Current version of the application.");
+        t("settings.text.currentVersionOfTheApplication"));
 
   return (
     <>
       <SettingsRow
-        id={searchableSetting("app-version").id}
+        id={searchableSetting("app-version", t).id}
         title={<AboutVersionTitle />}
         description={description}
         managed={updatesDenial}
@@ -301,32 +309,39 @@ function AboutVersionSection() {
       />
       {hasDesktopBridge ? (
         <SettingsRow
-          {...searchableSetting("update-track")}
+          {...searchableSetting("update-track", t)}
           description={
             nightlyDeniedBy !== undefined ? (
-              `${managedUpdatesMessage(nightlyDeniedBy)} Nightly builds are not available${
+              t(
                 selectedUpdateChannel === "nightly"
-                  ? "; switch to Stable to keep getting updates."
-                  : "."
-              }`
+                  ? "settings.parallelA.nightlyUnavailableSwitch"
+                  : "settings.parallelA.nightlyUnavailable",
+                { message: managedUpdatesMessage(nightlyDeniedBy) },
+              )
             ) : unswitchedMachines > 0 ? (
               <>
                 {unswitchedMachines === 1
-                  ? "1 machine still runs"
-                  : `${unswitchedMachines} machines still run`}{" "}
-                {channelSwitchLabel(selectedUpdateChannel === "nightly" ? "latest" : "nightly")}.{" "}
-                {/* The dialog moves what it can and says why it skips the rest. */}
+                  ? t("settings.text.n1MachineStillRuns")
+                  : t("settings.text.unswitchedmachinesMachinesStillRun", {
+                      unswitchedMachines,
+                    })}{" "}
+                {t(
+                  selectedUpdateChannel === "nightly"
+                    ? "settings.text.stable"
+                    : "settings.text.nightly",
+                )}
+                . {/* The dialog moves what it can and says why it skips the rest. */}
                 <Button
                   size="xs"
                   variant="link"
                   disabled={updateRun !== null}
                   onClick={() => setSwitchChannel(selectedUpdateChannel)}
                 >
-                  Review
+                  {t("settings.text.review")}
                 </Button>
               </>
             ) : (
-              "Switches this app and every connected machine whose database the target release supports."
+              t("settings.text.switchesThisAppAndEveryConnected")
             )
           }
           managed={updatesDenial}
@@ -342,21 +357,27 @@ function AboutVersionSection() {
               <SelectTrigger
                 size="sm"
                 className="w-full sm:w-40"
-                aria-label="Update track"
+                aria-label={t("settings.text.updateTrack")}
                 disabled={switchChannel !== null || updateRun !== null}
               >
-                <SelectValue>{channelSwitchLabel(selectedUpdateChannel)}</SelectValue>
+                <SelectValue>
+                  {t(
+                    selectedUpdateChannel === "nightly"
+                      ? "settings.text.nightly"
+                      : "settings.text.stable",
+                  )}
+                </SelectValue>
               </SelectTrigger>
               <SelectPopup align="end" alignItemWithTrigger={false}>
                 <SelectItem hideIndicator value="latest">
-                  Stable
+                  {t("settings.text.stable")}
                 </SelectItem>
                 <SelectItem
                   hideIndicator
                   value="nightly"
                   disabled={nightlyDeniedBy !== undefined && selectedUpdateChannel !== "nightly"}
                 >
-                  Nightly
+                  {t("settings.text.nightly")}
                 </SelectItem>
               </SelectPopup>
             </Select>
@@ -364,8 +385,8 @@ function AboutVersionSection() {
         />
       ) : selectedHostedAppChannel ? (
         <SettingsRow
-          {...searchableSetting("update-track")}
-          description="Switches the hosted app release channel."
+          {...searchableSetting("update-track", t)}
+          description={t("settings.text.switchesTheHostedAppReleaseChannel")}
           control={
             <Select
               value={selectedHostedAppChannel}
@@ -376,15 +397,19 @@ function AboutVersionSection() {
                 );
               }}
             >
-              <SelectTrigger size="sm" className="w-full sm:w-40" aria-label="Update track">
+              <SelectTrigger
+                size="sm"
+                className="w-full sm:w-40"
+                aria-label={t("settings.text.updateTrack")}
+              >
                 <SelectValue>{HOSTED_APP_CHANNEL_LABEL}</SelectValue>
               </SelectTrigger>
               <SelectPopup align="end" alignItemWithTrigger={false}>
                 <SelectItem hideIndicator value="latest">
-                  Latest
+                  {t("settings.text.latest")}
                 </SelectItem>
                 <SelectItem hideIndicator value="nightly">
-                  Nightly
+                  {t("settings.text.nightly")}
                 </SelectItem>
               </SelectPopup>
             </Select>
@@ -743,34 +768,35 @@ function AutoSettleDaysInput({
 }
 
 export function LegacyFeaturesSection() {
+  const { t } = useTranslation();
   const settings = useScopedSettings();
   const updateSettings = useUpdateScopedSettings();
 
   return (
-    <SettingsSection id="legacy-features" title="Legacy">
+    <SettingsSection id="legacy-features" title={t("settings.text.legacy")}>
       <SettingsRow
-        {...searchableSetting("legacy-plan-mode")}
-        description="Restore Build/Plan, /plan, /default, and Shift+Tab. Off uses build mode."
+        {...searchableSetting("legacy-plan-mode", t)}
+        description={t("settings.text.restoreBuildPlanPlanDefaultAnd")}
         control={
           <Switch
             checked={settings.planModeEnabled}
             onCheckedChange={(checked) => {
               updateSettings({ planModeEnabled: Boolean(checked) });
             }}
-            aria-label="Plan mode (legacy)"
+            aria-label={t("settings.text.planModeLegacy")}
           />
         }
       />
       <SettingsRow
-        {...searchableSetting("legacy-context-window-indicator")}
-        description="Shows context window usage as a circular indicator in the composer."
+        {...searchableSetting("legacy-context-window-indicator", t)}
+        description={t("settings.text.showsContextWindowUsageAsA")}
         control={
           <Switch
             checked={settings.contextWindowMeterEnabled}
             onCheckedChange={(checked) =>
               updateSettings({ contextWindowMeterEnabled: Boolean(checked) })
             }
-            aria-label="Context window indicator (legacy)"
+            aria-label={t("settings.text.contextWindowIndicatorLegacy")}
           />
         }
       />
@@ -2025,6 +2051,7 @@ export function ThreadsSettingsPanel() {
 }
 
 export function MaintenanceSettingsPanel() {
+  const { t } = useTranslation();
   const settings = useScopedSettings();
   const updateSettings = useUpdateScopedSettings();
   const { scope, environment, connectedEnvironments } = useSettingsScope();
@@ -2034,17 +2061,17 @@ export function MaintenanceSettingsPanel() {
 
   return (
     <SettingsPageContainer>
-      <SettingsSection id="updates" title="Updates">
+      <SettingsSection id="updates" title={t("settings.text.updates")}>
         <SettingsRow
           serverScoped
           settingKeys={["enableProviderUpdateChecks"]}
-          {...searchableSetting("provider-update-checks")}
-          description="Check installed provider CLIs for newer available versions and fetch model catalog updates. When off, new models may not appear."
+          {...searchableSetting("provider-update-checks", t)}
+          description={t("settings.text.checkInstalledProviderClisForNewer")}
           resetAction={
             settings.enableProviderUpdateChecks !==
             DEFAULT_UNIFIED_SETTINGS.enableProviderUpdateChecks ? (
-              <SettingResetButton
-                label="provider update checks"
+              <TranslatedSettingResetButton
+                label={t("settings.text.providerUpdateChecks")}
                 onClick={() =>
                   updateSettings({
                     enableProviderUpdateChecks: DEFAULT_UNIFIED_SETTINGS.enableProviderUpdateChecks,
@@ -2060,26 +2087,24 @@ export function MaintenanceSettingsPanel() {
               onCheckedChange={(checked) =>
                 updateSettings({ enableProviderUpdateChecks: Boolean(checked) })
               }
-              aria-label="Check provider versions"
+              aria-label={t("settings.text.checkProviderVersions")}
             />
           }
         />
         <SettingsRow
-          {...searchableSetting("continue-threads-after-server-update")}
+          {...searchableSetting("continue-threads-after-server-update", t)}
           serverScoped
           settingKeys={["continueThreadsAfterServerUpdate"]}
-          description="Automatically resume interrupted threads after an update, crash, or machine restart on the selected environments."
+          description={t("settings.text.automaticallyResumeInterruptedThreadsAfterAn")}
           status={
-            !hasServerTargets
-              ? "All selected connected environments must support restart continuation."
-              : undefined
+            !hasServerTargets ? t("settings.parallelA.restartContinuationUnsupported") : undefined
           }
           resetAction={
             hasServerTargets &&
             settings.continueThreadsAfterServerUpdate !==
               DEFAULT_UNIFIED_SETTINGS.continueThreadsAfterServerUpdate ? (
-              <SettingResetButton
-                label="continue threads after restarts"
+              <TranslatedSettingResetButton
+                label={t("settings.text.continueThreadsAfterRestarts")}
                 onClick={() =>
                   updateSettings({
                     continueThreadsAfterServerUpdate:
@@ -2097,25 +2122,25 @@ export function MaintenanceSettingsPanel() {
               onCheckedChange={(checked) =>
                 updateSettings({ continueThreadsAfterServerUpdate: Boolean(checked) })
               }
-              aria-label="Continue threads after restarts"
+              aria-label={t("settings.text.continueThreadsAfterRestarts2")}
             />
           }
         />
       </SettingsSection>
 
-      <SettingsSection id="background" title="Background activity">
+      <SettingsSection id="background" title={t("settings.text.backgroundActivity3")}>
         <BackgroundActivitySettingsRow />
       </SettingsSection>
 
       <StorageCleanupSections />
 
-      <SettingsSection id="diagnostics-section" title="Diagnostics">
+      <SettingsSection id="diagnostics-section" title={t("settings.text.diagnostics")}>
         <SettingsRow
-          {...searchableSetting("diagnostics")}
+          {...searchableSetting("diagnostics", t)}
           description={
             isEnvironmentScope
-              ? "Inspect processes, resource use, and logs on this environment."
-              : "Inspect processes, resource use, and logs on one environment at a time."
+              ? t("settings.text.inspectProcessesResourceUseAndLogs")
+              : t("settings.text.inspectProcessesResourceUseAndLogs2")
           }
           control={
             <Button
@@ -2125,7 +2150,7 @@ export function MaintenanceSettingsPanel() {
               size="sm"
               variant="outline"
             >
-              View diagnostics
+              {t("settings.text.viewDiagnostics")}
             </Button>
           }
         />
@@ -2135,15 +2160,18 @@ export function MaintenanceSettingsPanel() {
 }
 
 export function AboutSettingsPanel() {
+  const { t } = useTranslation();
   const primaryPolicy = usePrimaryManagedPolicy();
   const telemetryOff = managedTelemetryOffMessage(primaryPolicy);
   return (
     <SettingsPageContainer>
-      <SettingsSection id="about" title="App">
+      <SettingsSection id="about" title={t("settings.text.app")}>
         {primaryPolicy ? (
           <SettingsRow
-            title="Organization"
-            description={`This environment is managed by ${primaryPolicy.organization}. Some settings and features follow its policy.`}
+            title={t("settings.text.organization")}
+            description={t("settings.text.thisEnvironmentIsManagedByOrganization", {
+              organization: primaryPolicy.organization,
+            })}
             control={
               primaryPolicy.supportUrl ? (
                 <Button
@@ -2153,7 +2181,7 @@ export function AboutSettingsPanel() {
                   size="sm"
                   variant="outline"
                 >
-                  Get help
+                  {t("settings.text.getHelp")}
                 </Button>
               ) : null
             }
@@ -2164,22 +2192,22 @@ export function AboutSettingsPanel() {
         ) : (
           <>
             <SettingsRow
-              id={searchableSetting("app-version").id}
+              id={searchableSetting("app-version", t).id}
               title={<AboutVersionTitle />}
-              description="Current version of the application."
+              description={t("settings.text.currentVersionOfTheApplication")}
             />
           </>
         )}
         <MobileAppSettingsRow />
       </SettingsSection>
 
-      <SettingsSection id="legal" title="Legal">
+      <SettingsSection id="legal" title={t("settings.text.legal")}>
         <SettingsRow
-          {...searchableSetting("privacy-policy")}
+          {...searchableSetting("privacy-policy", t)}
           description={
             telemetryOff === undefined
-              ? "How we handle your data, including the anonymous usage data Codi collects."
-              : `How we handle your data. ${telemetryOff}`
+              ? t("settings.text.howWeHandleYourDataIncluding")
+              : t("settings.text.howWeHandleYourDataTelemetryoff", { telemetryOff })
           }
           control={
             <Button
@@ -2187,20 +2215,20 @@ export function AboutSettingsPanel() {
               size="sm"
               variant="outline"
             >
-              View policy
+              {t("settings.text.viewPolicy")}
             </Button>
           }
         />
         <SettingsRow
-          {...searchableSetting("open-source-licenses")}
-          description="Notices for dependencies, assets, and optional tools used by Codi."
+          {...searchableSetting("open-source-licenses", t)}
+          description={t("settings.text.noticesForDependenciesAssetsAndOptional")}
           control={
             <Button
               render={<Link to="/settings/open-source-licenses" />}
               size="sm"
               variant="outline"
             >
-              View licenses
+              {t("settings.text.viewLicenses")}
             </Button>
           }
         />
