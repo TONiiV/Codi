@@ -74,6 +74,7 @@ export const CLIENT_GUARDED_RPC_SCOPES = {
   [WS_METHODS.peerLinksAnswerRequest]: AuthAccessWriteScope,
   // Workspace roles are checked by the service; this scope is the environment's ceiling.
   [TELESCOPE_WS_METHODS.memberInvite]: AuthTelescopeAdminScope,
+  [TELESCOPE_WS_METHODS.memberLinkCode]: AuthTelescopeAdminScope,
   [TELESCOPE_WS_METHODS.memberSetRole]: AuthTelescopeAdminScope,
   [TELESCOPE_WS_METHODS.memberRevoke]: AuthTelescopeAdminScope,
   [TELESCOPE_WS_METHODS.projectBind]: AuthTelescopeAdminScope,

@@ -77,6 +77,7 @@ describe("RPC authorization scopes", () => {
     );
     for (const method of [
       Telescope.WS_METHODS.memberInvite,
+      Telescope.WS_METHODS.memberLinkCode,
       Telescope.WS_METHODS.memberSetRole,
       Telescope.WS_METHODS.memberRevoke,
       Telescope.WS_METHODS.projectBind,

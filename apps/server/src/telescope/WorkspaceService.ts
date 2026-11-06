@@ -1,4 +1,4 @@
-import { EnvironmentId, ProjectId, Telescope } from "@t3tools/contracts";
+import { type AuthSessionId, EnvironmentId, ProjectId, Telescope } from "@t3tools/contracts";
 import * as Context from "effect/Context";
 import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as DateTime from "effect/DateTime";
@@ -28,10 +28,13 @@ const MemberRow = Schema.Struct({
   joined_at: Schema.String,
   revoked_at: Schema.NullOr(Schema.String),
 });
+const SessionLinkRow = Schema.Struct({ member_id: Schema.String });
 const InvitationRow = Schema.Struct({
   invitation_id: Telescope.InvitationId,
   workspace_id: Telescope.WorkspaceId,
   role: Telescope.WorkspaceRole,
+  invited_by: Schema.String,
+  for_member_id: Schema.NullOr(Schema.String),
   expires_at: Schema.String,
   accepted_at: Schema.NullOr(Schema.String),
 });
@@ -44,6 +47,7 @@ const BindingRow = Schema.Struct({
 
 const decodeWorkspaces = Schema.decodeUnknownEffect(Schema.Array(WorkspaceRow));
 const decodeMembers = Schema.decodeUnknownEffect(Schema.Array(MemberRow));
+const decodeSessionLinks = Schema.decodeUnknownEffect(Schema.Array(SessionLinkRow));
 const decodeInvitations = Schema.decodeUnknownEffect(Schema.Array(InvitationRow));
 const decodeBindings = Schema.decodeUnknownEffect(Schema.Array(BindingRow));
 
@@ -72,7 +76,7 @@ const toBinding = (row: typeof BindingRow.Type): Telescope.ProjectBinding => ({
 const fail = (reason: Telescope.WorkspaceError["reason"], message: string) =>
   Effect.fail(new Telescope.WorkspaceError({ reason, message }));
 
-type Caller = Telescope.SubjectId;
+type Caller = AuthSessionId;
 type Failure = Telescope.WorkspaceError | PersistenceSqlError | PersistenceDecodeError;
 type Rpcs = (typeof Telescope.WorkspaceRpcs)[number];
 type In<Tag extends Rpcs["_tag"]> = Rpc.Payload<Rpc.ExtractTag<Rpcs, Tag>>;
@@ -81,7 +85,10 @@ type Method<Tag extends Rpcs["_tag"]> = (
   input: In<Tag>,
 ) => Effect.Effect<Rpc.Success<Rpc.ExtractTag<Rpcs, Tag>>, Failure>;
 
-/** Workspaces, members, invitations and project bindings. `caller` is the session subject. */
+/**
+ * Workspaces, members, invitations and project bindings. `caller` is the auth session id; it acts
+ * as the member it is linked to in `telescope_member_sessions`. Member ids fill `subjectId`.
+ */
 export class WorkspaceService extends Context.Service<
   WorkspaceService,
   {
@@ -89,6 +96,7 @@ export class WorkspaceService extends Context.Service<
     readonly list: Method<"telescope.workspace.list">;
     readonly get: Method<"telescope.workspace.get">;
     readonly invite: Method<"telescope.member.invite">;
+    readonly linkCode: Method<"telescope.member.linkCode">;
     readonly accept: Method<"telescope.member.accept">;
     readonly members: Method<"telescope.member.list">;
     readonly setRole: Method<"telescope.member.setRole">;
@@ -104,10 +112,31 @@ const make = Effect.gen(function* () {
   const random = yield* SecureRandom.SecureRandom;
   const now = DateTime.now.pipe(Effect.map(DateTime.formatIso));
 
-  const memberRow = (workspaceId: Telescope.WorkspaceId, subjectId: string) =>
+  const memberById = (workspaceId: Telescope.WorkspaceId, memberId: string) =>
     db
-      .select(workspaceId, "members", decodeMembers, { subject_id: subjectId })
+      .select(workspaceId, "members", decodeMembers, { subject_id: memberId })
       .pipe(Effect.map((rows) => rows[0]));
+
+  const sessionMember = Effect.fn("WorkspaceService.sessionMember")(function* (
+    workspaceId: Telescope.WorkspaceId,
+    caller: Caller,
+  ) {
+    const [link] = yield* db.select(workspaceId, "member_sessions", decodeSessionLinks, {
+      auth_session_id: caller,
+    });
+    return link === undefined ? undefined : yield* memberById(workspaceId, link.member_id);
+  });
+
+  const linkSession = (workspaceId: Telescope.WorkspaceId, memberId: string, caller: Caller) =>
+    now.pipe(
+      Effect.flatMap((at) =>
+        db.insert(workspaceId, "member_sessions", {
+          member_id: memberId,
+          auth_session_id: caller,
+          linked_at: at,
+        }),
+      ),
+    );
 
   // Missing workspaces and foreign ones answer alike, so ids cannot be probed.
   const requireMember = Effect.fn("WorkspaceService.requireMember")(function* (
@@ -115,7 +144,7 @@ const make = Effect.gen(function* () {
     caller: Caller,
     role?: "admin",
   ) {
-    const member = yield* memberRow(workspaceId, caller);
+    const member = yield* sessionMember(workspaceId, caller);
     if (member === undefined || member.revoked_at !== null)
       return yield* fail("forbidden", "You are not a member of this workspace.");
     if (role !== undefined && member.role !== role)
@@ -126,20 +155,52 @@ const make = Effect.gen(function* () {
   const requireActiveTarget = Effect.fn("WorkspaceService.requireActiveTarget")(function* (
     workspaceId: Telescope.WorkspaceId,
     subjectId: string,
-    nextRole?: Telescope.WorkspaceRole,
   ) {
-    const target = yield* memberRow(workspaceId, subjectId);
+    const target = yield* memberById(workspaceId, subjectId);
     if (target === undefined || target.revoked_at !== null)
       return yield* fail("not_found", "That person is not an active member.");
-    if (target.role === "admin" && nextRole !== "admin") {
-      const admins = yield* db.select(workspaceId, "members", decodeMembers, {
-        role: "admin",
-        revoked_at: null,
-      });
-      if (admins.length <= 1)
-        return yield* fail("conflict", "A workspace needs at least one admin.");
-    }
     return target;
+  });
+
+  /** `nextRole` undefined means the target is being revoked. */
+  const keepAnAdmin = Effect.fn("WorkspaceService.keepAnAdmin")(function* (
+    target: typeof MemberRow.Type,
+    nextRole?: Telescope.WorkspaceRole,
+  ) {
+    if (target.role !== "admin" || nextRole === "admin") return;
+    const admins = yield* db.select(target.workspace_id, "members", decodeMembers, {
+      role: "admin",
+      revoked_at: null,
+    });
+    if (admins.length <= 1) return yield* fail("conflict", "A workspace needs at least one admin.");
+  });
+
+  const issueCode = Effect.fn("WorkspaceService.issueCode")(function* (
+    admin: typeof MemberRow.Type,
+    role: Telescope.WorkspaceRole,
+    expiresInSeconds: number | undefined,
+    forMemberId?: string,
+  ) {
+    const invitation: Telescope.Invitation = {
+      id: Telescope.InvitationId.make(yield* random.uuidV4()),
+      workspaceId: admin.workspace_id,
+      code: Base64Url.encode(yield* random.randomBytes(18)),
+      role,
+      invitedBy: admin.subject_id,
+      ...(forMemberId === undefined ? {} : { forSubjectId: forMemberId }),
+      expiresAt: DateTime.formatIso(
+        DateTime.add(yield* DateTime.now, { seconds: expiresInSeconds ?? INVITATION_TTL_SECONDS }),
+      ),
+    };
+    yield* db.insert(admin.workspace_id, "invitations", {
+      invitation_id: invitation.id,
+      code: invitation.code,
+      role,
+      invited_by: admin.subject_id,
+      for_member_id: forMemberId ?? null,
+      expires_at: invitation.expiresAt,
+    });
+    return invitation;
   });
 
   const create = Effect.fn("WorkspaceService.create")(function* (
@@ -147,17 +208,19 @@ const make = Effect.gen(function* () {
     input: In<"telescope.workspace.create">,
   ) {
     const workspaceId = Telescope.WorkspaceId.make(yield* random.uuidV4());
+    const memberId = yield* random.uuidV4();
     const createdAt = yield* now;
-    const row = { kind: input.kind, name: input.name, created_at: createdAt, created_by: caller };
+    const row = { kind: input.kind, name: input.name, created_at: createdAt, created_by: memberId };
     yield* db.transaction(
       Effect.all([
         db.insert(workspaceId, "workspaces", row),
         db.insert(workspaceId, "members", {
-          subject_id: caller,
+          subject_id: memberId,
           display_name: input.displayName,
           role: "admin",
           joined_at: createdAt,
         }),
+        linkSession(workspaceId, memberId, caller),
       ]),
     );
     return toWorkspace({ ...row, workspace_id: workspaceId });
@@ -183,27 +246,34 @@ const make = Effect.gen(function* () {
     caller: Caller,
     input: In<"telescope.member.invite">,
   ) {
-    yield* requireMember(input.workspaceId, caller, "admin");
-    const invitation: Telescope.Invitation = {
-      id: Telescope.InvitationId.make(yield* random.uuidV4()),
-      workspaceId: input.workspaceId,
-      code: Base64Url.encode(yield* random.randomBytes(18)),
-      role: input.role,
-      invitedBy: caller,
-      expiresAt: DateTime.formatIso(
-        DateTime.add(yield* DateTime.now, {
-          seconds: input.expiresInSeconds ?? INVITATION_TTL_SECONDS,
-        }),
-      ),
+    const admin = yield* requireMember(input.workspaceId, caller, "admin");
+    return yield* issueCode(admin, input.role, input.expiresInSeconds);
+  });
+
+  const linkCode = Effect.fn("WorkspaceService.linkCode")(function* (
+    caller: Caller,
+    input: In<"telescope.member.linkCode">,
+  ) {
+    const admin = yield* requireMember(input.workspaceId, caller, "admin");
+    const target = yield* requireActiveTarget(input.workspaceId, input.subjectId);
+    return yield* issueCode(admin, target.role, input.expiresInSeconds, target.subject_id);
+  });
+
+  const addMember = Effect.fn("WorkspaceService.addMember")(function* (
+    workspaceId: Telescope.WorkspaceId,
+    displayName: string,
+    role: Telescope.WorkspaceRole,
+    at: string,
+  ) {
+    const row = {
+      subject_id: yield* random.uuidV4(),
+      display_name: displayName,
+      role,
+      joined_at: at,
+      revoked_at: null,
     };
-    yield* db.insert(input.workspaceId, "invitations", {
-      invitation_id: invitation.id,
-      code: invitation.code,
-      role: invitation.role,
-      invited_by: caller,
-      expires_at: invitation.expiresAt,
-    });
-    return invitation;
+    yield* db.insert(workspaceId, "members", row);
+    return { ...row, workspace_id: workspaceId };
   });
 
   const accept = Effect.fn("WorkspaceService.accept")(function* (
@@ -222,32 +292,34 @@ const make = Effect.gen(function* () {
           return yield* fail("conflict", "This invitation has already been used.");
         if (invitation.expires_at <= at)
           return yield* fail("expired", "This invitation has expired.");
-        const existing = yield* memberRow(workspaceId, caller);
-        if (existing !== undefined && existing.revoked_at === null)
-          return yield* fail("conflict", "You are already a member of this workspace.");
-        const member = {
-          display_name: input.displayName,
-          role: invitation.role,
-          joined_at: at,
-          revoked_at: null,
-        };
-        yield* existing === undefined
-          ? db.insert(workspaceId, "members", { ...member, subject_id: caller })
-          : db.update(workspaceId, "members", member, { subject_id: caller });
+        // A code dies with its issuer's admin role, so revoking or demoting them voids it.
+        const issuer = yield* memberById(workspaceId, invitation.invited_by);
+        if (issuer === undefined || issuer.revoked_at !== null || issuer.role !== "admin")
+          return yield* fail("expired", "This invitation is no longer valid.");
+        const existing = yield* sessionMember(workspaceId, caller);
+        if (existing !== undefined)
+          return yield* existing.revoked_at === null
+            ? fail("conflict", "You are already a member of this workspace.")
+            : fail("forbidden", "You were removed from this workspace.");
+        const member =
+          invitation.for_member_id === null
+            ? yield* addMember(workspaceId, input.displayName, invitation.role, at)
+            : yield* requireActiveTarget(workspaceId, invitation.for_member_id);
+        yield* linkSession(workspaceId, member.subject_id, caller);
         yield* db.update(
           workspaceId,
           "invitations",
-          { accepted_by: caller, accepted_at: at },
+          { accepted_by: member.subject_id, accepted_at: at },
           { invitation_id: invitation.invitation_id },
         );
-        return toMember({ ...member, workspace_id: workspaceId, subject_id: caller });
+        return toMember(member);
       }),
     );
   });
 
   const members = Effect.fn("WorkspaceService.members")(function* (
     caller: Caller,
-    { workspaceId }: In<"telescope.workspace.get">,
+    { workspaceId }: In<"telescope.member.list">,
   ) {
     yield* requireMember(workspaceId, caller);
     const rows = yield* db.select(workspaceId, "members", decodeMembers);
@@ -261,7 +333,8 @@ const make = Effect.gen(function* () {
     return yield* db.transaction(
       Effect.gen(function* () {
         yield* requireMember(input.workspaceId, caller, "admin");
-        const target = yield* requireActiveTarget(input.workspaceId, input.subjectId, input.role);
+        const target = yield* requireActiveTarget(input.workspaceId, input.subjectId);
+        yield* keepAnAdmin(target, input.role);
         const key = { subject_id: input.subjectId };
         yield* db.update(input.workspaceId, "members", { role: input.role }, key);
         return toMember({ ...target, role: input.role });
@@ -277,6 +350,7 @@ const make = Effect.gen(function* () {
       Effect.gen(function* () {
         yield* requireMember(input.workspaceId, caller, "admin");
         const target = yield* requireActiveTarget(input.workspaceId, input.subjectId);
+        yield* keepAnAdmin(target);
         const revokedAt = yield* now;
         const key = { subject_id: input.subjectId };
         yield* db.update(input.workspaceId, "members", { revoked_at: revokedAt }, key);
@@ -292,11 +366,13 @@ const make = Effect.gen(function* () {
 
   const bind = Effect.fn("WorkspaceService.bind")(function* (
     caller: Caller,
-    input: Telescope.ProjectBinding,
+    input: In<"telescope.project.bind">,
   ) {
     return yield* db.transaction(
       Effect.gen(function* () {
         yield* requireMember(input.workspaceId, caller, "admin");
+        if (input.leadSubjectId !== undefined)
+          yield* requireActiveTarget(input.workspaceId, input.leadSubjectId);
         yield* db.remove(input.workspaceId, "project_bindings", bindingKey(input));
         yield* db.insert(input.workspaceId, "project_bindings", {
           ...bindingKey(input),
@@ -318,7 +394,7 @@ const make = Effect.gen(function* () {
 
   const bindings = Effect.fn("WorkspaceService.bindings")(function* (
     caller: Caller,
-    { workspaceId }: In<"telescope.workspace.get">,
+    { workspaceId }: In<"telescope.project.listBindings">,
   ) {
     yield* requireMember(workspaceId, caller);
     const rows = yield* db.select(workspaceId, "project_bindings", decodeBindings);
@@ -330,6 +406,7 @@ const make = Effect.gen(function* () {
     list,
     get,
     invite,
+    linkCode,
     accept,
     members,
     setRole,

@@ -21,6 +21,7 @@ export const Workspace = Schema.Struct({
 });
 export type Workspace = typeof Workspace.Type;
 
+/** `subjectId` is the Telescope member id; paired auth sessions all share one auth subject. */
 export const Member = Schema.Struct({
   workspaceId: WorkspaceId,
   subjectId: SubjectId,
@@ -37,6 +38,8 @@ export const Invitation = Schema.Struct({
   code: Text,
   role: WorkspaceRole,
   invitedBy: SubjectId,
+  /** Set on a device-link code: accepting it links the session to this existing member. */
+  forSubjectId: Schema.optionalKey(SubjectId),
   expiresAt: Timestamp,
   acceptedBy: Schema.optionalKey(SubjectId),
   acceptedAt: Schema.optionalKey(Timestamp),
@@ -68,6 +71,11 @@ export const MemberInviteInput = Schema.Struct({
   role: WorkspaceRole,
   expiresInSeconds: Schema.optionalKey(PositiveInt),
 });
+export const MemberLinkCodeInput = Schema.Struct({
+  ...InWorkspace,
+  subjectId: SubjectId,
+  expiresInSeconds: Schema.optionalKey(PositiveInt),
+});
 export const MemberAcceptInput = Schema.Struct({ code: Text, displayName: Text });
 export const MemberListResult = Schema.Struct({ members: Schema.Array(Member) });
 export const MemberSetRoleInput = Schema.Struct({
@@ -91,5 +99,6 @@ export class WorkspaceError extends Schema.TaggedError<WorkspaceError>()(
   {
     reason: Schema.Literals(["not_found", "forbidden", "expired", "conflict", "storage"]),
     message: Schema.String,
+    cause: Schema.optionalKey(Schema.Defect()),
   },
 ) {}

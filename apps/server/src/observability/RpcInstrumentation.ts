@@ -231,6 +231,7 @@ const RPC_AGGREGATES = {
   [Telescope.WS_METHODS.workspaceList]: "telescope",
   [Telescope.WS_METHODS.workspaceGet]: "telescope",
   [Telescope.WS_METHODS.memberInvite]: "telescope",
+  [Telescope.WS_METHODS.memberLinkCode]: "telescope",
   [Telescope.WS_METHODS.memberAccept]: "telescope",
   [Telescope.WS_METHODS.memberList]: "telescope",
   [Telescope.WS_METHODS.memberSetRole]: "telescope",

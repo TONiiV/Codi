@@ -1397,13 +1397,18 @@ const telescopeStorage = <A, R>(
 ) =>
   effect.pipe(
     Effect.catchTags({
-      PersistenceSqlError: () => telescopeStorageError,
-      PersistenceDecodeError: () => telescopeStorageError,
+      PersistenceSqlError: telescopeStorageError,
+      PersistenceDecodeError: telescopeStorageError,
     }),
   );
-const telescopeStorageError = Effect.fail(
-  new Telescope.WorkspaceError({ reason: "storage", message: "Telescope storage is unavailable." }),
-);
+const telescopeStorageError = (cause: PersistenceSqlError | PersistenceDecodeError) =>
+  Effect.fail(
+    new Telescope.WorkspaceError({
+      reason: "storage",
+      message: "Telescope storage is unavailable.",
+      cause,
+    }),
+  );
 
 export const layerWsRpc = (
   currentSession: EnvironmentAuth.AuthenticatedSession,
@@ -1459,7 +1464,7 @@ export const layerWsRpc = (
       const providerSessionManager = yield* ProviderSessionManager.ProviderSessionManagerV2;
       const scheduledTasks = yield* ScheduledTasks.ScheduledTaskService;
       const telescope = yield* TelescopeWorkspaces.WorkspaceService;
-      const caller = currentSession.subject;
+      const caller = currentSession.sessionId;
       const secretRequests = yield* SecretRequests.SecretRequests;
       const guestShares = yield* GuestShareService.GuestShareService;
       const pullRequests = yield* PullRequestService.PullRequestService;
@@ -2376,6 +2381,8 @@ export const layerWsRpc = (
           telescopeStorage(telescope.get(caller, input)),
         [Telescope.WS_METHODS.memberInvite]: (input) =>
           telescopeStorage(telescope.invite(caller, input)),
+        [Telescope.WS_METHODS.memberLinkCode]: (input) =>
+          telescopeStorage(telescope.linkCode(caller, input)),
         [Telescope.WS_METHODS.memberAccept]: (input) =>
           telescopeStorage(telescope.accept(caller, input)),
         [Telescope.WS_METHODS.memberList]: (input) =>

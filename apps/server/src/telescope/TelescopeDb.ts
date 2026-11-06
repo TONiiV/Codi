@@ -1,4 +1,4 @@
-import { Telescope } from "@t3tools/contracts";
+import { type AuthSessionId, Telescope } from "@t3tools/contracts";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -17,6 +17,7 @@ import {
 export type TelescopeTable =
   | "workspaces"
   | "members"
+  | "member_sessions"
   | "invitations"
   | "project_bindings"
   | "agents"
@@ -72,7 +73,7 @@ export class TelescopeDb extends Context.Service<
     ) => Effect.Effect<void, PersistenceSqlError>;
     /** Cross-workspace lookups, each keyed by something no workspace owns. */
     readonly workspaceIdsOf: (
-      subjectId: Telescope.SubjectId,
+      authSessionId: AuthSessionId,
     ) => Effect.Effect<ReadonlyArray<Telescope.WorkspaceId>, PersistenceSqlError>;
     readonly workspaceIdForInvitation: (
       code: string,
@@ -154,10 +155,13 @@ const make = Effect.gen(function* () {
       Effect.mapError(toPersistenceSqlError(`TelescopeDb.remove.${table}`)),
     );
   });
-  const workspaceIdsOf = Effect.fn("TelescopeDb.workspaceIdsOf")(function* (subjectId: string) {
+  const workspaceIdsOf = Effect.fn("TelescopeDb.workspaceIdsOf")(function* (
+    authSessionId: AuthSessionId,
+  ) {
     const rows = yield* sql<{ readonly workspace_id: string }>`
-      SELECT workspace_id FROM telescope_members
-      WHERE subject_id = ${subjectId} AND revoked_at IS NULL
+      SELECT s.workspace_id FROM telescope_member_sessions s
+      JOIN telescope_members m ON m.workspace_id = s.workspace_id AND m.subject_id = s.member_id
+      WHERE s.auth_session_id = ${authSessionId} AND m.revoked_at IS NULL
     `.pipe(Effect.mapError(toPersistenceSqlError("TelescopeDb.workspaceIdsOf")));
     return rows.map((row) => Telescope.WorkspaceId.make(row.workspace_id));
   });
