@@ -1231,7 +1231,7 @@ export type StorageCleanupSettings = typeof StorageCleanupSettings.Type;
 
 const RunRetentionDays = Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 3650 }));
 export const TelescopeServerSettings = Schema.Struct({
-  /** Finished Telescope run records, with their tool calls, are deleted after this many days. */
+  /** Telescope run records, with their tool calls, are deleted this many days after they finish. */
   runRetentionDays: RunRetentionDays.pipe(Schema.withDecodingDefault(Effect.succeed(90))),
 });
 

@@ -190,7 +190,7 @@ it.layer(layer)("Telescope run records", (it) => {
     }),
   );
 
-  it.effect("prunes finished runs and their calls started before the cutoff, never open ones", () =>
+  it.effect("prunes finished runs and their calls ended before the cutoff, never open ones", () =>
     Effect.gen(function* () {
       const { runs, workspaceId } = yield* setup;
       const start = runs.start(alice, workspaceId, {
@@ -364,7 +364,16 @@ it.effect("the retention pass prunes runs past the configured days once a day", 
       [yield* exists(recent.id), yield* exists(late.id), yield* exists(stillOpen.id)],
       [false, true, true],
     );
+
+    // Retention counts from the finish: a run open longer than the window survives its finish.
+    yield* TestClock.setTime(10 * day);
     yield* finish(stillOpen.id);
+    yield* TestClock.setTime(10 * day + 60_000);
+    yield* pass;
+    assert.isTrue(yield* exists(stillOpen.id));
+    yield* TestClock.setTime(12 * day + 60_000);
+    yield* pass;
+    assert.isFalse(yield* exists(stillOpen.id));
   }).pipe(
     Effect.provide(
       layer.pipe(

@@ -443,7 +443,7 @@ export const layer = Layer.effect(RunRecordService, make).pipe(
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-/** One pass of the daily retention job: drops finished runs older than `telescope.runRetentionDays`. */
+/** One pass of the daily retention job: drops runs finished over `telescope.runRetentionDays` ago. */
 export const makeRetentionPass = Effect.gen(function* () {
   const runs = yield* RunRecordService;
   const settings = yield* ServerSettingsService;

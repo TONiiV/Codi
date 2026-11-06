@@ -125,7 +125,7 @@ export class TelescopeDb extends Context.Service<
       }>,
       PersistenceSqlError
     >;
-    /** Retention: drops every workspace's finished runs started before `cutoff`, with their calls. */
+    /** Retention: drops every workspace's runs that finished before `cutoff`, with their calls. */
     readonly pruneRunsBefore: (cutoff: string) => Effect.Effect<void, PersistenceSqlError>;
     /** The wake queue is shared by the whole machine. */
     readonly workspaceIdsWithActiveWakes: Effect.Effect<
@@ -349,8 +349,8 @@ const make = Effect.gen(function* () {
         Effect.all([
           sql`DELETE FROM telescope_run_calls WHERE run_id IN
           (SELECT run_id FROM telescope_runs
-          WHERE started_at < ${cutoff} AND finished_at IS NOT NULL)`,
-          sql`DELETE FROM telescope_runs WHERE started_at < ${cutoff} AND finished_at IS NOT NULL`,
+          WHERE finished_at IS NOT NULL AND finished_at < ${cutoff})`,
+          sql`DELETE FROM telescope_runs WHERE finished_at IS NOT NULL AND finished_at < ${cutoff}`,
         ]),
       )
       .pipe(Effect.mapError(toPersistenceSqlError("TelescopeDb.pruneRunsBefore")));
