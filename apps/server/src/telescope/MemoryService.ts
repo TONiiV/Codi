@@ -204,9 +204,14 @@ const make = Effect.gen(function* () {
     const callerAgent = "run" in caller ? agents.get(caller.run.agentId) : undefined;
     const asCompanyAgent =
       callerAgent !== undefined && COMPANY_AGENT_KINDS.includes(callerAgent.kind);
+    // A run reads only its own agent's private memories; a member reads those of agents they own.
     // confidential and internal both reach every active member until guests exist.
+    const ownsPrivate = (row: MemoryRow) =>
+      "run" in caller
+        ? row.agent_id === caller.run.agentId
+        : agents.get(row.agent_id)?.owner_subject_id === self.memberId;
     const visible = (row: MemoryRow) =>
-      (row.level !== "private" || agents.get(row.agent_id)?.owner_subject_id === self.memberId) &&
+      (row.level !== "private" || ownsPrivate(row)) &&
       (row.scope !== "person" || asCompanyAgent || row.about_subject_id === self.memberId);
     const found = rows.filter(visible).slice(0, input.limit ?? DEFAULT_LIMIT);
     const retrieved = found.map((row) => ({ ...row, last_retrieved_at: at, uses: row.uses + 1 }));

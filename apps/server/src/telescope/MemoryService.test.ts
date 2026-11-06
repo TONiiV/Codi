@@ -67,7 +67,36 @@ const setup = Effect.fn(function* (kind: Telescope.Workspace["kind"]) {
     memory
       .search(as(name), { workspaceId, query, ...options })
       .pipe(Effect.map(({ memories }) => memories));
-  return { db, memory, workspaceId, bobId: bob.subjectId, aliceAgent, bobAgent, add, search };
+  const aliceId = workspace.createdBy;
+  const runOn = Effect.fn(function* (agentId: string, onBehalfOf: string) {
+    const threadId = ThreadId.make(`thread-${agentId}`);
+    yield* db.insert(workspaceId, "runs", {
+      run_id: `run-${agentId}`,
+      agent_id: agentId,
+      on_behalf_of_json: JSON.stringify([onBehalfOf]),
+      input_snapshot_json: "{}",
+      started_at: at,
+      thread_id: threadId,
+    });
+    return yield* memory.callerForThread(threadId);
+  });
+  const searchAs = (caller: MemoryService.ThreadAgent, query: string) =>
+    memory
+      .search(caller, { workspaceId, query })
+      .pipe(Effect.map(({ memories }) => memories.map((m) => m.text)));
+  return {
+    db,
+    memory,
+    workspaceId,
+    aliceId,
+    bobId: bob.subjectId,
+    aliceAgent,
+    bobAgent,
+    add,
+    search,
+    runOn,
+    searchAs,
+  };
 });
 
 it.effect("searches by substring without FTS5", () =>
@@ -140,7 +169,19 @@ it.layer(layer)("Telescope memories", (it) => {
 
   it.effect("keeps private memories with their owner and runs inside their own agent", () =>
     Effect.gen(function* () {
-      const { db, add, search, memory, workspaceId, bobId, bobAgent } = yield* setup("enterprise");
+      const {
+        db,
+        add,
+        search,
+        memory,
+        workspaceId,
+        aliceId,
+        bobId,
+        aliceAgent,
+        bobAgent,
+        runOn,
+        searchAs,
+      } = yield* setup("enterprise");
       yield* add("预算审批人是老王");
       yield* add("预算按季度结算", { level: "internal" });
 
@@ -149,6 +190,21 @@ it.layer(layer)("Telescope memories", (it) => {
         (yield* search("bob", "预算")).map((m) => m.text),
         ["预算按季度结算"],
       );
+      // Private means the writing agent: other agents acting for the same member do not see it.
+      yield* db.insert(
+        workspaceId,
+        "agents",
+        agent(`${workspaceId}-company`, null, "company_main"),
+      );
+      yield* db.insert(workspaceId, "agents", agent(`${workspaceId}-alice2`, aliceId, "custom"));
+      for (const [other, expected] of [
+        [aliceAgent, ["预算审批人是老王", "预算按季度结算"]],
+        [`${workspaceId}-company`, ["预算按季度结算"]],
+        [`${workspaceId}-alice2`, ["预算按季度结算"]],
+      ] as const) {
+        const seen = yield* searchAs(yield* runOn(other, aliceId), "预算");
+        assert.deepStrictEqual(seen.toSorted(), [...expected].toSorted(), other);
+      }
       const outsider = yield* search("carol", "预算").pipe(Effect.flip);
       assert.strictEqual(
         outsider._tag === "TelescopeWorkspaceError" && outsider.reason,
@@ -196,6 +252,28 @@ it.layer(layer)("Telescope memories", (it) => {
         finished._tag === "TelescopeWorkspaceError" && finished.reason,
         "forbidden",
       );
+    }),
+  );
+
+  it.effect("shows a person record only to company agents and the person it is about", () =>
+    Effect.gen(function* () {
+      const { db, memory, workspaceId, aliceId, bobId, runOn, search, searchAs } =
+        yield* setup("enterprise");
+      const company = `${workspaceId}-company`;
+      yield* db.insert(workspaceId, "agents", agent(company, null, "company_main"));
+      const companyRun = yield* runOn(company, aliceId);
+      yield* memory.write(companyRun, {
+        workspaceId,
+        agentId: Telescope.AgentId.make(company),
+        op: "add",
+        text: "鲍勃擅长结构设计",
+        scope: "person",
+        aboutSubjectId: Telescope.SubjectId.make(bobId),
+      });
+
+      assert.deepStrictEqual(yield* searchAs(companyRun, "结构设计"), ["鲍勃擅长结构设计"]);
+      assert.lengthOf(yield* search("bob", "结构设计"), 1);
+      assert.deepStrictEqual(yield* search("alice", "结构设计"), []);
     }),
   );
 
