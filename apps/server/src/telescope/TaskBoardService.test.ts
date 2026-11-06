@@ -168,11 +168,12 @@ it.layer(layer)("Telescope task board", (it) => {
     }),
   );
 
-  it.effect("lists only the latest free text and keeps the full history on get", () =>
+  it.effect("lists only the latest free text, keeps the full history on get and caps entries", () =>
     Effect.gen(function* () {
       const { board, a } = yield* setup;
       const task = yield* board.createTask(alice, { workspaceId: a, title: "Chatty" });
-      const notes = Array.from({ length: 21 }, (_, i) => `note ${i}`);
+      const limit = Telescope.BOARD_LIMITS.freeTextEntries;
+      const notes = Array.from({ length: limit }, (_, i) => `note ${i}`);
       yield* Effect.forEach(notes, (note, i) =>
         board.updateTask(alice, { workspaceId: a, taskId: task.id, baseVersion: i + 1, note }),
       );
@@ -182,7 +183,21 @@ it.layer(layer)("Telescope task board", (it) => {
         notes.slice(-Telescope.BOARD_LIMITS.listedFreeTextEntries),
       );
       const full = yield* board.getTask(alice, { workspaceId: a, taskId: task.id });
-      assert.strictEqual(full.freeText.length, 21);
+      assert.strictEqual(full.freeText.length, limit);
+
+      const atCap = { workspaceId: a, taskId: task.id, baseVersion: limit + 1 };
+      const overflow = yield* board
+        .updateTask(alice, { ...atCap, note: "one too many" })
+        .pipe(Effect.flip);
+      assert.deepStrictEqual(
+        overflow,
+        new Telescope.FreeTextLimitError({ taskId: task.id, limit }),
+      );
+      const done = yield* board.updateTask(alice, { ...atCap, set: { status: "done" } });
+      assert.deepStrictEqual(
+        [done.version, done.status, done.freeText.length],
+        [limit + 2, "done", limit],
+      );
     }),
   );
 
