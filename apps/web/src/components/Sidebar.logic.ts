@@ -2,6 +2,10 @@ import type { EnvironmentServerConfig } from "@t3tools/client-runtime/connection
 import { scopeThreadRef, scopedThreadKey } from "@t3tools/client-runtime/environment";
 import { resolveThreadWorkingStartedAt } from "@t3tools/client-runtime/state/models";
 import { isShownUnderParent } from "@t3tools/client-runtime/state/threads";
+import {
+  boundWorkspaceIds,
+  hiddenOutsideWorkspace,
+} from "@t3tools/client-runtime/telescope/workspaces";
 import { backgroundWorkHoldsCompletion } from "@t3tools/shared/orchestrationV2PendingBackgroundWork";
 import { threadPullRequestSearchTerms } from "@t3tools/shared/threadPullRequests";
 import * as React from "react";
@@ -20,6 +24,8 @@ import {
   isListedThreadLineage,
   type ContextMenuItem,
   type EnvironmentId,
+  type ProjectId,
+  type Telescope,
   type ThreadId,
 } from "@t3tools/contracts";
 import type { SidebarProjectSortOrder, SidebarThreadSortOrder } from "@t3tools/contracts/settings";
@@ -611,6 +617,50 @@ export function filterSidebarV2VisibleThreads<
       (scopedProjectKeys === null ||
         scopedProjectKeys.has(`${thread.environmentId}:${thread.projectId}`)),
   );
+}
+
+interface SidebarProjectRef {
+  readonly environmentId: EnvironmentId;
+  readonly projectId: ProjectId;
+}
+
+const sidebarProjectRefKey = (ref: SidebarProjectRef) => `${ref.environmentId}:${ref.projectId}`;
+
+const NO_HIDDEN_PROJECT_KEYS: ReadonlySet<string> = new Set();
+
+/** Groups bound only to other workspaces leave the Code sidebar; unbound groups stay everywhere. */
+export function filterSidebarWorkspaceProjects<
+  G extends { readonly memberProjectRefs: readonly SidebarProjectRef[] },
+>(
+  groups: readonly G[],
+  bindings: ReadonlyArray<Telescope.ProjectBinding>,
+  currentWorkspaceId: Telescope.WorkspaceId | null,
+): { readonly groups: readonly G[]; readonly hiddenProjectKeys: ReadonlySet<string> } {
+  if (bindings.length === 0) return { groups, hiddenProjectKeys: NO_HIDDEN_PROJECT_KEYS };
+  const hidden = groups.filter((group) =>
+    hiddenOutsideWorkspace(
+      boundWorkspaceIds(bindings, group.memberProjectRefs),
+      currentWorkspaceId,
+    ),
+  );
+  if (hidden.length === 0) return { groups, hiddenProjectKeys: NO_HIDDEN_PROJECT_KEYS };
+  const hiddenGroups = new Set(hidden);
+  return {
+    groups: groups.filter((group) => !hiddenGroups.has(group)),
+    hiddenProjectKeys: new Set(
+      hidden.flatMap((group) => group.memberProjectRefs.map(sidebarProjectRefKey)),
+    ),
+  };
+}
+
+/** Threads and drafts of workspace-hidden projects hide with them, in every project scope. */
+export function dropWorkspaceHiddenProjects<T extends SidebarProjectRef>(
+  items: readonly T[],
+  hiddenProjectKeys: ReadonlySet<string>,
+): readonly T[] {
+  return hiddenProjectKeys.size === 0
+    ? items
+    : items.filter((item) => !hiddenProjectKeys.has(sidebarProjectRefKey(item)));
 }
 
 export function buildBulkTitleRegenerationContextMenuItem(input: {

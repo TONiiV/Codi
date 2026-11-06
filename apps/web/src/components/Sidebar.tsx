@@ -178,7 +178,9 @@ import {
 } from "./threadActionMenu.logic";
 import {
   applySidebarThreadDrop,
+  dropWorkspaceHiddenProjects,
   filterSidebarV2VisibleThreads,
+  filterSidebarWorkspaceProjects,
   groupSidebarThreadsByProject,
   sidebarFolderExpansionKeys,
   buildBulkTitleRegenerationContextMenuItem,
@@ -261,6 +263,7 @@ import {
   type SidebarSweepAction,
 } from "./sidebar/SidebarThreadRow";
 import { SidebarDraftBlock } from "./sidebar/SidebarDraftBlock";
+import { useTelescopeWorkspaces } from "./telescope/telescopeState";
 import {
   SidebarProjectFolderHeader,
   sidebarFolderRowId,
@@ -798,13 +801,25 @@ function isOptimisticDropReleased(input: {
   return membershipChanged || foreignKeyLanded || allAssignmentsLanded;
 }
 
+// A hook of its own so the compiler caches the filtered list on its two inputs.
+function useWorkspaceVisibleThreads(hiddenProjectKeys: ReadonlySet<string>) {
+  const shells = useQuietThreadShells();
+  return dropWorkspaceHiddenProjects(shells, hiddenProjectKeys);
+}
+
 // Build maps in a hook so the compiler can prove they are frozen and cache them.
 function useSidebarLookups() {
   const projects = useProjects();
   const environments = useEnvironmentIdentities();
   const serverConfigs = useServerConfigs();
   const providerEntriesByEnvironment = useAtomValue(sidebarProviderEntriesAtom);
-  const projectGroups = useSidebarProjectGroups();
+  const workspace = useTelescopeWorkspaces();
+  const allProjectGroups = useSidebarProjectGroups();
+  const { groups: projectGroups, hiddenProjectKeys } = filterSidebarWorkspaceProjects(
+    allProjectGroups,
+    workspace.bindings,
+    workspace.current?.id ?? null,
+  );
   const environmentLabelById = new Map(
     environments.map((environment) => [environment.environmentId, environment.label] as const),
   );
@@ -832,6 +847,7 @@ function useSidebarLookups() {
     projects,
     serverConfigs,
     projectGroups,
+    hiddenProjectKeys,
     environmentLabelById,
     providerEntriesByEnvironment,
     projectByKey,
@@ -896,6 +912,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
     projects,
     serverConfigs,
     projectGroups,
+    hiddenProjectKeys,
     environmentLabelById,
     providerEntriesByEnvironment,
     projectByKey,
@@ -1096,7 +1113,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
             ),
           ),
         );
-  const threads = useQuietThreadShells();
+  const threads = useWorkspaceVisibleThreads(hiddenProjectKeys);
   const routeRowThreadKey =
     routeThreadRef === null
       ? null
@@ -1194,9 +1211,10 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
       if (!composerDraftHasUserContent(store.draftsByThreadKey[draftKey])) {
         continue;
       }
+      const projectKey = `${session.environmentId}:${session.projectId}`;
       if (
-        scopedProjectKeys !== null &&
-        !scopedProjectKeys.has(`${session.environmentId}:${session.projectId}`)
+        hiddenProjectKeys.has(projectKey) ||
+        (scopedProjectKeys !== null && !scopedProjectKeys.has(projectKey))
       ) {
         continue;
       }

@@ -239,6 +239,7 @@ const RPC_AGGREGATES = {
   [Telescope.WS_METHODS.projectBind]: "telescope",
   [Telescope.WS_METHODS.projectUnbind]: "telescope",
   [Telescope.WS_METHODS.projectListBindings]: "telescope",
+  [Telescope.WS_METHODS.projectBindingSummary]: "telescope",
   [Telescope.WS_METHODS.taskCreate]: "telescope",
   [Telescope.WS_METHODS.taskUpdate]: "telescope",
   [Telescope.WS_METHODS.taskGet]: "telescope",

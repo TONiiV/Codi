@@ -28,6 +28,7 @@ import {
   MemberRevokeInput,
   MemberSetRoleInput,
   ProjectBinding,
+  ProjectBindingSummaryResult,
   ProjectListBindingsResult,
   ProjectUnbindInput,
   Workspace,
@@ -69,6 +70,7 @@ export const WS_METHODS = {
   projectBind: "telescope.project.bind",
   projectUnbind: "telescope.project.unbind",
   projectListBindings: "telescope.project.listBindings",
+  projectBindingSummary: "telescope.project.bindingSummary",
   taskCreate: "telescope.task.create",
   taskUpdate: "telescope.task.update",
   taskGet: "telescope.task.get",
@@ -111,6 +113,7 @@ export const WorkspaceRpcs = [
   make(WS_METHODS.projectBind, ProjectBinding, ProjectBinding),
   make(WS_METHODS.projectUnbind, ProjectUnbindInput, Schema.Struct({})),
   make(WS_METHODS.projectListBindings, WorkspaceScopedInput, ProjectListBindingsResult),
+  make(WS_METHODS.projectBindingSummary, Schema.Struct({}), ProjectBindingSummaryResult),
 ] as const;
 
 const boardError = Schema.Union([
