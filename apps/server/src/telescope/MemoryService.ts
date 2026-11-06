@@ -113,7 +113,7 @@ export class MemoryService extends Context.Service<
     readonly search: Method<"telescope.memory.search">;
     readonly write: Method<"telescope.memory.write">;
     readonly pin: Method<"telescope.memory.pin">;
-    /** Resolves the agent behind a thread from its latest Telescope run. */
+    /** Resolves the agent behind a thread from its newest unfinished Telescope run. */
     readonly callerForThread: (threadId: ThreadId) => Effect.Effect<ThreadAgent, Failure>;
   }
 >()("t3/telescope/MemoryService") {}

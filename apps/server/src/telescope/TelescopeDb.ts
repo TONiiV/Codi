@@ -257,7 +257,8 @@ const make = Effect.gen(function* () {
     decodeRows: RowsDecoder<A, R>,
   ) {
     const rows = yield* sql`
-      SELECT * FROM telescope_runs WHERE thread_id = ${threadId} ORDER BY started_at DESC LIMIT 1
+      SELECT * FROM telescope_runs WHERE thread_id = ${threadId} AND finished_at IS NULL
+      ORDER BY started_at DESC LIMIT 1
     `.pipe(Effect.mapError(toPersistenceSqlError("TelescopeDb.latestRunForThread")));
     return yield* decodeRows(rows).pipe(
       Effect.mapError(toPersistenceDecodeError("TelescopeDb.latestRunForThread")),

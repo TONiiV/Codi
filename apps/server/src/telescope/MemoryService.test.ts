@@ -189,6 +189,13 @@ it.layer(layer)("Telescope memories", (it) => {
         personRecord._tag === "TelescopeWorkspaceError" && personRecord.reason,
         "forbidden",
       );
+
+      yield* db.update(workspaceId, "runs", { finished_at: at }, { run_id: "run-1" });
+      const finished = yield* memory.callerForThread(threadId).pipe(Effect.flip);
+      assert.strictEqual(
+        finished._tag === "TelescopeWorkspaceError" && finished.reason,
+        "forbidden",
+      );
     }),
   );
 
