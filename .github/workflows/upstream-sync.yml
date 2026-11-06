@@ -86,6 +86,10 @@ jobs:
             Codi on the same lines): take the upstream side, then reapply the Codi rename to
             user-visible copy in that hunk. Keep fork-only additions, e.g. a "codi"
             alternative in a regex. Keep fork changes elsewhere in the file as they are.
+          - A fork quarantine ("// quarantine: #N <why>" above an it.skip) on a test upstream
+            changed, renamed or rewrote: take the upstream side, then put the same quarantine
+            comment and .skip on the upstream test that covers the same scenario. If upstream
+            deleted that scenario, drop the quarantine and say so in the report.
           - pnpm-lock.yaml: resolve package.json files first, then
             git checkout --theirs pnpm-lock.yaml and run vp install --no-frozen-lockfile.
           - Both sides changed behavior in ways that need a product decision, or you are not
