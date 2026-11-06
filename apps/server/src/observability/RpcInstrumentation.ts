@@ -246,6 +246,12 @@ const RPC_AGGREGATES = {
   [Telescope.WS_METHODS.decisionCreate]: "telescope",
   [Telescope.WS_METHODS.decisionList]: "telescope",
   [Telescope.WS_METHODS.commitList]: "telescope",
+  [Telescope.WS_METHODS.agentListMine]: "telescope",
+  [Telescope.WS_METHODS.agentGet]: "telescope",
+  [Telescope.WS_METHODS.agentCreateCustom]: "telescope",
+  [Telescope.WS_METHODS.agentUpdate]: "telescope",
+  [Telescope.WS_METHODS.agentListCompany]: "telescope",
+  [Telescope.WS_METHODS.agentUpdateCompany]: "telescope",
 } as const satisfies Readonly<Record<WsRpcMethod, string>>;
 
 const RPC_SPAN_PREFIX = "ws.rpc";

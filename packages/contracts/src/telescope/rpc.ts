@@ -3,6 +3,14 @@ import * as Schema from "effect/Schema";
 
 import { EnvironmentAuthorizationError } from "../auth.ts";
 import {
+  Agent,
+  AgentCreateCustomInput,
+  AgentGetInput,
+  AgentGetResult,
+  AgentListResult,
+  AgentUpdateInput,
+} from "./agent.ts";
+import {
   Invitation,
   Member,
   MemberAcceptInput,
@@ -57,6 +65,12 @@ export const WS_METHODS = {
   decisionCreate: "telescope.decision.create",
   decisionList: "telescope.decision.list",
   commitList: "telescope.commit.list",
+  agentListMine: "telescope.agent.listMine",
+  agentGet: "telescope.agent.get",
+  agentCreateCustom: "telescope.agent.createCustom",
+  agentUpdate: "telescope.agent.update",
+  agentListCompany: "telescope.agent.listCompany",
+  agentUpdateCompany: "telescope.agent.updateCompany",
 } as const;
 
 const error = Schema.Union([WorkspaceError, EnvironmentAuthorizationError]);
@@ -101,4 +115,13 @@ export const TaskBoardRpcs = [
   makeBoard(WS_METHODS.decisionCreate, DecisionCreateInput, Decision),
   makeBoard(WS_METHODS.decisionList, WorkspaceScopedInput, DecisionListResult),
   makeBoard(WS_METHODS.commitList, CommitListInput, CommitListResult),
+] as const;
+
+export const AgentRpcs = [
+  make(WS_METHODS.agentListMine, WorkspaceScopedInput, AgentListResult),
+  make(WS_METHODS.agentGet, AgentGetInput, AgentGetResult),
+  make(WS_METHODS.agentCreateCustom, AgentCreateCustomInput, Agent),
+  make(WS_METHODS.agentUpdate, AgentUpdateInput, Agent),
+  make(WS_METHODS.agentListCompany, WorkspaceScopedInput, AgentListResult),
+  make(WS_METHODS.agentUpdateCompany, AgentUpdateInput, Agent),
 ] as const;

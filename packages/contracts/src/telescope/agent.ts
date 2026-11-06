@@ -27,6 +27,7 @@ export const Channel = Schema.Literals(["telegram", "wechat", "email"]);
 export type Channel = typeof Channel.Type;
 
 export const AgentExposure = Schema.Literals(["hidden", "visible", "contactable", "dispatchable"]);
+export type AgentExposure = typeof AgentExposure.Type;
 
 export const StandingPowers = Schema.Struct({
   openTickets: Schema.Boolean,
@@ -34,6 +35,8 @@ export const StandingPowers = Schema.Struct({
   answerMembers: Schema.Boolean,
   mergePRs: Schema.Boolean,
 });
+export type StandingPowers = typeof StandingPowers.Type;
+export const AgentDispatchMode = Schema.Literals(["start", "inbox"]);
 
 export const Agent = Schema.Struct({
   id: AgentId,
@@ -47,7 +50,7 @@ export const Agent = Schema.Struct({
   standingPowers: StandingPowers,
   exposure: AgentExposure,
   syncWithBoard: Schema.Boolean,
-  dispatchMode: Schema.Literals(["start", "inbox"]),
+  dispatchMode: AgentDispatchMode,
   channels: Schema.Array(Channel),
   createdAt: Timestamp,
   updatedAt: Timestamp,
@@ -97,3 +100,27 @@ export const ChannelBinding = Schema.Struct({
   createdAt: Timestamp,
 });
 export type ChannelBinding = typeof ChannelBinding.Type;
+
+const AgentRef = { workspaceId: WorkspaceId, agentId: AgentId };
+
+export const AgentGetInput = Schema.Struct(AgentRef);
+export const AgentCreateCustomInput = Schema.Struct({
+  workspaceId: WorkspaceId,
+  name: Text,
+  projectId: Schema.optionalKey(ProjectId),
+  modelSelection: Schema.optionalKey(ModelSelection),
+});
+/** Absent fields stay as they are. */
+export const AgentUpdateInput = Schema.Struct({
+  ...AgentRef,
+  name: Schema.optionalKey(Text),
+  modelSelection: Schema.optionalKey(ModelSelection),
+  standingPowers: Schema.optionalKey(StandingPowers),
+  exposure: Schema.optionalKey(AgentExposure),
+  syncWithBoard: Schema.optionalKey(Schema.Boolean),
+  dispatchMode: Schema.optionalKey(AgentDispatchMode),
+  channels: Schema.optionalKey(Schema.Array(Channel)),
+});
+export type AgentUpdateInput = typeof AgentUpdateInput.Type;
+export const AgentListResult = Schema.Struct({ agents: Schema.Array(Agent) });
+export const AgentGetResult = Schema.Struct({ agent: Agent, card: AgentCard });
