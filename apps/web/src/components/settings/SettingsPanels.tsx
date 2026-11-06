@@ -127,8 +127,8 @@ const isSidebarProjectSortOrder = Schema.is(SidebarProjectSortOrder);
 const isAppLanguage = Schema.is(AppLanguage);
 
 const DIFF_LAYOUT_LABELS: Record<DiffLayout, string> = {
-  stacked: "Stacked",
-  split: "Split",
+  stacked: "settings.parallelA.diffLayoutStacked",
+  split: "settings.parallelA.diffLayoutSplit",
 };
 
 const DEFAULT_DRIVER_KIND = ProviderDriverKind.make("codex");
@@ -1150,26 +1150,30 @@ export function GeneralSettingsPanel() {
 }
 
 export function ChatSettingsPanel() {
+  const { t } = useTranslation();
   const modifierLabel = isMacPlatform(navigator.platform) ? "⌘" : "Ctrl";
   const sendShortcutOptions = [
     { value: "enter", label: "Enter" },
-    { value: "mod-enter-multiline", label: `${modifierLabel} + Enter for multiline prompts` },
-    { value: "mod-enter", label: `${modifierLabel} + Enter always` },
+    {
+      value: "mod-enter-multiline",
+      label: t("settings.text.modifierlabelEnterForMultilinePrompts", { modifierLabel }),
+    },
+    { value: "mod-enter", label: t("settings.text.modifierlabelEnterAlways", { modifierLabel }) },
   ] as const;
   const settings = useScopedSettings();
   const updateSettings = useUpdateScopedSettings();
 
   return (
     <SettingsPageContainer>
-      <SettingsSection id="composer" title="Composer">
+      <SettingsSection id="composer" title={t("settings.text.composer")}>
         <SettingsRow
-          {...searchableSetting("composer-rich-text")}
-          description="Show formatted Markdown as you type."
+          {...searchableSetting("composer-rich-text", t)}
+          description={t("settings.text.showFormattedMarkdownAsYouType")}
           resetAction={
             settings.composerRichTextEnabled !==
             DEFAULT_UNIFIED_SETTINGS.composerRichTextEnabled ? (
-              <SettingResetButton
-                label="rich text composer"
+              <TranslatedSettingResetButton
+                label={t("settings.text.richTextComposer")}
                 onClick={() =>
                   updateSettings({
                     composerRichTextEnabled: DEFAULT_UNIFIED_SETTINGS.composerRichTextEnabled,
@@ -1184,17 +1188,17 @@ export function ChatSettingsPanel() {
               onCheckedChange={(checked) =>
                 updateSettings({ composerRichTextEnabled: Boolean(checked) })
               }
-              aria-label="Rich text composer"
+              aria-label={t("settings.text.richTextComposer2")}
             />
           }
         />
         <SettingsRow
-          {...searchableSetting("send-shortcut")}
-          description="Choose when Enter sends a prompt or inserts a new line"
+          {...searchableSetting("send-shortcut", t)}
+          description={t("settings.text.chooseWhenEnterSendsAPrompt")}
           resetAction={
             settings.sendShortcut !== DEFAULT_UNIFIED_SETTINGS.sendShortcut ? (
-              <SettingResetButton
-                label="send shortcut"
+              <TranslatedSettingResetButton
+                label={t("settings.text.sendShortcut")}
                 onClick={() =>
                   updateSettings({ sendShortcut: DEFAULT_UNIFIED_SETTINGS.sendShortcut })
                 }
@@ -1212,7 +1216,7 @@ export function ChatSettingsPanel() {
               <SelectTrigger
                 size="sm"
                 className="w-auto min-w-0 max-w-full"
-                aria-label="Send shortcut"
+                aria-label={t("settings.text.sendShortcut2")}
               >
                 <SelectValue>
                   {
@@ -1234,14 +1238,14 @@ export function ChatSettingsPanel() {
             </Select>
           }
         />
-        <AdvancedSettings targetIds={[searchableSetting("skills-in-slash-menu").id]}>
+        <AdvancedSettings targetIds={[searchableSetting("skills-in-slash-menu", t).id]}>
           <SettingsRow
-            {...searchableSetting("skills-in-slash-menu")}
-            description="Also include skills in the / command menu. Skills always appear when you type $."
+            {...searchableSetting("skills-in-slash-menu", t)}
+            description={t("settings.text.alsoIncludeSkillsInTheCommand")}
             resetAction={
               settings.showSkillsInSlashMenu !== DEFAULT_UNIFIED_SETTINGS.showSkillsInSlashMenu ? (
-                <SettingResetButton
-                  label="skills in slash menu"
+                <TranslatedSettingResetButton
+                  label={t("settings.text.skillsInSlashMenu")}
                   onClick={() =>
                     updateSettings({
                       showSkillsInSlashMenu: DEFAULT_UNIFIED_SETTINGS.showSkillsInSlashMenu,
@@ -1256,26 +1260,27 @@ export function ChatSettingsPanel() {
                 onCheckedChange={(checked) =>
                   updateSettings({ showSkillsInSlashMenu: Boolean(checked) })
                 }
-                aria-label="Show skills in slash menu"
+                aria-label={t("settings.text.showSkillsInSlashMenu")}
               />
             }
           />
         </AdvancedSettings>
       </SettingsSection>
 
-      <SettingsSection id="follow-ups" title="Follow-ups">
+      <SettingsSection id="follow-ups" title={t("settings.text.followUps")}>
         <SettingsRow
-          {...searchableSetting("follow-up-behavior")}
+          {...searchableSetting("follow-up-behavior", t)}
           description={
-            "Queue follow-ups while the agent runs or steer the current run. " +
-            (settings.sendShortcut === "mod-enter-multiline"
-              ? `Press ${modifierLabel} + Enter for single-line prompts or ${modifierLabel} + Shift + Enter for multiline prompts to do the opposite for one message.`
-              : `Press ${modifierLabel}${settings.sendShortcut === "mod-enter" ? " + Shift" : ""} + Enter to do the opposite for one message.`)
+            settings.sendShortcut === "mod-enter-multiline"
+              ? t("settings.text.followUpBehaviorDescMultiline", { modifierLabel })
+              : t("settings.text.followUpBehaviorDesc", {
+                  shortcut: `${modifierLabel}${settings.sendShortcut === "mod-enter" ? " + Shift" : ""}`,
+                })
           }
           resetAction={
             settings.followUpBehavior !== DEFAULT_UNIFIED_SETTINGS.followUpBehavior ? (
-              <SettingResetButton
-                label="follow-up behavior"
+              <TranslatedSettingResetButton
+                label={t("settings.text.followUpBehavior")}
                 onClick={() =>
                   updateSettings({
                     followUpBehavior: DEFAULT_UNIFIED_SETTINGS.followUpBehavior,
@@ -1293,14 +1298,20 @@ export function ChatSettingsPanel() {
                 }
               }}
             >
-              <SelectTrigger size="sm" className="w-auto min-w-0" aria-label="Follow-up behavior">
+              <SelectTrigger
+                size="sm"
+                className="w-auto min-w-0"
+                aria-label={t("settings.text.followUpBehavior2")}
+              >
                 <SelectValue>
-                  {settings.followUpBehavior === "queue" ? "Queue" : "Steer"}
+                  {settings.followUpBehavior === "queue"
+                    ? t("settings.text.queue")
+                    : t("settings.text.steer")}
                 </SelectValue>
               </SelectTrigger>
               <SelectPopup align="end" alignItemWithTrigger={false}>
-                <SelectItem value="queue">Queue</SelectItem>
-                <SelectItem value="steer">Steer</SelectItem>
+                <SelectItem value="queue">{t("settings.text.queue")}</SelectItem>
+                <SelectItem value="steer">{t("settings.text.steer")}</SelectItem>
               </SelectPopup>
             </Select>
           }
@@ -1311,16 +1322,17 @@ export function ChatSettingsPanel() {
 }
 
 function DiffColorsSettingsRow() {
+  const { t } = useTranslation();
   const settings = useScopedSettings();
   const updateSettings = useUpdateScopedSettings();
   return (
     <SettingsRow
-      {...searchableSetting("diff-color-scheme")}
-      description="Choose colors for additions and deletions, including change counts."
+      {...searchableSetting("diff-color-scheme", t)}
+      description={t("settings.text.chooseColorsForAdditionsAndDeletions")}
       resetAction={
         settings.diffColorScheme !== DEFAULT_UNIFIED_SETTINGS.diffColorScheme ? (
-          <SettingResetButton
-            label="diff colors"
+          <TranslatedSettingResetButton
+            label={t("settings.text.diffColors")}
             onClick={() =>
               updateSettings({ diffColorScheme: DEFAULT_UNIFIED_SETTINGS.diffColorScheme })
             }
@@ -1336,7 +1348,11 @@ function DiffColorsSettingsRow() {
                 updateSettings({ diffColorScheme: value });
             }}
           >
-            <SelectTrigger size="sm" className="w-full min-w-0" aria-label="Diff colors">
+            <SelectTrigger
+              size="sm"
+              className="w-full min-w-0"
+              aria-label={t("settings.text.diffColors2")}
+            >
               <span
                 aria-hidden="true"
                 className={
@@ -1349,12 +1365,14 @@ function DiffColorsSettingsRow() {
                 <span className="size-2 rounded-full bg-diff-addition" />
               </span>
               <SelectValue>
-                {settings.diffColorScheme === "blue-orange" ? "Blue & orange" : "Red & green"}
+                {settings.diffColorScheme === "blue-orange"
+                  ? t("settings.text.blueOrange")
+                  : t("settings.text.redGreen")}
               </SelectValue>
             </SelectTrigger>
             <SelectPopup align="end" alignItemWithTrigger={false}>
-              <SelectItem value="red-green">Red & green (default)</SelectItem>
-              <SelectItem value="blue-orange">Blue & orange</SelectItem>
+              <SelectItem value="red-green">{t("settings.text.redGreenDefault")}</SelectItem>
+              <SelectItem value="blue-orange">{t("settings.text.blueOrange")}</SelectItem>
             </SelectPopup>
           </Select>
         </div>
@@ -1364,19 +1382,20 @@ function DiffColorsSettingsRow() {
 }
 
 export function DiffsSettingsPanel() {
+  const { t } = useTranslation();
   const settings = useScopedSettings();
   const updateSettings = useUpdateScopedSettings();
 
   return (
     <SettingsPageContainer>
-      <SettingsSection id="diffs" title="Diffs">
+      <SettingsSection id="diffs" title={t("settings.text.diffs")}>
         <SettingsRow
-          {...searchableSetting("diff-layout")}
-          description="Show diffs stacked or side by side. The toggle in the diff toolbar changes this too."
+          {...searchableSetting("diff-layout", t)}
+          description={t("settings.text.showDiffsStackedOrSideBy")}
           resetAction={
             settings.diffLayout !== DEFAULT_UNIFIED_SETTINGS.diffLayout ? (
-              <SettingResetButton
-                label="diff layout"
+              <TranslatedSettingResetButton
+                label={t("settings.text.diffLayout")}
                 onClick={() => updateSettings({ diffLayout: DEFAULT_UNIFIED_SETTINGS.diffLayout })}
               />
             ) : null
@@ -1390,27 +1409,31 @@ export function DiffsSettingsPanel() {
                 }
               }}
             >
-              <SelectTrigger size="sm" className="w-full sm:w-40" aria-label="Diff layout">
-                <SelectValue>{DIFF_LAYOUT_LABELS[settings.diffLayout]}</SelectValue>
+              <SelectTrigger
+                size="sm"
+                className="w-full sm:w-40"
+                aria-label={t("settings.text.diffLayout2")}
+              >
+                <SelectValue>{t(DIFF_LAYOUT_LABELS[settings.diffLayout])}</SelectValue>
               </SelectTrigger>
               <SelectPopup align="end" alignItemWithTrigger={false}>
                 <SelectItem hideIndicator value="stacked">
-                  {DIFF_LAYOUT_LABELS.stacked}
+                  {t(DIFF_LAYOUT_LABELS.stacked)}
                 </SelectItem>
                 <SelectItem hideIndicator value="split">
-                  {DIFF_LAYOUT_LABELS.split}
+                  {t(DIFF_LAYOUT_LABELS.split)}
                 </SelectItem>
               </SelectPopup>
             </Select>
           }
         />
         <SettingsRow
-          {...searchableSetting("hide-whitespace-changes")}
-          description="Set whether the diff panel ignores whitespace-only edits by default."
+          {...searchableSetting("hide-whitespace-changes", t)}
+          description={t("settings.text.setWhetherTheDiffPanelIgnores")}
           resetAction={
             settings.diffIgnoreWhitespace !== DEFAULT_UNIFIED_SETTINGS.diffIgnoreWhitespace ? (
-              <SettingResetButton
-                label="diff whitespace changes"
+              <TranslatedSettingResetButton
+                label={t("settings.text.diffWhitespaceChanges")}
                 onClick={() =>
                   updateSettings({
                     diffIgnoreWhitespace: DEFAULT_UNIFIED_SETTINGS.diffIgnoreWhitespace,
@@ -1425,17 +1448,17 @@ export function DiffsSettingsPanel() {
               onCheckedChange={(checked) =>
                 updateSettings({ diffIgnoreWhitespace: Boolean(checked) })
               }
-              aria-label="Hide whitespace changes by default"
+              aria-label={t("settings.text.hideWhitespaceChangesByDefault")}
             />
           }
         />
         <SettingsRow
-          {...searchableSetting("default-diff-file-state")}
-          description="Start with files expanded or collapsed when opening diffs or a pull request's Code tab."
+          {...searchableSetting("default-diff-file-state", t)}
+          description={t("settings.text.startWithFilesExpandedOrCollapsed")}
           resetAction={
             settings.diffFilesCollapsed !== DEFAULT_UNIFIED_SETTINGS.diffFilesCollapsed ? (
-              <SettingResetButton
-                label="default diff file state"
+              <TranslatedSettingResetButton
+                label={t("settings.text.defaultDiffFileState")}
                 onClick={() =>
                   updateSettings({
                     diffFilesCollapsed: DEFAULT_UNIFIED_SETTINGS.diffFilesCollapsed,
@@ -1456,16 +1479,20 @@ export function DiffsSettingsPanel() {
               <SelectTrigger
                 size="sm"
                 className="w-full sm:w-40"
-                aria-label="Default diff file state"
+                aria-label={t("settings.text.defaultDiffFileState2")}
               >
-                <SelectValue>{settings.diffFilesCollapsed ? "Collapsed" : "Expanded"}</SelectValue>
+                <SelectValue>
+                  {settings.diffFilesCollapsed
+                    ? t("settings.text.collapsed")
+                    : t("settings.text.expanded")}
+                </SelectValue>
               </SelectTrigger>
               <SelectPopup align="end" alignItemWithTrigger={false}>
                 <SelectItem hideIndicator value="expanded">
-                  Expanded
+                  {t("settings.text.expanded")}
                 </SelectItem>
                 <SelectItem hideIndicator value="collapsed">
-                  Collapsed
+                  {t("settings.text.collapsed")}
                 </SelectItem>
               </SelectPopup>
             </Select>
@@ -1474,14 +1501,14 @@ export function DiffsSettingsPanel() {
         <DiffColorsSettingsRow />
       </SettingsSection>
 
-      <SettingsSection id="pull-requests" title="Pull requests">
+      <SettingsSection id="pull-requests" title={t("settings.text.pullRequests")}>
         <SettingsRow
-          {...searchableSetting("proactive-panels")}
-          description="Open linked pull requests first. Otherwise, open Changes for edits to at least 3 files or 50 lines."
+          {...searchableSetting("proactive-panels", t)}
+          description={t("settings.text.openLinkedPullRequestsFirstOtherwise")}
           resetAction={
             settings.proactivePanelsEnabled !== DEFAULT_UNIFIED_SETTINGS.proactivePanelsEnabled ? (
-              <SettingResetButton
-                label="proactive panels"
+              <TranslatedSettingResetButton
+                label={t("settings.text.proactivePanels")}
                 onClick={() =>
                   updateSettings({
                     proactivePanelsEnabled: DEFAULT_UNIFIED_SETTINGS.proactivePanelsEnabled,
@@ -1496,7 +1523,7 @@ export function DiffsSettingsPanel() {
               onCheckedChange={(checked) =>
                 updateSettings({ proactivePanelsEnabled: Boolean(checked) })
               }
-              aria-label="Open pull requests and changes panels proactively"
+              aria-label={t("settings.text.openPullRequestsAndChangesPanels")}
             />
           }
         />
