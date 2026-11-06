@@ -10,6 +10,7 @@ import { EnvironmentRegistry } from "../connection/registry.ts";
 import {
   createTelescopeWorkspaceAtoms,
   boundWorkspaceIds,
+  dashboardListCounts,
   failureText,
   hiddenOutsideWorkspace,
   resolveCurrentWorkspace,
@@ -130,4 +131,58 @@ describe("telescope switchTo", () => {
       registry.dispose();
     }),
   );
+});
+
+describe("telescope dashboard counts", () => {
+  const task: Telescope.DashboardTask = {
+    id: Telescope.TaskId.make("task"),
+    title: "task",
+    status: "todo",
+    statusSince: "2026-11-06T00:00:00.000Z",
+  };
+  const run: Telescope.DashboardRun = {
+    id: Telescope.AgentRunId.make("run"),
+    agentId: Telescope.AgentId.make("agent"),
+    agentName: "agent",
+    startedAt: "2026-11-06T00:00:00.000Z",
+    calls: 0,
+    tokens: { input: 0, cachedInput: 0, cacheCreation: 0, output: 0 },
+  };
+  const summary = (
+    openTasks: Telescope.DashboardSummary["openTasks"],
+    tasks: number,
+    openRuns: number,
+    runs: number,
+  ): Telescope.DashboardSummary => ({
+    generatedAt: "2026-11-06T00:00:00.000Z",
+    openTasks,
+    tasks: Array.from({ length: tasks }, () => task),
+    openRuns,
+    runs: Array.from({ length: runs }, () => run),
+    wakes: { queued: 0, running: 0 },
+    pendingDecisions: 0,
+  });
+
+  it.each([
+    {
+      name: "lists hold everything",
+      input: summary({ todo: 1, in_progress: 1, in_review: 0, needs_decision: 1 }, 3, 2, 2),
+      tasks: { total: 3, shown: 3 },
+      runs: { total: 2, shown: 2 },
+    },
+    {
+      name: "capped lists count past the cap",
+      input: summary({ todo: 90, in_progress: 20, in_review: 5, needs_decision: 3 }, 100, 73, 50),
+      tasks: { total: 118, shown: 100 },
+      runs: { total: 73, shown: 50 },
+    },
+    {
+      name: "nothing open",
+      input: summary({ todo: 0, in_progress: 0, in_review: 0, needs_decision: 0 }, 0, 0, 0),
+      tasks: { total: 0, shown: 0 },
+      runs: { total: 0, shown: 0 },
+    },
+  ])("$name", ({ input, tasks, runs }) => {
+    expect(dashboardListCounts(input)).toEqual({ tasks, runs });
+  });
 });

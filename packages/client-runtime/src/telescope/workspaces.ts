@@ -106,6 +106,25 @@ export function bindingsFromSummary(
   );
 }
 
+export interface DashboardListCount {
+  readonly total: number;
+  readonly shown: number;
+}
+
+/** The dashboard lists are capped, so totals come from the uncapped counts, never list lengths. */
+export function dashboardListCounts(summary: Telescope.DashboardSummary): {
+  readonly tasks: DashboardListCount;
+  readonly runs: DashboardListCount;
+} {
+  return {
+    tasks: {
+      total: Object.values(summary.openTasks).reduce((sum, n) => sum + n, 0),
+      shown: summary.tasks.length,
+    },
+    runs: { total: summary.openRuns, shown: summary.runs.length },
+  };
+}
+
 export function createTelescopeWorkspaceAtoms<R, E>(
   runtime: Atom.AtomRuntime<EnvironmentRegistry | R, E>,
   storage: CurrentWorkspaceStorage,

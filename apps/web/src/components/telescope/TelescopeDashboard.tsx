@@ -1,3 +1,7 @@
+import {
+  dashboardListCounts,
+  type DashboardListCount,
+} from "@t3tools/client-runtime/telescope/workspaces";
 import type { Telescope } from "@t3tools/contracts";
 import { LayoutDashboardIcon } from "lucide-react";
 import type { ReactNode } from "react";
@@ -54,15 +58,20 @@ function Section({
   children,
 }: {
   title: string;
-  count: number;
+  count: DashboardListCount;
   children: ReactNode;
 }) {
   return (
     <section className="rounded-lg border bg-card">
       <h3 className="px-4 py-2.5 text-sm font-medium">
-        {title} <span className="text-muted-foreground tabular-nums">{count}</span>
+        {title} <span className="text-muted-foreground tabular-nums">{count.total}</span>
       </h3>
       {children}
+      {count.shown < count.total ? (
+        <p className="px-4 py-2.5 text-xs text-muted-foreground tabular-nums">
+          只显示前 {count.shown} 个，共 {count.total} 个
+        </p>
+      ) : null}
     </section>
   );
 }
@@ -70,13 +79,13 @@ function Section({
 function SummaryView({ summary }: { summary: Telescope.DashboardSummary }) {
   const now = summary.generatedAt;
   const { openTasks, tasks, runs, wakes } = summary;
-  const open = Object.values(openTasks).reduce((sum, n) => sum + n, 0);
+  const counts = dashboardListCounts(summary);
   return (
     <>
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Kpi
           label="未完成任务"
-          value={open}
+          value={counts.tasks.total}
           detail={`进行中 ${openTasks.in_progress} · 评审中 ${openTasks.in_review}`}
         />
         <Kpi
@@ -86,7 +95,7 @@ function SummaryView({ summary }: { summary: Telescope.DashboardSummary }) {
         />
         <Kpi
           label="运行中"
-          value={runs.length}
+          value={counts.runs.total}
           detail={runs[0] ? `最久的已跑 ${waited(runs[0].startedAt, now)}` : "没有在跑的运行"}
         />
         <Kpi
@@ -99,7 +108,7 @@ function SummaryView({ summary }: { summary: Telescope.DashboardSummary }) {
           }
         />
       </div>
-      <Section title="未完成任务 · 等得最久的在前" count={tasks.length}>
+      <Section title="未完成任务 · 等得最久的在前" count={counts.tasks}>
         <Table>
           <TableHeader>
             <TableRow>
@@ -141,7 +150,7 @@ function SummaryView({ summary }: { summary: Telescope.DashboardSummary }) {
           </TableBody>
         </Table>
       </Section>
-      <Section title="运行中" count={runs.length}>
+      <Section title="运行中" count={counts.runs}>
         <Table>
           <TableHeader>
             <TableRow>
