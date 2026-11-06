@@ -1,5 +1,6 @@
 import { HOSTED_APP_CHANNEL } from "~/branding";
 import { isElectron, isSecretsFeatureEnabled } from "~/env";
+import type { TFunction } from "i18next";
 import { isMacPlatform, isWindowsPlatform, normalizeSearchText } from "~/lib/utils";
 import { STATIC_KEYBINDING_COMMANDS, type KeybindingCommand } from "@t3tools/contracts";
 import type { EnvironmentId } from "@t3tools/contracts";
@@ -111,6 +112,11 @@ export const SETTINGS_SECTION_LABELS: Readonly<Record<SettingsPath, string>> = {
   "/settings/voice": "Voice",
   "/settings/archived": "Archive",
 };
+
+/** Takes the hook's `t` so React Compiler's memo cache is keyed on the language. */
+export function settingsSectionLabel(to: SettingsPath, t: TFunction): string {
+  return t(`settings.sections.${to.slice("/settings/".length)}`);
+}
 
 /** Sidebar order. A group without a heading is set apart by space alone. */
 export const SETTINGS_NAV_GROUPS: ReadonlyArray<{

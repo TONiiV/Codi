@@ -6,7 +6,6 @@ const english = createInstance();
 void english.init({
   resources: { en: { translation: en } },
   lng: "en",
-  initAsync: false,
   interpolation: { escapeValue: false },
 });
 

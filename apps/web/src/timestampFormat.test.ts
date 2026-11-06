@@ -26,6 +26,7 @@ const ZH_COPY: Record<string, string> = {
   "settings.parallelShared.expiresExpired": "已过期",
   "settings.parallelShared.expiresMoment": "即将过期",
   "settings.parallelShared.expiresIn": "{{duration}}后过期",
+  "settings.parallelShared.relativeAgoPlacement": "attached",
 };
 
 const zh: TFunction = ((key: string, options?: Record<string, unknown>) => {
@@ -46,7 +47,7 @@ describe("timestampFormat translations", () => {
   });
 
   it("formats relative and elapsed labels through the current translator", () => {
-    expect(formatRelativeTimeLabel(ago(5 * 60_000), NOW, zh)).toBe("5 分钟 前");
+    expect(formatRelativeTimeLabel(ago(5 * 60_000), NOW, zh)).toBe("5 分钟前");
     expect(formatRelativeTimeLabel(ago(20_000), NOW, zh)).toBe("刚刚");
     expect(formatElapsedDurationLabel(ago(30_000), NOW, zh)).toBe("30 秒");
     expect(formatElapsedDurationLabel(ago(2 * 3_600_000), NOW, zh)).toBe("2 小时");

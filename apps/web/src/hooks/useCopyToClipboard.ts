@@ -9,8 +9,8 @@ import { englishT } from "~/i18n/englishT";
 import { useTranslation } from "react-i18next";
 import { useStableCallback } from "./useStableCallback";
 
-function clipboardMessage(t: TFunction, key: string, fallback: string, target: string): string {
-  return t(`settings.parallelShared.${key}`, { defaultValue: fallback, target });
+function clipboardMessage(t: TFunction, key: string, target: string): string {
+  return t(`settings.parallelShared.${key}`, { target });
 }
 
 export class ClipboardApiUnavailableError extends Schema.TaggedError<ClipboardApiUnavailableError>()(
@@ -115,12 +115,7 @@ export async function writeTextToClipboard(
   if (typeof window === "undefined") {
     throw new ClipboardApiUnavailableError({
       target,
-      messageText: clipboardMessage(
-        t,
-        "copyUnavailable",
-        "Clipboard API is unavailable while copying {{target}}.",
-        target,
-      ),
+      messageText: clipboardMessage(t, "copyUnavailable", target),
     });
   }
 
@@ -145,12 +140,7 @@ export async function writeTextToClipboard(
     if (writeTextWithExecCommand(value, extraFlavors)) return true;
     throw new ClipboardApiUnavailableError({
       target,
-      messageText: clipboardMessage(
-        t,
-        "copyUnavailable",
-        "Clipboard API is unavailable while copying {{target}}.",
-        target,
-      ),
+      messageText: clipboardMessage(t, "copyUnavailable", target),
     });
   }
 
@@ -191,12 +181,7 @@ export async function writeTextToClipboard(
     throw new ClipboardWriteError({
       target,
       cause,
-      messageText: clipboardMessage(
-        t,
-        "copyFailed",
-        "Failed to copy {{target}} to the clipboard.",
-        target,
-      ),
+      messageText: clipboardMessage(t, "copyFailed", target),
     });
   }
 }
@@ -212,12 +197,7 @@ export async function readTextFromClipboard(
   ) {
     throw new ClipboardReadUnavailableError({
       target,
-      messageText: clipboardMessage(
-        t,
-        "readUnavailable",
-        "Clipboard API is unavailable while reading {{target}}.",
-        target,
-      ),
+      messageText: clipboardMessage(t, "readUnavailable", target),
     });
   }
 
@@ -227,12 +207,7 @@ export async function readTextFromClipboard(
     throw new ClipboardReadError({
       target,
       cause,
-      messageText: clipboardMessage(
-        t,
-        "readFailed",
-        "Failed to read {{target}} from the clipboard.",
-        target,
-      ),
+      messageText: clipboardMessage(t, "readFailed", target),
     });
   }
 }

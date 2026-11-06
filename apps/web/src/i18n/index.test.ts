@@ -23,20 +23,25 @@ describe("resolveLanguage", () => {
 });
 
 describe("i18n initialization", () => {
-  it("is ready synchronously and keeps the helper translator English across language changes", () => {
+  it("starts in English, loads zh-CN on first use, and lets the latest language request win", async () => {
     expect(i18n.isInitialized).toBe(true);
+    expect(i18n.hasResourceBundle("zh-CN", "translation")).toBe(false);
     vi.stubGlobal("document", { documentElement: { lang: "" } });
 
     try {
-      applyLanguage("zh-CN");
+      await applyLanguage("zh-CN");
       expect(document.documentElement.lang).toBe("zh-CN");
       expect(i18n.t("common.search")).toBe(zhCN.common.search);
       expect(englishT("common.search")).toBe(en.common.search);
 
-      applyLanguage("en");
+      await applyLanguage("en");
       expect(document.documentElement.lang).toBe("en");
       expect(i18n.t("common.search")).toBe(en.common.search);
-      expect(englishT("common.search")).toBe(en.common.search);
+
+      i18n.removeResourceBundle("zh-CN", "translation");
+      await Promise.all([applyLanguage("zh-CN"), applyLanguage("en")]);
+      expect(document.documentElement.lang).toBe("en");
+      expect(i18n.language).toBe("en");
     } finally {
       vi.unstubAllGlobals();
     }

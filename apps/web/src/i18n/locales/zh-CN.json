@@ -1,11 +1,76 @@
 {
   "common": {
-    "search": "搜索"
+    "search": "搜索",
+    "back": "返回"
   },
   "sidebar": {
-    "toggle": "切换主侧边栏"
+    "toggle": "切换主侧边栏",
+    "goBack": "后退",
+    "goForward": "前进",
+    "home": "Codi 主页",
+    "settings": "设置",
+    "pullRequests": "拉取请求",
+    "usage": "用量"
   },
   "settings": {
+    "title": "设置",
+    "breadcrumbLabel": "设置面包屑导航",
+    "openSourceLicenses": "开源许可",
+    "sections": {
+      "diagnostics": "诊断",
+      "projects": "项目",
+      "general": "通用",
+      "appearance": "外观",
+      "chat": "聊天",
+      "diffs": "差异与拉取请求",
+      "keybindings": "快捷键",
+      "snap-shot": "快照",
+      "providers": "提供方",
+      "threads": "会话",
+      "browser": "浏览器",
+      "devices": "设备",
+      "scheduled-tasks": "定时任务",
+      "source-control": "源代码管理",
+      "worktrees": "工作树",
+      "connections": "环境",
+      "access": "共享与访问",
+      "secrets": "密钥",
+      "maintenance": "维护",
+      "labs": "实验室",
+      "about": "关于",
+      "archived": "归档",
+      "voice": "语音"
+    },
+    "groups": {
+      "Agents": "智能体",
+      "Code": "代码",
+      "Connections": "连接"
+    },
+    "nav": {
+      "searchSettings": "搜索设置",
+      "clearSearch": "清除设置搜索",
+      "noResults": "未找到设置",
+      "searchResults": "设置搜索结果",
+      "sections": "设置分区"
+    },
+    "text": {
+      "resetToDefault": "恢复默认",
+      "overriddenForThisProject": "已为此项目覆盖",
+      "environmentWideSettingSelectAnEnvironment": "环境范围的设置。请选择一个环境来更改它。",
+      "backgroundPolicyDetails": "后台策略详情",
+      "resetToInheritedValue": "重置为继承的值",
+      "mixedAcrossSelectedEnvironments": "所选环境间不一致",
+      "inheritedFromTheRepositoryST3": "继承自仓库的 t3.json",
+      "inheritedFromInheritedfrom": "继承自 {{inheritedFrom}}",
+      "setOnTheEnvironment": "在环境上设置",
+      "builtInDefault": "内置默认值",
+      "resetLabelToDefault": "将{{label}}恢复为默认值",
+      "theSelectedEnvironment": "所选环境",
+      "managedByManagedby": "由 {{managedBy}} 管理。",
+      "thePrimaryEnvironment": "主环境",
+      "reconnectTheSelectedEnvironmentToChange": "请重新连接所选环境以更改此设置。",
+      "connectionLacksPermissionToChangeSettingsOn": "此连接没有权限更改 {{target}} 上的设置。"
+    },
     "parallelShared": {
       "copied": "已复制！",
       "failedToCopy": "复制失败",
@@ -24,7 +89,8 @@
       "copyUnavailable": "复制 {{target}} 时剪贴板 API 不可用。",
       "copyFailed": "无法将 {{target}} 复制到剪贴板。",
       "readUnavailable": "读取 {{target}} 时剪贴板 API 不可用。",
-      "readFailed": "无法从剪贴板读取 {{target}}。"
+      "readFailed": "无法从剪贴板读取 {{target}}。",
+      "relativeAgoPlacement": "attached"
     }
   }
 }

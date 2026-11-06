@@ -11,7 +11,13 @@ import {
 } from "@t3tools/contracts";
 import * as Equal from "effect/Equal";
 import { useLocation, useNavigate } from "@tanstack/react-router";
-import { createContext, type ComponentPropsWithoutRef, type ReactNode, useContext } from "react";
+import {
+  createContext,
+  type ComponentProps,
+  type ComponentPropsWithoutRef,
+  type ReactNode,
+  useContext,
+} from "react";
 
 import {
   PRIMARY_SETTINGS_UNAVAILABLE_MESSAGE,
@@ -36,6 +42,7 @@ import {
   type SettingInheritanceState,
   type SettingOverridingProject,
 } from "./SettingInheritance";
+import { useTranslation } from "react-i18next";
 
 const EMPTY_SETTING_KEYS: readonly (keyof ServerSettings)[] = [];
 const EMPTY_MANAGED_PATHS: readonly string[] = [];
@@ -189,12 +196,17 @@ export const SETTINGS_PICKER_TRIGGER_CLASSNAME =
   "min-w-0 max-w-none shrink-0 border-input bg-background font-normal text-foreground shadow-xs/5 hover:bg-accent/50 dark:bg-input/32 [&_svg[data-composer-control-chevron]]:stroke-[1.75] [&_svg[data-composer-control-chevron]]:opacity-70";
 
 export function PolicyTooltip({ children }: { readonly children: string }) {
+  const { t } = useTranslation();
   return (
     <Tooltip>
       <TooltipTrigger
         delay={200}
         render={
-          <Button size="icon-micro" variant="ghost-muted" aria-label="Background policy details">
+          <Button
+            size="icon-micro"
+            variant="ghost-muted"
+            aria-label={t("settings.text.backgroundPolicyDetails")}
+          >
             <InfoIcon className="size-3.5" />
           </Button>
         }
@@ -333,6 +345,7 @@ export function SettingsRow({
   managed?: string | undefined;
   children?: ReactNode;
 }) {
+  const { t } = useTranslation();
   const targetRef = useSettingsSearchTarget<HTMLDivElement>(rowProps.id);
   const primarySettingsAvailable = usePrimarySettingsAvailable();
   const context = useOptionalSettingsScope();
@@ -395,9 +408,9 @@ export function SettingsRow({
     unavailable || managedBy !== undefined || managed !== undefined ? null : isProjectScope &&
       scopedKeys.length > 0 ? (
       source === "project" || source === "mixed" ? (
-        <SettingResetButton
+        <TranslatedSettingResetButton
           label={typeof title === "string" ? title : "override"}
-          tooltip="Reset to inherited value"
+          tooltip={t("settings.text.resetToInheritedValue")}
           onClick={() => (onResetOverride ? onResetOverride() : clearOverrides(scopedKeys))}
         />
       ) : null
@@ -428,24 +441,24 @@ export function SettingsRow({
     managed !== undefined && control
       ? inertControl(managed)
       : managedBy !== undefined && control
-        ? inertControl(`Managed by ${managedBy}.`)
+        ? inertControl(t("settings.text.managedByManagedby", { managedBy }))
         : unavailable && control
           ? inertControl(
               !canWriteSettings
-                ? `This connection lacks permission to change settings on ${
-                    context
+                ? t("settings.text.connectionLacksPermissionToChangeSettingsOn", {
+                    target: context
                       ? context.connectedEnvironments
                           .filter((target) => !writableIds.has(target.environmentId))
                           .map((target) => target.label)
-                          .join(", ") || "the selected environment"
-                      : (primaryEnvironment?.label ?? "the primary environment")
-                  }.`
+                          .join(", ") || t("settings.text.theSelectedEnvironment")
+                      : (primaryEnvironment?.label ?? t("settings.text.thePrimaryEnvironment")),
+                  })
                 : context
-                  ? "Reconnect the selected environment to change this setting."
+                  ? t("settings.text.reconnectTheSelectedEnvironmentToChange")
                   : PRIMARY_SETTINGS_UNAVAILABLE_MESSAGE,
             )
           : environmentWide && control
-            ? inertControl("Environment-wide setting. Select an environment to change it.")
+            ? inertControl(t("settings.text.environmentWideSettingSelectAnEnvironment"))
             : control;
   const customized =
     context !== null &&
@@ -459,16 +472,19 @@ export function SettingsRow({
       }),
     );
   const inheritance: { state: SettingInheritanceState; summary: string } = mixed
-    ? { state: "mixed", summary: "Mixed across selected environments" }
+    ? { state: "mixed", summary: t("settings.text.mixedAcrossSelectedEnvironments") }
     : source === "project"
-      ? { state: "overridden", summary: "Overridden for this project" }
+      ? { state: "overridden", summary: t("settings.text.overriddenForThisProject") }
       : source === "t3.json"
-        ? { state: "inherited", summary: "Inherited from the repository's t3.json" }
+        ? { state: "inherited", summary: t("settings.text.inheritedFromTheRepositoryST3") }
         : source === "environment" && scopedKeys.length > 0
-          ? { state: "inherited", summary: `Inherited from ${inheritedFrom}` }
+          ? {
+              state: "inherited",
+              summary: t("settings.text.inheritedFromInheritedfrom", { inheritedFrom }),
+            }
           : customized
-            ? { state: "environment", summary: "Set on the environment" }
-            : { state: "default", summary: "Built-in default" };
+            ? { state: "environment", summary: t("settings.text.setOnTheEnvironment") }
+            : { state: "default", summary: t("settings.text.builtInDefault") };
   const renderedInheritance =
     context && serverScoped && settingKeys.length > 0 ? (
       <SettingInheritance
@@ -547,14 +563,17 @@ export function SettingsRow({
   );
 }
 
+/** English defaults: panels that are not translated yet share this button; translated ones pass both. */
 export function SettingResetButton({
   label,
   tooltip = "Reset to default",
+  ariaLabel,
   disabled = false,
   onClick,
 }: {
   label: string;
   tooltip?: string;
+  ariaLabel?: string;
   disabled?: boolean;
   onClick: () => void;
 }) {
@@ -565,7 +584,7 @@ export function SettingResetButton({
           <Button
             size="icon-micro"
             variant="ghost-muted"
-            aria-label={`Reset ${label} to default`}
+            aria-label={ariaLabel ?? `Reset ${label} to default`}
             disabled={disabled}
             onClick={(event) => {
               event.stopPropagation();
@@ -578,6 +597,18 @@ export function SettingResetButton({
       />
       <TooltipPopup side="top">{tooltip}</TooltipPopup>
     </Tooltip>
+  );
+}
+
+/** The reset button for translated panels: same props, translated defaults. */
+function TranslatedSettingResetButton(props: ComponentProps<typeof SettingResetButton>) {
+  const { t } = useTranslation();
+  return (
+    <SettingResetButton
+      {...props}
+      tooltip={props.tooltip ?? t("settings.text.resetToDefault")}
+      ariaLabel={props.ariaLabel ?? t("settings.text.resetLabelToDefault", { label: props.label })}
+    />
   );
 }
 

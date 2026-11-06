@@ -1,11 +1,76 @@
 {
   "common": {
-    "search": "Search"
+    "search": "Search",
+    "back": "Back"
   },
   "sidebar": {
-    "toggle": "Toggle main sidebar"
+    "toggle": "Toggle main sidebar",
+    "goBack": "Go back",
+    "goForward": "Go forward",
+    "home": "Codi home",
+    "settings": "Settings",
+    "pullRequests": "Pull requests",
+    "usage": "Usage"
   },
   "settings": {
+    "title": "Settings",
+    "breadcrumbLabel": "Settings breadcrumb",
+    "openSourceLicenses": "Open source licenses",
+    "sections": {
+      "diagnostics": "Diagnostics",
+      "projects": "Projects",
+      "general": "General",
+      "appearance": "Appearance",
+      "chat": "Chat",
+      "diffs": "Diffs & pull requests",
+      "keybindings": "Keybindings",
+      "snap-shot": "SnapShots",
+      "providers": "Providers",
+      "threads": "Threads",
+      "browser": "Browser",
+      "devices": "Devices",
+      "scheduled-tasks": "Scheduled tasks",
+      "source-control": "Source control",
+      "worktrees": "Worktrees",
+      "connections": "Environments",
+      "access": "Sharing & access",
+      "secrets": "Secrets",
+      "maintenance": "Maintenance",
+      "labs": "Labs",
+      "about": "About",
+      "archived": "Archive",
+      "voice": "Voice"
+    },
+    "groups": {
+      "Agents": "Agents",
+      "Code": "Code",
+      "Connections": "Connections"
+    },
+    "nav": {
+      "searchSettings": "Search settings",
+      "clearSearch": "Clear settings search",
+      "noResults": "No settings found",
+      "searchResults": "Settings search results",
+      "sections": "Settings sections"
+    },
+    "text": {
+      "resetToDefault": "Reset to default",
+      "overriddenForThisProject": "Overridden for this project",
+      "environmentWideSettingSelectAnEnvironment": "Environment-wide setting. Select an environment to change it.",
+      "backgroundPolicyDetails": "Background policy details",
+      "resetToInheritedValue": "Reset to inherited value",
+      "mixedAcrossSelectedEnvironments": "Mixed across selected environments",
+      "inheritedFromTheRepositoryST3": "Inherited from the repository's t3.json",
+      "inheritedFromInheritedfrom": "Inherited from {{inheritedFrom}}",
+      "setOnTheEnvironment": "Set on the environment",
+      "builtInDefault": "Built-in default",
+      "resetLabelToDefault": "Reset {{label}} to default",
+      "theSelectedEnvironment": "the selected environment",
+      "managedByManagedby": "Managed by {{managedBy}}.",
+      "thePrimaryEnvironment": "the primary environment",
+      "reconnectTheSelectedEnvironmentToChange": "Reconnect the selected environment to change this setting.",
+      "connectionLacksPermissionToChangeSettingsOn": "This connection lacks permission to change settings on {{target}}."
+    },
     "parallelShared": {
       "copied": "Copied!",
       "failedToCopy": "Failed to copy",
@@ -24,7 +89,8 @@
       "copyUnavailable": "Clipboard API is unavailable while copying {{target}}.",
       "copyFailed": "Failed to copy {{target}} to the clipboard.",
       "readUnavailable": "Clipboard API is unavailable while reading {{target}}.",
-      "readFailed": "Failed to read {{target}} from the clipboard."
+      "readFailed": "Failed to read {{target}} from the clipboard.",
+      "relativeAgoPlacement": "separate"
     }
   }
 }

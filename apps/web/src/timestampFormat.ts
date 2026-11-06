@@ -261,18 +261,14 @@ export function msUntilRelativeTimeChange(
   return Math.min(nextChangeMs - nowMs, DAY_MS);
 }
 
-const DURATION_UNIT_SUFFIX = { seconds: "s", minutes: "m", hours: "h", days: "d" } as const;
-type DurationUnit = keyof typeof DURATION_UNIT_SUFFIX;
+type DurationUnit = "seconds" | "minutes" | "hours" | "days";
 
 function capitalize(value: string): string {
   return `${value[0]!.toUpperCase()}${value.slice(1)}`;
 }
 
 function formatDurationUnit(value: number, unit: DurationUnit, t: TFunction): string {
-  return t(`settings.parallelShared.duration${capitalize(unit)}`, {
-    defaultValue: `{{value}}${DURATION_UNIT_SUFFIX[unit]}`,
-    value,
-  });
+  return t(`settings.parallelShared.duration${capitalize(unit)}`, { value });
 }
 
 function formatRelativeUnit(
@@ -280,14 +276,11 @@ function formatRelativeUnit(
   unit: Exclude<DurationUnit, "seconds">,
   t: TFunction,
 ): string {
-  return t(`settings.parallelShared.relative${capitalize(unit)}`, {
-    defaultValue: `{{value}}${DURATION_UNIT_SUFFIX[unit]}`,
-    value,
-  });
+  return t(`settings.parallelShared.relative${capitalize(unit)}`, { value });
 }
 
 function justNowLabel(t: TFunction): string {
-  return t("settings.parallelShared.justNow", { defaultValue: "just now" });
+  return t("settings.parallelShared.justNow");
 }
 
 export function formatRelativeElapsed(
@@ -296,13 +289,17 @@ export function formatRelativeElapsed(
 ): RelativeTimeParts {
   const seconds = Math.floor(elapsedMs / 1000);
   if (seconds < 60) return { value: justNowLabel(t), suffix: null };
-  const ago = t("settings.parallelShared.relativeAgo", { defaultValue: "ago" });
+  const ago = t("settings.parallelShared.relativeAgo");
+  // Callers join value and suffix with a space; locales without one ("5 分钟前") attach it here.
+  const attached = t("settings.parallelShared.relativeAgoPlacement") === "attached";
+  const parts = (value: string): RelativeTimeParts =>
+    attached ? { value: `${value}${ago}`, suffix: null } : { value, suffix: ago };
   const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return { value: formatRelativeUnit(minutes, "minutes", t), suffix: ago };
+  if (minutes < 60) return parts(formatRelativeUnit(minutes, "minutes", t));
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return { value: formatRelativeUnit(hours, "hours", t), suffix: ago };
+  if (hours < 24) return parts(formatRelativeUnit(hours, "hours", t));
   const days = Math.floor(hours / 24);
-  return { value: formatRelativeUnit(days, "days", t), suffix: ago };
+  return parts(formatRelativeUnit(days, "days", t));
 }
 
 export function formatRelativeTime(
@@ -357,17 +354,12 @@ export function formatExpiresInLabel(
   const date = parseTimestampDate(isoDate);
   if (!date) return "";
   const diffMs = date.getTime() - nowMs;
-  if (diffMs <= 0) return t("settings.parallelShared.expiresExpired", { defaultValue: "Expired" });
+  if (diffMs <= 0) return t("settings.parallelShared.expiresExpired");
 
-  const expiresIn = (duration: string) =>
-    t("settings.parallelShared.expiresIn", {
-      defaultValue: "Expires in {{duration}}",
-      duration,
-    });
+  const expiresIn = (duration: string) => t("settings.parallelShared.expiresIn", { duration });
 
   const totalSeconds = Math.floor(diffMs / 1000);
-  if (totalSeconds < 5)
-    return t("settings.parallelShared.expiresMoment", { defaultValue: "Expires in a moment" });
+  if (totalSeconds < 5) return t("settings.parallelShared.expiresMoment");
   if (totalSeconds < 60) return expiresIn(formatDurationUnit(totalSeconds, "seconds", t));
 
   if (totalSeconds < 3600) {

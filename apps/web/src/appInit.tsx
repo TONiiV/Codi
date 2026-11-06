@@ -58,10 +58,10 @@ import { environmentThreadShells } from "./state/threads";
 import { resolveThreadRouteTarget } from "./threadRoutes";
 
 /** Keeps i18next on the Language setting; "system" follows navigator.language. */
-function startLanguageSync(): void {
+function startLanguageSync(): Promise<void> {
   const apply = () => applyLanguage(getClientSettings().language);
-  subscribeClientSettings(apply);
-  apply();
+  subscribeClientSettings(() => void apply());
+  return apply();
 }
 
 /** Writes appearance settings onto the document, touching only the groups that changed. */
@@ -172,7 +172,8 @@ function startThreadOverlayRetention(router: AppRouter): void {
  * Starts every app-lifetime service once, before the first render, and returns the router.
  * They run for the life of the page, so their disposers are dropped here.
  */
-export function startAppServices(): AppRouter {
+/** `languageReady` settles once the saved language is loaded; it never rejects. */
+export function startAppServices(): { router: AppRouter; languageReady: Promise<void> } {
   // Ahead of the history: the provider auth code must leave the address before anything reads it.
   startProviderAuthDelivery();
 
@@ -187,7 +188,7 @@ export function startAppServices(): AppRouter {
   installDesktopPasteAsText(window.desktopBridge, window);
 
   startClientAppearance();
-  startLanguageSync();
+  const languageReady = startLanguageSync();
   startDocumentTitle();
   startEnvironmentThemeRepaint();
   startBrowserChromeThemeSync(router);
@@ -228,5 +229,5 @@ export function startAppServices(): AppRouter {
   startGuideRunNotifications(appAtomRegistry, router);
   if (isElectron) startDesktopUpdateLaunchNotice();
 
-  return router;
+  return { router, languageReady };
 }
