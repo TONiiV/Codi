@@ -36,6 +36,14 @@ const asBlocks = (value: unknown): Json[] =>
     : [];
 const asString = (value: unknown) => (typeof value === "string" ? value : undefined);
 
+// User records the harness writes: background task results, slash commands, interrupt markers.
+const HARNESS_PREFIXES = [
+  "<task-notification>",
+  "<command-",
+  "<local-command-",
+  "[Request interrupted",
+];
+
 /** Text length over four is the usual estimate; transcripts do not record result tokens. */
 const textTokens = (content: unknown): number => {
   if (typeof content === "string") return Math.ceil(content.length / 4);
@@ -119,13 +127,16 @@ export const makeSessionCollector = (window: {
         const call = pendingResults.get(asString(result["tool_use_id"]) ?? "");
         if (call !== undefined) call.resultTokens += textTokens(result["content"]);
       }
-      const typed =
-        typeof message["content"] === "string" || blocks.some((block) => block["type"] === "text");
+      const text =
+        asString(message["content"]) ??
+        asString(blocks.find((block) => block["type"] === "text")?.["text"]);
       if (
-        typed &&
+        text !== undefined &&
         results.length === 0 &&
         record["isMeta"] !== true &&
-        record["isSidechain"] !== true
+        record["isSidechain"] !== true &&
+        record["isCompactSummary"] !== true &&
+        !HARNESS_PREFIXES.some((prefix) => text.trimStart().startsWith(prefix))
       )
         session.userPrompts += 1;
     }

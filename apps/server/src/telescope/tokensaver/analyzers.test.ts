@@ -28,6 +28,11 @@ describe("token saver transcripts", () => {
       transcript.prompt("s1", 5, "Caveat: injected context", { isMeta: true }),
       transcript.prompt("s1", 5, "subagent brief", { isSidechain: true }),
       transcript.prompt("s1", 30, "at the window end"),
+      transcript.prompt("s1", 6, "<task-notification><task-id>b1</task-id></task-notification>"),
+      transcript.prompt("s1", 6, "<command-name>/clear</command-name>"),
+      transcript.prompt("s1", 6, "<local-command-stdout></local-command-stdout>"),
+      transcript.prompt("s1", 6, "[Request interrupted by user]"),
+      transcript.prompt("s1", 6, "This session is being continued.", { isCompactSummary: true }),
       "not json",
     ];
     for (const line of lines) collector.add(line);
