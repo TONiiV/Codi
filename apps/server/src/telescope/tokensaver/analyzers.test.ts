@@ -148,6 +148,15 @@ describe("token saver analyzers", () => {
     // Below the saving floor.
     const small = read("/repo/small.ts", 900);
     assert.strictEqual(repeatedReads([session("s4", { toolCalls: [small, small] })]), undefined);
+    // A subagent rereading the parent's file is its own pair, not a third reread by the parent.
+    const shared = read("/repo/src/a.ts", 600);
+    const byAgent = repeatedReads([
+      session("s5", {
+        toolCalls: [shared, shared, { ...shared, agentId: "a1" }, { ...shared, agentId: "a1" }],
+      }),
+    ]);
+    assert.strictEqual(byAgent?.evidence.sessionFilePairs, 2);
+    assert.strictEqual(byAgent?.evidence.topFileRepeatsInOneSession, 1);
   });
 
   it("counts only the part of each tool result above the threshold", () => {

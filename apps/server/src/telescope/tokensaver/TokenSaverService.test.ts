@@ -281,7 +281,8 @@ it.effect("the weekly pass reports each due workspace once a week, as the owner"
       );
 
     yield* TestClock.setTime(now - 8 * day);
-    const [recent, old, never, broken] = [
+    const [recent, old, never, broken, crashing] = [
+      yield* workspace(),
       yield* workspace(),
       yield* workspace(),
       yield* workspace(),
@@ -292,11 +293,22 @@ it.effect("the weekly pass reports each due workspace once a week, as the owner"
     yield* sql`UPDATE telescope_tasks SET status = 'corrupt' WHERE workspace_id = ${broken}`;
     yield* TestClock.setTime(now - 3 * day);
     yield* report(recent);
-    const pass = (yield* TokenSaverService.makeWeeklyPass).pipe(withHome(home));
+    const real = yield* TokenSaverService.TokenSaverService;
+    const pass = (yield* TokenSaverService.makeWeeklyPass.pipe(
+      Effect.provideService(
+        TokenSaverService.TokenSaverService,
+        TokenSaverService.TokenSaverService.of({
+          runWeekly: (actor, input) =>
+            input.workspaceId === crashing
+              ? Effect.die(new Error("collector bug"))
+              : real.runWeekly(actor, input),
+        }),
+      ),
+    )).pipe(withHome(home));
 
     yield* TestClock.setTime(now);
     yield* pass;
-    assert.deepStrictEqual(yield* counts([recent, old, never]), [1, 2, 1]);
+    assert.deepStrictEqual(yield* counts([recent, old, never, crashing]), [1, 2, 1, 0]);
     const [proposal] = (yield* board.listDecisions(alice, { workspaceId: never })).decisions;
     assert.strictEqual(proposal?.status, "proposed");
 

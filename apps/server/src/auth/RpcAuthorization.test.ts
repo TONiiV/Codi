@@ -104,6 +104,7 @@ describe("RPC authorization scopes", () => {
       Telescope.WS_METHODS.leaseAcquire,
       Telescope.WS_METHODS.leaseHeartbeat,
       Telescope.WS_METHODS.leaseRelease,
+      Telescope.WS_METHODS.tokenSaverRun,
     ]) {
       expect(requiredScopeForRpcMethod(method)).toBe(AuthTelescopeMemberScope);
     }
