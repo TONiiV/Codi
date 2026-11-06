@@ -131,6 +131,7 @@ it.layer(layer)("WorkspaceService", (it) => {
           { environmentId, projectId: ProjectId.make("project-2"), workspaceIds: [personal.id] },
         ],
       );
+      assert.strictEqual(yield* reasonOf(service.bindingSummary(c, {})), "forbidden");
       yield* service.unbind(a, { ...elsewhere, projectId: ProjectId.make("project-2") });
       yield* service.unbind(a, elsewhere);
       assert.strictEqual(

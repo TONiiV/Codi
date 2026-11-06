@@ -428,7 +428,9 @@ const make = Effect.gen(function* () {
   });
 
   // Any member may see where projects are bound, so every sidebar can hide them (D16).
-  const bindingSummary = Effect.fn("WorkspaceService.bindingSummary")(function* () {
+  const bindingSummary = Effect.fn("WorkspaceService.bindingSummary")(function* (caller: Caller) {
+    if (!isOwner(caller) && (yield* db.workspaceIdsOf(deviceKey(caller))).length === 0)
+      return yield* fail("forbidden", "You are not a member of any workspace.");
     const ids = yield* db.allWorkspaceIds;
     const rows = yield* Effect.forEach(ids, (id) =>
       db.select(id, "project_bindings", decodeBindings),
