@@ -3,6 +3,7 @@ import { assert, it } from "@effect/vitest";
 import { AuthSessionId, EnvironmentId, ProjectId, Telescope } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as TestClock from "effect/testing/TestClock";
 
 import { runMigrations } from "../persistence/Migrations.ts";
 import type { PersistenceDecodeError, PersistenceSqlError } from "../persistence/Errors.ts";
@@ -30,7 +31,12 @@ const session = (name: string): WorkspaceService.Caller => ({
   sessionId: AuthSessionId.make(`session-${name}`),
   subject: "one-time-token",
 });
-const as = { ann: session("ann"), bea: session("bea"), zed: session("zed") };
+const as = {
+  ann: session("ann"),
+  bea: session("bea"),
+  cy: session("cy"),
+  zed: session("zed"),
+};
 const environmentId = EnvironmentId.make("env-local");
 const web = ProjectId.make("project-web");
 const api = ProjectId.make("project-api");
@@ -112,7 +118,7 @@ const reasonOf = <A>(
 it.layer(layer)("Telescope grants", (it) => {
   it.effect("never lets a member's Chief Agent merge PRs when the member role lacks it", () =>
     Effect.gen(function* () {
-      const { workspaceId, beaId, grants, setPowers, mine } = yield* setup;
+      const { workspaceId, beaId, grants, agents, setPowers, mine } = yield* setup;
       const bea = yield* mine(as.bea);
       const webAgent = find(bea, "chief_agent", web);
       const apiAgent = find(bea, "chief_agent", api);
@@ -141,6 +147,29 @@ it.layer(layer)("Telescope grants", (it) => {
       });
       assert.deepStrictEqual(Object.values(outsider.powers), [false, false, false, false]);
       assert.strictEqual(removedBy(outsider, "openTickets"), "role");
+
+      // A company agent has no owner cap, so only the role layer guards the member it acts for.
+      const workspaces = yield* WorkspaceService.WorkspaceService;
+      const { code } = yield* workspaces.invite(as.ann, { workspaceId, role: "project_lead" });
+      const cy = yield* workspaces.accept(as.cy, { code, displayName: "Cy" });
+      const { agents: company } = yield* agents.listCompany(as.ann, { workspaceId });
+      const front = find(company, "company_main");
+      yield* setPowers(front.id, ALL);
+      const forCy = (projectId: ProjectId) =>
+        grants.explain(workspaceId, { agentId: front.id, projectId, onBehalfOf: [cy.subjectId] });
+      assert.strictEqual(removedBy(yield* forCy(api), "mergePRs"), "role", "bea leads api, not cy");
+      assert.strictEqual(
+        removedBy(yield* forCy(web), "mergePRs"),
+        "role",
+        "the project_lead role alone grants no merging (D25)",
+      );
+      yield* workspaces.revoke(as.ann, { workspaceId, subjectId: beaId });
+      const revoked = yield* grants.explain(workspaceId, {
+        agentId: front.id,
+        projectId: web,
+        onBehalfOf: [beaId],
+      });
+      assert.strictEqual(removedBy(revoked, "openTickets"), "role", "a revoked member holds none");
     }),
   );
 
@@ -236,7 +265,10 @@ it.layer(layer)("Telescope grants", (it) => {
       const chief = find(yield* mine(as.bea), "chief_agent", web);
       const runId = Telescope.AgentRunId.make("run-1");
       const written: Array<Telescope.AuditEntry> = [];
-      for (const outcome of ["denied", "allowed", "denied", "allowed", "denied"] as const)
+      // Three instants shared by 10, 10 and 5 rows: random ids disagree with time across instants
+      // and tie within one, so the cursor needs both columns.
+      for (let index = 0; index < 25; index += 1) {
+        if (index === 10 || index === 20) yield* TestClock.adjust("1 second");
         written.push(
           yield* grants.audit(workspaceId, {
             runId,
@@ -246,10 +278,11 @@ it.layer(layer)("Telescope grants", (it) => {
             power: "mergePRs",
             tool: "merge_pull_request",
             argsRedacted: { token: "***" },
-            outcome,
+            outcome: index % 2 === 0 ? "denied" : "allowed",
             reason: "The member role does not grant this in this project.",
           }),
         );
+      }
 
       const workspaces = yield* WorkspaceService.WorkspaceService;
       const other = yield* workspaces.create(as.zed, {
@@ -266,10 +299,10 @@ it.layer(layer)("Telescope grants", (it) => {
 
       const pages: Array<ReadonlyArray<Telescope.AuditEntry>> = [];
       let before: { createdAt: string; auditId: Telescope.AuditEntryId } | undefined;
-      for (let page = 0; page < 4; page += 1) {
+      for (let page = 0; page < 5; page += 1) {
         const { entries } = yield* grants.auditList(as.ann, {
           workspaceId,
-          limit: 2,
+          limit: 7,
           ...(before === undefined ? {} : { before }),
         });
         pages.push(entries);
@@ -279,7 +312,7 @@ it.layer(layer)("Telescope grants", (it) => {
       }
       assert.deepStrictEqual(
         pages.map((entries) => entries.length),
-        [2, 2, 1, 0],
+        [7, 7, 7, 4, 0],
       );
       const listed = pages.flat();
       assert.deepStrictEqual(
