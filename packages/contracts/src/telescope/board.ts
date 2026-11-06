@@ -3,6 +3,8 @@ import * as Schema from "effect/Schema";
 import { PositiveInt, ProjectId, ThreadId } from "../baseSchemas.ts";
 import {
   AgentId,
+  AgentRunId,
+  BoardItemId,
   Count,
   DecisionId,
   LeaseId,
@@ -69,21 +71,26 @@ export const Decision = Schema.Struct({
   status: DecisionStatus,
   options: Schema.optionalKey(Schema.Array(Schema.Struct({ id: Text, label: Text }))),
   chosen: Schema.optionalKey(Text),
+  decidedBy: Schema.optionalKey(Text),
+  decidedAt: Schema.optionalKey(Timestamp),
   createdAt: Timestamp,
+  updatedAt: Timestamp,
+  version: Count,
 });
 export type Decision = typeof Decision.Type;
 
 export const BoardItem = Schema.Union([Task, Decision]);
 export type BoardItem = typeof BoardItem.Type;
 
-/** Conflict ladder: 0 auto-merge, 1 by rule, 2 chief agent rules, 3 escalated to the owner. */
+/** Conflict ladder: 0 auto-merge, 1 by rule, 2 the company main agent rules, 3 escalated to the owner. */
 export const MergeLevel = Schema.Literals([0, 1, 2, 3]);
 
 export const TaskCommit = Schema.Struct({
   id: TaskCommitId,
   parentId: Schema.optionalKey(TaskCommitId),
   workspaceId: WorkspaceId,
-  taskId: TaskId,
+  taskId: BoardItemId,
+  runId: Schema.optionalKey(AgentRunId),
   authorId: Text,
   onBehalfOf: Schema.optionalKey(OnBehalfOf),
   deviceSig: Schema.optionalKey(Text),

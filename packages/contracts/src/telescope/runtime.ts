@@ -1,14 +1,17 @@
 import * as Schema from "effect/Schema";
 
-import { EventId, ProjectId, ThreadId, TrimmedNonEmptyString } from "../baseSchemas.ts";
+import { EventId, ProjectId, ThreadId } from "../baseSchemas.ts";
+import { Channel } from "./agent.ts";
 import {
   AgentId,
   AgentRunId,
   Count,
+  GrantId,
   MemoryId,
   OnBehalfOf,
   RunCallId,
   SubjectId,
+  TaskId,
   Text,
   Timestamp,
   WakeId,
@@ -31,9 +34,11 @@ export const Wake = Schema.Struct({
   reason: WakeReason,
   agentId: AgentId,
   coalesceKey: Text,
+  /** 1 a conversation someone is waiting on, 2 dispatched work, 3 scheduled or background. */
   priority: Schema.Literals([1, 2, 3]),
   subjectId: SubjectId,
   threadId: Schema.optionalKey(ThreadId),
+  taskId: Schema.optionalKey(TaskId),
   payload: Schema.Json,
   status: WakeStatus,
   createdAt: Timestamp,
@@ -53,6 +58,16 @@ export const RunResultLabel = Schema.Literals([
   "ignored",
 ]);
 
+export const ContextManifestKind = Schema.Literals([
+  "memory",
+  "diary",
+  "board",
+  "thread",
+  "skill",
+  "prompt",
+]);
+export type ContextManifestKind = typeof ContextManifestKind.Type;
+
 export const RunTokens = Schema.Struct({
   input: Count,
   cachedInput: Count,
@@ -66,13 +81,15 @@ export const RunInputSnapshot = Schema.Struct({
   skillsVersions: Schema.Record(Schema.String, Schema.String),
   powersVersion: Text,
   model: Text,
-  contextManifest: Schema.Array(Schema.Struct({ kind: Text, id: Text, hash: Text })),
+  contextManifest: Schema.Array(Schema.Struct({ kind: ContextManifestKind, id: Text, hash: Text })),
 });
 
 export const AgentRun = Schema.Struct({
   id: AgentRunId,
   workspaceId: WorkspaceId,
   agentId: AgentId,
+  wakeId: Schema.optionalKey(WakeId),
+  grantId: Schema.optionalKey(GrantId),
   onBehalfOf: OnBehalfOf,
   inputSnapshot: RunInputSnapshot,
   startedAt: Timestamp,
@@ -81,6 +98,7 @@ export const AgentRun = Schema.Struct({
   threadId: Schema.optionalKey(ThreadId),
   resultLabels: Schema.Array(RunResultLabel),
   tokens: RunTokens,
+  outputSummary: Schema.optionalKey(Text),
 });
 export type AgentRun = typeof AgentRun.Type;
 
@@ -91,6 +109,7 @@ export const RunCall = Schema.Struct({
   seq: Count,
   tool: Text,
   args: Schema.Json,
+  grantId: Schema.optionalKey(GrantId),
   grantCheck: Schema.Literals(["allowed", "denied"]),
   tokens: Schema.optionalKey(Count),
   durationMs: Count,
@@ -99,6 +118,9 @@ export const RunCall = Schema.Struct({
 export type RunCall = typeof RunCall.Type;
 
 export const MemoryScope = Schema.Literals(["personal", "project", "person"]);
+/** `person` records belong to company agents only; the memory service enforces that. */
+export const MemoryLayer = Schema.Literals(["working", "thread", "diary", "long_term", "person"]);
+export type MemoryLayer = typeof MemoryLayer.Type;
 export const MemoryLevel = Schema.Literals(["private", "confidential", "internal"]);
 
 export const Memory = Schema.Struct({
@@ -106,6 +128,7 @@ export const Memory = Schema.Struct({
   workspaceId: WorkspaceId,
   agentId: AgentId,
   scope: MemoryScope,
+  layer: MemoryLayer,
   level: MemoryLevel,
   projectId: Schema.optionalKey(ProjectId),
   aboutSubjectId: Schema.optionalKey(SubjectId),
@@ -114,7 +137,7 @@ export const Memory = Schema.Struct({
   source: Schema.Struct({
     runId: Schema.optionalKey(AgentRunId),
     threadId: Schema.optionalKey(ThreadId),
-    channel: Schema.optionalKey(TrimmedNonEmptyString),
+    channel: Schema.optionalKey(Channel),
   }),
   pinned: Schema.Boolean,
   validFrom: Timestamp,

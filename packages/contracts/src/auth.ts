@@ -111,6 +111,11 @@ const legacyParents: Partial<Record<AuthEnvironmentScope, AuthEnvironmentScope>>
   [AuthSourceControlWriteScope]: AuthOrchestrationOperateScope,
   [AuthFilesystemWriteScope]: AuthOrchestrationOperateScope,
   [AuthTerminalReadScope]: AuthTerminalOperateScope,
+};
+
+// Denial-only mapping: these scopes were never split from a parent, so old servers do not grant them.
+const legacyRequiredScopes: Partial<Record<AuthEnvironmentScope, AuthEnvironmentScope>> = {
+  ...legacyParents,
   [AuthTelescopeMemberScope]: AuthOrchestrationReadScope,
   [AuthTelescopeAdminScope]: AuthAccessWriteScope,
 };
@@ -118,7 +123,7 @@ const legacyParents: Partial<Record<AuthEnvironmentScope, AuthEnvironmentScope>>
 /** Keep permission denials decodable by clients with the original scope enum. */
 export function authScopeRequiredResponse(requiredPermission: AuthEnvironmentScope) {
   return {
-    requiredScope: legacyParents[requiredPermission] ?? requiredPermission,
+    requiredScope: legacyRequiredScopes[requiredPermission] ?? requiredPermission,
     requiredPermission,
   };
 }

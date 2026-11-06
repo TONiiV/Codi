@@ -11,6 +11,7 @@ export const A2ATaskState = Schema.Literals([
   "COMPLETED",
   "FAILED",
   "CANCELED",
+  "REJECTED",
 ]);
 export type A2ATaskState = typeof A2ATaskState.Type;
 
@@ -26,6 +27,7 @@ export const A2AMessage = Schema.Struct({
   taskId: Schema.optionalKey(DelegationId),
   role: Schema.Literals(["user", "agent"]),
   parts: Schema.Array(A2APart),
+  referenceTaskIds: Schema.optionalKey(Schema.Array(DelegationId)),
 });
 export type A2AMessage = typeof A2AMessage.Type;
 
@@ -45,16 +47,18 @@ export const DelegationBrief = Schema.Struct({
   goalChain: Strings,
 });
 
+/** Outcome only; the state is `Delegation.state` and outputs are `Delegation.artifacts`. */
 export const DelegationReport = Schema.Struct({
-  status: A2ATaskState,
   result: Schema.String,
-  artifacts: Schema.Array(Schema.Struct({ kind: Text, url: Text })),
   decisions: Strings,
   blockedOn: Schema.optionalKey(Text),
   needsFrom: Schema.optionalKey(Text),
 });
 
-/** An A2A task between two agents; `id` is the A2A task id. */
+/**
+ * An A2A task between two agents; `id` is the A2A task id. `brief` and `report` are the typed
+ * payloads of the first message down and the final message up in `messages`.
+ */
 export const Delegation = Schema.Struct({
   id: DelegationId,
   contextId: Text,
@@ -65,7 +69,8 @@ export const Delegation = Schema.Struct({
   state: A2ATaskState,
   brief: DelegationBrief,
   report: Schema.optionalKey(DelegationReport),
-  referenceTaskIds: Schema.Array(DelegationId),
+  messages: Schema.Array(A2AMessage),
+  artifacts: Schema.Array(A2AArtifact),
   createdAt: Timestamp,
   updatedAt: Timestamp,
 });

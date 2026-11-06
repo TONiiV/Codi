@@ -23,6 +23,9 @@ export const AgentKind = Schema.Literals([
   "department",
 ]);
 export type AgentKind = typeof AgentKind.Type;
+export const Channel = Schema.Literals(["telegram", "wechat", "email"]);
+export type Channel = typeof Channel.Type;
+
 export const AgentExposure = Schema.Literals(["hidden", "visible", "contactable", "dispatchable"]);
 
 export const StandingPowers = Schema.Struct({
@@ -45,7 +48,7 @@ export const Agent = Schema.Struct({
   exposure: AgentExposure,
   syncWithBoard: Schema.Boolean,
   dispatchMode: Schema.Literals(["start", "inbox"]),
-  channels: Strings,
+  channels: Schema.Array(Channel),
   createdAt: Timestamp,
   updatedAt: Timestamp,
 });
@@ -68,7 +71,7 @@ export const AgentCard = Schema.Struct({
     }),
   ),
   requiredPermissions: Strings,
-  channels: Strings,
+  channels: Schema.Array(Channel),
 });
 export type AgentCard = typeof AgentCard.Type;
 
@@ -82,8 +85,6 @@ export const RoutingRule = Schema.Struct({
   priority: Count,
 });
 export type RoutingRule = typeof RoutingRule.Type;
-
-export const Channel = Schema.Literals(["telegram", "wechat", "email"]);
 
 export const ChannelBinding = Schema.Struct({
   id: ChannelBindingId,

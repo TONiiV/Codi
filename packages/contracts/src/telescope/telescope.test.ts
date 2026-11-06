@@ -35,6 +35,8 @@ describe("telescope contracts", () => {
         authorId: "u",
         status: "decided",
         createdAt: at,
+        updatedAt: at,
+        version: 0,
       }).kind,
     ).toBe("decision");
 
@@ -78,19 +80,39 @@ describe("telescope contracts", () => {
         role: "owner",
       }),
     ).toThrow();
-    expect(() =>
-      decodeDelegation({
-        id: "t-1",
-        contextId: "ctx",
-        workspaceId: "ws-1",
-        fromAgentId: "a-1",
-        toAgentId: "a-2",
-        state: "working",
-        brief: { goal: "g", constraints: [], acceptance: [], goalChain: [] },
-        referenceTaskIds: [],
-        createdAt: at,
-        updatedAt: at,
-      }),
-    ).toThrow();
+    const delegation = {
+      id: "t-1",
+      contextId: "ctx",
+      workspaceId: "ws-1",
+      fromAgentId: "a-1",
+      toAgentId: "a-2",
+      brief: { goal: "g", constraints: [], acceptance: [], goalChain: [] },
+      messages: [
+        {
+          messageId: "m-1",
+          contextId: "ctx",
+          taskId: "t-1",
+          role: "agent",
+          parts: [{ kind: "text", text: "which repo?" }],
+          referenceTaskIds: ["t-0"],
+        },
+      ],
+      artifacts: [{ artifactId: "art-1", parts: [{ kind: "file", uri: "file:///r.md" }] }],
+      createdAt: at,
+      updatedAt: at,
+    };
+    for (const state of [
+      "SUBMITTED",
+      "WORKING",
+      "INPUT_REQUIRED",
+      "AUTH_REQUIRED",
+      "COMPLETED",
+      "FAILED",
+      "CANCELED",
+      "REJECTED",
+    ]) {
+      expect(decodeDelegation({ ...delegation, state }).state).toBe(state);
+    }
+    expect(() => decodeDelegation({ ...delegation, state: "working" })).toThrow();
   });
 });

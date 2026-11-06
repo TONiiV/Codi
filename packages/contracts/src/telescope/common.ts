@@ -1,27 +1,48 @@
 import * as Schema from "effect/Schema";
 
-import { IsoDateTime, NonNegativeInt, TrimmedNonEmptyString } from "../baseSchemas.ts";
+import {
+  IsoDateTime,
+  makeEntityId,
+  NonNegativeInt,
+  TrimmedNonEmptyString,
+} from "../baseSchemas.ts";
 
-const makeId = <Brand extends string>(brand: Parameters<typeof Schema.brand<Brand>>[0]) =>
-  TrimmedNonEmptyString.pipe(Schema.brand<Brand>(brand));
-
-export const WorkspaceId = makeId("TelescopeWorkspaceId");
+export const WorkspaceId = makeEntityId("TelescopeWorkspaceId");
 export type WorkspaceId = typeof WorkspaceId.Type;
-export const InvitationId = makeId("TelescopeInvitationId");
-export const AgentId = makeId("TelescopeAgentId");
-export const TaskId = makeId("TelescopeTaskId");
-export const DecisionId = makeId("TelescopeDecisionId");
-export const TaskCommitId = makeId("TelescopeTaskCommitId");
-export const LeaseId = makeId("TelescopeLeaseId");
-export const GrantId = makeId("TelescopeGrantId");
-export const AuditEntryId = makeId("TelescopeAuditEntryId");
-export const WakeId = makeId("TelescopeWakeId");
-export const AgentRunId = makeId("TelescopeAgentRunId");
-export const RunCallId = makeId("TelescopeRunCallId");
-export const MemoryId = makeId("TelescopeMemoryId");
-export const DelegationId = makeId("TelescopeDelegationId");
-export const RoutingRuleId = makeId("TelescopeRoutingRuleId");
-export const ChannelBindingId = makeId("TelescopeChannelBindingId");
+export const InvitationId = makeEntityId("TelescopeInvitationId");
+export type InvitationId = typeof InvitationId.Type;
+export const AgentId = makeEntityId("TelescopeAgentId");
+export type AgentId = typeof AgentId.Type;
+export const TaskId = makeEntityId("TelescopeTaskId");
+export type TaskId = typeof TaskId.Type;
+export const DecisionId = makeEntityId("TelescopeDecisionId");
+export type DecisionId = typeof DecisionId.Type;
+export const TaskCommitId = makeEntityId("TelescopeTaskCommitId");
+export type TaskCommitId = typeof TaskCommitId.Type;
+export const LeaseId = makeEntityId("TelescopeLeaseId");
+export type LeaseId = typeof LeaseId.Type;
+export const GrantId = makeEntityId("TelescopeGrantId");
+export type GrantId = typeof GrantId.Type;
+export const AuditEntryId = makeEntityId("TelescopeAuditEntryId");
+export type AuditEntryId = typeof AuditEntryId.Type;
+export const WakeId = makeEntityId("TelescopeWakeId");
+export type WakeId = typeof WakeId.Type;
+export const AgentRunId = makeEntityId("TelescopeAgentRunId");
+export type AgentRunId = typeof AgentRunId.Type;
+export const RunCallId = makeEntityId("TelescopeRunCallId");
+export type RunCallId = typeof RunCallId.Type;
+export const MemoryId = makeEntityId("TelescopeMemoryId");
+export type MemoryId = typeof MemoryId.Type;
+export const DelegationId = makeEntityId("TelescopeDelegationId");
+export type DelegationId = typeof DelegationId.Type;
+export const RoutingRuleId = makeEntityId("TelescopeRoutingRuleId");
+export type RoutingRuleId = typeof RoutingRuleId.Type;
+export const ChannelBindingId = makeEntityId("TelescopeChannelBindingId");
+export type ChannelBindingId = typeof ChannelBindingId.Type;
+
+/** A board commit targets either kind of board item. */
+export const BoardItemId = Schema.Union([TaskId, DecisionId]);
+export type BoardItemId = typeof BoardItemId.Type;
 
 /** A Codi auth session subject (paired device or desktop owner). */
 export const SubjectId = TrimmedNonEmptyString;
