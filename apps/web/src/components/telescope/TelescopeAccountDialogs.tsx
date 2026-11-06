@@ -50,6 +50,7 @@ const ERROR_TEXT: ErrorText = {
   expired: "已经过期，请刷新后再试。",
   conflict: "和当前状态冲突，请刷新后再试。",
   storage: "保存失败，请稍后再试。",
+  invalid: "请求内容无效，请检查后重试。",
 };
 
 const JOIN_ERROR_TEXT: ErrorText = {
@@ -58,6 +59,7 @@ const JOIN_ERROR_TEXT: ErrorText = {
   expired: "邀请码已过期。",
   conflict: "邀请码已被使用，或你已是该工作区成员。",
   storage: ERROR_TEXT.storage,
+  invalid: "邀请码格式无效。",
 };
 
 const isWorkspaceError = Schema.is(Telescope.WorkspaceError);
