@@ -431,6 +431,12 @@ export const SETTINGS_SEARCH_ITEMS = [
     to: "/settings/appearance",
   },
   {
+    id: "language",
+    title: "Language",
+    to: "/settings/general",
+    searchTerms: ["locale translation chinese english 中文 语言"],
+  },
+  {
     id: "project-grouping",
     title: "Project grouping",
     to: "/settings/general",
@@ -1442,12 +1448,16 @@ export function isSettingsSearchScopeAvailable(
   }
 }
 
-export function searchableSetting(id: SettingsSearchItemId): {
+/** Pass the hook's `t` from translated panels so React Compiler's memo cache is keyed on the language. */
+export function searchableSetting(
+  id: SettingsSearchItemId,
+  t?: TFunction,
+): {
   readonly id: string;
   readonly title: string;
 } {
   const { id: anchorId, title } = SEARCH_ITEMS_BY_ID.get(id)!;
-  return { id: anchorId, title };
+  return { id: anchorId, title: t ? t(`settings.items.${id}`) : title };
 }
 
 export function filterAvailableSettingsSearchItems(
