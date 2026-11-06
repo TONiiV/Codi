@@ -137,6 +137,9 @@ jobs:
           node scripts/refresh-agent-context-budget.ts || fail "agent context budget grew: run the evals in evals/README.md, then raise it by hand"
           git diff --name-only | xargs -r vp fmt --no-error-on-unmatched-pattern
           git diff --quiet || git commit -qam "chore: re-apply the Codi rename after the upstream merge"
+          # Web and server browser tests run in headless Chromium; the runner has none.
+          node apps/web/node_modules/playwright/cli.js install --with-deps --only-shell chromium \
+            || fail "Playwright Chromium install failed"
           # The PR checks, scoped to what the fork changes relative to upstream (the Codi
           # rename and any resolved conflicts). Upstream's own CI covers its changes.
           vp run check:changed upstream/main 2>&1 | tee "$RUNNER_TEMP/check.log"
@@ -163,6 +166,10 @@ jobs:
             if grep -qiE 'oauth|unauthori[sz]ed|401|invalid api key|expired' "$RUNNER_TEMP/claude.log" 2>/dev/null; then
               echo
               echo "> Claude authentication failed. The token may have expired: run \`claude setup-token\` and update \`CLAUDE_CODE_OAUTH_TOKEN\`."
+            fi
+            if grep -qiE "hit your .*limit" "$RUNNER_TEMP/claude.log" 2>/dev/null; then
+              echo
+              echo "> Claude usage limit reached: $(grep -oiE "hit your .*limit[^\"]*" "$RUNNER_TEMP/claude.log" | head -1). Re-run this workflow after the reset."
             fi
             if [ -s "$RUNNER_TEMP/conflicts" ]; then
               echo
