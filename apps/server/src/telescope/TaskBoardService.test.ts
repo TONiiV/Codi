@@ -464,9 +464,17 @@ it.layer(layer)("Telescope task board", (it) => {
         'rebased from version 2; status: status only moves forward, kept "done"',
       );
 
-      yield* write(alice, 4, { status: "needs_decision" });
-      const held = yield* write(bob, 4, { status: "in_progress" });
-      assert.deepStrictEqual([held.status, held.version], ["needs_decision", 6]);
+      yield* write(holder, 4, { title: "Holder's race" });
+      const guarded = yield* write(bob, 4, { title: "Bob's race" });
+      assert.deepStrictEqual([guarded.title, guarded.version], ["Holder's race", 6]);
+      assert.strictEqual(
+        (yield* raceCommit)?.mergeReason,
+        'rebased from version 4; title: lease holder wins, kept "Holder\'s race"',
+      );
+
+      yield* write(alice, 6, { status: "needs_decision" });
+      const held = yield* write(bob, 6, { status: "in_progress" });
+      assert.deepStrictEqual([held.status, held.version], ["needs_decision", 8]);
       assert.strictEqual((yield* raceCommit)?.mergeLevel, 1);
       const { decisions } = yield* board.listDecisions(alice, { workspaceId: a });
       assert.strictEqual(decisions.length, 1);
