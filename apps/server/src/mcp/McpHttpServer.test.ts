@@ -1422,7 +1422,7 @@ it.effect("lists memory tools only to threads with an open Telescope run", () =>
                         readonly tools?: ReadonlyArray<{ readonly name: string }>;
                         readonly structuredContent?: unknown;
                       };
-                      readonly error?: { readonly message: string };
+                      readonly error?: { readonly code: number; readonly message: string };
                     },
                 ),
               );
@@ -1488,6 +1488,18 @@ it.effect("lists memory tools only to threads with an open Telescope run", () =>
       yield* addAgent("agent-alice-other");
       yield* openRun("run-3", "agent-alice-other", "thread-alice-other");
       expect(yield* search(yield* rpcAs("alice-other"))).toEqual({ memories: [] });
+      const oversized = [
+        ["memory_search", { query: "样".repeat(201) }],
+        ["memory_write", { op: "add", text: "样机周五 oversized", kind: "长".repeat(65) }],
+      ] as const;
+      for (const [name, args] of oversized) {
+        expect((yield* telescopeRun("tools/call", { name, arguments: args })).error?.code).toBe(
+          -32602,
+        );
+      }
+      expect(yield* search(yield* rpcAs("alice-elsewhere"))).toMatchObject({
+        memories: [{ text: "样机周五交付" }],
+      });
 
       yield* db.update(workspace.id, "runs", { finished_at: at }, { run_id: "run-1" });
       expect(yield* listed(telescopeRun)).toEqual([]);
