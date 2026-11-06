@@ -67,9 +67,12 @@ describe("token saver analyzers", () => {
   });
 
   it("counts rereads of an unchanged file range and resets after an edit", () => {
+    const shot = read("/repo/shot.png", 0);
     const finding = repeatedReads([
       session("s1", {
         toolCalls: [
+          shot,
+          shot,
           read("/repo/src/a.ts", 1000),
           read("/repo/src/a.ts", 1000),
           read("/repo/src/a.ts", 900, "100:50"),
@@ -86,6 +89,13 @@ describe("token saver analyzers", () => {
     assert.strictEqual(finding?.confidence, "medium");
     assert.include(finding?.suggestion, "+- `src/a.ts`");
     assert.strictEqual(repeatedReads([session("s2", { toolCalls: [read("/x", 1)] })]), undefined);
+    assert.strictEqual(
+      repeatedReads([session("s3", { toolCalls: [shot, shot, shot] })]),
+      undefined,
+    );
+    // Below the saving floor.
+    const small = read("/repo/small.ts", 900);
+    assert.strictEqual(repeatedReads([session("s4", { toolCalls: [small, small] })]), undefined);
   });
 
   it("counts only the part of each tool result above the threshold", () => {

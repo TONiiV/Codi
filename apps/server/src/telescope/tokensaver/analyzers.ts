@@ -14,6 +14,8 @@ export interface ConfigChange {
 const OVERSIZED_RESULT_TOKENS = 20_000;
 // Below this a session's cache traffic is mostly the first prompt write, which is not waste.
 const MIN_CACHE_TOKENS = 50_000;
+// A finding that saves less than this is noise, and an empty week writes no proposal.
+const MIN_SAVING_TOKENS = 1_000;
 const EDIT_TOOLS: ReadonlySet<string> = new Set(["Edit", "MultiEdit", "Write", "NotebookEdit"]);
 
 const median = (values: ReadonlyArray<number>) => {
@@ -21,6 +23,8 @@ const median = (values: ReadonlyArray<number>) => {
   const middle = Math.floor(sorted.length / 2);
   return sorted.length % 2 === 1 ? sorted[middle]! : (sorted[middle - 1]! + sorted[middle]!) / 2;
 };
+const reportable = (finding: Finding) =>
+  finding.estimatedSavingTokens >= MIN_SAVING_TOKENS ? finding : undefined;
 const relative = (cwd: string, filePath: string) =>
   cwd !== "" && filePath.startsWith(`${cwd}/`) ? filePath.slice(cwd.length + 1) : filePath;
 const claudeMdDiff = (lines: ReadonlyArray<string>) =>
@@ -71,7 +75,7 @@ export const brokenCachePrefix = (
     files.length > 0
       ? `${fileList} 在 agent 工作期间被改过，之后每一轮都重写了缓存的提示前缀。`
       : `${outliers.length} 个会话的缓存写入比例远高于本周中位数，常见原因是 ${fileList} 在会话中途被改。`;
-  return {
+  return reportable({
     pattern: "broken_cache_prefix",
     evidence: {
       sessions: measured.length,
@@ -87,7 +91,7 @@ export const brokenCachePrefix = (
       claudeMdDiff(["See docs/notes.md for current work notes; read it when the task needs it."]),
     estimatedSavingTokens: excess,
     confidence: correlated.length >= 2 ? "high" : correlated.length === 1 ? "medium" : "low",
-  };
+  });
 };
 
 /** A Read of a file range already read in the same session, with no edit to the file between. */
@@ -107,6 +111,8 @@ export const repeatedReads = (sessions: ReadonlyArray<SessionActivity>): Finding
         seen.add(key);
         continue;
       }
+      // Image results carry no text tokens; rereading a regenerated screenshot is not waste.
+      if (call.resultTokens === 0) continue;
       const group = `${session.sessionId}\0${call.filePath}`;
       const path = relative(session.cwd, call.filePath);
       const entry = repeats.get(group) ?? { path, count: 0, tokens: 0 };
@@ -122,7 +128,7 @@ export const repeatedReads = (sessions: ReadonlyArray<SessionActivity>): Finding
   const top = ranked[0]!;
   const saving = ranked.reduce((sum, { tokens }) => sum + tokens, 0);
   const topPaths = [...new Set(ranked.map(({ path }) => path))].slice(0, 3);
-  return {
+  return reportable({
     pattern: "repeated_reads",
     evidence: {
       repeatedReads: ranked.reduce((sum, { count }) => sum + count, 0),
@@ -140,7 +146,7 @@ export const repeatedReads = (sessions: ReadonlyArray<SessionActivity>): Finding
       ]),
     estimatedSavingTokens: saving,
     confidence: top.count >= 5 ? "high" : "medium",
-  };
+  });
 };
 
 const OUTPUT_ADVICE: Readonly<Record<string, string>> = {
@@ -168,7 +174,7 @@ export const oversizedToolOutputs = (
   const [topTool, top] = ranked[0]!;
   const sum = (key: "count" | "tokens" | "excess") =>
     ranked.reduce((total, [, entry]) => total + entry[key], 0);
-  return {
+  return reportable({
     pattern: "oversized_tool_outputs",
     evidence: {
       oversizedResults: sum("count"),
@@ -190,5 +196,5 @@ export const oversizedToolOutputs = (
       ]),
     estimatedSavingTokens: sum("excess"),
     confidence: "high",
-  };
+  });
 };
