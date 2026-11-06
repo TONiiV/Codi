@@ -251,6 +251,7 @@ export function MembersDialog(props: {
   const { refresh } = query;
   // The query atom outlives the dialog, so reopening would show members as of the last open.
   // A first open is already fetching; only a kept value needs the refresh.
+  // Reads `waiting` directly, not the query's `isPending`: that helper is a new closure every render, so as an effect dep it would refresh on every render.
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- refreshes the registry's kept members query once per open
   useEffect(() => {
     if (!registry.get(members).waiting) refresh();

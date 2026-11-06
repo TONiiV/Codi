@@ -121,7 +121,7 @@ describe("telescope switchTo", () => {
       );
       const atoms = createTelescopeWorkspaceAtoms(runtime, { read: () => null, write: () => {} });
       const registry = AtomRegistry.make();
-      const refresh = vi.spyOn(registry, "refresh").mockImplementation(() => {});
+      const refresh = vi.spyOn(registry, "refresh");
       const target = { environmentId: local, input: {} };
       yield* atoms.switchTo(target, registry, Telescope.WorkspaceId.make("b"));
       expect(refresh).toHaveBeenCalledWith(atoms.list(target));
