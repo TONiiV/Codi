@@ -25,7 +25,8 @@ const EXAMPLE_SKILLS = [
 
 const isWorkspaceError = Schema.is(Telescope.WorkspaceError);
 
-const READ_ERROR_TEXT: Record<Telescope.WorkspaceError["reason"], string> = {
+// Partial: a reason with no read-specific text (e.g. `invalid`) gets the generic fallback.
+const READ_ERROR_TEXT: Partial<Record<Telescope.WorkspaceError["reason"], string>> = {
   not_found: "找不到这个工作区，请刷新后再试。",
   forbidden: "你没有权限查看这些内容。",
   expired: "已经过期，请刷新后再试。",
@@ -46,9 +47,8 @@ function QueryState<A>({
       <Alert variant="error">
         <AlertDescription>
           读取失败：
-          {isWorkspaceError(query.failure)
-            ? READ_ERROR_TEXT[query.failure.reason]
-            : "请检查连接后再试。"}
+          {(isWorkspaceError(query.failure) ? READ_ERROR_TEXT[query.failure.reason] : undefined) ??
+            "请检查连接后再试。"}
         </AlertDescription>
         <AlertAction>
           <Button size="xs" variant="outline" onClick={query.refresh}>
