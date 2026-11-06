@@ -500,10 +500,9 @@ const make = Effect.gen(function* () {
 
   const acquireLease = Effect.fn("TaskBoardService.acquireLease")(function* (
     actor: Actor,
-    { workspaceId, taskId, agentId }: In<"telescope.lease.acquire">,
+    { workspaceId, taskId }: In<"telescope.lease.acquire">,
   ) {
-    const member = yield* requireMember(actor, workspaceId);
-    const author = agentId === undefined ? member : { ...member, authorId: agentId };
+    const author = yield* requireMember(actor, workspaceId);
     const time = yield* DateTime.now;
     const at = DateTime.formatIso(time);
     return yield* db.transaction(
@@ -519,7 +518,7 @@ const make = Effect.gen(function* () {
           workspaceId,
           taskId,
           holderAgentId: Telescope.AgentId.make(author.authorId),
-          holderSubjectId: member.memberId,
+          holderSubjectId: author.memberId,
           acquiredAt: at,
           heartbeatAt: at,
           expiresAt: DateTime.formatIso(DateTime.add(time, LEASE_TTL)),
@@ -540,6 +539,8 @@ const make = Effect.gen(function* () {
     const [lease] = yield* db.select(workspaceId, "leases", decodeLeases, where);
     if (lease === undefined || isExpired(lease, at))
       return yield* fail("not_found", "Lease not found or expired.");
+    // Any device or agent of the holding member may renew or release, so a stuck agent's lease
+    // can be freed by its member without waiting for expiry.
     if (lease.holderSubjectId !== member.memberId)
       return yield* fail("forbidden", "Only the lease holder can do this.");
     return lease;

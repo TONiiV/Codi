@@ -21,6 +21,7 @@ const layer = Layer.mergeAll(TaskBoardService.layer, WorkspaceService.layer).pip
 
 const isWorkspaceError = Schema.is(Telescope.WorkspaceError);
 const isStale = Schema.is(Telescope.StaleTaskVersionError);
+const decodeLeaseAcquire = Schema.decodeUnknownSync(Telescope.LeaseAcquireInput);
 const reasonOf = (error: { readonly _tag: string }) =>
   isWorkspaceError(error) ? error.reason : error._tag;
 
@@ -305,17 +306,13 @@ it.layer(layer)("Telescope task board", (it) => {
 
   it.effect("gives a task one lease holder, kept by heartbeats and released on expiry", () =>
     Effect.gen(function* () {
-      const { workspaces, board, a } = yield* setup;
+      const { workspaces, board, a, aliceId } = yield* setup;
       const task = yield* board.createTask(alice, { workspaceId: a, title: "Contested" });
       const bob = { caller: session("bob") };
       const { code } = yield* workspaces.invite(alice.caller, { workspaceId: a, role: "member" });
       const bobId = (yield* workspaces.accept(bob.caller, { code, displayName: "Bob" })).subjectId;
       const claim = (actor: TaskBoardService.Actor, agent: string) =>
-        board.acquireLease(actor, {
-          workspaceId: a,
-          taskId: task.id,
-          agentId: Telescope.AgentId.make(agent),
-        });
+        board.acquireLease({ ...actor, authorId: agent }, { workspaceId: a, taskId: task.id });
 
       const [first, second] = yield* Effect.all(
         [Effect.result(claim(alice, "agent-a")), Effect.result(claim(bob, "agent-b"))],
@@ -356,6 +353,27 @@ it.layer(layer)("Telescope task board", (it) => {
           [bobId, { leaseId: null }],
         ],
       );
+
+      // Over RPC the actor is only the session; a payload cannot name the author.
+      const payload = decodeLeaseAcquire({
+        workspaceId: a,
+        taskId: task.id,
+        agentId: "server",
+      });
+      const own = yield* board.acquireLease(alice, payload);
+      assert.strictEqual(own.holderAgentId, aliceId);
+      const signed = yield* board.listCommits(alice, { workspaceId: a, taskId: task.id });
+      assert.strictEqual(signed.commits.at(-1)?.authorId, aliceId);
+      const write = (actor: TaskBoardService.Actor, title: string) =>
+        board.updateTask(actor, {
+          workspaceId: a,
+          taskId: task.id,
+          baseVersion: 6,
+          set: { title },
+        });
+      yield* write(bob, "Bob's");
+      const kept = yield* write(alice, "Alice's");
+      assert.deepStrictEqual([kept.title, kept.version], ["Alice's", 8]);
     }),
   );
 
@@ -421,11 +439,7 @@ it.layer(layer)("Telescope task board", (it) => {
       assert.strictEqual(settled.conflictDecisionId, undefined);
 
       const holder = { ...alice, authorId: "agent-h" };
-      yield* board.acquireLease(alice, {
-        workspaceId: a,
-        taskId: task.id,
-        agentId: Telescope.AgentId.make("agent-h"),
-      });
+      yield* board.acquireLease(holder, { workspaceId: a, taskId: task.id });
       yield* update(bob, 6, { title: "Bob's plan" });
       const won = yield* update(holder, 6, { title: "Holder's plan" });
       assert.deepStrictEqual([won.title, won.version], ["Holder's plan", 8]);
@@ -441,11 +455,7 @@ it.layer(layer)("Telescope task board", (it) => {
         board.listCommits(alice, { workspaceId: a, taskId: race.id }),
         ({ commits }) => commits.at(-1),
       );
-      yield* board.acquireLease(alice, {
-        workspaceId: a,
-        taskId: race.id,
-        agentId: Telescope.AgentId.make("agent-h"),
-      });
+      yield* board.acquireLease(holder, { workspaceId: a, taskId: race.id });
       yield* write(bob, 2, { status: "done" });
       const forward = yield* write(holder, 2, { status: "in_progress" });
       assert.deepStrictEqual([forward.status, forward.version], ["done", 4]);

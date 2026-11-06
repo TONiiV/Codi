@@ -84,12 +84,8 @@ export const DecisionListResult = Schema.Struct({ decisions: Schema.Array(Decisi
 export const CommitListInput = Schema.Struct({ ...InWorkspace, taskId: BoardItemId });
 export const CommitListResult = Schema.Struct({ commits: Schema.Array(TaskCommit) });
 
-/** `agentId` names the agent working the task; without it the calling member holds the lease. */
-export const LeaseAcquireInput = Schema.Struct({
-  ...InWorkspace,
-  taskId: TaskId,
-  agentId: Schema.optionalKey(AgentId),
-});
+/** The lease holder is the caller's author: its agent, else the member. */
+export const LeaseAcquireInput = Schema.Struct({ ...InWorkspace, taskId: TaskId });
 export const LeaseScopedInput = Schema.Struct({ ...InWorkspace, leaseId: LeaseId });
 
 export class StaleTaskVersionError extends Schema.TaggedError<StaleTaskVersionError>()(
