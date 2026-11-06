@@ -4,6 +4,7 @@ import { AuthSessionId, Telescope } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
+import * as SqlClient from "effect/sql/SqlClient";
 
 import { runMigrations } from "../persistence/Migrations.ts";
 import * as SqlitePersistence from "../persistence/Sqlite.ts";
@@ -137,6 +138,15 @@ it.layer(layer)("Telescope task board", (it) => {
         text: "One engine.",
         supersedes: first.id,
       });
+      const late = yield* board
+        .createDecision(alice, {
+          workspaceId: a,
+          title: "pglite",
+          text: "",
+          supersedes: proposal.id,
+        })
+        .pipe(Effect.flip);
+      assert.strictEqual(reasonOf(late), "conflict");
       const { decisions } = yield* board.listDecisions(alice, { workspaceId: a });
       assert.deepStrictEqual(
         decisions.map((d) => [d.title, d.status, d.version, d.supersedes]).toSorted(),
@@ -165,6 +175,53 @@ it.layer(layer)("Telescope task board", (it) => {
         proposed.commits.map((c) => c.changedFields),
         [{ title: "pglite", text: "", status: "proposed", supersedes: first.id }],
       );
+    }),
+  );
+
+  it.effect("deciding a proposal also retires the decision the proposal supersedes", () =>
+    Effect.gen(function* () {
+      const { board, a, b } = yield* setup;
+      const decide = (title: string, supersedes: Telescope.DecisionId) =>
+        board.createDecision(alice, { workspaceId: a, title, text: "", supersedes });
+      const old = yield* board.createDecision(alice, {
+        workspaceId: a,
+        title: "Postgres",
+        text: "",
+      });
+      const proposal = yield* board.createDecision(alice, {
+        workspaceId: a,
+        title: "pglite",
+        text: "",
+        status: "proposed",
+        supersedes: old.id,
+      });
+      yield* decide("SQLite", proposal.id);
+
+      const foreign = yield* board.createDecision(alice, { workspaceId: b, title: "B", text: "" });
+      const stray = yield* board.createDecision(alice, {
+        workspaceId: a,
+        title: "stray",
+        text: "",
+        status: "proposed",
+      });
+      const sql = yield* SqlClient.SqlClient;
+      yield* sql`UPDATE telescope_tasks SET supersedes = ${foreign.id} WHERE item_id = ${stray.id}`;
+      yield* decide("Adopt stray", stray.id);
+
+      const statuses = (workspaceId: Telescope.WorkspaceId) =>
+        board
+          .listDecisions(alice, { workspaceId })
+          .pipe(
+            Effect.map(({ decisions }) => decisions.map((d) => [d.title, d.status]).toSorted()),
+          );
+      assert.deepStrictEqual(yield* statuses(a), [
+        ["Adopt stray", "decided"],
+        ["Postgres", "superseded"],
+        ["SQLite", "decided"],
+        ["pglite", "superseded"],
+        ["stray", "superseded"],
+      ]);
+      assert.deepStrictEqual(yield* statuses(b), [["B", "decided"]]);
     }),
   );
 

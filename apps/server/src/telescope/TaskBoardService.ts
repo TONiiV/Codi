@@ -300,24 +300,37 @@ const make = Effect.gen(function* () {
       updatedAt: at,
       version: 1,
     };
+    const findDecision = (id: Telescope.DecisionId) =>
+      db
+        .select(workspaceId, "tasks", decodeDecisions, { kind: "decision", item_id: id })
+        .pipe(Effect.map(([found]) => found));
+    const retire = (old: Telescope.Decision) =>
+      db
+        .update(
+          workspaceId,
+          "tasks",
+          { status: "superseded", updated_at: at, version: old.version + 1 },
+          { kind: "decision", item_id: old.id, version: old.version },
+        )
+        .pipe(Effect.andThen(recordCommit(author, old, old.version, { status: "superseded" }, at)));
     return yield* db.transaction(
       Effect.gen(function* () {
         if (decision.supersedes !== undefined) {
-          const where = { kind: "decision", item_id: decision.supersedes };
-          const [old] = yield* db.select(workspaceId, "tasks", decodeDecisions, where);
+          const old = yield* findDecision(decision.supersedes);
           if (old === undefined) return yield* fail("not_found", "Decision not found.");
           // Two decisions replacing the same one is a conflict for a person to settle.
           if (old.status === "superseded")
             return yield* fail("conflict", "That decision has already been superseded.");
           if (status === "decided") {
-            const version = old.version + 1;
-            yield* db.update(
-              workspaceId,
-              "tasks",
-              { status: "superseded", updated_at: at, version },
-              { ...where, version: old.version },
-            );
-            yield* recordCommit(author, old, old.version, { status: "superseded" }, at);
+            // Deciding a proposal also retires what it proposed to replace: one step, no recursion.
+            const target =
+              old.status === "proposed" && old.supersedes !== undefined
+                ? yield* findDecision(old.supersedes)
+                : undefined;
+            if (target?.status === "superseded")
+              return yield* fail("conflict", "That decision has already been superseded.");
+            yield* retire(old);
+            if (target !== undefined) yield* retire(target);
           }
         }
         yield* db.insert(workspaceId, "tasks", toColumns(decision, "item_id"));
