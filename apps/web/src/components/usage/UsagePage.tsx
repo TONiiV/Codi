@@ -82,6 +82,7 @@ import {
   WorkspaceBreadcrumbText,
 } from "../WorkspaceBreadcrumb";
 import { WorkspacePageContainer } from "../WorkspacePageContainer";
+import { UsageFlow } from "./UsageFlow";
 import { UsageLimitsSection } from "./UsageLimits";
 import { UsagePriceOverrides } from "./UsagePriceOverrides";
 import { UsageProviderChart } from "./UsageProviderChart";
@@ -553,6 +554,8 @@ export function UsagePage() {
                   </p>
                 ))}
               </div>
+            ) : metric === "flow" ? (
+              <UsageFlow merged={merged} environments={selectedEnvironments} />
             ) : (
               <UsageOverview
                 merged={merged}

@@ -49,6 +49,7 @@ import { UsageDailyChart } from "./UsageDailyChart";
 import { toggleUsageEnvironment } from "./usageEnvironmentSelection";
 import { useRefreshLimits } from "./UsageLimitsSection";
 import { UsageLimitsSection } from "./UsageLimitsPooled";
+import { UsageProjectsSection } from "./UsageProjectsSection";
 import type { UsageChartMetric } from "./usageChartData";
 import { PROVIDER_LABEL, useProviderColors, useUsageMixColors } from "./usageProviders";
 
@@ -377,6 +378,7 @@ function UsageScreen(props: {
                       />
                       <CostSection merged={merged} wide={wide} />
                       <ModelsSection merged={merged} metric={metric} columns={wide ? 2 : 1} />
+                      <UsageProjectsSection merged={merged} metric={metric} />
                     </UsageUpdating>
                   </>
                 )}
