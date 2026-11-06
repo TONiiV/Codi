@@ -63,6 +63,7 @@ export const session = (
   endMs: 2_000,
   cachedInputTokens: 950_000,
   cacheCreationTokens: 50_000,
+  turns: 20,
   userPrompts: 1,
   toolCalls: [],
   ...overrides,

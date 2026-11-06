@@ -16,6 +16,8 @@ export interface SessionActivity {
   endMs: number;
   cachedInputTokens: number;
   cacheCreationTokens: number;
+  /** Assistant messages with usage: one per model request. */
+  turns: number;
   userPrompts: number;
   readonly toolCalls: ToolCall[];
 }
@@ -71,6 +73,7 @@ export const makeSessionCollector = (window: {
         endMs: at,
         cachedInputTokens: 0,
         cacheCreationTokens: 0,
+        turns: 0,
         userPrompts: 0,
         toolCalls: [],
       };
@@ -87,6 +90,7 @@ export const makeSessionCollector = (window: {
       const messageId = asString(message["id"]);
       if (usage !== undefined && (messageId === undefined || !countedMessages.has(messageId))) {
         if (messageId !== undefined) countedMessages.add(messageId);
+        session.turns += 1;
         session.cachedInputTokens += tokenCount(usage["cache_read_input_tokens"]);
         session.cacheCreationTokens += tokenCount(usage["cache_creation_input_tokens"]);
       }

@@ -34,6 +34,7 @@ describe("token saver transcripts", () => {
     const [activity] = collector.sessions();
     assert.strictEqual(activity?.cachedInputTokens, 1000);
     assert.strictEqual(activity?.cacheCreationTokens, 100);
+    assert.strictEqual(activity?.turns, 1);
     assert.strictEqual(activity?.userPrompts, 2);
     assert.strictEqual(activity?.cwd, "/repo");
     assert.deepStrictEqual(activity?.toolCalls, [
@@ -72,6 +73,12 @@ describe("token saver analyzers", () => {
     // 400K written against a typical 5% of 1M.
     assert.strictEqual(finding?.estimatedSavingTokens, 350_000);
     assert.strictEqual(brokenCachePrefix(normal, []), undefined);
+    const short = session("g", {
+      turns: 9,
+      cacheCreationTokens: 27_000,
+      cachedInputTokens: 50_000,
+    });
+    assert.strictEqual(brokenCachePrefix([...normal, short], []), undefined);
   });
 
   it("uses twice the median as the outlier bar and ignores prefix files of other projects", () => {

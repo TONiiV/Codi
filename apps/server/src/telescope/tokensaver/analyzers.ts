@@ -14,6 +14,8 @@ export interface ConfigChange {
 const OVERSIZED_RESULT_TOKENS = 20_000;
 // Below this a session's cache traffic is mostly the first prompt write, which is not waste.
 const MIN_CACHE_TOKENS = 50_000;
+// A short session's cold prefix write (about 25K for Claude Code) dominates its ratio.
+const MIN_CACHE_TURNS = 10;
 // A finding that saves less than this is noise, and an empty week writes no proposal.
 const MIN_SAVING_TOKENS = 1_000;
 const EDIT_TOOLS: ReadonlySet<string> = new Set(["Edit", "MultiEdit", "Write", "NotebookEdit"]);
@@ -47,7 +49,7 @@ export const brokenCachePrefix = (
 ): Finding | undefined => {
   const measured = sessions.flatMap((session) => {
     const total = session.cacheCreationTokens + session.cachedInputTokens;
-    return total < MIN_CACHE_TOKENS
+    return total < MIN_CACHE_TOKENS || session.turns < MIN_CACHE_TURNS
       ? []
       : [{ session, total, ratio: session.cacheCreationTokens / total }];
   });
