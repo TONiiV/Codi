@@ -59,6 +59,7 @@ import {
 import { useSettingsProjectGroups } from "./useSettingsProjectGroups";
 import { readUnloadedThreadCount } from "../../state/olderSettledShelf";
 import { settingsScopeEnvironmentLabels } from "./settingsScopeAxis";
+import { ProjectWorkspaceRow } from "../telescope/TelescopeProjectWorkspace";
 
 const ProjectIconPickerDialog = lazy(() =>
   import("./ProjectIconPickerDialog").then((module) => ({
@@ -606,6 +607,7 @@ function ProjectDetail({
               </div>
             }
           />
+          <ProjectWorkspaceRow group={group} />
           {canOrganize ? (
             <>
               <SettingsRow

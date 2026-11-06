@@ -13,6 +13,7 @@ import { ITEM_ROW_CLASSNAME } from "./itemRows";
 import { SettingsGroup } from "./SettingsGroup";
 import { SettingsPageContainer, SettingsSection } from "./settingsLayout";
 import { useSettingsScope } from "./SettingsScopeContext";
+import { WorkspaceProjectSections } from "../telescope/TelescopeProjectWorkspace";
 import type { SettingsScopeSearch } from "./settingsScope";
 import {
   settingsScopeEnvironmentAddress,
@@ -59,7 +60,10 @@ export function SettingsScopeNotice({
     target === "checkout"
       ? groups.filter((group) => !search.project || group.projectKey === search.project)
       : [null];
-  const renderChoices = (group: SidebarProjectSnapshot | null) => {
+  const renderChoices = (
+    group: SidebarProjectSnapshot | null,
+    projectGroups: readonly SidebarProjectSnapshot[] = groups,
+  ) => {
     const choices: ScopeChoice[] = group
       ? group.memberProjects.map((member) => {
           const environment = environments.find(
@@ -83,7 +87,7 @@ export function SettingsScopeNotice({
           };
         })
       : target === "project"
-        ? groups.map((group) => ({
+        ? projectGroups.map((group) => ({
             label: group.displayName,
             secondary: [
               ...(group.archived ? [t("settings.parallelA.archivedBadge")] : []),
@@ -168,14 +172,24 @@ export function SettingsScopeNotice({
         {children}
       </p>
       <div className="space-y-4">
-        {choiceGroups.map((group) =>
-          group?.displayName ? (
-            <SettingsSection key={group.projectKey} title={group.displayName}>
-              {renderChoices(group)}
-            </SettingsSection>
-          ) : (
-            <SettingsGroup key={group?.projectKey ?? target}>{renderChoices(group)}</SettingsGroup>
-          ),
+        {target === "project" ? (
+          <WorkspaceProjectSections
+            groups={groups}
+            render={(list) => renderChoices(null, list)}
+            fallback={<SettingsGroup>{renderChoices(null)}</SettingsGroup>}
+          />
+        ) : (
+          choiceGroups.map((group) =>
+            group?.displayName ? (
+              <SettingsSection key={group.projectKey} title={group.displayName}>
+                {renderChoices(group)}
+              </SettingsSection>
+            ) : (
+              <SettingsGroup key={group?.projectKey ?? target}>
+                {renderChoices(group)}
+              </SettingsGroup>
+            ),
+          )
         )}
       </div>
     </div>
