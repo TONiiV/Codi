@@ -1,15 +1,15 @@
-import { useNavigate } from "@tanstack/react-router";
 import { MicroscopeIcon, TelescopeIcon } from "lucide-react";
 
 import { cn } from "../../lib/utils";
-import { TELESCOPE_PATH, useTelescopeView } from "./telescopeViews";
+import { useNavigateToAppMode } from "../sidebar/mainAppLocation";
+import { useTelescopeView } from "./telescopeViews";
 
 /**
  * Rests as a faint capsule and opens on hover or keyboard focus; CSS only, nothing runs at rest.
- * Phones have no room in the top bar, so there the rail and the command palette switch modes.
+ * Phones have no room in the top bar, so there the sidebar sheet switches modes.
  */
 export function TelescopeModeSwitch() {
-  const navigate = useNavigate();
+  const navigateToAppMode = useNavigateToAppMode();
   const onTelescope = useTelescopeView() !== null;
   const Current = onTelescope ? TelescopeIcon : MicroscopeIcon;
   const modes = [
@@ -18,14 +18,14 @@ export function TelescopeModeSwitch() {
       label: "Telescope",
       icon: TelescopeIcon,
       active: onTelescope,
-      go: () => void navigate({ to: TELESCOPE_PATH, search: { view: "chats" } }),
+      go: () => void navigateToAppMode("telescope"),
     },
     {
       id: "microscope",
       label: "Microscope",
       icon: MicroscopeIcon,
       active: !onTelescope,
-      go: () => void navigate({ to: "/" }),
+      go: () => void navigateToAppMode("code"),
     },
   ];
   return (

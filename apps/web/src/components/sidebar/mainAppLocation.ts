@@ -17,8 +17,12 @@ export function isSidebarUtilityPage(pathname: string) {
 // are still recorded; they are real app URLs, so returning to one is harmless.
 const SHELL_LESS_PATHS = new Set(["/pair", "/connect", "/connect-agent", GUEST_PAGE_PATH]);
 
+export const TELESCOPE_PATH = "/telescope";
+
 let mainAppHref: string | null = null;
 let appModalReturnHref: string | null = null;
+let codeHref: string | null = null;
+let telescopeHref: string | null = null;
 
 /** Remembers where Settings, Usage, and the utility pages lead back to. */
 export function startMainAppLocationTracking(router: AnyRouter): () => void {
@@ -27,7 +31,10 @@ export function startMainAppLocationTracking(router: AnyRouter): () => void {
     if (isAppModalPage(pathname) || SHELL_LESS_PATHS.has(pathname)) return;
     const href = withoutAssistantCitationHash(router.state.location.href);
     appModalReturnHref = href;
-    if (!isSidebarUtilityPage(pathname)) mainAppHref = href;
+    if (isSidebarUtilityPage(pathname)) return;
+    mainAppHref = href;
+    if (pathname === TELESCOPE_PATH) telescopeHref = href;
+    else codeHref = href;
   };
   record();
   return router.subscribe("onResolved", record);
@@ -36,6 +43,18 @@ export function startMainAppLocationTracking(router: AnyRouter): () => void {
 export function useNavigateToMainApp() {
   const navigate = useNavigate();
   return () => navigate({ href: mainAppHref ?? "/" });
+}
+
+/** Switches between Code and Telescope, back to where each was last left. */
+export function useNavigateToAppMode() {
+  const navigate = useNavigate();
+  return (mode: "code" | "telescope") =>
+    navigate({ href: mode === "code" ? (codeHref ?? "/") : (telescopeHref ?? TELESCOPE_PATH) });
+}
+
+/** The page Settings or Usage would return to, read during render. */
+export function peekAppModalReturnHref() {
+  return appModalReturnHref;
 }
 
 /** Leaves Settings or Usage for the page that opened it. */

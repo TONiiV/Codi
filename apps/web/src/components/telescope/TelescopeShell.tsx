@@ -4,7 +4,8 @@ import type { CSSProperties, ReactNode } from "react";
 
 import { isElectron } from "../../env";
 import { cn } from "../../lib/utils";
-import { SidebarChromeHeader } from "../sidebar/SidebarChrome";
+import { TELESCOPE_PATH, useNavigateToAppMode } from "../sidebar/mainAppLocation";
+import { SidebarChromeFooter, SidebarChromeHeader } from "../sidebar/SidebarChrome";
 import { Button } from "../ui/button";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "../ui/empty";
 import { SidebarContent, SidebarGroup, SidebarInset, useSidebar } from "../ui/sidebar";
@@ -14,15 +15,12 @@ import {
   WorkspaceBreadcrumbItem,
   WorkspaceBreadcrumbSeparator,
 } from "../WorkspaceBreadcrumb";
-import {
-  TELESCOPE_PATH,
-  TELESCOPE_VIEWS,
-  telescopeViewEntry,
-  type TelescopeView,
-} from "./telescopeViews";
+import { WorkspacePageHeader } from "../WorkspacePageHeader";
+import { TELESCOPE_VIEWS, telescopeViewEntry, type TelescopeView } from "./telescopeViews";
 
 function TelescopeRail({ view, collapsed }: { view: TelescopeView; collapsed: boolean }) {
   const navigate = useNavigate();
+  const navigateToAppMode = useNavigateToAppMode();
   const { isMobile, setOpenMobile } = useSidebar();
   return (
     <nav
@@ -63,7 +61,7 @@ function TelescopeRail({ view, collapsed }: { view: TelescopeView; collapsed: bo
               variant="ghost-muted"
               onClick={() => {
                 if (isMobile) setOpenMobile(false);
-                void navigate({ to: "/" });
+                void navigateToAppMode("code");
               }}
             />
           }
@@ -108,6 +106,7 @@ export function TelescopeSidebar({
           </SidebarGroup>
         </SidebarContent>
       </div>
+      <SidebarChromeFooter />
     </>
   );
 }
@@ -133,16 +132,24 @@ const TITLEBAR_INSET = {
     "max(var(--workspace-gutter-start), calc(var(--workspace-titlebar-content-left) - var(--sidebar-width-icon)))",
 } as CSSProperties;
 
-/** Telescope's main area: breadcrumb header and a main slot that falls back to the view's empty state. */
-export function TelescopePage({ view, children }: { view: TelescopeView; children?: ReactNode }) {
+/**
+ * Telescope's main area: breadcrumb header and a main slot that falls back to the view's empty
+ * state. `background` keeps it inert under Settings or Usage.
+ */
+export function TelescopePage({
+  view,
+  background = false,
+  children,
+}: {
+  view: TelescopeView;
+  background?: boolean;
+  children?: ReactNode;
+}) {
   return (
-    <SidebarInset className="h-dvh min-h-0 overflow-hidden overscroll-y-none">
-      <header
-        className={cn(
-          "flex h-(--workspace-topbar-height) shrink-0 items-center pl-(--workspace-gutter-start) pr-(--workspace-gutter-end)",
-          "md:[[data-sidebar-state=collapsed]_&]:pl-(--telescope-collapsed-left) max-md:pl-(--workspace-titlebar-content-left)",
-          isElectron && "drag-region",
-        )}
+    <SidebarInset className="h-dvh min-h-0 overflow-hidden overscroll-y-none" inert={background}>
+      <WorkspacePageHeader
+        electron={isElectron}
+        className="md:[[data-sidebar-state=collapsed]_&]:pl-(--telescope-collapsed-left)"
         style={TITLEBAR_INSET}
       >
         <WorkspaceBreadcrumb ariaLabel="Telescope breadcrumb">
@@ -154,7 +161,7 @@ export function TelescopePage({ view, children }: { view: TelescopeView; childre
             <h1>{telescopeViewEntry(view).label}</h1>
           </WorkspaceBreadcrumbItem>
         </WorkspaceBreadcrumb>
-      </header>
+      </WorkspacePageHeader>
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
         {children ?? <TelescopeEmptyState view={view} />}
       </div>

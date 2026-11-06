@@ -7,7 +7,7 @@ import {
   UsersRoundIcon,
 } from "lucide-react";
 
-export const TELESCOPE_PATH = "/telescope";
+import { isAppModalPage, peekAppModalReturnHref, TELESCOPE_PATH } from "../sidebar/mainAppLocation";
 
 export const TELESCOPE_VIEWS = [
   {
@@ -62,10 +62,27 @@ export function telescopeViewEntry(view: TelescopeView) {
   return TELESCOPE_VIEWS.find((entry) => entry.id === view) ?? TELESCOPE_VIEWS[0];
 }
 
-/** The Telescope view on screen, or null while the app is in Code (Microscope). */
+/**
+ * The Telescope view on screen: its own route, or the route a Settings or Usage modal was opened
+ * from, so the shell stays put behind the modal.
+ */
+export function telescopeViewAt(
+  pathname: string,
+  searchView: unknown,
+  modalReturnHref: string | null,
+): TelescopeView | null {
+  if (pathname === TELESCOPE_PATH) return parseTelescopeView(searchView);
+  if (!isAppModalPage(pathname) || modalReturnHref === null) return null;
+  const opener = new URL(modalReturnHref, "http://codi.local");
+  return opener.pathname === TELESCOPE_PATH
+    ? parseTelescopeView(opener.searchParams.get("view"))
+    : null;
+}
+
+/** The Telescope view in effect, or null while the app is in Code (Microscope). */
 export function useTelescopeView(): TelescopeView | null {
   return useLocation({
     select: (location) =>
-      location.pathname === TELESCOPE_PATH ? parseTelescopeView(location.search.view) : null,
+      telescopeViewAt(location.pathname, location.search.view, peekAppModalReturnHref()),
   });
 }
