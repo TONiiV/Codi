@@ -147,7 +147,7 @@ export interface ChannelSwitchRelease {
   readonly databaseMigration: number | undefined;
 }
 
-export const channelSwitchLabel = (channel: DesktopUpdateChannel) =>
+const channelSwitchLabel = (channel: DesktopUpdateChannel) =>
   channel === "nightly" ? "Nightly" : "Stable";
 
 /** Stable and Nightly each build their own commits, so either can hold migrations the other lacks.

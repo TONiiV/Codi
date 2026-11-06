@@ -13,7 +13,6 @@ import { npmReleaseAtom, npmReleaseFailureMessage } from "~/state/npmRelease";
 import { downloadLocalUpdate, installLocalUpdate } from "../sidebar/SidebarUpdatePill";
 import { UpdateEverythingDialog } from "../sidebar/UpdateEverythingDialog";
 import {
-  channelSwitchLabel,
   localSwitchBlockReason,
   type ChannelSwitchRelease,
 } from "../sidebar/updateEverything.logic";
@@ -46,12 +45,12 @@ export function UpdateTrackSwitchDialog({
   if (AsyncResult.isSuccess(release) && release.value !== null) {
     return <SwitchPlan release={{ channel, ...release.value }} onClose={onClose} />;
   }
-  const label = channelSwitchLabel(channel);
+  const label = t(channel === "nightly" ? "settings.text.nightly" : "settings.text.stable");
   return (
     <AlertDialog open onOpenChange={(open) => !open && onClose()}>
       <AlertDialogPopup>
         <AlertDialogHeader>
-          <AlertDialogTitle>{t("settings.text.switchToLabel", { label })}</AlertDialogTitle>
+          <AlertDialogTitle>{t("settings.text.switchToLabel3", { label })}</AlertDialogTitle>
           <AlertDialogDescription>
             {AsyncResult.isFailure(release)
               ? npmReleaseFailureMessage(release.cause)
@@ -86,7 +85,7 @@ function SwitchPlan({
   const switchesLocal = crossesLocal && !updatesOff;
   const [checking, setChecking] = useState(false);
   const everything = useUpdateEverything(switchesLocal ? release.version : null, release);
-  const label = channelSwitchLabel(release.channel);
+  const label = t(release.channel === "nightly" ? "settings.text.nightly" : "settings.text.stable");
   // This app's reinstall restarts every server it hosts, so each of their databases must allow it.
   const localBlocked = localSwitchBlockReason(
     APP_VERSION,

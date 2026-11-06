@@ -164,7 +164,7 @@ function GuestLinksRow() {
         <Trans
           i18nKey="settings.parallelA.labsGuestLinksDesc"
           components={{
-            link: <Link to="/settings/access" className="underline underline-offset-2" />,
+            settingsLink: <Link to="/settings/access" className="underline underline-offset-2" />,
           }}
         />
       }
@@ -193,7 +193,9 @@ function LinkedEnvironmentsRow() {
         <Trans
           i18nKey="settings.parallelA.labsLinkedEnvDesc"
           components={{
-            link: <Link to="/settings/connections" className="underline underline-offset-2" />,
+            settingsLink: (
+              <Link to="/settings/connections" className="underline underline-offset-2" />
+            ),
           }}
         />
       }
@@ -232,7 +234,7 @@ function SimlockHostsRow() {
                 className="underline underline-offset-2"
               />
             ),
-            link: <Link to="/settings/devices" className="underline underline-offset-2" />,
+            settingsLink: <Link to="/settings/devices" className="underline underline-offset-2" />,
           }}
         />
       }
