@@ -24,6 +24,11 @@ export function resolveCurrentWorkspace(
   return workspaces.find((workspace) => workspace.id === storedId) ?? workspaces[0] ?? null;
 }
 
+/** The environment owner's built-in member: an admin of every workspace, never removable. */
+export function isEnvironmentOwner(member: Telescope.Member): boolean {
+  return member.subjectId === "owner";
+}
+
 interface ProjectRef {
   readonly environmentId: EnvironmentId;
   readonly projectId: ProjectId;

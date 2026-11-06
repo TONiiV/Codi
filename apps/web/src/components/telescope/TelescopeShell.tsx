@@ -5,7 +5,7 @@ import type { CSSProperties, ReactNode } from "react";
 import { isElectron } from "../../env";
 import { cn } from "../../lib/utils";
 import { TELESCOPE_PATH, useNavigateToAppMode } from "../sidebar/mainAppLocation";
-import { SidebarChromeFooter, SidebarChromeHeader } from "../sidebar/SidebarChrome";
+import { SidebarChromeHeader } from "../sidebar/SidebarChrome";
 import { Button } from "../ui/button";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "../ui/empty";
 import { SidebarContent, SidebarGroup, SidebarInset, useSidebar } from "../ui/sidebar";
@@ -16,6 +16,7 @@ import {
   WorkspaceBreadcrumbSeparator,
 } from "../WorkspaceBreadcrumb";
 import { WorkspacePageHeader } from "../WorkspacePageHeader";
+import { TelescopeAccountFooter } from "./TelescopeAccount";
 import { TELESCOPE_VIEWS, telescopeViewEntry, type TelescopeView } from "./telescopeViews";
 
 function TelescopeRail({ view, collapsed }: { view: TelescopeView; collapsed: boolean }) {
@@ -106,7 +107,7 @@ export function TelescopeSidebar({
           </SidebarGroup>
         </SidebarContent>
       </div>
-      <SidebarChromeFooter />
+      <TelescopeAccountFooter />
     </>
   );
 }
