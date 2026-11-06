@@ -1,4 +1,10 @@
-import { ArrowLeftIcon, ArrowRightIcon, ChartNoAxesColumnIcon, SettingsIcon } from "lucide-react";
+import {
+  ArrowLeftIcon,
+  ArrowRightIcon,
+  ChartNoAxesColumnIcon,
+  SettingsIcon,
+  TelescopeIcon,
+} from "lucide-react";
 import type { ReactNode } from "react";
 import { memo } from "react";
 import { Link, useLocation, useNavigate } from "@tanstack/react-router";
@@ -33,7 +39,12 @@ import {
 } from "../ui/sidebar";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { readPullRequestListPreferences } from "../pullRequest/pullRequestListPreferences";
-import { isSidebarUtilityPage, useNavigateToMainApp } from "./mainAppLocation";
+import { useTelescopeView } from "../telescope/telescopeViews";
+import {
+  isSidebarUtilityPage,
+  useNavigateToAppMode,
+  useNavigateToMainApp,
+} from "./mainAppLocation";
 import { SidebarThreadUndoNotice } from "./SidebarThreadUndoNotice";
 import { SidebarProviderUpdatePill } from "./SidebarProviderUpdatePill";
 import { SidebarUpdateArchitectureWarning, SidebarUpdatePill } from "./SidebarUpdatePill";
@@ -205,6 +216,8 @@ function SidebarUtilityItem({
 const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
   const navigate = useNavigate();
   const navigateToMainApp = useNavigateToMainApp();
+  const navigateToAppMode = useNavigateToAppMode();
+  const onTelescope = useTelescopeView() !== null;
   const { isMobile, setOpenMobile } = useSidebar();
   const isOnUtilityPage = useLocation({
     select: (location) => isSidebarUtilityPage(location.pathname),
@@ -239,6 +252,11 @@ const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
     void navigateToMainApp();
   };
 
+  const handleTelescopeClick = () => {
+    closeMobileSidebar();
+    void navigateToAppMode("telescope");
+  };
+
   return (
     <SidebarMenu className="flex-row items-center">
       {isOnUtilityPage ? (
@@ -267,6 +285,14 @@ const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
             label="Usage"
             onClick={handleUsageClick}
           />
+          {/* The Telescope capsule is hidden on phones, so the Code sheet carries the way in. */}
+          {isMobile && !onTelescope ? (
+            <SidebarUtilityItem
+              icon={<TelescopeIcon />}
+              label="Telescope"
+              onClick={handleTelescopeClick}
+            />
+          ) : null}
         </>
       )}
       <SidebarThreadUndoNotice />

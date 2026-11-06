@@ -71,9 +71,11 @@ import {
   RotateCcwIcon,
   SettingsIcon,
   MonitorIcon,
+  MicroscopeIcon,
   PinIcon,
   PinOffIcon,
   SquarePenIcon,
+  TelescopeIcon,
   TextSearchIcon,
   UserPlusIcon,
 } from "lucide-react";
@@ -256,6 +258,8 @@ import { Button } from "./ui/button";
 import { stackedThreadToast, toastManager } from "./ui/toast";
 import { suggestAppAccessForRemote } from "./sourceControlAppAccessToast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";
+import { useNavigateToAppMode } from "./sidebar/mainAppLocation";
+import { useTelescopeView } from "./telescope/telescopeViews";
 import { ComposerHandleContext, useComposerHandleContext } from "../composerHandleContext";
 import type { ChatComposerHandle } from "./chat/ChatComposer";
 import { pickableProjectGroups } from "@t3tools/client-runtime/state/project-grouping";
@@ -399,6 +403,8 @@ function OpenCommandPaletteDialog(props: {
   readonly initialContext: CommandPaletteReturnContext | undefined;
 }) {
   const navigate = useNavigate();
+  const navigateToAppMode = useNavigateToAppMode();
+  const onTelescope = useTelescopeView() !== null;
   const pathname = useLocation({ select: (location) => location.pathname });
   const { openChildSearch, setOpen } = props;
   // Keyed by palette session: the intent and restored search only seed this
@@ -1606,6 +1612,30 @@ function OpenCommandPaletteDialog(props: {
       await navigate({ to: "/usage" });
     },
   });
+
+  actionItems.push(
+    onTelescope
+      ? {
+          kind: "action",
+          value: "action:code",
+          searchTerms: ["code", "microscope", "threads", "back"],
+          title: "Back to Code",
+          icon: <MicroscopeIcon className={ITEM_ICON_CLASS} />,
+          run: async () => {
+            await navigateToAppMode("code");
+          },
+        }
+      : {
+          kind: "action",
+          value: "action:telescope",
+          searchTerms: ["telescope", "team", "tasks", "decisions", "dashboard"],
+          title: "Open Telescope",
+          icon: <TelescopeIcon className={ITEM_ICON_CLASS} />,
+          run: async () => {
+            await navigateToAppMode("telescope");
+          },
+        },
+  );
 
   for (const direction of [1, -1] as const) {
     const title = direction === 1 ? "Focus Next Workspace Area" : "Focus Previous Workspace Area";

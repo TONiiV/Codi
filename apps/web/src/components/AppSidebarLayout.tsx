@@ -38,6 +38,9 @@ import {
   usePanelNavigationSuppression,
 } from "../panelAnimations";
 import { BackgroundThreadAnnouncer } from "./BackgroundThreadAnnouncer";
+import { TelescopeModeSwitch } from "./telescope/TelescopeModeSwitch";
+import { TelescopeSidebar } from "./telescope/TelescopeShell";
+import { useTelescopeView } from "./telescope/telescopeViews";
 import { HistorySwipeNavigation } from "./HistorySwipeNavigation";
 import ThreadSidebar from "./Sidebar";
 import { SidebarBrandWidthProbe } from "./sidebar/SidebarChrome";
@@ -402,7 +405,9 @@ function SidebarControl() {
 }
 
 export function AppSidebarLayout({ children }: { children: ReactNode }) {
-  const sidebarArea = workspaceAreaProps("sidebar", 0, "Threads");
+  const telescopeView = useTelescopeView();
+  const sidebarLabel = telescopeView === null ? "Threads" : "Telescope";
+  const sidebarArea = workspaceAreaProps("sidebar", 0, sidebarLabel);
   const [sidebarRouteReveal] = useState<SidebarRouteReveal>(() => ({
     observedKey: null,
     pendingKey: null,
@@ -453,11 +458,11 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
         <SidebarBrandWidthProbe isElectron={isElectron} onWidthChange={setBrandWidth} />
         <Sidebar
           side="left"
-          collapsible="offcanvas"
+          collapsible={telescopeView === null ? "offcanvas" : "icon"}
           data-app-sidebar=""
           {...sidebarArea}
           role="navigation"
-          aria-label="Threads"
+          aria-label={sidebarLabel}
           resizable={{
             maxWidth: sidebarMaximumWidth,
             minWidth: sidebarMinimumWidth,
@@ -469,12 +474,17 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
           }}
           style={windowControlsInsetStyle}
         >
-          <ThreadSidebar routeReveal={sidebarRouteReveal} />
+          {telescopeView === null ? (
+            <ThreadSidebar routeReveal={sidebarRouteReveal} />
+          ) : (
+            <TelescopeSidebar view={telescopeView} />
+          )}
           <SidebarRail onDoubleClick={resetSidebarWidth} />
         </Sidebar>
         {children}
         <BackgroundThreadAnnouncer />
         <SidebarControl />
+        <TelescopeModeSwitch />
         {isElectron ? <HistorySwipeNavigation /> : null}
       </SidebarProvider>
     </PanelAnimationSuppressionProvider>
