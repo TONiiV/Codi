@@ -31,6 +31,9 @@ const splitServers = (text: string) => {
   return { blocks, rest };
 };
 
+// Codex has no SSE marker, so the pack's transport rides in a comment it ignores.
+const TRANSPORT = /^\s*#\s*transport\s*=\s*"sse"\s*$/;
+
 const parseServer = (lines: ReadonlyArray<string>): McpServer => {
   const server: { -readonly [K in keyof McpServer]: McpServer[K] } = {};
   const env = new Set<string>();
@@ -39,6 +42,10 @@ const parseServer = (lines: ReadonlyArray<string>): McpServer => {
     const header = HEADER.exec(line);
     if (header) {
       inEnv = header[2] === ".env";
+      continue;
+    }
+    if (TRANSPORT.test(line)) {
+      server.transport = "sse";
       continue;
     }
     const match = /^\s*("[^"]+"|[\w-]+)\s*=\s*(.+?)\s*$/.exec(line);
@@ -74,6 +81,7 @@ const renderServer = (name: string, server: McpServer) =>
     ...(["command", "args", "url"] as const).flatMap((key) =>
       server[key] === undefined ? [] : [`${key} = ${JSON.stringify(server[key])}`],
     ),
+    ...(server.transport === undefined ? [] : [`# transport = "${server.transport}"`]),
     ...(server.url === undefined && server.env?.length
       ? [`env_vars = ${JSON.stringify(server.env)}`]
       : []),

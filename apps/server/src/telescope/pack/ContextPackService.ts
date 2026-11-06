@@ -39,7 +39,11 @@ export class ContextPackNoHarnessError extends Schema.TaggedError<ContextPackNoH
   }
 }
 
-type PackError = PlatformError | ContextPackFormatError | ContextPackOverlapError;
+type PackError =
+  | PlatformError
+  | ContextPackFormatError
+  | ContextPackOverlapError
+  | ContextPackPathError;
 
 export class ContextPackService extends Context.Service<
   ContextPackService,
@@ -56,7 +60,7 @@ export class ContextPackService extends Context.Service<
       dir: string,
       harness: HarnessName,
       merge: boolean,
-    ) => Effect.Effect<void, PackError | ContextPackPathError>;
+    ) => Effect.Effect<void, PackError>;
   }
 >()("t3/telescope/pack/ContextPackService") {}
 

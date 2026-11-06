@@ -53,13 +53,15 @@ export const cursor = makeHarness({
         ? (yield* fs.readFileString(target)).replace(FRONTMATTER, "")
         : undefined;
       const body = mergeInstructions(existing, text, merge).trimEnd();
-      yield* writeText(target, `${PACK_RULE_HEADER}${body}\n`);
+      yield* writeText(dir, target, `${PACK_RULE_HEADER}${body}\n`);
     }),
   },
   skillsDirs: [".cursor/skills"],
   mcp: jsonMcp(".cursor/mcp.json", "mcpServers", (server) =>
     server.url !== undefined
       ? {
+          // Cursor reads a bare `url` as HTTP, so only the SSE marker has to be written.
+          type: server.transport,
           url: server.url,
           headers: bearerHeaders(server.bearerTokenEnv, (name) => `\${env:${name}}`),
         }

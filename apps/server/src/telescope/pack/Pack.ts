@@ -59,10 +59,10 @@ export class ContextPackFormatError extends Schema.TaggedError<ContextPackFormat
 
 export class ContextPackPathError extends Schema.TaggedError<ContextPackPathError>()(
   "ContextPackPathError",
-  { path: Schema.String },
+  { path: Schema.String, root: Schema.String },
 ) {
   override get message(): string {
-    return `${this.path} resolves outside the context pack.`;
+    return `${this.path} resolves outside ${this.root}.`;
   }
 }
 
@@ -89,7 +89,7 @@ const formatErrorAt = (path: string) =>
 
 type HarnessEffect<A> = Effect.Effect<
   A,
-  PlatformError | ContextPackFormatError,
+  PlatformError | ContextPackFormatError | ContextPackPathError,
   FileSystem.FileSystem | Path.Path
 >;
 
@@ -135,13 +135,13 @@ export const makeHarness = (spec: HarnessSpec) => {
     }),
     write: Effect.fnUntraced(function* (pack: Pack, dir: string, merge: boolean) {
       const path = yield* Path.Path;
-      yield* writeSkills(pack.skills, path.join(dir, spec.skillsDirs[0]), false);
+      yield* writeSkills(pack.skills, path.join(dir, spec.skillsDirs[0]), false, dir);
       yield* spec.instructions.write(dir, pack.instructions, merge);
       const mcpFile = path.join(dir, spec.mcp.file);
       const existing = yield* readOptionalText(mcpFile);
       if (existing === undefined && Object.keys(pack.mcp).length === 0) return;
       const text = yield* parse(mcpFile, () => spec.mcp.write(existing, pack.mcp, merge));
-      yield* writeText(mcpFile, text);
+      yield* writeText(dir, mcpFile, text);
     }),
   };
 };
@@ -152,7 +152,7 @@ export const markdownInstructions = (file: string): HarnessSpec["instructions"] 
   }),
   write: Effect.fnUntraced(function* (dir, text, merge) {
     const target = (yield* Path.Path).join(dir, file);
-    yield* writeText(target, mergeInstructions(yield* readOptionalText(target), text, merge));
+    yield* writeText(dir, target, mergeInstructions(yield* readOptionalText(target), text, merge));
   }),
 });
 
@@ -209,10 +209,11 @@ const readOptionalText = Effect.fnUntraced(function* (file: string) {
   return (yield* fs.exists(file)) ? yield* fs.readFileString(file) : undefined;
 });
 
-export const writeText = Effect.fnUntraced(function* (file: string, text: string) {
+export const writeText = Effect.fnUntraced(function* (root: string, file: string, text: string) {
   const fs = yield* FileSystem.FileSystem;
-  yield* fs.makeDirectory((yield* Path.Path).dirname(file), { recursive: true });
-  yield* fs.writeFileString(file, text);
+  const target = yield* writeTargetInside(root, file);
+  yield* fs.makeDirectory((yield* Path.Path).dirname(target), { recursive: true });
+  yield* fs.writeFileString(target, text);
 });
 
 const BLOCK = /<!-- context-pack:begin -->[\s\S]*?<!-- context-pack:end -->/;
@@ -255,6 +256,21 @@ const plannedRealPath: (
   },
 );
 
+// A write follows links in its target, so what must stay inside the directory being written to
+// is the resolved path, including the target a dangling link names.
+const writeTargetInside = Effect.fnUntraced(function* (root: string, file: string) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const link = yield* fs.readLink(file).pipe(Effect.orElseSucceed(() => undefined));
+  const real = yield* plannedRealPath(
+    link === undefined ? file : path.resolve(path.dirname(file), link),
+  );
+  if (!isInside(path, yield* plannedRealPath(root), real)) {
+    return yield* new ContextPackPathError({ path: file, root });
+  }
+  return real;
+});
+
 // Writing either directory would clobber the other when one lies inside the other.
 export const assertSeparate = Effect.fnUntraced(function* (packDir: string, projectDir: string) {
   const path = yield* Path.Path;
@@ -290,28 +306,30 @@ const copyTree: (
   to: string,
   root: string,
   ancestors: ReadonlyArray<string>,
-) => Effect.Effect<void, PlatformError, FileSystem.FileSystem | Path.Path> = Effect.fnUntraced(
-  function* (from, to, root, ancestors) {
+  destRoot: string,
+) => Effect.Effect<void, PlatformError | ContextPackPathError, FileSystem.FileSystem | Path.Path> =
+  Effect.fnUntraced(function* (from, to, root, ancestors, destRoot) {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
-    yield* fs.makeDirectory(to, { recursive: true });
+    yield* fs.makeDirectory(yield* writeTargetInside(destRoot, to), { recursive: true });
     for (const name of (yield* fs.readDirectory(from)).toSorted()) {
       const real = yield* realPathInside(root, path.join(from, name));
       if (real === undefined || ancestors.includes(real)) continue;
       const info = yield* fs.stat(real);
       if (info.type === "Directory") {
-        yield* copyTree(real, path.join(to, name), root, [...ancestors, real]);
+        yield* copyTree(real, path.join(to, name), root, [...ancestors, real], destRoot);
       } else if (info.type === "File") {
-        yield* fs.writeFile(path.join(to, name), yield* fs.readFile(real));
+        const target = yield* writeTargetInside(destRoot, path.join(to, name));
+        yield* fs.writeFile(target, yield* fs.readFile(real));
       }
     }
-  },
-);
+  });
 
 const writeSkills = Effect.fnUntraced(function* (
   skills: Pack["skills"],
   skillsDir: string,
   replace: boolean,
+  destRoot: string,
 ) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
@@ -323,13 +341,15 @@ const writeSkills = Effect.fnUntraced(function* (
     );
     if (source) return yield* new ContextPackOverlapError({ path: target, source: source.dir });
   }
+  // A skills dir that is itself a link out of the project would carry every skill with it.
+  const dir = yield* writeTargetInside(destRoot, skillsDir);
   for (const skill of skills) {
-    const target = path.join(skillsDir, skill.name);
+    const target = path.join(dir, skill.name);
     // An import never deletes project files: it writes over a same-name skill, unlinking only a link.
     if (replace || (yield* Effect.isSuccess(fs.readLink(target)))) {
       yield* fs.remove(target, { recursive: true, force: true });
     }
-    yield* copyTree(skill.dir, target, skill.dir, [skill.dir]);
+    yield* copyTree(skill.dir, target, skill.dir, [skill.dir], destRoot);
   }
 });
 
@@ -347,19 +367,20 @@ export const writePackDir = Effect.fn("ContextPack.writePackDir")(function* (
   ) {
     return yield* new ContextPackOutDirError({ path: outDir });
   }
-  yield* writeSkills(pack.skills, path.join(outDir, "skills"), true);
+  yield* writeSkills(pack.skills, path.join(outDir, "skills"), true, outDir);
   const manifest: typeof Manifest.Type = {
     version: 1,
     ...meta,
     skills: pack.skills.map((skill) => skill.name),
   };
   yield* writeText(
+    outDir,
     path.join(outDir, PACK_FILES.manifest),
     yield* encodeManifest(manifest).pipe(Effect.orDie),
   );
-  yield* writeText(path.join(outDir, PACK_FILES.instructions), pack.instructions);
+  yield* writeText(outDir, path.join(outDir, PACK_FILES.instructions), pack.instructions);
   const mcp = yield* encodeMcpFile({ servers: pack.mcp }).pipe(Effect.orDie);
-  yield* writeText(path.join(outDir, PACK_FILES.mcp), mcp);
+  yield* writeText(outDir, path.join(outDir, PACK_FILES.mcp), mcp);
 });
 
 // A pack is untrusted input: every file it supplies must resolve inside the pack.
@@ -371,7 +392,7 @@ export const readPackDir = Effect.fn("ContextPack.readPackDir")(function* (packD
     const file = path.join(root, name);
     const real = yield* realPathInside(root, file);
     if (real !== undefined) return yield* fs.readFileString(real);
-    if (yield* fs.exists(file)) return yield* new ContextPackPathError({ path: file });
+    if (yield* fs.exists(file)) return yield* new ContextPackPathError({ path: file, root });
     return yield* fs.readFileString(file);
   });
   const manifest = yield* decodeManifest(yield* read(PACK_FILES.manifest)).pipe(
