@@ -34,6 +34,8 @@ export const Member = Schema.Struct({
   revokedAt: Schema.optionalKey(Timestamp),
 });
 export type Member = typeof Member.Type;
+/** The environment owner's member id: an admin of every workspace, never removable. */
+export const OWNER_MEMBER_ID = "owner";
 
 export const Invitation = Schema.Struct({
   id: InvitationId,

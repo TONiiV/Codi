@@ -16,6 +16,7 @@ import {
   WorkspaceBreadcrumbSeparator,
 } from "../WorkspaceBreadcrumb";
 import { WorkspacePageHeader } from "../WorkspacePageHeader";
+import { TelescopeAccountFooter } from "./TelescopeAccount";
 import { TELESCOPE_VIEWS, telescopeViewEntry, type TelescopeView } from "./telescopeViews";
 
 function TelescopeRail({ view, collapsed }: { view: TelescopeView; collapsed: boolean }) {
@@ -106,6 +107,7 @@ export function TelescopeSidebar({
           </SidebarGroup>
         </SidebarContent>
       </div>
+      <TelescopeAccountFooter />
       <SidebarChromeFooter />
     </>
   );

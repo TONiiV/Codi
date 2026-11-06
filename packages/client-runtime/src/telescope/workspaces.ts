@@ -24,6 +24,11 @@ export function resolveCurrentWorkspace(
   return workspaces.find((workspace) => workspace.id === storedId) ?? workspaces[0] ?? null;
 }
 
+/** The environment owner's built-in member: an admin of every workspace, never removable. */
+export function isEnvironmentOwner(member: Telescope.Member): boolean {
+  return member.subjectId === Telescope.OWNER_MEMBER_ID;
+}
+
 interface ProjectRef {
   readonly environmentId: EnvironmentId;
   readonly projectId: ProjectId;
@@ -128,6 +133,7 @@ export function createTelescopeWorkspaceAtoms<R, E>(
   ) =>
     Effect.sync(() => {
       registry.refresh(list({ environmentId, input: {} }));
+      registry.refresh(bindingSummary({ environmentId, input: {} }));
       registry.set(storedWorkspaceIdAtom, workspaceId);
     });
   const inWorkspace = (target: {

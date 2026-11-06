@@ -13,8 +13,7 @@ import type { PersistenceDecodeError, PersistenceSqlError } from "../persistence
 import * as TelescopeDb from "./TelescopeDb.ts";
 
 const INVITATION_TTL_SECONDS = 7 * 24 * 60 * 60;
-/** The environment owner's member id: an admin of every workspace here, needing no device link. */
-export const OWNER_MEMBER_ID = "owner";
+export const OWNER_MEMBER_ID = Telescope.OWNER_MEMBER_ID;
 // Only the owner holds these: the desktop app's bootstrap and the startup (or dev) admin link.
 const OWNER_SUBJECTS: ReadonlySet<string> = new Set([
   "desktop-bootstrap",
