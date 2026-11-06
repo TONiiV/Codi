@@ -40,6 +40,12 @@ const agent = (id: string, owner: string | null, kind: Telescope.AgentKind = "ch
   updated_at: at,
 });
 
+const outcome = <A, R>(effect: Effect.Effect<A, MemoryService.Failure, R>) =>
+  Effect.match(effect, {
+    onFailure: (error) => (error._tag === "TelescopeWorkspaceError" ? error.reason : error._tag),
+    onSuccess: () => "ok",
+  });
+
 const setup = Effect.fn(function* (kind: Telescope.Workspace["kind"]) {
   const db = yield* TelescopeDb.TelescopeDb;
   const workspaces = yield* WorkspaceService.WorkspaceService;
@@ -183,7 +189,7 @@ it.layer(layer)("Telescope memories", (it) => {
         runOn,
         searchAs,
       } = yield* setup("enterprise");
-      yield* add("预算审批人是老王");
+      const secret = yield* add("预算审批人是老王");
       yield* add("预算按季度结算", { level: "internal" });
 
       assert.lengthOf(yield* search("alice", "预算"), 2);
@@ -246,6 +252,35 @@ it.layer(layer)("Telescope memories", (it) => {
         personRecord._tag === "TelescopeWorkspaceError" && personRecord.reason,
         "forbidden",
       );
+      // Another agent's run reaches Alice's memory neither by its own agent id nor by hers.
+      const alice2Run = yield* memory.callerForThread(
+        ThreadId.make(`thread-${workspaceId}-alice2`),
+      );
+      for (const [caller, ownAgent] of [
+        [resolved, bobAgent],
+        [alice2Run, `${workspaceId}-alice2`],
+      ] as const) {
+        for (const op of ["update", "noop", "invalidate"] as const) {
+          const reach = (agentId: string) =>
+            outcome(
+              memory.write(caller, {
+                workspaceId,
+                agentId: Telescope.AgentId.make(agentId),
+                op,
+                id: secret.id,
+                text: "改写别人的记忆",
+              }),
+            );
+          assert.strictEqual(yield* reach(ownAgent), "not_found", `${ownAgent} ${op}`);
+          assert.strictEqual(yield* reach(aliceAgent), "forbidden", `${ownAgent} ${op}`);
+        }
+        const pinned = memory.pin(caller, { workspaceId, id: secret.id, pinned: true });
+        assert.strictEqual(yield* outcome(pinned), "forbidden", ownAgent);
+      }
+      assert.deepStrictEqual(
+        (yield* search("alice", "审批人")).map((m) => [m.text, m.rev, m.pinned, m.invalidAt]),
+        [["预算审批人是老王", 0, false, undefined]],
+      );
 
       yield* db.update(workspaceId, "runs", { finished_at: at }, { run_id: "run-1" });
       const finished = yield* memory.callerForThread(threadId).pipe(Effect.flip);
@@ -305,6 +340,60 @@ it.layer(layer)("Telescope memories", (it) => {
       ).pipe(Effect.provideService(Scheduler.MaxOpsBeforeYield, 50));
       const [counted] = yield* search("alice", "周会", { limit: 1 });
       assert.strictEqual(counted?.uses, 7);
+
+      const unpin = { workspaceId, id: later.id, pinned: false };
+      assert.strictEqual(yield* outcome(memory.pin(as("bob"), unpin)), "forbidden");
+      yield* memory.pin(as("alice"), unpin);
+      assert.deepStrictEqual(
+        (yield* search("alice", "周会")).map((m) => m.pinned),
+        [false, false],
+      );
+    }),
+  );
+
+  it.effect("keeps searches inside the workspace, its active members and the asked agent", () =>
+    Effect.gen(function* () {
+      const workspaces = yield* WorkspaceService.WorkspaceService;
+      const first = yield* setup("enterprise");
+      const second = yield* setup("enterprise");
+      const own = yield* first.add("隔离测试的共享文本", { level: "internal" });
+      yield* second.add("隔离测试的共享文本", { level: "internal" });
+      // internal reaches every member, so only the workspace filter keeps the other row out.
+      for (const query of ["隔离", "隔离测试"]) {
+        const found = yield* first.search("alice", query);
+        assert.deepStrictEqual(
+          found.map((m) => m.id),
+          [own.id],
+          query,
+        );
+      }
+
+      const bobs = yield* first.memory.write(as("bob"), {
+        workspaceId: first.workspaceId,
+        agentId: Telescope.AgentId.make(first.bobAgent),
+        op: "add",
+        text: "隔离测试由鲍勃记录",
+        level: "internal",
+      });
+      assert.lengthOf(yield* first.search("alice", "隔离测试"), 2);
+      const filtered = yield* first.search("alice", "隔离测试", { agentId: first.bobAgent });
+      assert.deepStrictEqual(
+        filtered.map((m) => m.id),
+        [bobs.id],
+      );
+
+      // The owner is a member of both workspaces, but a run stays in the one it started in.
+      const ownerRun = yield* first.runOn(first.aliceAgent, WorkspaceService.OWNER_MEMBER_ID);
+      assert.lengthOf(yield* first.searchAs(ownerRun, "隔离测试"), 2);
+      assert.strictEqual(yield* outcome(second.searchAs(ownerRun, "隔离测试")), "forbidden");
+
+      const bobRun = yield* first.runOn(first.bobAgent, first.bobId);
+      assert.lengthOf(yield* first.searchAs(bobRun, "隔离测试"), 2);
+      yield* workspaces.revoke(sessions.alice, {
+        workspaceId: first.workspaceId,
+        subjectId: Telescope.SubjectId.make(first.bobId),
+      });
+      assert.strictEqual(yield* outcome(first.searchAs(bobRun, "隔离测试")), "forbidden");
     }),
   );
 });
