@@ -231,6 +231,10 @@
       "types": "./src/state/peerLinks.ts",
       "default": "./src/state/peerLinks.ts"
     },
+    "./telescope/agents": {
+      "types": "./src/telescope/agents.ts",
+      "default": "./src/telescope/agents.ts"
+    },
     "./telescope/workspaces": {
       "types": "./src/telescope/workspaces.ts",
       "default": "./src/telescope/workspaces.ts"
