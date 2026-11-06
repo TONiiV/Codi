@@ -2,8 +2,8 @@ import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import { Argument, Command, Flag } from "effect/cli";
 
-import * as ContextPackService from "../lighthouse/pack/ContextPackService.ts";
-import { HARNESSES } from "../lighthouse/pack/Pack.ts";
+import * as ContextPackService from "../telescope/pack/ContextPackService.ts";
+import { HARNESSES } from "../telescope/pack/Pack.ts";
 
 const exportCommand = Command.make("export", {
   projectDir: Argument.String("projectDir").pipe(

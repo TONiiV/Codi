@@ -48,7 +48,7 @@ export class ContextPackService extends Context.Service<
       merge: boolean,
     ) => Effect.Effect<void, PackError>;
   }
->()("t3/lighthouse/pack/ContextPackService") {}
+>()("t3/telescope/pack/ContextPackService") {}
 
 const make = Effect.gen(function* () {
   const context = yield* Effect.context<FileSystem.FileSystem | Path.Path>();
