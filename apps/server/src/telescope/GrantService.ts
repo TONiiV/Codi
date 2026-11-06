@@ -82,7 +82,10 @@ interface GrantLayer {
   readonly reason: string;
 }
 
-/** `onBehalfOf` is the member id, then each agent that delegated down to `agentId`. */
+/**
+ * `onBehalfOf` is the member id, then each agent that delegated down to `agentId`. A project-bound
+ * agent is evaluated in its own project; any other `projectId` is a `conflict`.
+ */
 export interface GrantRequest {
   readonly agentId: Telescope.AgentId;
   readonly projectId?: ProjectId;
@@ -155,12 +158,21 @@ const make = Effect.gen(function* () {
   const compute = Effect.fn("GrantService.compute")(function* (
     workspaceId: Telescope.WorkspaceId,
     request: GrantRequest,
+    visibleTo?: string,
   ) {
     const [memberId, ...via] = request.onBehalfOf;
     const chain = yield* Effect.forEach([...via, request.agentId], (agentId) =>
       agents.powersOf(workspaceId, agentId),
     );
-    const projectId = request.projectId ?? chain.at(-1)?.agent.projectId;
+    if (
+      visibleTo !== undefined &&
+      chain.some(({ agent }) => ![null, visibleTo].includes(agent.ownerSubjectId))
+    )
+      return yield* fail("not_found", "Agent not found.");
+    const ownProject = chain.at(-1)?.agent.projectId;
+    if (ownProject !== undefined && (request.projectId ?? ownProject) !== ownProject)
+      return yield* fail("conflict", "The agent works in another project.");
+    const projectId = request.projectId ?? ownProject;
     const project = projectId === undefined ? {} : { project_id: projectId };
     const [member] = yield* db.select(workspaceId, "members", decodeMembers, {
       subject_id: memberId,
@@ -231,28 +243,29 @@ const make = Effect.gen(function* () {
         };
       }),
     };
-    return { result, agents: chain.map(({ agent }) => agent) };
+    return result;
   });
 
   const explain = (workspaceId: Telescope.WorkspaceId, request: GrantRequest) =>
-    compute(workspaceId, request).pipe(Effect.map(({ result }) => result));
+    compute(workspaceId, request);
 
   const effectiveGrant = (workspaceId: Telescope.WorkspaceId, request: GrantRequest) =>
-    explain(workspaceId, request).pipe(
+    compute(workspaceId, request).pipe(
       Effect.map(({ explanations: _, ...grant }): Telescope.EffectiveGrant => grant),
     );
 
   const explainFor: Method<"telescope.grant.explain"> = Effect.fn("GrantService.explainFor")(
     function* (caller, { workspaceId, agentId, via, projectId }) {
       const { self } = yield* workspaces.get(caller, { workspaceId });
-      const { result, agents: chain } = yield* compute(workspaceId, {
-        agentId,
-        onBehalfOf: [self.subjectId, ...(via ?? [])],
-        ...(projectId === undefined ? {} : { projectId }),
-      });
-      if (chain.some((agent) => ![null, self.subjectId].includes(agent.ownerSubjectId)))
-        return yield* fail("not_found", "Agent not found.");
-      return result;
+      return yield* compute(
+        workspaceId,
+        {
+          agentId,
+          onBehalfOf: [self.subjectId, ...(via ?? [])],
+          ...(projectId === undefined ? {} : { projectId }),
+        },
+        self.subjectId,
+      );
     },
   );
 

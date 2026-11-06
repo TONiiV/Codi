@@ -177,7 +177,7 @@ it.layer(layer)("Telescope grants", (it) => {
 
   it.effect("lets a project rule remove a power the role grants", () =>
     Effect.gen(function* () {
-      const { workspaceId, grants, setPowers, mine } = yield* setup;
+      const { workspaceId, beaId, grants, setPowers, mine } = yield* setup;
       const webAgent = find(yield* mine(as.ann), "chief_agent", web);
       yield* setPowers(webAgent.id, ALL);
       const rule = { workspaceId, projectId: web, powers: { ...ALL, mergePRs: false } };
@@ -201,9 +201,22 @@ it.layer(layer)("Telescope grants", (it) => {
       const lifted = yield* grants.explainFor(as.ann, { workspaceId, agentId: webAgent.id });
       assert.isTrue(lifted.powers.mergePRs, "a rule can be lifted again");
 
+      assert.strictEqual(
+        yield* reasonOf(
+          grants.effectiveGrant(workspaceId, {
+            agentId: find(yield* mine(as.bea), "chief_agent", web).id,
+            projectId: api,
+            onBehalfOf: [beaId],
+          }),
+        ),
+        "conflict",
+        "another project's rules never stand in for the agent's own",
+      );
+      const cos = find(yield* mine(as.ann), "chief_of_staff");
+      yield* setPowers(cos.id, ALL);
       const unbound = yield* grants.explainFor(as.ann, {
         workspaceId,
-        agentId: webAgent.id,
+        agentId: cos.id,
         projectId: ProjectId.make("unbound"),
       });
       assert.strictEqual(removedBy(unbound, "openTickets"), "project");
@@ -253,6 +266,13 @@ it.layer(layer)("Telescope grants", (it) => {
         yield* reasonOf(grants.explainFor(as.ann, { workspaceId, agentId: beaChief.id })),
         "not_found",
         "another member's agents are not explained",
+      );
+      assert.strictEqual(
+        yield* reasonOf(
+          grants.explainFor(as.ann, { workspaceId, agentId: beaChief.id, projectId: api }),
+        ),
+        "not_found",
+        "nor is where they work",
       );
       assert.strictEqual(
         yield* reasonOf(grants.explainFor(as.zed, { workspaceId, agentId: custom.id })),
