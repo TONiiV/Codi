@@ -5,6 +5,7 @@ import { cappedPowers, ownerCanMergePRs } from "./agents.ts";
 
 const workspaceId = Telescope.WorkspaceId.make("ws");
 const app = ProjectId.make("app");
+const docs = ProjectId.make("docs");
 const member = (role: Telescope.WorkspaceRole): Telescope.Member => ({
   workspaceId,
   subjectId: "me",
@@ -12,10 +13,10 @@ const member = (role: Telescope.WorkspaceRole): Telescope.Member => ({
   role,
   joinedAt: "2026-11-06T00:00:00.000Z",
 });
-const binding = (leadSubjectId?: string): Telescope.ProjectBinding => ({
+const binding = (leadSubjectId?: string, projectId = app): Telescope.ProjectBinding => ({
   workspaceId,
   environmentId: EnvironmentId.make("local"),
-  projectId: app,
+  projectId,
   ...(leadSubjectId === undefined ? {} : { leadSubjectId }),
 });
 const ALL_POWERS: Telescope.StandingPowers = {
@@ -27,12 +28,37 @@ const ALL_POWERS: Telescope.StandingPowers = {
 
 describe("telescope standing power cap", () => {
   it.each([
-    ["admin", undefined, [], true],
-    ["project_lead", app, [binding("me")], true],
-    ["project_lead", app, [binding("someone-else")], false],
-    ["project_lead", undefined, [binding("me")], false],
-    ["member", app, [binding()], false],
-  ] as const)("a %s owner of project %s may merge: %s", (role, projectId, bindings, expected) => {
+    { who: "an admin", role: "admin", projectId: undefined, bindings: [], expected: true },
+    {
+      who: "the agent project lead",
+      role: "project_lead",
+      projectId: app,
+      bindings: [binding("me")],
+      expected: true,
+    },
+    {
+      who: "a lead whose project has another lead",
+      role: "project_lead",
+      projectId: app,
+      bindings: [binding("someone-else")],
+      expected: false,
+    },
+    {
+      who: "the lead of another project",
+      role: "project_lead",
+      projectId: app,
+      bindings: [binding("someone-else"), binding("me", docs)],
+      expected: false,
+    },
+    {
+      who: "a lead with an unbound agent",
+      role: "project_lead",
+      projectId: undefined,
+      bindings: [binding("me")],
+      expected: false,
+    },
+    { who: "a member", role: "member", projectId: app, bindings: [binding()], expected: false },
+  ] as const)("$who may merge: $expected", ({ role, projectId, bindings, expected }) => {
     const agent = projectId === undefined ? {} : { projectId };
     expect(ownerCanMergePRs(member(role), agent, bindings)).toBe(expected);
   });

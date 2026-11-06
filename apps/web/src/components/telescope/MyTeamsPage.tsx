@@ -89,7 +89,7 @@ function Teams({
   const scoped = { environmentId, input: { workspaceId: workspace.id } };
   const [picked, setPicked] = useState<Tab>("mine");
   const tab = picked === "company" && !enterprise ? "mine" : picked;
-  const bindings = useEnvironmentQuery(telescopeAgents.bindings(scoped)).data?.bindings ?? [];
+  const bindings = useEnvironmentQuery(telescopeAgents.bindings(scoped));
   const mine = useEnvironmentQuery(telescopeAgents.listMine(scoped));
   const company = useEnvironmentQuery(enterprise ? telescopeAgents.listCompany(scoped) : null);
 
@@ -127,18 +127,22 @@ function Teams({
               agents.length === 0 ? (
                 <p className="text-sm text-muted-foreground">还没有 agent。</p>
               ) : (
-                <AgentList>
-                  {agents.map((agent) => (
-                    <AgentRow
-                      key={agent.id}
-                      agent={agent}
-                      powers={cappedPowers(
-                        agent.standingPowers,
-                        ownerCanMergePRs(self, agent, bindings),
-                      )}
-                    />
-                  ))}
-                </AgentList>
+                <QueryState query={bindings}>
+                  {(projects) => (
+                    <AgentList>
+                      {agents.map((agent) => (
+                        <AgentRow
+                          key={agent.id}
+                          agent={agent}
+                          powers={cappedPowers(
+                            agent.standingPowers,
+                            ownerCanMergePRs(self, agent, projects.bindings),
+                          )}
+                        />
+                      ))}
+                    </AgentList>
+                  )}
+                </QueryState>
               )
             }
           </QueryState>
@@ -210,7 +214,7 @@ export function MyTeamsPage() {
       : telescope.get({ environmentId, input: { workspaceId: current.id } }),
   );
   if (environmentId === null || current === null)
-    return list.data === null ? (
+    return environmentId !== null && list.data === null ? (
       <div className="mx-auto w-full max-w-3xl px-4 py-6">
         <QueryState query={list}>{() => null}</QueryState>
       </div>
