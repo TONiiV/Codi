@@ -2409,6 +2409,8 @@ export const layerWsRpc = (
           telescopeStorage(telescope.setRole(caller, input)),
         [Telescope.WS_METHODS.memberRevoke]: (input) =>
           telescopeStorage(telescope.revoke(caller, input)),
+        [Telescope.WS_METHODS.memberRestore]: (input) =>
+          telescopeStorage(telescope.restore(caller, input)),
         [Telescope.WS_METHODS.projectBind]: (input) =>
           telescopeStorage(telescope.bind(caller, input)),
         [Telescope.WS_METHODS.projectUnbind]: (input) =>

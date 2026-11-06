@@ -91,6 +91,7 @@ describe("RPC authorization scopes", () => {
       Telescope.WS_METHODS.memberLinkCode,
       Telescope.WS_METHODS.memberSetRole,
       Telescope.WS_METHODS.memberRevoke,
+      Telescope.WS_METHODS.memberRestore,
       Telescope.WS_METHODS.projectBind,
       Telescope.WS_METHODS.projectUnbind,
       Telescope.WS_METHODS.agentUpdateCompany,

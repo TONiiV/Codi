@@ -1,0 +1,107 @@
+import { type EnvironmentId, Telescope } from "@t3tools/contracts";
+import * as Effect from "effect/Effect";
+import type { Atom, AtomRegistry } from "effect/reactivity";
+
+import type { EnvironmentRegistry } from "../connection/registry.ts";
+import {
+  createEnvironmentRpcCommand,
+  createEnvironmentRpcQueryAtomFamily,
+} from "../state/runtime.ts";
+
+const { WS_METHODS } = Telescope;
+
+/** Pins the write to the version the user saw, so a concurrent change is merged, not lost. */
+export function taskUpdateInput(
+  task: Telescope.Task,
+  change: { readonly set?: Telescope.TaskFields; readonly note?: string },
+): typeof Telescope.TaskUpdateInput.Type {
+  return { workspaceId: task.workspaceId, taskId: task.id, baseVersion: task.version, ...change };
+}
+
+export type TaskUpdateOutcome =
+  | { readonly kind: "applied" }
+  | { readonly kind: "conflict"; readonly decisionId: Telescope.DecisionId }
+  | { readonly kind: "kept"; readonly fields: ReadonlyArray<string> };
+
+/** Whether the server kept what was asked, kept a newer value by rule, or opened a decision. */
+export function taskUpdateOutcome(
+  set: Telescope.TaskFields,
+  result: typeof Telescope.TaskUpdateResult.Type,
+): TaskUpdateOutcome {
+  if (result.conflict !== undefined) return { kind: "conflict", ...result.conflict };
+  const saved: Readonly<Record<string, unknown>> = result;
+  const fields = Object.entries(set)
+    .filter(([key, value]) => JSON.stringify(value ?? null) !== JSON.stringify(saved[key] ?? null))
+    .map(([key]) => key);
+  return fields.length === 0 ? { kind: "applied" } : { kind: "kept", fields };
+}
+
+export function isStaleTaskVersion(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "_tag" in error &&
+    error._tag === "TelescopeStaleTaskVersionError"
+  );
+}
+
+interface BoardTarget {
+  readonly environmentId: EnvironmentId;
+  readonly input: {
+    readonly workspaceId: Telescope.WorkspaceId;
+    readonly taskId?: Telescope.TaskId;
+  };
+}
+
+export function createTelescopeBoardAtoms<R, E>(
+  runtime: Atom.AtomRuntime<EnvironmentRegistry | R, E>,
+) {
+  const tasks = createEnvironmentRpcQueryAtomFamily(runtime, {
+    label: "telescope:task:list",
+    tag: WS_METHODS.taskList,
+  });
+  const task = createEnvironmentRpcQueryAtomFamily(runtime, {
+    label: "telescope:task:get",
+    tag: WS_METHODS.taskGet,
+  });
+  const decisions = createEnvironmentRpcQueryAtomFamily(runtime, {
+    label: "telescope:decision:list",
+    tag: WS_METHODS.decisionList,
+  });
+
+  // A merged or conflicting write changes the board as well, so every write refreshes on settle.
+  const refreshBoard = (
+    { environmentId, input: { workspaceId, taskId } }: BoardTarget,
+    registry: AtomRegistry.AtomRegistry,
+  ) =>
+    Effect.sync(() => {
+      registry.refresh(tasks({ environmentId, input: { workspaceId } }));
+      registry.refresh(decisions({ environmentId, input: { workspaceId } }));
+      if (taskId !== undefined)
+        registry.refresh(task({ environmentId, input: { workspaceId, taskId } }));
+    });
+
+  return {
+    tasks,
+    task,
+    decisions,
+    agents: createEnvironmentRpcQueryAtomFamily(runtime, {
+      label: "telescope:agent:list-mine",
+      tag: WS_METHODS.agentListMine,
+    }),
+    companyAgents: createEnvironmentRpcQueryAtomFamily(runtime, {
+      label: "telescope:agent:list-company",
+      tag: WS_METHODS.agentListCompany,
+    }),
+    createTask: createEnvironmentRpcCommand(runtime, {
+      label: "telescope:task:create",
+      tag: WS_METHODS.taskCreate,
+      onSettled: refreshBoard,
+    }),
+    updateTask: createEnvironmentRpcCommand(runtime, {
+      label: "telescope:task:update",
+      tag: WS_METHODS.taskUpdate,
+      onSettled: refreshBoard,
+    }),
+  };
+}
