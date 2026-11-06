@@ -21,6 +21,7 @@ const JSON_FIELDS = new Set([
   "options",
   "onBehalfOf",
   "changedFields",
+  "conflict",
 ]);
 /**
  * Columns are the snake_case field names; JSON values live in `<name>_json` TEXT columns.
@@ -225,6 +226,11 @@ const make = Effect.gen(function* () {
     return next;
   });
 
+  const findDecision = (workspaceId: Telescope.WorkspaceId, id: Telescope.DecisionId) =>
+    db
+      .select(workspaceId, "tasks", decodeDecisions, { kind: "decision", item_id: id })
+      .pipe(Effect.map(([found]) => found));
+
   const activeLease = Effect.fn("TaskBoardService.activeLease")(function* (
     task: Telescope.Task,
     at: string,
@@ -236,8 +242,8 @@ const make = Effect.gen(function* () {
 
   /**
    * The one write path for tasks. A stale `baseVersion` is merged onto the current version by
-   * `mergeStale`; a conflict no rule settles moves the task to `needs_decision` and proposes a
-   * decision that records both sides.
+   * `mergeStale`; for fields no rule settles it proposes a decision and marks the task with
+   * `conflictDecisionId`, keeping the current values until that decision is made.
    */
   const commitTask = Effect.fn("TaskBoardService.commitTask")(function* (
     author: Author,
@@ -253,6 +259,8 @@ const make = Effect.gen(function* () {
     const set = input.set ?? {};
     const mine: Record<string, Schema.Json> = {};
     for (const key of TASK_FIELDS) {
+      // Only a write that has seen the marker may clear it; it never takes part in a merge.
+      if (key === "conflictDecisionId" && input.baseVersion !== current.version) continue;
       if (key in set && !sameJson(set[key], current[key])) mine[key] = set[key] ?? null;
     }
     const at = yield* now;
@@ -278,13 +286,25 @@ const make = Effect.gen(function* () {
       leaseHolder: lease?.holderAgentId,
     });
     if (conflicts.length > 0) {
-      const decision = yield* proposeConflict(author, current, input, conflicts, at);
-      const marked = { ...fields, conflictDecisionId: decision.id };
+      const incoming = Object.fromEntries(conflicts.map((key) => [key, mine[key] ?? null]));
+      const open =
+        current.conflictDecisionId === undefined
+          ? undefined
+          : yield* findDecision(current.workspaceId, current.conflictDecisionId);
+      // A resent stale write reuses the proposal it already opened.
+      const reused =
+        open?.status === "proposed" && sameJson(open.conflict?.incoming, incoming)
+          ? open.id
+          : undefined;
+      if (reused !== undefined && Object.keys(fields).length === 0 && notes.length === 0)
+        return { ...current, conflict: { decisionId: reused } };
+      const decisionId = reused ?? (yield* proposeConflict(author, current, incoming, at)).id;
+      const marked = reused === undefined ? { ...fields, conflictDecisionId: decisionId } : fields;
       const next = yield* applyCommit(author, current, marked, notes, at, {
         mergeLevel: 2,
-        mergeReason: `${merge.mergeReason}; no rule settles ${conflicts.join(", ")}; decision ${decision.id}`,
+        mergeReason: `${merge.mergeReason}; no rule settles ${conflicts.join(", ")}; decision ${decisionId}`,
       });
-      return { ...next, conflict: { decisionId: decision.id } };
+      return { ...next, conflict: { decisionId } };
     }
     const unchanged = Object.keys(fields).length === 0 && notes.length === 0;
     if (unchanged && merge.mergeLevel === 0) return current;
@@ -292,34 +312,28 @@ const make = Effect.gen(function* () {
   });
 
   /**
-   * The proposed decision for the fields of a stale write no rule settles; its text holds both
-   * sides. The task points at it through `conflictDecisionId`.
+   * The proposed decision for the fields of a stale write no rule settles. `conflict` holds the
+   * incoming values; the text shows both sides. The task points at it through `conflictDecisionId`.
    */
   const proposeConflict = (
     author: Author,
     current: Telescope.Task,
-    input: In<"telescope.task.update">,
-    fields: ReadonlyArray<string>,
+    incoming: Telescope.TaskConflict["incoming"],
     at: string,
   ) => {
-    const incoming: Readonly<Record<string, unknown>> = input.set ?? {};
     const existing: Readonly<Record<string, unknown>> = current;
-    const sides = (key: string) => ({
-      current: existing[key] ?? null,
-      incoming: incoming[key] ?? null,
-    });
+    const side = (value: unknown) => JSON.stringify(value ?? null);
+    const lines = Object.entries(incoming).map(
+      ([key, value]) => `${key}：当前 ${side(existing[key])}，新提交 ${side(value)}`,
+    );
     const title = `冲突：${current.title}`.slice(0, Telescope.BOARD_LIMITS.titleLength).trim();
     return writeDecision(
       author,
       current.workspaceId,
       {
         title,
-        text: JSON.stringify({
-          taskId: current.id,
-          version: current.version,
-          incoming: { authorId: author.authorId, baseVersion: input.baseVersion, set: incoming },
-          conflicts: Object.fromEntries(fields.map((key) => [key, sides(key)])),
-        }),
+        text: lines.join("\n"),
+        conflict: { taskId: current.id, incoming },
         status: "proposed",
         options: [
           { id: "keep", label: "保留当前值" },
@@ -387,10 +401,30 @@ const make = Effect.gen(function* () {
     return { tasks: tasks.map((task) => ({ ...task, freeText: task.freeText.slice(-listed) })) };
   });
 
+  /** Deciding a conflict proposal clears its task's marker and, for `incoming`, applies that side. */
+  const settleConflict = Effect.fn("TaskBoardService.settleConflict")(function* (
+    author: Committer,
+    proposal: Telescope.Decision,
+    { taskId, incoming }: Telescope.TaskConflict,
+    decision: Telescope.Decision,
+    at: string,
+  ) {
+    const where = { kind: "task", item_id: taskId };
+    const [task] = yield* db.select(proposal.workspaceId, "tasks", decodeTasks, where);
+    if (task?.conflictDecisionId !== proposal.id) return;
+    const chosen = decision.chosen === "incoming" ? incoming : {};
+    yield* applyCommit(author, task, { ...chosen, conflictDecisionId: null }, [], at, {
+      mergeLevel: 0,
+      mergeReason: `settled by decision ${decision.id}`,
+    });
+  });
+
   const writeDecision = Effect.fn("TaskBoardService.writeDecision")(function* (
     author: Author,
     workspaceId: Telescope.WorkspaceId,
-    input: Omit<In<"telescope.decision.create">, "workspaceId">,
+    input: Omit<In<"telescope.decision.create">, "workspaceId"> & {
+      readonly conflict?: Telescope.TaskConflict;
+    },
     at: string,
   ) {
     const { authorId } = author;
@@ -407,10 +441,6 @@ const make = Effect.gen(function* () {
       updatedAt: at,
       version: 1,
     };
-    const findDecision = (id: Telescope.DecisionId) =>
-      db
-        .select(workspaceId, "tasks", decodeDecisions, { kind: "decision", item_id: id })
-        .pipe(Effect.map(([found]) => found));
     const retire = (old: Telescope.Decision) =>
       db
         .update(
@@ -421,7 +451,7 @@ const make = Effect.gen(function* () {
         )
         .pipe(Effect.andThen(recordCommit(author, old, old.version, { status: "superseded" }, at)));
     if (decision.supersedes !== undefined) {
-      const old = yield* findDecision(decision.supersedes);
+      const old = yield* findDecision(workspaceId, decision.supersedes);
       if (old === undefined) return yield* fail("not_found", "Decision not found.");
       // Two decisions replacing the same one is a conflict for a person to settle.
       if (old.status === "superseded")
@@ -430,17 +460,19 @@ const make = Effect.gen(function* () {
         // Deciding a proposal also retires what it proposed to replace: one step, no recursion.
         const target =
           old.status === "proposed" && old.supersedes !== undefined
-            ? yield* findDecision(old.supersedes)
+            ? yield* findDecision(workspaceId, old.supersedes)
             : undefined;
         if (target?.status === "superseded")
           return yield* fail("conflict", "That decision has already been superseded.");
         yield* retire(old);
         if (target !== undefined) yield* retire(target);
+        if (old.conflict !== undefined)
+          yield* settleConflict(author, old, old.conflict, decision, at);
       }
     }
     yield* db.insert(workspaceId, "tasks", toColumns(decision, "item_id"));
     const created: Record<string, Schema.Json> = { title: input.title, text: input.text, status };
-    for (const key of ["supersedes", "options", "chosen"] as const) {
+    for (const key of ["supersedes", "options", "chosen", "conflict"] as const) {
       const value = input[key];
       if (value !== undefined) created[key] = value;
     }

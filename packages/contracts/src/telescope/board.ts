@@ -62,6 +62,13 @@ export type Task = typeof Task.Type;
 
 export const DecisionStatus = Schema.Literals(["proposed", "decided", "superseded"]);
 
+/** What a conflict proposal settles: deciding it with `chosen: "incoming"` applies `incoming`. */
+export const TaskConflict = Schema.Struct({
+  taskId: TaskId,
+  incoming: Schema.Record(Schema.String, Schema.Json),
+});
+export type TaskConflict = typeof TaskConflict.Type;
+
 export const Decision = Schema.Struct({
   kind: Schema.Literal("decision"),
   id: DecisionId,
@@ -73,6 +80,7 @@ export const Decision = Schema.Struct({
   status: DecisionStatus,
   options: Schema.optionalKey(Schema.Array(Schema.Struct({ id: Text, label: Text }))),
   chosen: Schema.optionalKey(Text),
+  conflict: Schema.optionalKey(TaskConflict),
   decidedBy: Schema.optionalKey(Text),
   decidedAt: Schema.optionalKey(Timestamp),
   createdAt: Timestamp,
