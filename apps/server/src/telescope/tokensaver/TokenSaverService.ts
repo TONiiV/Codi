@@ -73,9 +73,23 @@ const ENVIRONMENT_OWNER: WorkspaceService.Caller = {
   subject: INTERNAL_ADMINISTRATIVE_BOOTSTRAP_SUBJECT,
 };
 
-const encodeFindings = Schema.encodeSync(
-  Schema.fromJsonString(Schema.Array(Telescope.TokenSaverFinding)),
-);
+// A decision's text is the report markdown, then its data as a fenced JSON block, so a rerun can
+// return the stored report exactly as the first run did.
+const StoredReport = Schema.Struct({
+  since: Telescope.TokenSaverReport.fields.since,
+  until: Telescope.TokenSaverReport.fields.until,
+  sessionsAnalyzed: Telescope.TokenSaverReport.fields.sessionsAnalyzed,
+  findings: Telescope.TokenSaverReport.fields.findings,
+  quality: Telescope.TokenSaverReport.fields.quality,
+});
+const encodeStoredReport = Schema.encodeSync(Schema.fromJsonString(StoredReport));
+const decodeStoredReport = Schema.decodeUnknownOption(Schema.fromJsonString(StoredReport));
+const STORED_REPORT_BLOCK = /^([\s\S]*?)\n\n```json\n([\s\S]*)\n```$/;
+/** `None` for a decision written before the data block held the whole report. */
+const decodeDecisionText = (text: string) => {
+  const [, markdown = "", json = ""] = STORED_REPORT_BLOCK.exec(text) ?? [];
+  return Option.map(decodeStoredReport(json), (stored) => ({ ...stored, markdown }));
+};
 const iso = (ms: number) => DateTime.formatIso(DateTime.makeUnsafe(ms));
 const thousands = (tokens: number) => `${Math.round(tokens / 1000)}K`;
 const metric = (value: number | null) => (value === null ? "未测量" : String(value));
@@ -215,12 +229,14 @@ const make = Effect.gen(function* () {
     if (open !== undefined)
       return {
         workspaceId,
-        since: iso(sinceMs),
-        until: iso(untilMs),
-        sessionsAnalyzed: 0,
-        findings: [],
-        quality: { testPassRate: null, followUpPrompts: null, rollbacks: null },
-        markdown: open.text,
+        ...Option.getOrElse(decodeDecisionText(open.text), () => ({
+          since: iso(sinceMs),
+          until: iso(untilMs),
+          sessionsAnalyzed: 0,
+          findings: [],
+          quality: { testPassRate: null, followUpPrompts: null, rollbacks: null },
+          markdown: open.text,
+        })),
         decisionId: open.id,
       };
     const sessions = projects.size === 0 ? [] : yield* readSessions(projects, { sinceMs, untilMs });
@@ -254,7 +270,7 @@ const make = Effect.gen(function* () {
       {
         workspaceId,
         title: `省 token 周报 ${body.since.slice(0, 10)} 至 ${body.until.slice(0, 10)}`,
-        text: `${report.markdown}\n\n\`\`\`json\n${encodeFindings(findings)}\n\`\`\``,
+        text: `${report.markdown}\n\n\`\`\`json\n${encodeStoredReport(body)}\n\`\`\``,
         status: "proposed",
         options: OPTIONS,
       },

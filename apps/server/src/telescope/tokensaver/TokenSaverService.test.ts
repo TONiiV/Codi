@@ -157,6 +157,8 @@ it.layer(layer)("Telescope token saver", (it) => {
         assert.include(report.markdown, "只统计在 Codi 线程中运行的会话，其他 provider 暂不支持");
         assert.include(report.markdown, "超过阈值的结果 2 次，这些结果共计 35K token");
         assert.include(report.markdown, "- 测试通过率：未测量");
+        assert.include(report.markdown, "涉及的智能体和文件组合 ");
+        assert.include(report.markdown, "该文件在一个智能体里重复读 ");
 
         const { decisions } = yield* board.listDecisions(alice, { workspaceId });
         assert.strictEqual(decisions.length, 1);
@@ -175,7 +177,8 @@ it.layer(layer)("Telescope token saver", (it) => {
         // otherwise find nothing and return no decision id.
         const again = yield* run(yield* (yield* FileSystem.FileSystem).makeTempDirectoryScoped());
         assert.strictEqual(again.decisionId, report.decisionId);
-        assert.strictEqual(again.markdown, decision?.text);
+        assert.deepStrictEqual(again, report);
+        assert.notInclude(again.markdown, "```json");
         assert.strictEqual(
           (yield* board.listDecisions(alice, { workspaceId })).decisions.length,
           1,
@@ -229,6 +232,26 @@ it.layer(layer)("Telescope token saver", (it) => {
         );
       }),
     ),
+  );
+
+  it.effect("hands back a proposal from before the data block as its stored text", () =>
+    Effect.gen(function* () {
+      const workspaces = yield* WorkspaceService.WorkspaceService;
+      const board = yield* TaskBoardService.TaskBoardService;
+      const tokenSaver = yield* TokenSaverService.TokenSaverService;
+      const { id: workspaceId } = yield* workspaces.create(alice.caller, {
+        kind: "personal",
+        name: "Mine",
+        displayName: "Alice",
+      });
+      const text = "# old report\n\n```json\n[]\n```";
+      const { id } = yield* board.createDecision(
+        { ...alice, authorId: TokenSaverService.AGENT_ID },
+        { workspaceId, title: "Old report", text, status: "proposed" },
+      );
+      const again = yield* tokenSaver.runWeekly(alice, { workspaceId });
+      assert.deepStrictEqual([again.decisionId, again.markdown, again.findings], [id, text, []]);
+    }),
   );
 
   it.effect("refuses a run by someone who is not a member", () =>
