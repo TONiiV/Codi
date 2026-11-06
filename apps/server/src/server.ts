@@ -89,6 +89,7 @@ import * as TelescopeToolGateway from "./telescope/ToolGateway.ts";
 import * as TelescopeThreadTurnTokens from "./telescope/ThreadTurnTokens.ts";
 import * as TelescopeWakeQueue from "./telescope/WakeQueueService.ts";
 import * as TelescopeTokenSaver from "./telescope/tokensaver/TokenSaverService.ts";
+import * as TelescopeMemory from "./telescope/MemoryService.ts";
 import * as PeerLinks from "./peer/PeerLinks.ts";
 import * as PeerMcpClient from "./peer/PeerMcpClient.ts";
 import * as McpSessionRegistry from "./mcp/McpSessionRegistry.ts";
@@ -820,7 +821,12 @@ const layerMakeRoutes = Layer.mergeAll(
   Layer.provide(TelescopeBoard.layer),
   Layer.provide(TelescopeAgents.layer),
   Layer.provide(
-    Layer.mergeAll(TelescopeRuns.layer, TelescopeGrants.layer, TelescopeToolGateway.layer),
+    Layer.mergeAll(
+      TelescopeRuns.layer,
+      TelescopeGrants.layer,
+      TelescopeMemory.layer,
+      TelescopeToolGateway.layer,
+    ),
   ),
   Layer.provide(TelescopeTokenSaver.layer.pipe(Layer.provide(UsageProjectResolver.layer))),
   // Share the service so HTTP/WS clients single-flight reads and invalidate each other's cached patches.

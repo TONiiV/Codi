@@ -24,13 +24,13 @@ const SECRET_KEY = /token|secret|password|passphrase|api.?key|authorization|cook
 const decodeTool = Schema.decodeUnknownEffect(Telescope.GatewayTool);
 const RunRow = Schema.Struct({
   run_id: Telescope.AgentRunId,
+  workspace_id: Telescope.WorkspaceId,
   agent_id: Telescope.AgentId,
   on_behalf_of_json: Schema.fromJsonString(
     Schema.TupleWithRest(Schema.Tuple([Telescope.SubjectId]), [Telescope.AgentId]),
   ),
-  started_at: Schema.String,
 });
-type OpenRun = typeof RunRow.Type & { readonly workspaceId: Telescope.WorkspaceId };
+type OpenRun = typeof RunRow.Type;
 const decodeRuns = Schema.decodeUnknownEffect(Schema.Array(RunRow));
 const decodeAgents = Schema.decodeUnknownEffect(
   Schema.Array(Schema.Struct({ agent_id: Telescope.AgentId })),
@@ -165,26 +165,13 @@ const make = Effect.gen(function* () {
   const runs = yield* RunRecordService.RunRecordService;
   const now = DateTime.now.pipe(Effect.map(DateTime.formatIso));
 
-  const openRun = Effect.fn("ToolGateway.openRun")(function* (
-    threadId: ThreadId,
-  ): Effect.fn.Return<OpenRun | undefined, Failure> {
-    const open = yield* db.openRunsOnThread(threadId);
-    const rows = yield* Effect.forEach(open, ({ workspaceId, runId }) =>
-      db
-        .select(workspaceId, "runs", decodeRuns, { run_id: runId })
-        .pipe(Effect.map((found) => found.map((row) => ({ ...row, workspaceId })))),
-    );
-    const [newest] = rows.flat().toSorted((a, b) => b.started_at.localeCompare(a.started_at));
-    return newest;
-  });
-
   // One transaction: the budget check and its count cannot interleave with another call.
   const decide = Effect.fn("ToolGateway.decide")(function* (
     run: OpenRun,
     tool: Telescope.GatewayTool,
     argsRedacted: Schema.Json,
   ) {
-    const { workspaceId, agent_id: agentId, on_behalf_of_json: onBehalfOf } = run;
+    const { workspace_id: workspaceId, agent_id: agentId, on_behalf_of_json: onBehalfOf } = run;
     const power = TOOL_POWERS[tool];
     const [killSwitch] = yield* db.select(workspaceId, "kill_switches", decodeKillSwitches, {
       agent_id: agentId,
@@ -261,7 +248,7 @@ const make = Effect.gen(function* () {
     const tool = yield* decodeTool(toolName).pipe(
       Effect.mapError(() => new ToolGatewayDenied({ reason: "unknown_tool" })),
     );
-    const run = yield* openRun(threadId);
+    const [run] = yield* db.latestRunForThread(threadId, decodeRuns);
     if (run === undefined) return yield* new ToolGatewayDenied({ reason: "no_run", tool });
     const argsRedacted = redact(args);
     const decided = yield* db.transaction(decide(run, tool, argsRedacted));

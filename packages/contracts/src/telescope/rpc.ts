@@ -11,7 +11,14 @@ import {
   AgentUpdateInput,
 } from "./agent.ts";
 import {
+  MemoryPinInput,
+  MemorySearchInput,
+  MemorySearchResult,
+  MemoryWriteInput,
+} from "./memory.ts";
+import {
   AgentRun,
+  Memory,
   RunCallsResult,
   RunListInput,
   RunListResult,
@@ -111,6 +118,9 @@ export const WS_METHODS = {
   budgetSet: "telescope.budget.set",
   killSwitchSet: "telescope.killSwitch.set",
   governanceGet: "telescope.governance.get",
+  memorySearch: "telescope.memory.search",
+  memoryWrite: "telescope.memory.write",
+  memoryPin: "telescope.memory.pin",
 } as const;
 
 const error = Schema.Union([WorkspaceError, EnvironmentAuthorizationError]);
@@ -188,4 +198,10 @@ export const GrantRpcs = [
   make(WS_METHODS.budgetSet, BudgetSetInput, Budget),
   make(WS_METHODS.killSwitchSet, KillSwitchSetInput, KillSwitch),
   make(WS_METHODS.governanceGet, WorkspaceScopedInput, GovernanceState),
+] as const;
+
+export const MemoryRpcs = [
+  make(WS_METHODS.memorySearch, MemorySearchInput, MemorySearchResult),
+  make(WS_METHODS.memoryWrite, MemoryWriteInput, Memory),
+  make(WS_METHODS.memoryPin, MemoryPinInput, Memory),
 ] as const;
