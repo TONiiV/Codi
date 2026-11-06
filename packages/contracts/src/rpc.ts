@@ -37,6 +37,7 @@ import * as Schema from "effect/Schema";
 import * as Rpc from "effect/rpc/Rpc";
 import {
   TaskBoardRpcs as TelescopeTaskBoardRpcs,
+  AgentRpcs as TelescopeAgentRpcs,
   WorkspaceRpcs as TelescopeWorkspaceRpcs,
 } from "./telescope/rpc.ts";
 import * as RpcGroup from "effect/rpc/RpcGroup";
@@ -2217,4 +2218,5 @@ export const WsRpcGroup = RpcGroup.make(
   WsOrchestrationV2SubscribeCommandOutputRpc,
   ...TelescopeWorkspaceRpcs,
   ...TelescopeTaskBoardRpcs,
+  ...TelescopeAgentRpcs,
 ).middleware(RpcScopeAuthorization);
