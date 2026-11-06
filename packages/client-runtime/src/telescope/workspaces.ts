@@ -144,10 +144,19 @@ export function createTelescopeWorkspaceAtoms<R, E>(
     target: Parameters<typeof inWorkspace>[0],
     registry: AtomRegistry.AtomRegistry,
   ) => Effect.sync(() => registry.refresh(members(inWorkspace(target))));
+  /** Bumped by this client's bind and unbind, so views built on bindings re-read them. */
+  const bindingsRevisionAtom = Atom.make(0).pipe(
+    Atom.keepAlive,
+    Atom.withLabel("telescope:bindings-revision"),
+  );
   const refreshBindings = (
     { environmentId }: { environmentId: EnvironmentId },
     registry: AtomRegistry.AtomRegistry,
-  ) => Effect.sync(() => registry.refresh(bindingSummary({ environmentId, input: {} })));
+  ) =>
+    Effect.sync(() => {
+      registry.refresh(bindingSummary({ environmentId, input: {} }));
+      registry.set(bindingsRevisionAtom, registry.get(bindingsRevisionAtom) + 1);
+    });
 
   return {
     list,
@@ -156,6 +165,7 @@ export function createTelescopeWorkspaceAtoms<R, E>(
     storedWorkspaceIdAtom,
     currentWorkspaceAtom,
     allBindingsAtom,
+    bindingsRevisionAtom,
     create: createEnvironmentRpcCommand(runtime, {
       label: "telescope:workspace:create",
       tag: WS_METHODS.workspaceCreate,

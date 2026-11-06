@@ -16,6 +16,7 @@ import {
   WorkspaceBreadcrumbSeparator,
 } from "../WorkspaceBreadcrumb";
 import { WorkspacePageHeader } from "../WorkspacePageHeader";
+import { MyTeamsPage } from "./MyTeamsPage";
 import { TelescopeAccountFooter } from "./TelescopeAccount";
 import { TELESCOPE_VIEWS, telescopeViewEntry, type TelescopeView } from "./telescopeViews";
 
@@ -165,7 +166,7 @@ export function TelescopePage({
         </WorkspaceBreadcrumb>
       </WorkspacePageHeader>
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
-        {children ?? <TelescopeEmptyState view={view} />}
+        {children ?? (view === "teams" ? <MyTeamsPage /> : <TelescopeEmptyState view={view} />)}
       </div>
     </SidebarInset>
   );
