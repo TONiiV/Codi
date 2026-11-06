@@ -16,6 +16,7 @@ import {
   RunListInput,
   RunListResult,
   RunScopedInput,
+  WakeListResult,
 } from "./runtime.ts";
 import {
   Invitation,
@@ -87,6 +88,7 @@ export const WS_METHODS = {
   leaseAcquire: "telescope.lease.acquire",
   leaseHeartbeat: "telescope.lease.heartbeat",
   leaseRelease: "telescope.lease.release",
+  wakeList: "telescope.wake.list",
 } as const;
 
 const error = Schema.Union([WorkspaceError, EnvironmentAuthorizationError]);
@@ -150,3 +152,5 @@ export const RunRpcs = [
   make(WS_METHODS.runGet, RunScopedInput, AgentRun),
   make(WS_METHODS.runCalls, RunScopedInput, RunCallsResult),
 ] as const;
+
+export const WakeRpcs = [make(WS_METHODS.wakeList, WorkspaceScopedInput, WakeListResult)] as const;
