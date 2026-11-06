@@ -81,6 +81,12 @@ import {
   type ReactNode,
 } from "react";
 import { type AnyRouter, useRouter } from "@tanstack/react-router";
+import { LighthouseChatList } from "./prototype/LighthouseChatList";
+import { LighthouseRail } from "./prototype/LighthouseRail";
+import { useLighthouseSearch } from "./prototype/lighthouseLocation";
+import { WorkspaceFooter } from "./prototype/WorkspaceFooter";
+import { useCodeProjectWorkspace, useWorkspaceId } from "./prototype/workspaceStore";
+import { WorkSubList } from "./prototype/LighthouseWork";
 
 import {
   isAtomCommandInterrupted,
@@ -825,7 +831,12 @@ function useSidebarLookups() {
   const environments = useEnvironmentIdentities();
   const serverConfigs = useServerConfigs();
   const providerEntriesByEnvironment = useAtomValue(sidebarProviderEntriesAtom);
-  const projectGroups = useSidebarProjectGroups();
+  const workspaceId = useWorkspaceId();
+  const workspaceOf = useCodeProjectWorkspace();
+  // PROTOTYPE, wipe me: Code lists only the current workspace's projects.
+  const projectGroups = useSidebarProjectGroups().filter(
+    (group) => !import.meta.env.DEV || workspaceOf(group) === workspaceId,
+  );
   const environmentLabelById = new Map(
     environments.map((environment) => [environment.environmentId, environment.label] as const),
   );
@@ -913,6 +924,11 @@ function readRouteThreadKey(router: AnyRouter): string | null {
 }
 
 export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReveal }) {
+  const lighthouseSearch = useLighthouseSearch();
+  const onLighthousePrototype = lighthouseSearch !== null;
+  const lighthouseView = lighthouseSearch?.view ?? "chats";
+  const lighthouseViewer = lighthouseSearch?.as ?? "admin";
+  const lighthouseSidebarState = useSidebar().state;
   const {
     projects,
     serverConfigs,
@@ -1117,7 +1133,11 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
             ),
           ),
         );
-  const threads = useQuietThreadShells();
+  const allThreads = useQuietThreadShells();
+  // PROTOTYPE, wipe me: threads of another workspace's projects stay hidden too.
+  const threads = import.meta.env.DEV
+    ? allThreads.filter((t) => projectDisplayNameByKey.has(`${t.environmentId}:${t.projectId}`))
+    : allThreads;
   const routeRowThreadKey =
     routeThreadRef === null
       ? null
@@ -2982,6 +3002,33 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
       ? shortcutLabelForCommand(keybindings, "chat.newLocal")
       : undefined);
   const newThreadInProjectShortcutLabel = shortcutLabelForCommand(keybindings, "chat.newLocal");
+  if (onLighthousePrototype && lighthouseSidebarState === "collapsed") {
+    return (
+      <div className="flex min-h-0 flex-1 flex-col">
+        <div className="h-(--workspace-topbar-height) shrink-0" />
+        <LighthouseRail collapsed />
+      </div>
+    );
+  }
+  if (onLighthousePrototype) {
+    // PROTOTYPE, wipe me: the Work tab turns the thread list into a Chief of Staff chat list.
+    return (
+      <>
+        <SidebarChromeHeader isElectron={isElectron} />
+        <div className="flex min-h-0 flex-1">
+          <LighthouseRail />
+          <SidebarContent className="min-h-full">
+            {lighthouseView === "chats" ? (
+              <LighthouseChatList />
+            ) : (
+              <WorkSubList view={lighthouseView} viewer={lighthouseViewer} />
+            )}
+          </SidebarContent>
+        </div>
+        <WorkspaceFooter />
+      </>
+    );
+  }
   return (
     <>
       <ThreadContextDragGhost />

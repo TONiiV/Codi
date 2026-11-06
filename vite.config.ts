@@ -178,6 +178,8 @@ export default defineConfig({
       "apps/mobile/modules/t3-highlights/Vendor/**",
       "apps/mobile/modules/t3-highlights/cpp/generated/**",
       "*.icon/**",
+      // Vendored bloub engine (MIT), kept verbatim.
+      "apps/web/src/components/prototype/bloub/**",
     ],
     sortPackageJson: {},
     overrides: [
@@ -206,6 +208,8 @@ export default defineConfig({
       "apps/mobile/android/**",
       "apps/mobile/ios/**",
       "apps/mobile/uniwind-types.d.ts",
+      // Vendored bloub engine (MIT), kept verbatim.
+      "apps/web/src/components/prototype/bloub/**",
     ],
     plugins: ["eslint", "oxc", "react", "unicorn", "typescript"],
     jsPlugins: ["./oxlint-plugin-t3code/index.ts", "@shadcn/lint"],
