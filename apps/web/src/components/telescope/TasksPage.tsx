@@ -1,5 +1,5 @@
 import { Telescope } from "@t3tools/contracts";
-import { PlusIcon } from "lucide-react";
+import { Columns3Icon, PlusIcon, TableIcon } from "lucide-react";
 import { useState } from "react";
 
 import { useEnvironmentQuery } from "../../state/query";
@@ -23,7 +23,7 @@ import {
   useBoardCommand,
   useBoardTarget,
 } from "./TasksParts";
-import { TasksTable } from "./TasksViews";
+import { TasksBoard, TasksTable } from "./TasksViews";
 
 function NewTaskDialog({ target }: { target: BoardTarget }) {
   const [open, setOpen] = useState(false);
@@ -72,17 +72,38 @@ function NewTaskDialog({ target }: { target: BoardTarget }) {
 }
 
 function TasksBody({ target }: { target: BoardTarget }) {
+  const [layout, setLayout] = useState<"table" | "board">("table");
   const input = { workspaceId: target.workspaceId };
   const query = useEnvironmentQuery(
     telescopeBoard.tasks({ environmentId: target.environmentId, input }),
   );
   const tasks = query.data?.tasks ?? [];
+  const View = layout === "table" ? TasksTable : TasksBoard;
+  const layoutButton = (id: typeof layout, label: string, Icon: typeof TableIcon) => (
+    <Button
+      size="xs"
+      variant={layout === id ? "secondary" : "ghost-muted"}
+      aria-pressed={layout === id}
+      onClick={() => setLayout(id)}
+    >
+      <Icon /> {label}
+    </Button>
+  );
   return (
-    <BoardFrame query={query} actions={<NewTaskDialog target={target} />}>
+    <BoardFrame
+      query={query}
+      actions={
+        <>
+          {layoutButton("table", "表格", TableIcon)}
+          {layoutButton("board", "按状态", Columns3Icon)}
+          <NewTaskDialog target={target} />
+        </>
+      }
+    >
       {tasks.length === 0 ? (
         <TelescopeEmptyState view="tasks" />
       ) : (
-        <TasksTable target={target} tasks={tasks} />
+        <View target={target} tasks={tasks} />
       )}
     </BoardFrame>
   );

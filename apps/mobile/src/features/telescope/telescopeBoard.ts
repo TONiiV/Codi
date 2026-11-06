@@ -1,32 +1,10 @@
 import type { Telescope } from "@t3tools/contracts";
 
-const DECISION_ORDER = { proposed: 0, decided: 1, superseded: 2 } as const;
-
-/** Proposals waiting on someone first, then the record, newest first within each group. */
-export function sortDecisions(
-  decisions: ReadonlyArray<Telescope.Decision>,
-): ReadonlyArray<Telescope.Decision> {
-  return [...decisions].sort(
-    (a, b) =>
-      DECISION_ORDER[a.status] - DECISION_ORDER[b.status] || b.updatedAt.localeCompare(a.updatedAt),
-  );
-}
-
-/** Choosing an option records a new decided decision that retires the proposal. */
-export function decideInput(
-  proposal: Telescope.Decision,
-  optionId: string,
-): typeof Telescope.DecisionCreateInput.Type {
-  return {
-    workspaceId: proposal.workspaceId,
-    title: proposal.title,
-    text: proposal.text,
-    status: "decided",
-    supersedes: proposal.id,
-    ...(proposal.options === undefined ? {} : { options: proposal.options }),
-    chosen: optionId,
-  };
-}
+export {
+  decideInput,
+  isStaleTaskVersion,
+  sortDecisions,
+} from "@t3tools/client-runtime/telescope/taskBoard";
 
 const REVIEW_STATUSES: ReadonlySet<Telescope.TaskStatus> = new Set(["needs_decision", "in_review"]);
 
@@ -52,15 +30,6 @@ export function reviewUpdateInput(
     baseVersion: task.version,
     set: { status },
   };
-}
-
-export function isStaleTaskVersion(error: unknown): boolean {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    "_tag" in error &&
-    error._tag === "TelescopeStaleTaskVersionError"
-  );
 }
 
 export function formatBoardDate(iso: string): string {

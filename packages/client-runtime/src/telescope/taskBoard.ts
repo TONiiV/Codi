@@ -10,6 +10,59 @@ import {
 
 const { WS_METHODS } = Telescope;
 
+/** Kanban columns: the forward path first, then the states a person settles. */
+export const TASK_STATUSES = [
+  "todo",
+  "in_progress",
+  "in_review",
+  "done",
+  "needs_decision",
+  "dropped",
+] as const satisfies ReadonlyArray<Telescope.TaskStatus>;
+
+export function tasksByStatus(
+  tasks: ReadonlyArray<Telescope.Task>,
+): Record<Telescope.TaskStatus, ReadonlyArray<Telescope.Task>> {
+  const columns: Record<Telescope.TaskStatus, Telescope.Task[]> = {
+    todo: [],
+    in_progress: [],
+    in_review: [],
+    done: [],
+    needs_decision: [],
+    dropped: [],
+  };
+  for (const task of tasks) columns[task.status].push(task);
+  return columns;
+}
+
+const DECISION_ORDER = { proposed: 0, decided: 1, superseded: 2 } as const;
+
+/** Proposals waiting on someone first, then the record, newest first within each group. */
+export function sortDecisions(
+  decisions: ReadonlyArray<Telescope.Decision>,
+): ReadonlyArray<Telescope.Decision> {
+  return [...decisions].sort(
+    (a, b) =>
+      DECISION_ORDER[a.status] - DECISION_ORDER[b.status] || b.updatedAt.localeCompare(a.updatedAt),
+  );
+}
+
+/** Choosing an option records a decided decision that retires the proposal (D26). */
+export function decideInput(
+  proposal: Telescope.Decision,
+  optionId: string,
+): typeof Telescope.DecisionCreateInput.Type {
+  return {
+    workspaceId: proposal.workspaceId,
+    title: proposal.title,
+    text: proposal.text,
+    status: "decided",
+    supersedes: proposal.id,
+    ...(proposal.options === undefined ? {} : { options: proposal.options }),
+    chosen: optionId,
+  };
+}
+
 /** Pins the write to the version the user saw, so a concurrent change is merged, not lost. */
 export function taskUpdateInput(
   task: Telescope.Task,
@@ -101,6 +154,11 @@ export function createTelescopeBoardAtoms<R, E>(
     updateTask: createEnvironmentRpcCommand(runtime, {
       label: "telescope:task:update",
       tag: WS_METHODS.taskUpdate,
+      onSettled: refreshBoard,
+    }),
+    createDecision: createEnvironmentRpcCommand(runtime, {
+      label: "telescope:decision:create",
+      tag: WS_METHODS.decisionCreate,
       onSettled: refreshBoard,
     }),
   };

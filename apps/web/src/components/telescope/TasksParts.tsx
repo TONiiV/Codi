@@ -45,6 +45,10 @@ export const TASK_STATUS = {
   dropped: { label: "已放弃", badge: "secondary" },
 } as const satisfies Record<Telescope.TaskStatus, { label: string; badge: string }>;
 
+export function StatusBadge({ status }: { status: Telescope.TaskStatus }) {
+  return <Badge variant={TASK_STATUS[status].badge}>{TASK_STATUS[status].label}</Badge>;
+}
+
 const decisionLink = (hash: Telescope.DecisionId) => ({
   to: TELESCOPE_PATH,
   search: { view: "decisions" as const },
