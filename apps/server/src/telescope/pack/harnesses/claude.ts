@@ -12,6 +12,8 @@ import {
 } from "../Pack.ts";
 
 const claudeMd = markdownInstructions("CLAUDE.md");
+const OMITTED_IMPORT =
+  "(An import of a file outside the project was left out of this context pack.)";
 
 // Untraced: runs inside the ContextPackService.export span.
 // CLAUDE.md often only imports AGENTS.md (`@AGENTS.md`); inline those lines so the pack is complete.
@@ -25,10 +27,18 @@ const readInlined = Effect.fnUntraced(function* (dir: string) {
     const target = /^@(\S+\.md)\s*$/.exec(line)?.[1];
     const file = target === undefined ? undefined : path.resolve(dir, target);
     const real = file === undefined ? undefined : yield* realPathInside(dir, file);
-    if (file !== undefined && real === undefined && (yield* fs.exists(file))) {
-      yield* Effect.logWarning(`Kept @${target} as text: it resolves outside ${dir}.`);
+    if (real !== undefined) {
+      lines.push((yield* fs.readFileString(real)).trimEnd());
+    } else if (target !== undefined && path.isAbsolute(target)) {
+      // An absolute path names the exporter's machine, so it stays out of a pack meant for sharing.
+      yield* Effect.logWarning(`Left out @${target}: it resolves outside ${dir}.`);
+      lines.push(OMITTED_IMPORT);
+    } else {
+      if (file !== undefined && (yield* fs.exists(file))) {
+        yield* Effect.logWarning(`Kept @${target} as text: it resolves outside ${dir}.`);
+      }
+      lines.push(line);
     }
-    lines.push(real === undefined ? line : (yield* fs.readFileString(real)).trimEnd());
   }
   return lines.join("\n");
 });

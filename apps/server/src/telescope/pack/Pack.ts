@@ -71,7 +71,7 @@ export class ContextPackOverlapError extends Schema.TaggedError<ContextPackOverl
   { path: Schema.String, source: Schema.String },
 ) {
   override get message(): string {
-    return `Writing ${this.path} would overwrite the skill at ${this.source}. Choose another directory.`;
+    return `${this.path} overlaps ${this.source}. Keep the context pack directory outside the project.`;
   }
 }
 
@@ -117,7 +117,9 @@ export const makeHarness = (spec: HarnessSpec) => {
         }
       }
       return {
-        instructions: ((yield* spec.instructions.read(root)) ?? "").replace(IMPORTED, "\n"),
+        instructions: ((yield* spec.instructions.read(root)) ?? "")
+          .replace(IMPORTED, "\n")
+          .trimStart(),
         skills,
         mcp: mcpText === undefined ? {} : yield* parse(mcpFile, () => spec.mcp.read(mcpText)),
       } satisfies Pack;
@@ -193,7 +195,7 @@ export const jsonMcp = (
   },
 });
 
-export const readOptionalText = Effect.fnUntraced(function* (file: string) {
+const readOptionalText = Effect.fnUntraced(function* (file: string) {
   const fs = yield* FileSystem.FileSystem;
   return (yield* fs.exists(file)) ? yield* fs.readFileString(file) : undefined;
 });
@@ -209,7 +211,7 @@ const BLOCK = /<!-- context-pack:begin -->[\s\S]*?<!-- context-pack:end -->/;
 const IMPORTED = /\n*<!-- context-pack:begin -->[\s\S]*?<!-- context-pack:end -->\n?/g;
 
 // Merge keeps the harness file and swaps only the block a previous import wrote.
-const mergeInstructions = (existing: string | undefined, text: string, merge: boolean) => {
+export const mergeInstructions = (existing: string | undefined, text: string, merge: boolean) => {
   if (!merge) return text;
   const block = `<!-- context-pack:begin -->\n${text.trim()}\n<!-- context-pack:end -->`;
   if (existing !== undefined && BLOCK.test(existing)) return existing.replace(BLOCK, () => block);
@@ -243,6 +245,16 @@ const plannedRealPath: (
     return path.join(yield* plannedRealPath(path.dirname(file)), path.basename(file));
   },
 );
+
+// Writing either directory would clobber the other when one lies inside the other.
+export const assertSeparate = Effect.fnUntraced(function* (packDir: string, projectDir: string) {
+  const path = yield* Path.Path;
+  const pack = yield* plannedRealPath(packDir);
+  const project = yield* plannedRealPath(projectDir);
+  if (isInside(path, project, pack) || isInside(path, pack, project)) {
+    return yield* new ContextPackOverlapError({ path: pack, source: project });
+  }
+});
 
 const readSkills = Effect.fnUntraced(function* (skillsDir: string, root: string) {
   const fs = yield* FileSystem.FileSystem;
@@ -290,7 +302,7 @@ const copyTree: (
 const writeSkills = Effect.fnUntraced(function* (skills: Pack["skills"], skillsDir: string) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
-  // Checked before any write: removing a target that holds a source would delete that skill.
+  // Second guard behind assertSeparate, for harness dirs that link into the pack or the project.
   for (const skill of skills) {
     const target = yield* plannedRealPath(path.join(skillsDir, skill.name));
     const source = skills.find(

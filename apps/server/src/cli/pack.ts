@@ -32,7 +32,9 @@ const importCommand = Command.make("import", {
     Flag.withDescription("Harness whose native files to write."),
   ),
   merge: Flag.Boolean("merge").pipe(
-    Flag.withDescription("Keep existing harness content and add the pack's on top."),
+    Flag.withDescription(
+      "Keeps the project's own content; pack servers replace same-name servers.",
+    ),
     Flag.withDefault(false),
   ),
 }).pipe(

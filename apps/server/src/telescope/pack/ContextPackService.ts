@@ -12,6 +12,7 @@ import { codex } from "./harnesses/codex.ts";
 import { cursor } from "./harnesses/cursor.ts";
 import { opencode } from "./harnesses/opencode.ts";
 import {
+  assertSeparate,
   type ContextPackFormatError,
   type ContextPackOverlapError,
   type ContextPackPathError,
@@ -68,6 +69,7 @@ const make = Effect.gen(function* () {
     outDir: string,
   ) {
     const root = yield* fs.realPath(path.resolve(dir));
+    yield* assertSeparate(path.resolve(outDir), root);
     let instructions = "";
     const skills: Array<Pack["skills"][number]> = [];
     const mcp: Record<string, McpServers[string]> = {};
@@ -98,6 +100,7 @@ const make = Effect.gen(function* () {
     harness: HarnessName,
     merge: boolean,
   ) {
+    yield* assertSeparate(path.resolve(packDir), path.resolve(dir));
     const pack = yield* readPackDir(path.resolve(packDir));
     yield* HARNESS_BY_NAME[harness].write(pack, path.resolve(dir), merge);
   }, Effect.provide(context));
