@@ -5,7 +5,7 @@ import type { CSSProperties, ReactNode } from "react";
 import { isElectron } from "../../env";
 import { cn } from "../../lib/utils";
 import { TELESCOPE_PATH, useNavigateToAppMode } from "../sidebar/mainAppLocation";
-import { SidebarChromeHeader } from "../sidebar/SidebarChrome";
+import { SidebarChromeFooter, SidebarChromeHeader } from "../sidebar/SidebarChrome";
 import { Button } from "../ui/button";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "../ui/empty";
 import { SidebarContent, SidebarGroup, SidebarInset, useSidebar } from "../ui/sidebar";
@@ -108,6 +108,7 @@ export function TelescopeSidebar({
         </SidebarContent>
       </div>
       <TelescopeAccountFooter />
+      <SidebarChromeFooter />
     </>
   );
 }
