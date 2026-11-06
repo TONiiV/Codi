@@ -24,16 +24,18 @@ export const layer = Layer.effectDiscard(
       const turn = event.payload;
       const usage = turn.turnTokenUsage;
       if (!TERMINAL.has(turn.status) || usage === undefined || usage.localCommand === true) return;
-      if (counted.has(turn.id)) return;
-      counted.add(turn.id);
-      const oldest = counted.values().next();
-      if (counted.size > REMEMBERED_TURNS && !oldest.done) counted.delete(oldest.value);
-      yield* runs.recordThreadTurn(event.threadId, {
+      const tokens = {
         input: usage.inputTokens ?? 0,
         cachedInput: usage.cachedInputTokens ?? 0,
         cacheCreation: usage.cacheCreationTokens ?? 0,
         output: usage.outputTokens ?? 0,
-      });
+      };
+      if (tokens.input + tokens.cachedInput + tokens.cacheCreation + tokens.output === 0) return;
+      if (counted.has(turn.id)) return;
+      counted.add(turn.id);
+      const oldest = counted.values().next();
+      if (counted.size > REMEMBERED_TURNS && !oldest.done) counted.delete(oldest.value);
+      yield* runs.recordThreadTurn(event.threadId, tokens);
     });
 
     yield* forkParked(
