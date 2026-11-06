@@ -225,8 +225,20 @@ describe("ContextPackService", () => {
       const rules = ".cursor/rules";
       for (const [project, harness, merge, phrase, files] of [
         ["sync", "codex", true, /Use pnpm\./g, ["AGENTS.md"]],
-        ["sync-cursor", "cursor", true, /Be concise\./g, [`${rules}/context-pack.mdc`]],
-        ["sync-cursor-replace", "cursor", false, /Be concise\./g, [`${rules}/context-pack.mdc`]],
+        [
+          "sync-cursor",
+          "cursor",
+          true,
+          /Be concise\./g,
+          [`${rules}/context-pack.mdc`, `${rules}/style.mdc`],
+        ],
+        [
+          "sync-cursor-replace",
+          "cursor",
+          false,
+          /Be concise\./g,
+          [`${rules}/context-pack.mdc`, `${rules}/style.mdc`],
+        ],
       ] as const) {
         const pack = `${project}-pack`;
         const snapshots: Array<string> = [];
@@ -241,11 +253,12 @@ describe("ContextPackService", () => {
         expect((yield* dir.read(`${pack}/instructions.md`)).match(phrase)).toHaveLength(1);
       }
       expect((yield* dir.read("sync/AGENTS.md")).match(/Use pnpm\./g)).toHaveLength(2);
-      expect(yield* dir.read(`sync-cursor/${rules}/style.mdc`)).toContain("Be concise.");
+      for (const project of ["sync-cursor", "sync-cursor-replace"]) {
+        expect(yield* dir.read(`${project}/${rules}/style.mdc`)).toContain("Be concise.");
+      }
       expect(yield* dir.read(`sync-cursor/${rules}/context-pack.mdc`)).toContain(
         "context-pack:begin",
       );
-      expect(yield* dir.exists(dir.at(`sync-cursor-replace/${rules}/style.mdc`))).toBe(false);
       expect(yield* dir.read(`sync-cursor-replace/${rules}/context-pack.mdc`)).not.toContain(
         "context-pack:begin",
       );

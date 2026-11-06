@@ -39,21 +39,16 @@ export const cursor = makeHarness({
       const path = yield* Path.Path;
       const rules = path.join(dir, RULES);
       const bodies: Array<string> = [];
-      for (const file of yield* ruleFiles(rules)) {
+      // The pack rule belongs to the pack that wrote it, like a context-pack block.
+      for (const file of (yield* ruleFiles(rules)).filter((f) => f !== PACK_RULE)) {
         bodies.push(ruleBody(yield* fs.readFileString(path.join(rules, file))));
       }
       return bodies.length === 0 ? undefined : bodies.join("\n\n");
     }),
-    // The pack rule plays the instruction file's part: merge keeps the other rules and swaps only
-    // the pack's block, otherwise the pack's text replaces the project's rules.
+    // Only the pack rule is written, so the project's other rules survive in either mode.
     write: Effect.fnUntraced(function* (dir, text, merge) {
       const fs = yield* FileSystem.FileSystem;
-      const path = yield* Path.Path;
-      const rules = path.join(dir, RULES);
-      const target = path.join(rules, PACK_RULE);
-      for (const file of merge ? [] : yield* ruleFiles(rules)) {
-        if (file !== PACK_RULE) yield* fs.remove(path.join(rules, file));
-      }
+      const target = (yield* Path.Path).join(dir, RULES, PACK_RULE);
       const existing = (yield* fs.exists(target))
         ? (yield* fs.readFileString(target)).replace(FRONTMATTER, "")
         : undefined;
