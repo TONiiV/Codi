@@ -138,6 +138,15 @@ it.layer(layer)("Telescope task board", (it) => {
         text: "One engine.",
         supersedes: first.id,
       });
+      const late = yield* board
+        .createDecision(alice, {
+          workspaceId: a,
+          title: "pglite",
+          text: "",
+          supersedes: proposal.id,
+        })
+        .pipe(Effect.flip);
+      assert.strictEqual(reasonOf(late), "conflict");
       const { decisions } = yield* board.listDecisions(alice, { workspaceId: a });
       assert.deepStrictEqual(
         decisions.map((d) => [d.title, d.status, d.version, d.supersedes]).toSorted(),

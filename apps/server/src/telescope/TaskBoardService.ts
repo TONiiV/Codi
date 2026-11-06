@@ -322,12 +322,15 @@ const make = Effect.gen(function* () {
           if (old.status === "superseded")
             return yield* fail("conflict", "That decision has already been superseded.");
           if (status === "decided") {
-            yield* retire(old);
             // Deciding a proposal also retires what it proposed to replace: one step, no recursion.
-            if (old.status === "proposed" && old.supersedes !== undefined) {
-              const target = yield* findDecision(old.supersedes);
-              if (target !== undefined && target.status !== "superseded") yield* retire(target);
-            }
+            const target =
+              old.status === "proposed" && old.supersedes !== undefined
+                ? yield* findDecision(old.supersedes)
+                : undefined;
+            if (target?.status === "superseded")
+              return yield* fail("conflict", "That decision has already been superseded.");
+            yield* retire(old);
+            if (target !== undefined) yield* retire(target);
           }
         }
         yield* db.insert(workspaceId, "tasks", toColumns(decision, "item_id"));
