@@ -16,7 +16,10 @@ import { mergeUsage } from "@t3tools/shared/usageMerge";
 import {
   EnvironmentId,
   ProviderDriverKind,
+  ProjectId,
   ProviderInstanceId,
+  USAGE_CONTRACT_VERSION,
+  USAGE_UNVERSIONED_CLIENT_CONTRACT_VERSION,
   UsageDay,
   type UsageSource,
   type UsageSummary,
@@ -42,6 +45,7 @@ import * as ServerConfig from "../config.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import * as Sqlite from "../persistence/Sqlite.ts";
 import * as CodexUsageHistory from "./CodexUsageHistory.ts";
+import * as UsageProjectResolver from "./UsageProjectResolver.ts";
 import * as CursorAccountReader from "@t3tools/provider-cursor/server/CursorAccountReader";
 import * as CursorKeychain from "@t3tools/provider-cursor/server/CursorKeychain";
 import * as CursorUsageAccounts from "@t3tools/provider-cursor/server/CursorUsageAccounts";
@@ -165,7 +169,11 @@ const layerService = (input: {
     Layer.provideMerge(AntigravityUsage.layer),
     Layer.provideMerge(MuseUsageHome.layer),
     Layer.provideMerge(ProviderHostLive.layer),
-    Layer.provideMerge(CodexUsageHistory.layer.pipe(Layer.provideMerge(Sqlite.layerMemory))),
+    Layer.provideMerge(
+      Layer.mergeAll(CodexUsageHistory.layer, UsageProjectResolver.layer).pipe(
+        Layer.provideMerge(Sqlite.layerMemory),
+      ),
+    ),
     Layer.provideMerge(Layer.mock(BackgroundPolicy.BackgroundPolicy)({})),
     Layer.provideMerge(
       Layer.mock(ServerSecretStore.ServerSecretStore)({
@@ -2443,6 +2451,90 @@ describe("UsageService", () => {
             ratesDocument: rates,
           }),
         ),
+      );
+    }).pipe(Effect.scoped),
+  );
+
+  it.live("attributes Codi-run sessions to their project and answers each client's contract", () =>
+    Effect.gen(function* () {
+      const { transcript, settings, home } = yield* setup;
+      yield* Effect.promise(() =>
+        NodeFSP.writeFile(
+          transcript,
+          claudeLine(1, 3, "claude-fable-5", "codi-session") +
+            claudeLine(2, 5, "claude-fable-5", "cli-session") +
+            claudeLine(3, 7, "claude-fable-5", "forked-session"),
+        ),
+      );
+      const seedAttempt = (sessionId: string, threadId: string, projectId: string) =>
+        Effect.gen(function* () {
+          const sql = yield* SqlClient.SqlClient;
+          yield* sql`INSERT OR IGNORE INTO orchestration_v2_projection_threads ${sql.insert({
+            thread_id: threadId,
+            project_id: projectId,
+            title: threadId,
+            default_provider: "claudeAgent",
+            runtime_mode: "full-access",
+            interaction_mode: "default",
+            created_at: "2026-08-01T10:00:00Z",
+            updated_at: "2026-08-01T10:00:00Z",
+            payload_json: "{}",
+          })}`;
+          yield* sql`INSERT INTO orchestration_v2_projection_run_attempts ${sql.insert({
+            attempt_id: `attempt-${threadId}-${sessionId}`,
+            thread_id: threadId,
+            run_id: `run-${threadId}-${sessionId}`,
+            attempt_ordinal: 1,
+            root_node_id: `node-${threadId}`,
+            provider: "claudeAgent",
+            provider_thread_id: `provider-thread-${threadId}`,
+            status: "completed",
+            payload_json: encodeUnknownJsonString({ nativeThreadId: sessionId }),
+          })}`;
+        });
+
+      yield* Effect.gen(function* () {
+        yield* seedAttempt("codi-session", "thread-a", "project-a");
+        yield* seedAttempt("codi-session", "thread-a2", "project-a");
+        // Two projects claim this session, so it stays unattributed.
+        yield* seedAttempt("forked-session", "thread-b", "project-b");
+        yield* seedAttempt("forked-session", "thread-c", "project-c");
+        const service = yield* UsageService.make;
+        const [unversioned, current] = yield* Effect.all(
+          [
+            service.readSummary(WINDOW),
+            service.readSummary({ ...WINDOW, contractVersion: USAGE_CONTRACT_VERSION }),
+          ],
+          { concurrency: "unbounded" },
+        );
+
+        assert.deepStrictEqual(
+          current.buckets.map(({ projectId, totals }) => ({
+            projectId,
+            outputTokens: totals.outputTokens,
+          })),
+          [
+            { projectId: undefined, outputTokens: 12 },
+            { projectId: ProjectId.make("project-a"), outputTokens: 3 },
+          ],
+        );
+        assert.strictEqual(current.contractVersion, USAGE_CONTRACT_VERSION);
+        assert.strictEqual(unversioned.contractVersion, USAGE_UNVERSIONED_CLIENT_CONTRACT_VERSION);
+        assert.deepStrictEqual(unversioned.buckets, current.buckets);
+        assert.strictEqual(
+          (yield* service.readSummary({ ...WINDOW, contractVersion: USAGE_CONTRACT_VERSION + 1 }))
+            .contractVersion,
+          USAGE_CONTRACT_VERSION,
+        );
+
+        yield* seedAttempt("codi-session", "thread-d", "project-d");
+        assert.deepStrictEqual(
+          (yield* service.readSummary(WINDOW)).buckets.map(({ projectId }) => projectId),
+          [undefined],
+        );
+      }).pipe(
+        Effect.scoped,
+        Effect.provide(layerService({ prefix: "usage-service-project-test", home, settings })),
       );
     }).pipe(Effect.scoped),
   );

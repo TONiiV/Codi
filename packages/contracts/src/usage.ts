@@ -1,9 +1,17 @@
 import * as Schema from "effect/Schema";
 
-import { ForwardCompatibleArray, NonNegativeInt, TrimmedNonEmptyString } from "./baseSchemas.ts";
+import {
+  ForwardCompatibleArray,
+  NonNegativeInt,
+  ProjectId,
+  TrimmedNonEmptyString,
+} from "./baseSchemas.ts";
 
 /** Bump for incompatible UsageSummary changes; skipped unknown array variants need no bump. */
-export const USAGE_CONTRACT_VERSION = 6 as const;
+export const USAGE_CONTRACT_VERSION = 7 as const;
+
+/** Clients that send no contractVersion reject anything newer than this, so servers answer them with it. */
+export const USAGE_UNVERSIONED_CLIENT_CONTRACT_VERSION = 6 as const;
 
 export const USAGE_MERGE_COMPATIBLE_SINCE = 4 as const;
 
@@ -56,6 +64,8 @@ export const UsageBucket = Schema.Struct({
   provider: UsageProviderKind,
   model: TrimmedNonEmptyString,
   sourcePath: Schema.optional(TrimmedNonEmptyString),
+  /** The environment-local project whose thread ran these sessions; absent outside Codi. */
+  projectId: Schema.optional(ProjectId),
   totals: UsageTokenTotals,
   costUsd: Schema.Number,
   cacheSavingsUsd: Schema.Number,
@@ -135,6 +145,8 @@ export const UsageSummaryInput = Schema.Struct({
   untilTime: Schema.optional(TrimmedNonEmptyString),
   awaitRefresh: Schema.optional(Schema.Boolean),
   modelFilter: Schema.optional(UsageModelFilter),
+  /** The newest USAGE_CONTRACT_VERSION the client reads. */
+  contractVersion: Schema.optional(NonNegativeInt),
 });
 export type UsageSummaryInput = typeof UsageSummaryInput.Type;
 

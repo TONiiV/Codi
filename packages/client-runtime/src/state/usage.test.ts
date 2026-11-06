@@ -131,9 +131,10 @@ describe("manual usage refresh", () => {
       entry.scan.resolve(summary);
     }
     await refreshing;
+    const versioned = { ...input, contractVersion: USAGE_CONTRACT_VERSION };
     expect(requested).toEqual([
-      { environmentId: "filtered", input: { ...input, modelFilter } },
-      { environmentId: "plain", input },
+      { environmentId: "filtered", input: { ...versioned, modelFilter } },
+      { environmentId: "plain", input: versioned },
     ]);
   });
 

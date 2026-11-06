@@ -5,6 +5,7 @@ import type {
   UsageDay,
   UsageModelFilter,
   UsageModelSelector,
+  ProjectId,
   UsageResolution,
   UsageTokenTotals,
 } from "@t3tools/contracts";
@@ -70,6 +71,7 @@ export interface AggregateOptions {
   readonly priceOverrides?: RateTable;
   readonly modelAliases?: ReadonlyMap<string, string>;
   readonly modelFilter?: UsageModelFilter;
+  readonly projectBySession?: ReadonlyMap<string, ProjectId>;
   readonly resolution?: UsageResolution;
   readonly sinceTimeMs?: number;
   readonly untilTimeMs?: number;
@@ -142,6 +144,7 @@ export class UsageAggregator {
     readonly provider: string;
     readonly model: string;
     readonly source: string;
+    readonly projectId: string;
     readonly bucket: MutableBucket;
   } | null = null;
   #duplicatesDropped = 0;
@@ -196,7 +199,15 @@ export class UsageAggregator {
       this.#hourlyWindow === null
         ? -1
         : Math.floor((record.timestampMs - this.#hourlyWindow.sinceTimeMs) / HOUR_MS);
-    const bucket = this.#bucketFor(day, hourIndex, record.provider, record.model, sourcePath ?? "");
+    const projectId = this.#options.projectBySession?.get(record.sessionId) ?? "";
+    const bucket = this.#bucketFor(
+      day,
+      hourIndex,
+      record.provider,
+      record.model,
+      sourcePath ?? "",
+      projectId,
+    );
 
     const priced = priceUsage(this.#options.rates, record, this.#options.priceOverrides);
 
@@ -250,6 +261,7 @@ export class UsageAggregator {
     provider: string,
     model: string,
     source: string,
+    projectId: string,
   ): MutableBucket {
     const last = this.#lastBucket;
     if (
@@ -258,14 +270,15 @@ export class UsageAggregator {
       last.hourIndex === hourIndex &&
       last.provider === provider &&
       last.model === model &&
-      last.source === source
+      last.source === source &&
+      last.projectId === projectId
     ) {
       return last.bucket;
     }
     const window = this.#hourlyWindow;
     const hourStart =
       window === null ? "" : new Date(window.sinceTimeMs + hourIndex * HOUR_MS).toISOString();
-    const key = `${day}\u0000${hourStart}\u0000${provider}\u0000${model}\u0000${source}`;
+    const key = `${day}\u0000${hourStart}\u0000${provider}\u0000${model}\u0000${source}\u0000${projectId}`;
     let bucket = this.#buckets.get(key);
     if (bucket === undefined) {
       bucket = {
@@ -283,14 +296,14 @@ export class UsageAggregator {
       };
       this.#buckets.set(key, bucket);
     }
-    this.#lastBucket = { day, hourIndex, provider, model, source, bucket };
+    this.#lastBucket = { day, hourIndex, provider, model, source, projectId, bucket };
     return bucket;
   }
 
   finish(): AggregateResult {
     const buckets: UsageBucket[] = [];
     for (const [key, bucket] of this.#buckets) {
-      const [day = "", hourStart = "", provider = "", model = "", sourcePath = ""] =
+      const [day = "", hourStart = "", provider = "", model = "", sourcePath = "", projectId = ""] =
         key.split("\u0000");
       const category = bucket.categoryCostUsd;
       const fastCostUsd = roundUsd(bucket.fastCostUsd);
@@ -302,6 +315,7 @@ export class UsageAggregator {
         provider: provider as UsageBucket["provider"],
         model,
         ...(sourcePath === "" ? {} : { sourcePath }),
+        ...(projectId === "" ? {} : { projectId: projectId as ProjectId }),
         totals: { ...bucket.totals },
         costUsd: bucket.costUsd,
         cacheSavingsUsd: bucket.cacheSavingsUsd,
@@ -329,7 +343,8 @@ export class UsageAggregator {
         a.day.localeCompare(b.day) ||
         (a.hourStart ?? "").localeCompare(b.hourStart ?? "") ||
         a.provider.localeCompare(b.provider) ||
-        a.model.localeCompare(b.model),
+        a.model.localeCompare(b.model) ||
+        (a.projectId ?? "").localeCompare(b.projectId ?? ""),
     );
 
     return {
