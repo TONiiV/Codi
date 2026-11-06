@@ -67,6 +67,12 @@ export class TelescopeDb extends Context.Service<
       where?: Row,
       options?: SelectOptions,
     ) => Effect.Effect<A, PersistenceSqlError | PersistenceDecodeError, R>;
+    /** The number of rows `select` returns for the same `where`, without reading them. */
+    readonly count: (
+      workspaceId: Telescope.WorkspaceId,
+      table: TelescopeTable,
+      where?: Row,
+    ) => Effect.Effect<number, PersistenceSqlError>;
     /** Keys of `row` and `set` must not name `workspace_id`; the repository writes it. */
     readonly insert: (
       workspaceId: Telescope.WorkspaceId,
@@ -119,7 +125,7 @@ export class TelescopeDb extends Context.Service<
       }>,
       PersistenceSqlError
     >;
-    /** Retention: drops every workspace's runs started before `cutoff`, with their calls. */
+    /** Retention: drops every workspace's finished runs started before `cutoff`, with their calls. */
     readonly pruneRunsBefore: (cutoff: string) => Effect.Effect<void, PersistenceSqlError>;
     /** The wake queue is shared by the whole machine. */
     readonly workspaceIdsWithActiveWakes: Effect.Effect<
@@ -186,6 +192,19 @@ const make = Effect.gen(function* () {
     return yield* decodeRows(rows).pipe(
       Effect.mapError(toPersistenceDecodeError(`TelescopeDb.select.${table}`)),
     );
+  });
+  const count = Effect.fn("TelescopeDb.count")(function* (
+    workspaceId: Telescope.WorkspaceId,
+    table: TelescopeTable,
+    where: Row = {},
+  ) {
+    yield* checkColumns(`TelescopeDb.count.${table}`, where, "caller");
+    const rows = yield* sql<{
+      readonly n: number;
+    }>`SELECT COUNT(*) AS n FROM ${tableName(table)} WHERE ${scoped(workspaceId, where)}`.pipe(
+      Effect.mapError(toPersistenceSqlError(`TelescopeDb.count.${table}`)),
+    );
+    return rows[0]?.n ?? 0;
   });
   const insert = Effect.fn("TelescopeDb.insert")(function* (
     workspaceId: Telescope.WorkspaceId,
@@ -329,8 +348,9 @@ const make = Effect.gen(function* () {
       .withTransaction(
         Effect.all([
           sql`DELETE FROM telescope_run_calls WHERE run_id IN
-          (SELECT run_id FROM telescope_runs WHERE started_at < ${cutoff})`,
-          sql`DELETE FROM telescope_runs WHERE started_at < ${cutoff}`,
+          (SELECT run_id FROM telescope_runs
+          WHERE started_at < ${cutoff} AND finished_at IS NOT NULL)`,
+          sql`DELETE FROM telescope_runs WHERE started_at < ${cutoff} AND finished_at IS NOT NULL`,
         ]),
       )
       .pipe(Effect.mapError(toPersistenceSqlError("TelescopeDb.pruneRunsBefore")));
@@ -355,6 +375,7 @@ const make = Effect.gen(function* () {
 
   return TelescopeDb.of({
     select,
+    count,
     insert,
     update,
     remove,

@@ -190,22 +190,26 @@ it.layer(layer)("Telescope run records", (it) => {
     }),
   );
 
-  it.effect("prunes runs and their calls started before the cutoff", () =>
+  it.effect("prunes finished runs and their calls started before the cutoff, never open ones", () =>
     Effect.gen(function* () {
       const { runs, workspaceId } = yield* setup;
       const start = runs.start(alice, workspaceId, {
         agentId,
         inputSnapshot: snapshot([]),
       });
+      const call = {
+        tool: "board.read",
+        argsRedacted: {},
+        grantCheck: "allowed" as const,
+        durationMs: 3,
+      };
       const old = yield* start;
-      yield* runs.recordCall(
+      const stillOpen = yield* start;
+      yield* runs.recordCall({ workspaceId, runId: old.id }, call);
+      yield* runs.recordCall({ workspaceId, runId: stillOpen.id }, call);
+      yield* runs.finish(
         { workspaceId, runId: old.id },
-        {
-          tool: "board.read",
-          argsRedacted: {},
-          grantCheck: "allowed",
-          durationMs: 3,
-        },
+        { outputSummary: "done", tokens: noTokens, resultLabels: [] },
       );
       yield* TestClock.adjust("2 days");
       const recent = yield* start;
@@ -218,6 +222,10 @@ it.layer(layer)("Telescope run records", (it) => {
       const calls = yield* sql`SELECT 1 FROM telescope_run_calls WHERE run_id = ${old.id}`;
       assert.strictEqual(calls.length, 0);
       assert.strictEqual((yield* runs.get(alice, { workspaceId, runId: recent.id })).id, recent.id);
+      const open = { workspaceId, runId: stillOpen.id };
+      assert.lengthOf((yield* runs.calls(alice, open)).calls, 1);
+      yield* runs.recordCall(open, call);
+      yield* runs.finish(open, { outputSummary: "late", tokens: noTokens, resultLabels: [] });
     }),
   );
 
@@ -324,15 +332,26 @@ it.effect("the retention pass prunes runs past the configured days once a day", 
           Effect.catchTags({ TelescopeWorkspaceError: () => Effect.succeed(false) }),
         );
     const start = runs.start(alice, workspaceId, { agentId, inputSnapshot: snapshot([]) });
+    const finish = (runId: Telescope.AgentRunId) =>
+      runs.finish(
+        { workspaceId, runId },
+        { outputSummary: "done", tokens: noTokens, resultLabels: [] },
+      );
     yield* TestClock.setTime(0);
     const old = yield* start;
+    yield* finish(old.id);
+    const stillOpen = yield* start;
     yield* TestClock.setTime(5 * day);
     const recent = yield* start;
+    yield* finish(recent.id);
     const pass = yield* RunRecordService.makeRetentionPass;
 
     yield* TestClock.setTime(7 * day);
     yield* pass;
-    assert.deepStrictEqual([yield* exists(old.id), yield* exists(recent.id)], [false, true]);
+    assert.deepStrictEqual(
+      [yield* exists(old.id), yield* exists(stillOpen.id), yield* exists(recent.id)],
+      [false, true, true],
+    );
 
     // The next check waits a day, so a run that ages out meanwhile survives until then.
     yield* TestClock.setTime(8 * day - 1);
@@ -341,7 +360,11 @@ it.effect("the retention pass prunes runs past the configured days once a day", 
     assert.isTrue(yield* exists(recent.id));
     yield* TestClock.setTime(9 * day);
     yield* pass;
-    assert.deepStrictEqual([yield* exists(recent.id), yield* exists(late.id)], [false, true]);
+    assert.deepStrictEqual(
+      [yield* exists(recent.id), yield* exists(late.id), yield* exists(stillOpen.id)],
+      [false, true, true],
+    );
+    yield* finish(stillOpen.id);
   }).pipe(
     Effect.provide(
       layer.pipe(

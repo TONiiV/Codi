@@ -57,6 +57,8 @@ export const DashboardSummary = Schema.Struct({
     needs_decision: Count,
   }),
   tasks: Schema.Array(DashboardTask),
+  /** Every unfinished run, while `runs` lists at most the oldest 50. */
+  openRuns: Count,
   runs: Schema.Array(DashboardRun),
   wakes: Schema.Struct({
     queued: Count,

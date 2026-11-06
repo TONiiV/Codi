@@ -1,6 +1,6 @@
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import { assert, it } from "@effect/vitest";
-import { AuthSessionId, Telescope } from "@t3tools/contracts";
+import { AuthSessionId, EnvironmentId, Telescope } from "@t3tools/contracts";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -8,6 +8,7 @@ import * as Schema from "effect/Schema";
 import * as SqlClient from "effect/sql/SqlClient";
 import * as TestClock from "effect/testing/TestClock";
 
+import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
 import { runMigrations } from "../persistence/Migrations.ts";
 import * as SqlitePersistence from "../persistence/Sqlite.ts";
 import * as AttributionService from "./AttributionService.ts";
@@ -25,7 +26,14 @@ const layer = Layer.mergeAll(
   RunRecordService.layer,
   WakeQueueService.layer,
   WorkspaceService.layer,
-).pipe(Layer.provideMerge(Layer.merge(database, NodeCrypto.layer)));
+).pipe(
+  Layer.provideMerge(Layer.merge(database, NodeCrypto.layer)),
+  Layer.provide(
+    Layer.succeed(ServerEnvironment.ServerEnvironmentIdentity, {
+      getEnvironmentId: Effect.succeed(EnvironmentId.make("env-elsewhere")),
+    }),
+  ),
+);
 
 const session = (name: string): WorkspaceService.Caller => ({
   sessionId: AuthSessionId.make(`session-${name}`),
@@ -82,7 +90,7 @@ it.layer(layer)("Telescope attribution", (it) => {
         yield* board.createTask(me, { workspaceId: otherId, title: "Elsewhere" });
         yield* wake(workspaceId, "first");
         yield* TestClock.setTime(hour);
-        yield* board.createTask(me, {
+        const owned = yield* board.createTask(me, {
           workspaceId,
           title: "Owned",
           status: "in_progress",
@@ -115,17 +123,32 @@ it.layer(layer)("Telescope attribution", (it) => {
           status: "proposed",
         });
         yield* board.createDecision(me, { workspaceId, title: "Settled", text: "" });
+        // Only the latest status change counts: earlier ones and later non-status edits do not.
+        yield* TestClock.setTime(2.5 * hour);
+        const moved = yield* board.updateTask(me, {
+          workspaceId,
+          taskId: leased.id,
+          baseVersion: leased.version,
+          set: { status: "in_progress" },
+        });
         yield* TestClock.setTime(3 * hour);
         yield* board.updateTask(me, {
           workspaceId,
           taskId: leased.id,
-          baseVersion: leased.version,
+          baseVersion: moved.version,
           set: { status: "in_review" },
+        });
+        yield* TestClock.adjust("30 seconds");
+        yield* board.updateTask(me, {
+          workspaceId,
+          taskId: owned.id,
+          baseVersion: owned.version,
+          set: { title: "Owned work" },
         });
         yield* board.acquireLease(agent, { workspaceId, taskId: leased.id });
         const started = yield* wakes.dequeue;
         assert.strictEqual(started?.coalesceKey, "first");
-        yield* TestClock.adjust("1 minute");
+        yield* TestClock.adjust("30 seconds");
 
         const summary = yield* attribution.summary(alice, { workspaceId });
         assert.deepStrictEqual(
@@ -133,7 +156,7 @@ it.layer(layer)("Telescope attribution", (it) => {
           [
             { title: "Old todo", status: "todo", statusSince: iso(0) },
             {
-              title: "Owned",
+              title: "Owned work",
               status: "in_progress",
               statusSince: iso(hour),
               holder: { via: "owner", name: "PM 助理" },
@@ -152,6 +175,7 @@ it.layer(layer)("Telescope attribution", (it) => {
           in_review: 1,
           needs_decision: 0,
         });
+        assert.strictEqual(summary.openRuns, 1);
         assert.deepStrictEqual(summary.runs, [
           {
             id: open.id,
@@ -175,5 +199,24 @@ it.layer(layer)("Telescope attribution", (it) => {
         const denied = yield* Effect.flip(attribution.summary(session("mallory"), { workspaceId }));
         assert.strictEqual(isWorkspaceError(denied) ? denied.reason : denied._tag, "forbidden");
       }),
+  );
+
+  it.effect("counts every open run while listing only the oldest fifty", () =>
+    Effect.gen(function* () {
+      const workspaces = yield* WorkspaceService.WorkspaceService;
+      const runs = yield* RunRecordService.RunRecordService;
+      const attribution = yield* AttributionService.AttributionService;
+      const { id: workspaceId } = yield* workspaces.create(alice, {
+        kind: "enterprise",
+        name: "Busy",
+        displayName: "Alice",
+      });
+      for (let i = 0; i < 51; i += 1)
+        yield* runs.start(alice, workspaceId, { agentId, inputSnapshot: snapshot });
+
+      const summary = yield* attribution.summary(alice, { workspaceId });
+      assert.strictEqual(summary.openRuns, 51);
+      assert.lengthOf(summary.runs, 50);
+    }),
   );
 });

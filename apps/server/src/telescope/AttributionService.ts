@@ -148,6 +148,7 @@ const make = Effect.gen(function* () {
 
     const oldestFirst = { orderBy: ["started_at", "run_id"], limit: RUN_LIMIT };
     const runs = yield* select("runs", Runs, { finished_at: null }, oldestFirst);
+    const openRuns = yield* db.count(workspaceId, "runs", { finished_at: null });
     const calls =
       runs.length === 0
         ? []
@@ -181,6 +182,7 @@ const make = Effect.gen(function* () {
       generatedAt,
       openTasks,
       tasks: listed,
+      openRuns,
       runs: runs.map((run): Telescope.DashboardRun => {
         const runCalls = callsByRun.get(run.run_id) ?? [];
         const last = runCalls.at(-1);
@@ -207,7 +209,7 @@ const make = Effect.gen(function* () {
       },
       pendingDecisions: pending.length,
     };
-  });
+  }, db.transaction);
 
   return AttributionService.of({ summary });
 });
