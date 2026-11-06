@@ -554,7 +554,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       ? [t("settings.text.addProjectBaseDirectory2")]
       : []),
     ...(settings.ghqCloneLayout !== DEFAULT_UNIFIED_SETTINGS.ghqCloneLayout
-      ? ["Clone into host folders"]
+      ? [t("settings.text.cloneIntoHostFolders")]
       : []),
     ...(settings.confirmThreadUnpin !== DEFAULT_UNIFIED_SETTINGS.confirmThreadUnpin
       ? [t("settings.text.unpinConfirmation")]
@@ -582,7 +582,9 @@ export function useSettingsRestore(onRestored?: () => void) {
     if (changedSettingLabels.length === 0) return;
     const api = readLocalApi();
     const confirmed = await (api ?? ensureLocalApi()).dialogs.confirm(
-      t("settings.parallelA.restoreDefaultsConfirm", { labels: changedSettingLabels.join(", ") }),
+      t("settings.parallelA.restoreDefaultsConfirm", {
+        labels: changedSettingLabels.join(t("settings.parallelA.listSeparator")),
+      }),
       { variant: "destructive" },
     );
     if (!confirmed) return;

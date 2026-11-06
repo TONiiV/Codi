@@ -227,6 +227,7 @@
       "providerUpdateChecks2": "提供方更新检查",
       "newThreadMode": "新会话模式",
       "newWorktreesStartFromRemote2": "新工作树从远程开始",
+      "cloneIntoHostFolders": "克隆到主机目录",
       "unpinConfirmation": "取消置顶确认",
       "archiveConfirmation": "归档确认",
       "deleteConfirmation": "删除确认",
@@ -252,6 +253,7 @@
     },
     "parallelA": {
       "restoreDefaultsConfirm": "要恢复默认设置吗？\n这将重置：{{labels}}。",
+      "listSeparator": "、",
       "archivedBadge": "已归档",
       "scopeOn": "位于",
       "scopeAcross": "跨"

@@ -227,6 +227,7 @@
       "providerUpdateChecks2": "Provider update checks",
       "newThreadMode": "New thread mode",
       "newWorktreesStartFromRemote2": "New worktrees start from remote",
+      "cloneIntoHostFolders": "Clone into host folders",
       "unpinConfirmation": "Unpin confirmation",
       "archiveConfirmation": "Archive confirmation",
       "deleteConfirmation": "Delete confirmation",
@@ -252,6 +253,7 @@
     },
     "parallelA": {
       "restoreDefaultsConfirm": "Restore default settings?\nThis will reset: {{labels}}.",
+      "listSeparator": ", ",
       "archivedBadge": "Archived",
       "scopeOn": "on",
       "scopeAcross": "across"
