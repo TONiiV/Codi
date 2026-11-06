@@ -22,6 +22,20 @@ import {
   WorkspaceListResult,
   WorkspaceScopedInput,
 } from "./workspace.ts";
+import {
+  CommitListInput,
+  CommitListResult,
+  DecisionCreateInput,
+  DecisionListResult,
+  FreeTextLimitError,
+  StaleTaskVersionError,
+  TaskCreateInput,
+  TaskGetInput,
+  TaskListInput,
+  TaskListResult,
+  TaskUpdateInput,
+} from "./taskBoard.ts";
+import { Decision, Task } from "./board.ts";
 
 export const WS_METHODS = {
   workspaceCreate: "telescope.workspace.create",
@@ -36,6 +50,13 @@ export const WS_METHODS = {
   projectBind: "telescope.project.bind",
   projectUnbind: "telescope.project.unbind",
   projectListBindings: "telescope.project.listBindings",
+  taskCreate: "telescope.task.create",
+  taskUpdate: "telescope.task.update",
+  taskGet: "telescope.task.get",
+  taskList: "telescope.task.list",
+  decisionCreate: "telescope.decision.create",
+  decisionList: "telescope.decision.list",
+  commitList: "telescope.commit.list",
 } as const;
 
 const error = Schema.Union([WorkspaceError, EnvironmentAuthorizationError]);
@@ -58,4 +79,26 @@ export const WorkspaceRpcs = [
   make(WS_METHODS.projectBind, ProjectBinding, ProjectBinding),
   make(WS_METHODS.projectUnbind, ProjectUnbindInput, Schema.Struct({})),
   make(WS_METHODS.projectListBindings, WorkspaceScopedInput, ProjectListBindingsResult),
+] as const;
+
+const boardError = Schema.Union([
+  WorkspaceError,
+  StaleTaskVersionError,
+  FreeTextLimitError,
+  EnvironmentAuthorizationError,
+]);
+const makeBoard = <const Tag extends string, P extends Schema.Top, S extends Schema.Top>(
+  tag: Tag,
+  payload: P,
+  success: S,
+) => Rpc.make(tag, { payload, success, error: boardError });
+
+export const TaskBoardRpcs = [
+  makeBoard(WS_METHODS.taskCreate, TaskCreateInput, Task),
+  makeBoard(WS_METHODS.taskUpdate, TaskUpdateInput, Task),
+  makeBoard(WS_METHODS.taskGet, TaskGetInput, Task),
+  makeBoard(WS_METHODS.taskList, TaskListInput, TaskListResult),
+  makeBoard(WS_METHODS.decisionCreate, DecisionCreateInput, Decision),
+  makeBoard(WS_METHODS.decisionList, WorkspaceScopedInput, DecisionListResult),
+  makeBoard(WS_METHODS.commitList, CommitListInput, CommitListResult),
 ] as const;

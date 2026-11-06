@@ -127,7 +127,8 @@ import * as DocumentText from "./provider/DocumentText.ts";
 import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
 import * as ScheduledTasks from "./scheduledTasks/ScheduledTaskService.ts";
 import * as TelescopeWorkspaces from "./telescope/WorkspaceService.ts";
-import type { PersistenceDecodeError, PersistenceSqlError } from "./persistence/Errors.ts";
+import * as TelescopeBoard from "./telescope/TaskBoardService.ts";
+import { PersistenceDecodeError, PersistenceSqlError } from "./persistence/Errors.ts";
 import * as SecretRequests from "./secrets/SecretRequests.ts";
 import * as GuestShareService from "./guest/GuestShareService.ts";
 import {
@@ -1388,26 +1389,27 @@ export const subscribeOrchestrationV2Shell = Effect.fn("ws.orchestrationV2.subsc
   },
 );
 
-const telescopeStorage = <A, R>(
-  effect: Effect.Effect<
-    A,
-    Telescope.WorkspaceError | PersistenceSqlError | PersistenceDecodeError,
-    R
-  >,
-) =>
+const isTelescopeStorageFailure = Schema.is(
+  Schema.Union([PersistenceSqlError, PersistenceDecodeError]),
+);
+const telescopeStorage = <A, E, R>(
+  effect: Effect.Effect<A, E | PersistenceSqlError | PersistenceDecodeError, R>,
+): Effect.Effect<A, E | Telescope.WorkspaceError, R> =>
   effect.pipe(
-    Effect.catchTags({
-      PersistenceSqlError: telescopeStorageError,
-      PersistenceDecodeError: telescopeStorageError,
-    }),
-  );
-const telescopeStorageError = (cause: PersistenceSqlError | PersistenceDecodeError) =>
-  Effect.fail(
-    new Telescope.WorkspaceError({
-      reason: "storage",
-      message: "Telescope storage is unavailable.",
-      cause,
-    }),
+    Effect.tapError((error) =>
+      isTelescopeStorageFailure(error)
+        ? Effect.logError("Telescope storage failed", { error })
+        : Effect.void,
+    ),
+    Effect.mapError((error) =>
+      isTelescopeStorageFailure(error)
+        ? new Telescope.WorkspaceError({
+            reason: "storage",
+            message: "Telescope storage is unavailable.",
+            cause: error,
+          })
+        : error,
+    ),
   );
 
 export const layerWsRpc = (
@@ -1465,6 +1467,8 @@ export const layerWsRpc = (
       const scheduledTasks = yield* ScheduledTasks.ScheduledTaskService;
       const telescope = yield* TelescopeWorkspaces.WorkspaceService;
       const caller = currentSession;
+      const board = yield* TelescopeBoard.TaskBoardService;
+      const actor = { caller };
       const secretRequests = yield* SecretRequests.SecretRequests;
       const guestShares = yield* GuestShareService.GuestShareService;
       const pullRequests = yield* PullRequestService.PullRequestService;
@@ -2397,6 +2401,18 @@ export const layerWsRpc = (
           telescopeStorage(telescope.unbind(caller, input)),
         [Telescope.WS_METHODS.projectListBindings]: (input) =>
           telescopeStorage(telescope.bindings(caller, input)),
+        [Telescope.WS_METHODS.taskCreate]: (input) =>
+          telescopeStorage(board.createTask(actor, input)),
+        [Telescope.WS_METHODS.taskUpdate]: (input) =>
+          telescopeStorage(board.updateTask(actor, input)),
+        [Telescope.WS_METHODS.taskGet]: (input) => telescopeStorage(board.getTask(actor, input)),
+        [Telescope.WS_METHODS.taskList]: (input) => telescopeStorage(board.listTasks(actor, input)),
+        [Telescope.WS_METHODS.decisionCreate]: (input) =>
+          telescopeStorage(board.createDecision(actor, input)),
+        [Telescope.WS_METHODS.decisionList]: (input) =>
+          telescopeStorage(board.listDecisions(actor, input)),
+        [Telescope.WS_METHODS.commitList]: (input) =>
+          telescopeStorage(board.listCommits(actor, input)),
         [WS_METHODS.guestShareCreate]: (input) =>
           Effect.annotateCurrentSpan({ "orchestration_v2.thread_id": input.threadId }).pipe(
             Effect.andThen(guestShares.create(input)),
@@ -3553,6 +3569,7 @@ export const layer = Layer.unwrap(
     const peerLinks = yield* PeerLinks.PeerLinks;
     const peerLinkRequests = yield* PeerLinkRequests.PeerLinkRequests;
     const telescopeWorkspaces = yield* TelescopeWorkspaces.WorkspaceService;
+    const telescopeBoard = yield* TelescopeBoard.TaskBoardService;
     const sql = yield* SqlClient.SqlClient;
     return HttpRouter.add(
       "GET",
@@ -3645,6 +3662,7 @@ export const layer = Layer.unwrap(
               Layer.provide(
                 Layer.succeed(TelescopeWorkspaces.WorkspaceService, telescopeWorkspaces),
               ),
+              Layer.provide(Layer.succeed(TelescopeBoard.TaskBoardService, telescopeBoard)),
               Layer.provide(
                 SourceControlDiscovery.layer.pipe(
                   Layer.provide(
