@@ -1,9 +1,16 @@
 import * as Schema from "effect/Schema";
 
 import { ProjectId, ThreadId } from "../baseSchemas.ts";
-import { TaskStatus } from "./board.ts";
 import { AgentId, AgentRunId, Count, DecisionId, TaskId, Text, Timestamp } from "./common.ts";
 import { RunTokens } from "./runtime.ts";
+
+export const OpenTaskStatus = Schema.Literals([
+  "todo",
+  "in_progress",
+  "in_review",
+  "needs_decision",
+]);
+export type OpenTaskStatus = typeof OpenTaskStatus.Type;
 
 /** Who has the task: an unexpired lease's holder, else its owner. */
 export const DashboardHolder = Schema.Struct({
@@ -15,7 +22,7 @@ export const DashboardHolder = Schema.Struct({
 export const DashboardTask = Schema.Struct({
   id: TaskId,
   title: Text,
-  status: TaskStatus,
+  status: OpenTaskStatus,
   projectId: Schema.optionalKey(ProjectId),
   holder: Schema.optionalKey(DashboardHolder),
   /** When the task entered its current status. */

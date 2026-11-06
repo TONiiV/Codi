@@ -10,7 +10,6 @@ import type { PersistenceDecodeError, PersistenceSqlError } from "../persistence
 import * as TelescopeDb from "./TelescopeDb.ts";
 import * as WorkspaceService from "./WorkspaceService.ts";
 
-const OPEN_STATUSES = ["todo", "in_progress", "in_review", "needs_decision"] as const;
 const TASK_LIMIT = 100;
 const RUN_LIMIT = 50;
 
@@ -26,7 +25,7 @@ const rows = <Fields extends Schema.Struct.Fields>(fields: Fields) => ({
 const Tasks = rows({
   item_id: Telescope.TaskId,
   title: Telescope.Text,
-  status: Schema.Literals(OPEN_STATUSES),
+  status: Telescope.OpenTaskStatus,
   project_id: Schema.NullOr(ProjectId),
   owner_subject_id: Schema.NullOr(Schema.String),
   owner_agent_id: Schema.NullOr(Schema.String),
@@ -87,7 +86,7 @@ const make = Effect.gen(function* () {
       options: TelescopeDb.SelectOptions = {},
     ) => db.select(workspaceId, table, decode, where, { ...options, columns });
 
-    const open = { filter: sql.in("status", OPEN_STATUSES) };
+    const open = { filter: sql.in("status", Telescope.OpenTaskStatus.literals) };
     const tasks = yield* select("tasks", Tasks, { kind: "task" }, open);
     const taskIds = tasks.map((task) => task.item_id);
     const statusChanges =
