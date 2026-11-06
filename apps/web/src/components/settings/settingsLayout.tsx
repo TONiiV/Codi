@@ -409,7 +409,7 @@ export function SettingsRow({
       scopedKeys.length > 0 ? (
       source === "project" || source === "mixed" ? (
         <TranslatedSettingResetButton
-          label={typeof title === "string" ? title : "override"}
+          label={typeof title === "string" ? title : t("settings.text.overrideValue")}
           tooltip={t("settings.text.resetToInheritedValue")}
           onClick={() => (onResetOverride ? onResetOverride() : clearOverrides(scopedKeys))}
         />
@@ -601,7 +601,7 @@ export function SettingResetButton({
 }
 
 /** The reset button for translated panels: same props, translated defaults. */
-function TranslatedSettingResetButton(props: ComponentProps<typeof SettingResetButton>) {
+export function TranslatedSettingResetButton(props: ComponentProps<typeof SettingResetButton>) {
   const { t } = useTranslation();
   return (
     <SettingResetButton

@@ -16,6 +16,8 @@
     "title": "设置",
     "breadcrumbLabel": "设置面包屑导航",
     "openSourceLicenses": "开源许可",
+    "resetToDefault": "恢复默认",
+    "resetLabel": "将“{{label}}”恢复为默认值",
     "sections": {
       "diagnostics": "诊断",
       "projects": "项目",
@@ -53,6 +55,86 @@
       "searchResults": "设置搜索结果",
       "sections": "设置分区"
     },
+    "items": {
+      "language": "语言",
+      "project-grouping": "项目分组",
+      "project-order": "项目排序",
+      "working-shelf": "运行中分区",
+      "thread-notifications": "会话通知",
+      "in-app-notifications": "应用内通知",
+      "unpin-confirmation": "取消置顶确认",
+      "archive-confirmation": "归档确认",
+      "delete-confirmation": "删除确认",
+      "quit-confirmation": "退出快捷键",
+      "time-format": "时间格式"
+    },
+    "general": {
+      "language": {
+        "section": "语言",
+        "description": "Codi 界面使用的语言。“跟随系统”会使用浏览器或操作系统的语言。",
+        "system": "跟随系统",
+        "reset": "语言"
+      },
+      "notifications": {
+        "section": "通知",
+        "description": "会话完成、失败，或需要输入或批准时发出系统提醒。仅在 Codi 打开时对本设备生效。",
+        "needsHttps": "通知需要支持的浏览器并通过 HTTPS 访问，或使用桌面应用。仍可单独使用声音提醒。",
+        "unavailable": "此浏览器不支持通知。仍可单独使用声音提醒。",
+        "denied": "请在浏览器或系统设置中允许通知，然后重新选择此选项。仍可单独使用声音提醒。",
+        "inAppDescription": "当本应用处于前台，且其他会话完成、失败，或需要输入或批准时，显示一条提示。",
+        "mode": {
+          "off": "关闭",
+          "notifications": "仅通知",
+          "sound": "仅声音",
+          "notifications-and-sound": "通知并播放声音"
+        }
+      },
+      "sidebar": {
+        "section": "侧边栏",
+        "projectGroupingDescription": "合并不同环境中相同的仓库。",
+        "projectGroupingReset": "项目分组",
+        "projectOrderDescription": "侧边栏项目选择器和命令面板中项目的排列顺序。",
+        "projectOrderReset": "项目排序",
+        "projectOrder": {
+          "updated_at": "最近用户消息",
+          "created_at": "创建时间",
+          "manual": "手动"
+        },
+        "workingShelfDescription": "将运行中和监控中的会话折叠到“运行中”分区。需要你处理时，它们会回到收件箱顶部。实验室中的简约侧边栏没有“运行中”分区。",
+        "workingShelfReset": "运行中分区"
+      },
+      "confirmations": {
+        "section": "确认",
+        "unpinDescription": "从置顶分区取消置顶会话前先询问。",
+        "unpinReset": "取消置顶确认",
+        "unpinAria": "确认取消置顶会话",
+        "archiveDescription": "归档会话前，需要再点击一次行内归档按钮。",
+        "archiveReset": "归档确认",
+        "archiveAria": "确认归档会话",
+        "deleteDescription": "删除会话及其聊天记录前先询问。",
+        "deleteReset": "删除确认",
+        "deleteAria": "确认删除会话",
+        "quitDescription": "“长按”模式下，快速连按两次也会退出。",
+        "quitReset": "退出快捷键行为",
+        "quitAria": "退出快捷键行为",
+        "quit": {
+          "direct": "直接退出",
+          "hold": "长按",
+          "double-click": "连按两次"
+        }
+      },
+      "display": {
+        "section": "显示",
+        "timeFormatDescription": "“跟随系统”会使用浏览器或操作系统的时钟偏好。",
+        "timeFormatReset": "时间格式",
+        "timeFormatAria": "时间格式",
+        "timeFormat": {
+          "locale": "跟随系统",
+          "12-hour": "12 小时制",
+          "24-hour": "24 小时制"
+        }
+      }
+    },
     "text": {
       "resetToDefault": "恢复默认",
       "overriddenForThisProject": "已为此项目覆盖",
@@ -65,11 +147,13 @@
       "setOnTheEnvironment": "在环境上设置",
       "builtInDefault": "内置默认值",
       "resetLabelToDefault": "将{{label}}恢复为默认值",
+      "daysOfInactivityBeforeAutoSettle": "自动完结前的无活动天数",
       "theSelectedEnvironment": "所选环境",
       "managedByManagedby": "由 {{managedBy}} 管理。",
       "thePrimaryEnvironment": "主环境",
       "reconnectTheSelectedEnvironmentToChange": "请重新连接所选环境以更改此设置。",
-      "connectionLacksPermissionToChangeSettingsOn": "此连接没有权限更改 {{target}} 上的设置。"
+      "connectionLacksPermissionToChangeSettingsOn": "此连接没有权限更改 {{target}} 上的设置。",
+      "overrideValue": "覆盖值"
     },
     "parallelShared": {
       "copied": "已复制！",
