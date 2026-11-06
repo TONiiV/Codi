@@ -45,6 +45,12 @@ it.layer(layer)("TelescopeDb", (it) => {
         yield* db.select(wsA, "members", decodeNames, { workspace_id: wsB }),
         [],
       );
+      const sql = yield* SqlClient.SqlClient;
+      const widening = { filter: sql`1 = 0 OR 1 = 1` };
+      assert.deepStrictEqual(names(yield* db.select(wsA, "members", decodeNames, {}, widening)), [
+        "ws-a/ann",
+        "ws-a/cal",
+      ]);
 
       yield* db.update(wsA, "members", { display_name: "renamed" }, {});
       yield* db.remove(wsA, "members", { subject_id: "bea" });
