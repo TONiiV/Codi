@@ -29,6 +29,7 @@ import {
   type ProjectOverrideEntry,
   type ScopedSettingsPatch,
 } from "./scopedSettings";
+import { useTranslation } from "react-i18next";
 
 export function useScopedSettings<T = UnifiedSettings>(
   selector?: (settings: UnifiedSettings) => T,
@@ -48,12 +49,13 @@ export function useScopedSettingSource(keys: readonly (keyof ServerSettings)[]) 
 }
 
 function useRunScopedPlan() {
+  const { t } = useTranslation();
   const persistServer = useAtomCommand(serverEnvironment.updateSettings, { reportFailure: false });
   return (plan: ReturnType<typeof planScopedSettingsPatch>, onFailed?: () => void) => {
     if (plan.unavailableReason) {
       toastManager.add({
         type: "warning",
-        title: "Setting not saved",
+        title: t("settings.text.settingNotSaved"),
         description: plan.unavailableReason,
       });
       onFailed?.();
@@ -70,26 +72,35 @@ function useRunScopedPlan() {
             Cause.fail(
               new EnvironmentAuthorizationError({
                 requiredScope: missing,
-                message: "This connection lacks permission to change these settings.",
+                message: t("settings.text.thisConnectionLacksPermissionToChange"),
               }),
             ),
           );
         return persistServer(request);
       },
       persistClientSettingsPatch,
+      t,
     ).then(({ failedEnvironments, savedEnvironments, savedEnvironmentCount }) => {
       if (failedEnvironments.length === 0) return;
       onFailed?.();
       toastManager.add({
         type: "error",
         title:
-          savedEnvironmentCount > 0 ? "Setting saved on some environments" : "Setting not saved",
+          savedEnvironmentCount > 0
+            ? t("settings.text.settingSavedOnSomeEnvironments")
+            : t("settings.text.settingNotSaved"),
         description: [
-          ...failedEnvironments.map(
-            ({ label, message }) => `Could not save on ${label}: ${message}`,
+          ...failedEnvironments.map(({ label, message }) =>
+            t("settings.manual.scopedSave.couldNotSaveOn", { label, message }),
           ),
           ...(savedEnvironmentCount > 0
-            ? [`Saved on ${savedEnvironments.map(({ label }) => label).join(", ")}.`]
+            ? [
+                t("settings.manual.scopedSave.savedOn", {
+                  labels: savedEnvironments
+                    .map(({ label }) => label)
+                    .join(t("settings.parallelA.listSeparator")),
+                }),
+              ]
             : []),
         ].join("\n"),
       });
@@ -98,23 +109,26 @@ function useRunScopedPlan() {
 }
 
 export function useUpdateScopedSettings() {
+  const { t } = useTranslation();
   const { scope, environments } = useSettingsScope();
   const run = useRunScopedPlan();
   /** `onFailed` runs when any target rejects or drops the patch, so a draft can fall back. */
   return (patch: ScopedSettingsPatch, options?: { readonly onFailed?: () => void }) =>
-    run(planScopedSettingsPatch(scope, environments, patch), options?.onFailed);
+    run(planScopedSettingsPatch(scope, environments, patch, t), options?.onFailed);
 }
 
 export function useClearScopedSettings() {
+  const { t } = useTranslation();
   const context = useOptionalSettingsScope();
   const run = useRunScopedPlan();
   return (keys: readonly ProjectScopedServerSettingKey[]) => {
     if (context === null) return;
-    run(planScopedSettingsClear(context.scope, context.environments, keys));
+    run(planScopedSettingsClear(context.scope, context.environments, keys, t));
   };
 }
 
 export function useClearProjectOverrides() {
+  const { t } = useTranslation();
   const context = useOptionalSettingsScope();
   const run = useRunScopedPlan();
   return (
@@ -122,7 +136,7 @@ export function useClearProjectOverrides() {
     keys: readonly ProjectScopedServerSettingKey[],
   ) => {
     if (context === null) return;
-    run(planProjectOverridesClear(context.environments, entries, keys));
+    run(planProjectOverridesClear(context.environments, entries, keys, t));
   };
 }
 
