@@ -1,11 +1,12 @@
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import { assert, it } from "@effect/vitest";
-import { AuthSessionId, Telescope, ThreadId } from "@t3tools/contracts";
+import { AuthSessionId, EnvironmentId, Telescope, ThreadId } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Scheduler from "effect/Scheduler";
 import * as SqlClient from "effect/sql/SqlClient";
 
+import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
 import { runMigrations } from "../persistence/Migrations.ts";
 import * as SqlitePersistence from "../persistence/Sqlite.ts";
 import * as MemoryService from "./MemoryService.ts";
@@ -17,6 +18,11 @@ const database = Layer.effectDiscard(runMigrations()).pipe(
 );
 const layer = Layer.mergeAll(TelescopeDb.layer, WorkspaceService.layer, MemoryService.layer).pipe(
   Layer.provideMerge(Layer.merge(database, NodeCrypto.layer)),
+  Layer.provide(
+    Layer.succeed(ServerEnvironment.ServerEnvironmentIdentity, {
+      getEnvironmentId: Effect.succeed(EnvironmentId.make("env-elsewhere")),
+    }),
+  ),
 );
 
 const session = (name: string): WorkspaceService.Caller => ({
