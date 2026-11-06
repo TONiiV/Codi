@@ -173,9 +173,11 @@ const make = Effect.gen(function* () {
   ) {
     const { workspace_id: workspaceId, agent_id: agentId, on_behalf_of_json: onBehalfOf } = run;
     const power = TOOL_POWERS[tool];
-    const [killSwitch] = yield* db.select(workspaceId, "kill_switches", decodeKillSwitches, {
-      agent_id: agentId,
-    });
+    // `onBehalfOf[0]` is the member; a stop of any agent the run acts through holds.
+    const chain = new Set([agentId, ...onBehalfOf.slice(1)]);
+    const stopped = (yield* db.select(workspaceId, "kill_switches", decodeKillSwitches)).some(
+      (row) => chain.has(row.agent_id) && row.state !== "running",
+    );
     const grant = yield* grants.effectiveGrant(workspaceId, { agentId, onBehalfOf });
     const levelIds: Readonly<Record<Telescope.Budget["scope"], string | undefined>> = {
       company: workspaceId,
@@ -194,14 +196,13 @@ const make = Effect.gen(function* () {
           budget.used_calls >= budget.limit_calls,
       ),
     );
-    const denied =
-      killSwitch !== undefined && killSwitch.state !== "running"
-        ? new ToolGatewayDenied({ reason: "stopped", tool })
-        : !grant.powers[power]
-          ? new ToolGatewayDenied({ reason: "forbidden", tool })
-          : spent !== undefined
-            ? new ToolGatewayDenied({ reason: "budget", tool, level: spent })
-            : undefined;
+    const denied = stopped
+      ? new ToolGatewayDenied({ reason: "stopped", tool })
+      : !grant.powers[power]
+        ? new ToolGatewayDenied({ reason: "forbidden", tool })
+        : spent !== undefined
+          ? new ToolGatewayDenied({ reason: "budget", tool, level: spent })
+          : undefined;
     yield* grants.audit(workspaceId, {
       runId: run.run_id,
       agentId,

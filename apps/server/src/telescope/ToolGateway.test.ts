@@ -190,6 +190,27 @@ it.layer(layer)("Telescope tool gateway", (it) => {
   it.effect("stops an agent at its next tool call and resumes it", () =>
     Effect.gen(function* () {
       const { workspaceId, chiefId, gateway, call, denial, audit } = yield* setup;
+      const { agents: mine } = yield* (yield* AgentService.AgentService).listMine(as.bea, {
+        workspaceId,
+      });
+      const cos = mine.find((agent) => agent.kind === "chief_of_staff");
+      assert.isDefined(cos);
+      const viaThread = ThreadId.make(`thread-via-${workspaceId}`);
+      yield* (yield* RunRecordService.RunRecordService).start(as.bea, workspaceId, {
+        agentId: cos.id,
+        threadId: viaThread,
+        via: [chiefId],
+        inputSnapshot: {
+          promptVersion: "prompt@1",
+          skillsVersions: {},
+          powersVersion: "powers@1",
+          model: "model-a",
+          contextManifest: [],
+        },
+      });
+      const viaCall = TestClock.adjust("1 second").pipe(
+        Effect.andThen(gateway.call(viaThread, "answer_member", {}, () => Effect.void)),
+      );
       const stop = (state: Telescope.KillSwitch["state"]) => ({
         workspaceId,
         agentId: chiefId,
@@ -204,6 +225,11 @@ it.layer(layer)("Telescope tool gateway", (it) => {
       assert.strictEqual(yield* denial("open_ticket"), "stopped");
       yield* gateway.setKillSwitch(as.ann, stop("terminated"));
       assert.strictEqual(yield* denial("open_ticket"), "stopped");
+      const viaDenied = yield* viaCall.pipe(Effect.flip);
+      assert.strictEqual(
+        viaDenied._tag === "TelescopeToolGatewayDenied" && viaDenied.reason,
+        "stopped",
+      );
       const { killSwitches } = yield* gateway.governance(as.ann, { workspaceId });
       assert.deepStrictEqual(
         killSwitches.map((row) => [row.agentId, row.state]),
@@ -213,8 +239,16 @@ it.layer(layer)("Telescope tool gateway", (it) => {
       assert.strictEqual(hidden._tag === "TelescopeWorkspaceError" && hidden.reason, "forbidden");
       yield* gateway.setKillSwitch(as.ann, stop("running"));
       yield* call("open_ticket");
+      yield* viaCall;
       const outcomes = (yield* audit).map((entry) => entry.outcome);
-      assert.deepStrictEqual(outcomes, ["allowed", "denied", "denied", "allowed"]);
+      assert.deepStrictEqual(outcomes, [
+        "allowed",
+        "denied",
+        "denied",
+        "denied",
+        "allowed",
+        "allowed",
+      ]);
     }),
   );
 
