@@ -65,6 +65,13 @@ import {
 import { Decision, Lease, Task } from "./board.ts";
 import { TokenSaverReport, TokenSaverRunInput } from "./tokenSaver.ts";
 import {
+  Budget,
+  BudgetSetInput,
+  GovernanceState,
+  KillSwitch,
+  KillSwitchSetInput,
+} from "./governance.ts";
+import {
   GrantAuditListInput,
   GrantAuditListResult,
   GrantExplainInput,
@@ -109,6 +116,9 @@ export const WS_METHODS = {
   tokenSaverRun: "telescope.tokensaver.run",
   grantExplain: "telescope.grant.explain",
   grantAuditList: "telescope.grant.audit.list",
+  budgetSet: "telescope.budget.set",
+  killSwitchSet: "telescope.killSwitch.set",
+  governanceGet: "telescope.governance.get",
   memorySearch: "telescope.memory.search",
   memoryWrite: "telescope.memory.write",
   memoryPin: "telescope.memory.pin",
@@ -187,6 +197,9 @@ export const TokenSaverRpcs = [
 export const GrantRpcs = [
   make(WS_METHODS.grantExplain, GrantExplainInput, GrantExplainResult),
   make(WS_METHODS.grantAuditList, GrantAuditListInput, GrantAuditListResult),
+  make(WS_METHODS.budgetSet, BudgetSetInput, Budget),
+  make(WS_METHODS.killSwitchSet, KillSwitchSetInput, KillSwitch),
+  make(WS_METHODS.governanceGet, WorkspaceScopedInput, GovernanceState),
 ] as const;
 
 export const MemoryRpcs = [

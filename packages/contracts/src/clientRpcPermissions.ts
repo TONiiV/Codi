@@ -82,6 +82,9 @@ export const CLIENT_GUARDED_RPC_SCOPES = {
   [TELESCOPE_WS_METHODS.projectUnbind]: AuthTelescopeAdminScope,
   [TELESCOPE_WS_METHODS.agentUpdateCompany]: AuthTelescopeAdminScope,
   [TELESCOPE_WS_METHODS.grantAuditList]: AuthTelescopeAdminScope,
+  [TELESCOPE_WS_METHODS.budgetSet]: AuthTelescopeAdminScope,
+  [TELESCOPE_WS_METHODS.killSwitchSet]: AuthTelescopeAdminScope,
+  [TELESCOPE_WS_METHODS.governanceGet]: AuthTelescopeAdminScope,
 } as const;
 export type ClientGuardedRpcTag = keyof typeof CLIENT_GUARDED_RPC_SCOPES;
 

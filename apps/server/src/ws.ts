@@ -131,6 +131,7 @@ import * as TelescopeBoard from "./telescope/TaskBoardService.ts";
 import * as TelescopeRuns from "./telescope/RunRecordService.ts";
 import * as TelescopeTokenSaver from "./telescope/tokensaver/TokenSaverService.ts";
 import * as TelescopeGrants from "./telescope/GrantService.ts";
+import * as TelescopeToolGateway from "./telescope/ToolGateway.ts";
 import { PersistenceDecodeError, PersistenceSqlError } from "./persistence/Errors.ts";
 import * as TelescopeAgents from "./telescope/AgentService.ts";
 import * as TelescopeWakeQueue from "./telescope/WakeQueueService.ts";
@@ -1476,6 +1477,7 @@ export const layerWsRpc = (
       const telescopeRuns = yield* TelescopeRuns.RunRecordService;
       const telescopeWakes = yield* TelescopeWakeQueue.WakeQueueService;
       const telescopeGrants = yield* TelescopeGrants.GrantService;
+      const telescopeGateway = yield* TelescopeToolGateway.ToolGateway;
       const telescopeMemory = yield* TelescopeMemory.MemoryService;
       const caller = currentSession;
       const board = yield* TelescopeBoard.TaskBoardService;
@@ -2461,6 +2463,12 @@ export const layerWsRpc = (
           telescopeStorage(telescopeGrants.explainFor(caller, input)),
         [Telescope.WS_METHODS.grantAuditList]: (input) =>
           telescopeStorage(telescopeGrants.auditList(caller, input)),
+        [Telescope.WS_METHODS.budgetSet]: (input) =>
+          telescopeStorage(telescopeGateway.setBudget(caller, input)),
+        [Telescope.WS_METHODS.killSwitchSet]: (input) =>
+          telescopeStorage(telescopeGateway.setKillSwitch(caller, input)),
+        [Telescope.WS_METHODS.governanceGet]: (input) =>
+          telescopeStorage(telescopeGateway.governance(caller, input)),
         [Telescope.WS_METHODS.memorySearch]: (input) =>
           telescopeStorage(telescopeMemory.search({ session: caller }, input)),
         [Telescope.WS_METHODS.memoryWrite]: (input) =>
@@ -3629,6 +3637,7 @@ export const layer = Layer.unwrap(
     const telescopeWakes = yield* TelescopeWakeQueue.WakeQueueService;
     const telescopeTokenSaver = yield* TelescopeTokenSaver.TokenSaverService;
     const telescopeGrants = yield* TelescopeGrants.GrantService;
+    const telescopeGateway = yield* TelescopeToolGateway.ToolGateway;
     const telescopeMemory = yield* TelescopeMemory.MemoryService;
     const sql = yield* SqlClient.SqlClient;
     return HttpRouter.add(
@@ -3732,6 +3741,7 @@ export const layer = Layer.unwrap(
               Layer.provide(
                 Layer.mergeAll(
                   Layer.succeed(TelescopeGrants.GrantService, telescopeGrants),
+                  Layer.succeed(TelescopeToolGateway.ToolGateway, telescopeGateway),
                   Layer.succeed(TelescopeMemory.MemoryService, telescopeMemory),
                 ),
               ),

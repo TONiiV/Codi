@@ -96,6 +96,9 @@ describe("RPC authorization scopes", () => {
       Telescope.WS_METHODS.projectUnbind,
       Telescope.WS_METHODS.agentUpdateCompany,
       Telescope.WS_METHODS.grantAuditList,
+      Telescope.WS_METHODS.budgetSet,
+      Telescope.WS_METHODS.killSwitchSet,
+      Telescope.WS_METHODS.governanceGet,
     ]) {
       expect(requiredScopeForRpcMethod(method)).toBe(AuthTelescopeAdminScope);
     }
