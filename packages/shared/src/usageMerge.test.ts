@@ -367,23 +367,39 @@ describe("mergeUsage", () => {
     expect(merged.projectProviders[1]?.categoryCost.unsplit).toBe(3);
   });
 
-  it("keeps a newer partial scan's cell for another project of a claimed cell", () => {
+  it("does not double-count a shared source whose environments attribute projects differently", () => {
     const source = { provider: "claude" as const, hostId: "mac", homePath: "/home/theo/.claude" };
     const p1 = "project-1" as ProjectId;
-    const complete = environment("old", summary([bucket({ projectId: p1 })], [source]));
+    const p2 = "project-2" as ProjectId;
+    const laterDay = "2026-08-08" as UsageDay;
+    const complete = environment("desktop", summary([bucket({ projectId: p1 })], [source]));
     const partialSummary = summary(
-      [bucket({ projectId: p1 }), bucket({ projectId: "project-2" as ProjectId, costUsd: 4 })],
+      [
+        bucket(),
+        bucket({ day: laterDay, projectId: p1 }),
+        bucket({ day: laterDay, projectId: p2, costUsd: 4 }),
+      ],
       [source],
     );
-    const partial = environment("new", {
+    const partial = environment("cli-server", {
       ...partialSummary,
       readAt: "2026-08-07T01:00:00.000Z",
       sources: partialSummary.sources.map((entry) => ({ ...entry, status: "partial" as const })),
     });
 
     const merged = mergeUsage([complete, partial], USAGE_CONTRACT_VERSION);
-    expect(merged.costUsd).toBe(14);
-    expect(merged.projectProviders.map(({ projectId }) => projectId)).toEqual([p1, "project-2"]);
+    expect(merged.costUsd).toBe(24);
+    expect(
+      merged.projectProviders.map(({ environmentId, projectId, costUsd }) => [
+        environmentId,
+        projectId,
+        costUsd,
+      ]),
+    ).toEqual([
+      ["desktop", p1, 10],
+      ["cli-server", p1, 10],
+      ["cli-server", p2, 4],
+    ]);
   });
 
   it("identifies an environment reporting an older contract version", () => {

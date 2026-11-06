@@ -2526,6 +2526,12 @@ describe("UsageService", () => {
             .contractVersion,
           USAGE_CONTRACT_VERSION,
         );
+
+        yield* seedAttempt("codi-session", "thread-d", "project-d");
+        assert.deepStrictEqual(
+          (yield* service.readSummary(WINDOW)).buckets.map(({ projectId }) => projectId),
+          [undefined],
+        );
       }).pipe(
         Effect.scoped,
         Effect.provide(layerService({ prefix: "usage-service-project-test", home, settings })),

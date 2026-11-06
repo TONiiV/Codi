@@ -143,14 +143,9 @@ function bucketsForSource(summary: UsageSummary, source: UsageSource): readonly 
   );
 }
 
+// Project ids are environment-local, so they cannot match cells across environments.
 function bucketKey(bucket: UsageBucket): string {
-  return JSON.stringify([
-    bucket.day,
-    bucket.hourStart ?? null,
-    bucket.provider,
-    bucket.model,
-    bucket.projectId ?? null,
-  ]);
+  return JSON.stringify([bucket.day, bucket.hourStart ?? null, bucket.provider, bucket.model]);
 }
 
 function claimSources(environments: readonly EnvironmentUsage[]): {
@@ -213,15 +208,16 @@ function claimSources(environments: readonly EnvironmentUsage[]): {
       }
       const supplemental =
         supplementalBucketsByEnvironment.get(environment.environmentId) ?? new Set<UsageBucket>();
-      let added = false;
+      // One scan splits a cell into per-project buckets; keep all of them.
+      const claimed = new Set<string>();
       for (const bucket of bucketsForSource(environment.summary, source)) {
         const cell = bucketKey(bucket);
         if (seen.has(cell)) continue;
-        seen.add(cell);
+        claimed.add(cell);
         supplemental.add(bucket);
-        added = true;
       }
-      if (!added) continue;
+      if (claimed.size === 0) continue;
+      for (const cell of claimed) seen.add(cell);
       supplementalBucketsByEnvironment.set(environment.environmentId, supplemental);
       sessionsByFingerprint.set(
         key,

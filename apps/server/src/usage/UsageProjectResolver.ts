@@ -20,47 +20,36 @@ export class UsageProjectResolver extends Context.Service<
 
 const make = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
-  // A thread never changes project, so hits stay valid; misses may resolve once Codi runs them.
-  const resolved = new Map<string, ProjectId>();
 
+  // Uncached so a newly run or newly ambiguous session is answered from current state.
   const resolve = Effect.fn("UsageProjectResolver.resolve")(function* (
     sessionIds: ReadonlySet<string>,
   ) {
-    const unknown = [...sessionIds].filter((sessionId) => !resolved.has(sessionId));
-    if (unknown.length > 0) {
-      const rows = yield* sql<{ readonly native_thread_id: string; readonly project_id: string }>`
-        SELECT DISTINCT json_extract(attempt.payload_json, '$.nativeThreadId') AS native_thread_id,
-          thread.project_id AS project_id
-        FROM orchestration_v2_projection_run_attempts AS attempt
-        JOIN orchestration_v2_projection_threads AS thread ON thread.thread_id = attempt.thread_id
-        WHERE json_extract(attempt.payload_json, '$.nativeThreadId') IN (
-          SELECT value FROM json_each(${encodeSessionIds(unknown)})
-        )
-      `.pipe(
-        NodeSqliteClient.readOnly,
-        Effect.catch((cause) =>
-          Effect.logWarning("Could not resolve usage sessions to projects", cause).pipe(
-            Effect.as([]),
-          ),
-        ),
-      );
-      const projects = new Map<string, string | null>();
-      for (const row of rows) {
-        const seen = projects.get(row.native_thread_id);
-        projects.set(
-          row.native_thread_id,
-          seen === undefined || seen === row.project_id ? row.project_id : null,
-        );
-      }
-      for (const [sessionId, projectId] of projects) {
-        if (projectId !== null) resolved.set(sessionId, ProjectId.make(projectId));
-      }
-    }
     const result = new Map<string, ProjectId>();
-    for (const sessionId of sessionIds) {
-      const projectId = resolved.get(sessionId);
-      if (projectId !== undefined) result.set(sessionId, projectId);
+    if (sessionIds.size === 0) return result;
+    const rows = yield* sql<{ readonly native_thread_id: string; readonly project_id: string }>`
+      SELECT DISTINCT json_extract(attempt.payload_json, '$.nativeThreadId') AS native_thread_id,
+        thread.project_id AS project_id
+      FROM orchestration_v2_projection_run_attempts AS attempt
+      JOIN orchestration_v2_projection_threads AS thread ON thread.thread_id = attempt.thread_id
+      WHERE json_extract(attempt.payload_json, '$.nativeThreadId') IN (
+        SELECT value FROM json_each(${encodeSessionIds([...sessionIds])})
+      )
+    `.pipe(
+      NodeSqliteClient.readOnly,
+      Effect.catch((cause) =>
+        Effect.logWarning("Could not resolve usage sessions to projects", cause).pipe(
+          Effect.as([]),
+        ),
+      ),
+    );
+    const ambiguous = new Set<string>();
+    for (const row of rows) {
+      const seen = result.get(row.native_thread_id);
+      if (seen !== undefined && seen !== row.project_id) ambiguous.add(row.native_thread_id);
+      result.set(row.native_thread_id, ProjectId.make(row.project_id));
     }
+    for (const sessionId of ambiguous) result.delete(sessionId);
     return result;
   });
 
