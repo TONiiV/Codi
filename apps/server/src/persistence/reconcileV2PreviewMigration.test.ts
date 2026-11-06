@@ -65,7 +65,7 @@ describe("V2 preview upgrade", () => {
         [83, "TelescopeMemberSessions"],
         [84, "TelescopeRunIndexes"],
         [86, "TelescopeTaskConflict"],
-        [85, "TelescopeWakeMergedInto"],
+        [87, "TelescopeWakeMergedInto"],
       ]);
       assert.deepStrictEqual(yield* runMigrations(), []);
       assert.deepStrictEqual(yield* sql`SELECT * FROM orchestration_v2_legacy_imports`, imports);
@@ -174,7 +174,7 @@ describe("V2 preview upgrade", () => {
         [83, "TelescopeMemberSessions"],
         [84, "TelescopeRunIndexes"],
         [86, "TelescopeTaskConflict"],
-        [85, "TelescopeWakeMergedInto"],
+        [87, "TelescopeWakeMergedInto"],
       ]);
     }).pipe(Effect.provide(NodeSqliteClient.layer({ filename: ":memory:" }))),
   );
