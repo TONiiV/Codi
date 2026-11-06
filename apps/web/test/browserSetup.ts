@@ -1,6 +1,8 @@
 import { beforeEach } from "vite-plus/test";
 import { commands } from "vite-plus/test/browser";
 
+import "../src/i18n";
+
 declare module "vite-plus/test/browser" {
   interface BrowserCommands {
     /** Defined in vite.config.ts. Moves Playwright's mouse off the page. */

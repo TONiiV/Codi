@@ -1,0 +1,30 @@
+{
+  "common": {
+    "search": "搜索"
+  },
+  "sidebar": {
+    "toggle": "切换主侧边栏"
+  },
+  "settings": {
+    "parallelShared": {
+      "copied": "已复制！",
+      "failedToCopy": "复制失败",
+      "justNow": "刚刚",
+      "relativeAgo": "前",
+      "relativeMinutes": "{{value}} 分钟",
+      "relativeHours": "{{value}} 小时",
+      "relativeDays": "{{value}} 天",
+      "durationSeconds": "{{value}} 秒",
+      "durationMinutes": "{{value}} 分钟",
+      "durationHours": "{{value}} 小时",
+      "durationDays": "{{value}} 天",
+      "expiresExpired": "已过期",
+      "expiresMoment": "即将过期",
+      "expiresIn": "{{duration}}后过期",
+      "copyUnavailable": "复制 {{target}} 时剪贴板 API 不可用。",
+      "copyFailed": "无法将 {{target}} 复制到剪贴板。",
+      "readUnavailable": "读取 {{target}} 时剪贴板 API 不可用。",
+      "readFailed": "无法从剪贴板读取 {{target}}。"
+    }
+  }
+}

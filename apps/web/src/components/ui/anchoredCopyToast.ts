@@ -1,3 +1,4 @@
+import i18n from "i18next";
 import type { RefObject } from "react";
 import { anchoredToastManager } from "./toast";
 
@@ -13,7 +14,7 @@ export function showAnchoredCopySuccessToast(ref: RefObject<HTMLButtonElement | 
       anchor: ref.current,
     },
     timeout: ANCHORED_COPY_TOAST_TIMEOUT_MS,
-    title: "Copied!",
+    title: i18n.t("settings.parallelShared.copied"),
   });
 }
 
@@ -24,7 +25,7 @@ export function showAnchoredCopyErrorToast(ref: RefObject<HTMLButtonElement | nu
     positionerProps: {
       anchor: ref.current,
     },
-    title: "Failed to copy",
+    title: i18n.t("settings.parallelShared.failedToCopy"),
     description: error.message,
   });
 }
