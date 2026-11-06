@@ -39,7 +39,7 @@ export function useBoardTarget(): BoardTarget | null {
 export const TASK_STATUS = {
   todo: { label: "未开始", badge: "outline" },
   in_progress: { label: "进行中", badge: "info" },
-  in_review: { label: "等确认", badge: "warning" },
+  in_review: { label: "等你确认", badge: "warning" },
   done: { label: "完成", badge: "success" },
   needs_decision: { label: "等你决定", badge: "error" },
   dropped: { label: "已放弃", badge: "secondary" },
@@ -77,7 +77,11 @@ export function useBoardNames({ environmentId, workspaceId }: BoardTarget) {
 
 const errorText = (error: unknown) =>
   error instanceof Error && error.message.length > 0 ? error.message : "请稍后再试。";
-const STALE = { type: "warning", title: "已被别人改过，请重新看" } as const;
+const STALE = {
+  type: "warning",
+  title: "任务已更新",
+  description: "有人刚改过这条任务，列表已刷新，请再看一眼。",
+} as const;
 
 /** Every task write: pinned to the version on screen, with the server's outcome surfaced. */
 export function useTaskWrite({ environmentId }: BoardTarget) {
