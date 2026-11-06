@@ -8,18 +8,21 @@ import { Button } from "../ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
 import { projectName } from "./LighthouseWork";
 
+/** yuanPerM is the input price; cache hits and output are priced by the type multipliers. */
 const PROVIDERS = [
-  { id: "claude", label: "Claude Code", yuanPerM: 58, color: "var(--warning)", cache: 0.58 },
-  { id: "codex", label: "Codex", yuanPerM: 44, color: "var(--foreground)", cache: 0.42 },
-  { id: "cursor", label: "Cursor", yuanPerM: 50, color: "var(--info)", cache: 0.35 },
-  { id: "opencode", label: "OpenCode", yuanPerM: 18, color: "var(--success)", cache: 0.2 },
+  { id: "claude", label: "Claude Code", yuanPerM: 60, color: "var(--warning)", cache: 0.58 },
+  { id: "codex", label: "Codex", yuanPerM: 40, color: "var(--foreground)", cache: 0.42 },
+  { id: "cursor", label: "Cursor", yuanPerM: 45, color: "var(--info)", cache: 0.35 },
+  { id: "opencode", label: "OpenCode", yuanPerM: 16, color: "var(--success)", cache: 0.2 },
 ] as const;
 
 const TYPES = [
-  { id: "cache", label: "缓存命中", note: "便宜，付 1/10", color: "var(--success)" },
-  { id: "input", label: "输入", note: "全价", color: "var(--muted-foreground)" },
-  { id: "output", label: "输出", note: "最贵，约 5 倍", color: "var(--destructive)" },
+  { id: "cache", label: "缓存命中", note: "付 1/10", color: "var(--success)", mult: 0.1 },
+  { id: "input", label: "输入", note: "全价", color: "var(--muted-foreground)", mult: 1 },
+  { id: "output", label: "输出", note: "5 倍价", color: "var(--destructive)", mult: 5 },
 ] as const;
+
+type Unit = "tokens" | "cost";
 
 function seeded(seed: string) {
   let h = 2166136261;
@@ -48,8 +51,15 @@ function split(k: number, provider: (typeof PROVIDERS)[number]) {
 }
 
 const sum = (xs: ReadonlyArray<number>) => xs.reduce((s, v) => s + v, 0);
-const fmtK = (k: number) => (k >= 1000 ? `${(k / 1000).toFixed(1)}M` : `${k}K`);
-const fmtYuan = (k: number, yuanPerM: number) => `¥${Math.round((k / 1000) * yuanPerM)}`;
+
+/** Yuan for k thousand tokens of one provider, priced per token type. */
+function costOf(k: number, provider: (typeof PROVIDERS)[number]) {
+  const parts = split(k, provider);
+  return sum(TYPES.map((t) => (parts[t.id] / 1000) * provider.yuanPerM * t.mult));
+}
+
+const fmtK = (k: number) => (k >= 1000 ? `${(k / 1000).toFixed(1)}M` : `${Math.round(k)}K`);
+const fmtYuan = (y: number) => `¥${Math.round(y)}`;
 const fmtDelta = (now: number, before: number) =>
   before === 0 ? "" : `${now >= before ? "+" : ""}${Math.round(((now - before) / before) * 100)}%`;
 
@@ -99,30 +109,44 @@ function band(x0: number, y0: number, x1: number, y1: number, h: number) {
 function Sankey({
   projects,
   week,
+  unit,
   focus,
   onFocus,
 }: {
   projects: ReadonlyArray<string>;
   week: 0 | 1;
+  unit: Unit;
   focus: string | null;
   onFocus: (project: string | null) => void;
 }) {
   const rows = projects.map((p) => ({ id: p, cells: usage(p, week), before: usage(p, 1) }));
-  const byProvider = PROVIDERS.map((_, i) => sum(rows.map((r) => r.cells[i]!)));
+  const tokensBy = PROVIDERS.map((_, i) => sum(rows.map((r) => r.cells[i]!)));
+  const costBy = PROVIDERS.map((p, i) => costOf(tokensBy[i]!, p));
+  // In cost mode every band carries yuan; a project's share of a provider is priced at that
+  // provider's average rate, so the bands still add up through the chart.
+  const val = (k: number, i: number) =>
+    unit === "tokens" ? k : tokensBy[i] === 0 ? 0 : (k * costBy[i]!) / tokensBy[i]!;
+  const typeVal = (k: number, p: (typeof PROVIDERS)[number], t: (typeof TYPES)[number]) =>
+    unit === "tokens" ? split(k, p)[t.id] : (split(k, p)[t.id] / 1000) * p.yuanPerM * t.mult;
+  const fmt = unit === "tokens" ? fmtK : fmtYuan;
+  const other = unit === "tokens" ? fmtYuan : fmtK;
+  const byProvider = unit === "tokens" ? tokensBy : costBy;
   const grand = sum(byProvider);
-  const beforeGrand = sum(rows.flatMap((r) => r.before));
-  const typeTotals = TYPES.map((t) => sum(PROVIDERS.map((p, i) => split(byProvider[i]!, p)[t.id])));
+  const projectValue = (cells: ReadonlyArray<number>) => sum(cells.map((k, i) => val(k, i)));
+  const beforeGrand = sum(rows.map((r) => projectValue(r.before)));
+  const typeTotals = TYPES.map((t) => sum(PROVIDERS.map((p, i) => typeVal(tokensBy[i]!, p, t))));
+  const share = (v: number) => `${Math.round((v / grand) * 100)}%`;
   const scale = (H - GAP * (Math.max(rows.length, PROVIDERS.length) - 1) - 24) / grand;
 
   const nodes: Node[] = [
     ...rows.map((r) => ({
       key: `p:${r.id}`,
       col: 0,
-      value: sum(r.cells),
+      value: projectValue(r.cells),
       y: 0,
       color: "var(--primary)",
       title: projectName(r.id),
-      lines: [fmtK(sum(r.cells)), fmtDelta(sum(r.cells), sum(r.before))],
+      lines: [fmt(projectValue(r.cells)), fmtDelta(projectValue(r.cells), projectValue(r.before))],
     })),
     {
       key: "total",
@@ -130,8 +154,8 @@ function Sankey({
       value: grand,
       y: 0,
       color: "var(--primary)",
-      title: "总用量",
-      lines: [fmtK(grand), `较上周 ${fmtDelta(grand, beforeGrand) || "无"}`],
+      title: unit === "tokens" ? "总用量" : "总费用",
+      lines: [fmt(grand), `较上周 ${fmtDelta(grand, beforeGrand) || "无"}`],
     },
     ...PROVIDERS.map((p, i) => ({
       key: `h:${p.id}`,
@@ -141,8 +165,8 @@ function Sankey({
       color: p.color,
       title: p.label,
       lines: [
-        `${fmtK(byProvider[i]!)} · ${Math.round((byProvider[i]! / grand) * 100)}%`,
-        `${fmtYuan(byProvider[i]!, p.yuanPerM)} 估算`,
+        `${fmt(byProvider[i]!)} · ${share(byProvider[i]!)}`,
+        unit === "tokens" ? `${other(costBy[i]!)} 估算` : other(tokensBy[i]!),
       ],
     })),
     ...TYPES.map((t, i) => ({
@@ -152,7 +176,7 @@ function Sankey({
       y: 0,
       color: t.color,
       title: t.label,
-      lines: [`${fmtK(typeTotals[i]!)} · ${Math.round((typeTotals[i]! / grand) * 100)}%`, t.note],
+      lines: [`${fmt(typeTotals[i]!)} · ${share(typeTotals[i]!)}`, t.note],
     })),
   ];
   stack(nodes, scale);
@@ -162,7 +186,7 @@ function Sankey({
     ...rows.map((r) => ({
       from: `p:${r.id}`,
       to: "total",
-      value: sum(r.cells),
+      value: projectValue(r.cells),
       color: "var(--primary)",
       project: r.id,
     })),
@@ -170,7 +194,7 @@ function Sankey({
       PROVIDERS.map((p, i) => ({
         from: "total",
         to: `h:${p.id}`,
-        value: r.cells[i]!,
+        value: val(r.cells[i]!, i),
         color: p.color,
         project: r.id,
       })),
@@ -179,7 +203,7 @@ function Sankey({
       TYPES.map((t) => ({
         from: `h:${p.id}`,
         to: `t:${t.id}`,
-        value: split(byProvider[i]!, p)[t.id],
+        value: typeVal(tokensBy[i]!, p, t),
         color: t.color,
         project: null,
       })),
@@ -288,13 +312,14 @@ function Sankey({
 export function TokenFlow({ projects }: { projects: ReadonlyArray<string> }) {
   const [week, setWeek] = useState<0 | 1>(0);
   const [view, setView] = useState<"chart" | "table">("chart");
+  const [unit, setUnit] = useState<Unit>("tokens");
   const [focus, setFocus] = useState<string | null>(null);
   const rows = projects.map((p) => ({ id: p, cells: usage(p, week), before: usage(p, 1) }));
   const colTotals = PROVIDERS.map((_, i) => sum(rows.map((r) => r.cells[i]!)));
   const grand = sum(colTotals);
   const max = Math.max(1, ...rows.flatMap((r) => r.cells));
   const cost = (cells: ReadonlyArray<number>) =>
-    `¥${Math.round(sum(cells.map((v, i) => (v / 1000) * PROVIDERS[i]!.yuanPerM)))}`;
+    fmtYuan(sum(cells.map((v, i) => costOf(v, PROVIDERS[i]!))));
 
   return (
     <div className="rounded-lg border bg-card">
@@ -323,6 +348,21 @@ export function TokenFlow({ projects }: { projects: ReadonlyArray<string> }) {
           <span className="mx-1 h-4 w-px bg-border" />
           <Button
             size="xs"
+            variant={unit === "tokens" ? "secondary" : "ghost-muted"}
+            onClick={() => setUnit("tokens")}
+          >
+            token
+          </Button>
+          <Button
+            size="xs"
+            variant={unit === "cost" ? "secondary" : "ghost-muted"}
+            onClick={() => setUnit("cost")}
+          >
+            估算费用
+          </Button>
+          <span className="mx-1 h-4 w-px bg-border" />
+          <Button
+            size="xs"
             variant={view === "chart" ? "secondary" : "ghost-muted"}
             onClick={() => setView("chart")}
           >
@@ -339,7 +379,7 @@ export function TokenFlow({ projects }: { projects: ReadonlyArray<string> }) {
       </div>
       {view === "chart" ? (
         <div className="px-3 pb-2">
-          <Sankey projects={projects} week={week} focus={focus} onFocus={setFocus} />
+          <Sankey projects={projects} week={week} unit={unit} focus={focus} onFocus={setFocus} />
         </div>
       ) : (
         <Table>
@@ -352,7 +392,7 @@ export function TokenFlow({ projects }: { projects: ReadonlyArray<string> }) {
                 </TableHead>
               ))}
               <TableHead className="text-end">合计</TableHead>
-              <TableHead className="text-end">估算费用</TableHead>
+              <TableHead className="text-end">{unit === "tokens" ? "估算费用" : "token"}</TableHead>
               <TableHead className="text-end">较上周</TableHead>
             </TableRow>
           </TableHeader>
@@ -370,15 +410,19 @@ export function TokenFlow({ projects }: { projects: ReadonlyArray<string> }) {
                           background: `color-mix(in oklab, var(--primary) ${Math.round((k / max) * 42)}%, transparent)`,
                         }}
                       >
-                        {fmtK(k)}
+                        {unit === "tokens" ? fmtK(k) : fmtYuan(costOf(k, PROVIDERS[i]!))}
                       </span>
                     </TableCell>
                   ))}
                   <TableCell className="text-end">
-                    <span className="font-medium tabular-nums">{fmtK(sum(r.cells))}</span>
+                    <span className="font-medium tabular-nums">
+                      {unit === "tokens" ? fmtK(sum(r.cells)) : cost(r.cells)}
+                    </span>
                   </TableCell>
                   <TableCell className="text-end">
-                    <span className="tabular-nums">{cost(r.cells)}</span>
+                    <span className="tabular-nums">
+                      {unit === "tokens" ? cost(r.cells) : fmtK(sum(r.cells))}
+                    </span>
                   </TableCell>
                   <TableCell className="text-end">
                     <span
@@ -399,14 +443,20 @@ export function TokenFlow({ projects }: { projects: ReadonlyArray<string> }) {
               </TableCell>
               {colTotals.map((k, i) => (
                 <TableCell key={PROVIDERS[i]!.id} className="text-end">
-                  <span className="font-medium tabular-nums">{fmtK(k)}</span>
+                  <span className="font-medium tabular-nums">
+                    {unit === "tokens" ? fmtK(k) : fmtYuan(costOf(k, PROVIDERS[i]!))}
+                  </span>
                 </TableCell>
               ))}
               <TableCell className="text-end">
-                <span className="font-medium tabular-nums">{fmtK(grand)}</span>
+                <span className="font-medium tabular-nums">
+                  {unit === "tokens" ? fmtK(grand) : cost(colTotals)}
+                </span>
               </TableCell>
               <TableCell className="text-end">
-                <span className="font-medium tabular-nums">{cost(colTotals)}</span>
+                <span className="font-medium tabular-nums">
+                  {unit === "tokens" ? cost(colTotals) : fmtK(grand)}
+                </span>
               </TableCell>
               <TableCell />
             </TableRow>
@@ -414,8 +464,9 @@ export function TokenFlow({ projects }: { projects: ReadonlyArray<string> }) {
         </Table>
       )}
       <div className="border-t px-4 py-2 text-xs text-muted-foreground">
-        费用按各 provider 的混合单价估算（Claude Code ¥58/M、Codex ¥44/M、Cursor ¥50/M、OpenCode
-        ¥18/M）。悬停左侧项目名，只看它的流向。真实接入要在 Codi 的用量汇总里加项目维度。
+        费用按各 provider 的输入单价估算（Claude Code ¥60/M、Codex ¥40/M、Cursor ¥45/M、OpenCode
+        ¥16/M），缓存命中按 1/10，输出按 5 倍。悬停左侧项目名，只看它的流向。真实接入要在 Codi
+        的用量汇总里加项目维度。
       </div>
     </div>
   );
