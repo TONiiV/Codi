@@ -152,7 +152,7 @@
       "environment": "环境",
       "overriddenForThisProject": "已为此项目覆盖",
       "unavailableSelection": "所选内容不可用",
-      "unavailableEnvironment": "环境不可用",
+      "unavailableEnvironment": "不可用的环境",
       "environmentWideSettingSelectAnEnvironment": "环境范围的设置。请选择一个环境来更改它。",
       "backgroundPolicyDetails": "后台策略详情",
       "resetToInheritedValue": "重置为继承的值",
@@ -191,7 +191,7 @@
       "allEnvironments": "所有环境",
       "searchEnvironments": "搜索环境",
       "projectScope": "项目范围",
-      "unavailableProject": "项目不可用",
+      "unavailableProject": "不可用的项目",
       "allProjects": "所有项目",
       "searchProjects": "搜索项目",
       "theSelectedEnvironment": "所选环境",
@@ -256,7 +256,7 @@
       "listSeparator": "、",
       "archivedBadge": "已归档",
       "scopeOn": "位于",
-      "scopeAcross": "覆盖"
+      "scopeAcross": "涵盖"
     },
     "parallelShared": {
       "copied": "已复制！",
