@@ -378,7 +378,11 @@ function UsageScreen(props: {
                       />
                       <CostSection merged={merged} wide={wide} />
                       <ModelsSection merged={merged} metric={metric} columns={wide ? 2 : 1} />
-                      <UsageProjectsSection merged={merged} metric={metric} />
+                      <UsageProjectsSection
+                        merged={merged}
+                        metric={metric}
+                        environments={selectedEnvironments}
+                      />
                     </UsageUpdating>
                   </>
                 )}

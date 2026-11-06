@@ -52,9 +52,30 @@ function cellValues(entry: ProjectProviderTotals, unit: FlowUnit): Record<FlowTy
       other: 0,
     };
   }
-  // Same split as the Cost tab: "other" is cost no rates could divide, and under a cent it is rounding.
   const { input, cacheRead, cacheWrite, output, unsplit } = entry.categoryCost;
-  return { input, cacheRead, cacheWrite, output, other: unsplit >= 0.005 ? unsplit : 0 };
+  return { input, cacheRead, cacheWrite, output, other: unsplit };
+}
+
+// CJK glyphs are one em wide; the average Latin glyph at the label weight is about 0.58 em.
+const LABEL_EM = 14;
+const glyphWidth = (char: string) =>
+  /[\u1100-\u115f\u2e80-\ua4cf\uac00-\ud7a3\uf900-\ufaff\ufe30-\ufe4f\uff00-\uff60\uffe0-\uffe6]/u.test(
+    char,
+  )
+    ? LABEL_EM
+    : LABEL_EM * 0.58;
+const labelWidth = (text: string) => [...text].reduce((width, char) => width + glyphWidth(char), 0);
+
+export function fitLabel(text: string, maxWidth: number): string {
+  if (labelWidth(text) <= maxWidth) return text;
+  let fitted = "";
+  let width = glyphWidth("…");
+  for (const char of text) {
+    width += glyphWidth(char);
+    if (width > maxWidth) break;
+    fitted += char;
+  }
+  return `${fitted}…`;
 }
 
 function sumBy<Key>(cells: readonly FlowCell[], key: (cell: FlowCell) => Key): Map<Key, number> {
@@ -72,7 +93,7 @@ export function buildUsageFlow(
   projectLabel: (environmentId: EnvironmentId, projectId: ProjectId) => string,
 ): UsageFlowData {
   const labels = new Map<string, string>([[OUTSIDE_CODI_KEY, OUTSIDE_CODI_LABEL]]);
-  const raw: FlowCell[] = [];
+  const all: FlowCell[] = [];
   for (const entry of projectProviders) {
     const project =
       entry.projectId === null
@@ -84,10 +105,14 @@ export function buildUsageFlow(
     const values = cellValues(entry, unit);
     for (const type of TYPE_ORDER) {
       if (values[type] > 0) {
-        raw.push({ project, provider: entry.provider, type, value: values[type] });
+        all.push({ project, provider: entry.provider, type, value: values[type] });
       }
     }
   }
+
+  // Same cutoff as the Cost tab, on the summed "other": below a cent it is rounding.
+  const unsplit = all.reduce((sum, cell) => sum + (cell.type === "other" ? cell.value : 0), 0);
+  const raw = unsplit >= 0.005 ? all : all.filter((cell) => cell.type !== "other");
 
   const ranked = [...sumBy(raw, (cell) => cell.project)]
     .filter(([key]) => key !== OUTSIDE_CODI_KEY)

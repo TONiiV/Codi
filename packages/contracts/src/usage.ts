@@ -15,6 +15,9 @@ export const USAGE_UNVERSIONED_CLIENT_CONTRACT_VERSION = 6 as const;
 
 export const USAGE_MERGE_COMPATIBLE_SINCE = 4 as const;
 
+/** Servers before this version send buckets without a projectId. */
+export const USAGE_PROJECTS_SINCE = 7 as const;
+
 export const UsageProviderKind = Schema.Literals([
   "claude",
   "codex",

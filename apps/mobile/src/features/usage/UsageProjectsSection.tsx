@@ -1,11 +1,16 @@
-import type { UsageProviderKind } from "@t3tools/contracts";
+import {
+  USAGE_CONTRACT_VERSION,
+  USAGE_PROJECTS_SINCE,
+  type UsageProviderKind,
+} from "@t3tools/contracts";
 import { formatTokens, formatUsd } from "@t3tools/shared/usageFormat";
-import type { MergedUsage } from "@t3tools/shared/usageMerge";
+import { isCompatibleUsageContractVersion, type MergedUsage } from "@t3tools/shared/usageMerge";
 import { ScrollView, View } from "react-native";
 
 import { AppText as Text } from "../../components/ui/AppText";
 import { cn } from "../../lib/cn";
 import { useProjects } from "../../state/entities";
+import type { EnvironmentUsageStatus } from "../../state/usage";
 import { SettingsSection } from "../settings/components/SettingsSection";
 import type { UsageChartMetric } from "./usageChartData";
 import { PROVIDER_LABEL, PROVIDER_ORDER } from "./usageProviders";
@@ -15,8 +20,16 @@ const OUTSIDE_CODI = "Codi 之外";
 export function UsageProjectsSection(props: {
   readonly merged: MergedUsage;
   readonly metric: UsageChartMetric;
+  readonly environments: readonly EnvironmentUsageStatus[];
 }) {
   const projects = useProjects();
+  const showEnvironment = props.merged.contributingEnvironments.length > 1;
+  const outdated = props.environments.filter(
+    (environment) =>
+      environment.summary !== null &&
+      environment.summary.contractVersion < USAGE_PROJECTS_SINCE &&
+      isCompatibleUsageContractVersion(environment.summary.contractVersion, USAGE_CONTRACT_VERSION),
+  );
   const value = (entry: { costUsd: number; totalTokens: number }) =>
     props.metric === "cost" ? entry.costUsd : entry.totalTokens;
   const format = props.metric === "cost" ? formatUsd : formatTokens;
@@ -26,11 +39,16 @@ export function UsageProjectsSection(props: {
   >();
   for (const entry of props.merged.projectProviders) {
     const key = entry.projectId === null ? "" : `${entry.environmentId}:${entry.projectId}`;
+    const title =
+      projects.find((p) => p.environmentId === entry.environmentId && p.id === entry.projectId)
+        ?.title ?? "未知项目";
+    const environment = props.environments.find((e) => e.environmentId === entry.environmentId);
     const label =
       entry.projectId === null
         ? OUTSIDE_CODI
-        : (projects.find((p) => p.environmentId === entry.environmentId && p.id === entry.projectId)
-            ?.title ?? "未知项目");
+        : showEnvironment && environment
+          ? `${title} · ${environment.label}`
+          : title;
     const row = rows.get(key) ?? { key, label, cells: new Map() };
     row.cells.set(entry.provider, (row.cells.get(entry.provider) ?? 0) + value(entry));
     rows.set(key, row);
@@ -51,7 +69,15 @@ export function UsageProjectsSection(props: {
 
   const cell = "w-24 px-3 py-2.5 text-right text-sm tabular-nums";
   return (
-    <SettingsSection title="项目 × provider">
+    <SettingsSection
+      title="项目 × provider"
+      footer={outdated
+        .map(
+          (environment) =>
+            `${environment.label} 的服务端需要更新才能按项目统计，它的用量计入「Codi 之外」。`,
+        )
+        .join("\n")}
+    >
       <ScrollView horizontal showsHorizontalScrollIndicator={false}>
         <View>
           {[

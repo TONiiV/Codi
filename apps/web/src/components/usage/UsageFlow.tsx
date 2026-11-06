@@ -1,4 +1,4 @@
-import { USAGE_CONTRACT_VERSION } from "@t3tools/contracts";
+import { USAGE_CONTRACT_VERSION, USAGE_PROJECTS_SINCE } from "@t3tools/contracts";
 import { formatPercent, formatTokens, formatUsd } from "@t3tools/shared/usageFormat";
 import { isCompatibleUsageContractVersion, type MergedUsage } from "@t3tools/shared/usageMerge";
 import { useState } from "react";
@@ -8,11 +8,8 @@ import type { EnvironmentUsageStatus } from "../../state/usage";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "../ui/empty";
 import { Toggle, ToggleGroup } from "../ui/toggle-group";
 import { TYPE_COLORS } from "./usageBreakdown";
-import { buildUsageFlow, type FlowUnit, type UsageFlowData } from "./usageFlow";
+import { buildUsageFlow, fitLabel, type FlowUnit, type UsageFlowData } from "./usageFlow";
 import { PROVIDER_PRESENTATION } from "./usageProviders";
-
-// Servers before this contract version send buckets without a project.
-const PROJECT_USAGE_SINCE = 7;
 
 const W = 960;
 const NODE = 14;
@@ -28,6 +25,7 @@ interface Node {
   readonly value: number;
   readonly color: string;
   readonly title: string;
+  readonly fullTitle: string;
   readonly detail: string;
   readonly project: string | null;
   y: number;
@@ -38,7 +36,8 @@ function band(x0: number, y0: number, x1: number, y1: number, h: number) {
   return `M${x0} ${y0} C${mx} ${y0} ${mx} ${y1} ${x1} ${y1} L${x1} ${y1 + h} C${mx} ${y1 + h} ${mx} ${y0 + h} ${x0} ${y0 + h} Z`;
 }
 
-const truncate = (text: string) => (text.length > 22 ? `${text.slice(0, 21)}…` : text);
+// Project labels end-anchor at COLS[0] - 10; keep a small margin from the viewBox edge.
+const PROJECT_LABEL_WIDTH = COLS[0] - 18;
 
 function FlowSankey({ flow, unit }: { readonly flow: UsageFlowData; readonly unit: FlowUnit }) {
   const [focus, setFocus] = useState<string | null>(null);
@@ -48,13 +47,15 @@ function FlowSankey({ flow, unit }: { readonly flow: UsageFlowData; readonly uni
   const baseHeight = Math.max(320, tallest * (LINE * 3 + 4) + 40);
   const scale = (baseHeight - 40 - GAP * (tallest - 1)) / flow.total;
 
+  const totalTitle = unit === "tokens" ? "总用量" : "总费用";
   const nodes: Node[] = [
     ...flow.projects.map((project) => ({
       key: `p:${project.key}`,
       col: 0 as const,
       value: project.value,
       color: PROJECT_COLOR,
-      title: truncate(project.label),
+      title: fitLabel(project.label, PROJECT_LABEL_WIDTH),
+      fullTitle: project.label,
       detail: share(project.value),
       project: project.key,
       y: 0,
@@ -64,7 +65,8 @@ function FlowSankey({ flow, unit }: { readonly flow: UsageFlowData; readonly uni
       col: 1,
       value: flow.total,
       color: PROJECT_COLOR,
-      title: unit === "tokens" ? "总用量" : "总费用",
+      title: totalTitle,
+      fullTitle: totalTitle,
       detail: fmt(flow.total),
       project: null,
       y: 0,
@@ -75,6 +77,7 @@ function FlowSankey({ flow, unit }: { readonly flow: UsageFlowData; readonly uni
       value: provider.value,
       color: PROVIDER_PRESENTATION[provider.key].color,
       title: provider.label,
+      fullTitle: provider.label,
       detail: share(provider.value),
       project: null,
       y: 0,
@@ -85,6 +88,7 @@ function FlowSankey({ flow, unit }: { readonly flow: UsageFlowData; readonly uni
       value: type.value,
       color: TYPE_COLORS[type.key],
       title: type.label,
+      fullTitle: type.label,
       detail: share(type.value),
       project: null,
       y: 0,
@@ -189,6 +193,7 @@ function FlowSankey({ flow, unit }: { readonly flow: UsageFlowData; readonly uni
             opacity={dimmed(node.project) ? 0.35 : 1}
             onMouseEnter={node.project === null ? undefined : () => setFocus(node.project)}
           >
+            {node.title === node.fullTitle ? null : <title>{node.fullTitle}</title>}
             {node.project === null ? null : (
               <rect
                 x={0}
@@ -245,7 +250,7 @@ export function UsageFlow({
   const outdated = environments.filter(
     (environment) =>
       environment.summary !== null &&
-      environment.summary.contractVersion < PROJECT_USAGE_SINCE &&
+      environment.summary.contractVersion < USAGE_PROJECTS_SINCE &&
       isCompatibleUsageContractVersion(environment.summary.contractVersion, USAGE_CONTRACT_VERSION),
   );
 
