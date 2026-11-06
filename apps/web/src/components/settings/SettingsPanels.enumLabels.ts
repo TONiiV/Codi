@@ -1,4 +1,5 @@
 import type {
+  AuthGrantScope,
   ProjectIconColor,
   RuntimeMode,
   SidebarProjectGroupingMode,
@@ -76,4 +77,21 @@ export function projectIconColorText(color: ProjectIconColor, t: TFunction): str
 
 export function mergeMethodText(method: "merge" | "squash" | "rebase", t: TFunction): string {
   return t(`${P}mergeMethod${method[0]!.toUpperCase()}${method.slice(1)}`);
+}
+
+export function authScopeText(scope: AuthGrantScope, t: TFunction) {
+  const id = scope.replace(/[:-](\w)/g, (_, character: string) => character.toUpperCase());
+  return {
+    title: t(`${P}authScopeTitle_${id}`),
+    description: t(`${P}authScopeDescription_${id}`),
+  };
+}
+
+export function sessionPermissionsUnavailableText(
+  input: { readonly connected: boolean; readonly failed: boolean; readonly rejected: boolean },
+  t: TFunction,
+): string {
+  if (!input.connected) return t(`${P}permNotConnected`);
+  if (input.rejected) return t(`${P}permRejected`);
+  return t(`${P}${input.failed ? "permFailed" : "permChecking"}`);
 }
