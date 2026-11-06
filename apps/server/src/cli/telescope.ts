@@ -5,7 +5,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as References from "effect/References";
-import { Command, Flag, GlobalFlag } from "effect/cli";
+import { Argument, Command, Flag, GlobalFlag } from "effect/cli";
 import * as CliError from "effect/cli/CliError";
 
 import { INTERNAL_ADMINISTRATIVE_BOOTSTRAP_SUBJECT } from "../auth/EnvironmentAuth.ts";
@@ -14,7 +14,12 @@ import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
 import type { PersistenceDecodeError, PersistenceSqlError } from "../persistence/Errors.ts";
 import * as SqlitePersistence from "../persistence/Sqlite.ts";
 import * as WorkspaceService from "../telescope/WorkspaceService.ts";
-import { DurationFromString, projectLocationFlags, resolveCliAuthConfig } from "./config.ts";
+import {
+  type CliAuthLocationFlags,
+  DurationFromString,
+  projectLocationFlags,
+  resolveCliAuthConfig,
+} from "./config.ts";
 
 // Whoever can run the CLI owns this T3 home, so it acts as the environment owner.
 const OWNER: WorkspaceService.Caller = {
@@ -251,35 +256,48 @@ export const roleCommand = Command.make("role").pipe(
   Command.withSubcommands([roleSetCommand]),
 );
 
-export const projectBindCommand = Command.make("bind", {
-  ...common,
-  org: orgFlag,
-  project: projectFlag,
-  lead: memberFlag("lead", "Member id of the project's lead.").pipe(Flag.optional),
-}).pipe(
-  Command.withDescription("Bind a project on this environment to a Telescope workspace."),
-  Command.withHandler((flags) =>
-    runAsOwner(
-      flags,
-      (service) =>
-        localEnvironmentId.pipe(
-          Effect.flatMap((environmentId) =>
-            service.bind(OWNER, {
-              workspaceId: flags.org,
-              environmentId,
-              projectId: flags.project,
-              ...Option.match(flags.lead, {
-                onNone: () => ({}),
-                onSome: (leadSubjectId) => ({ leadSubjectId }),
-              }),
-            }),
+/** `resolveProjectId` is `t3 project`'s own resolver, injected to keep the modules acyclic. */
+export const makeProjectBindCommand = <E, R>(
+  resolveProjectId: (
+    flags: CliAuthLocationFlags,
+    identifier: string,
+  ) => Effect.Effect<ProjectId, E, R>,
+) =>
+  Command.make("bind", {
+    ...common,
+    org: orgFlag,
+    project: Argument.String("project").pipe(
+      Argument.withDescription("Project id or workspace root to bind."),
+    ),
+    lead: memberFlag("lead", "Member id of the project's lead.").pipe(Flag.optional),
+  }).pipe(
+    Command.withDescription("Bind a project on this environment to a Telescope workspace."),
+    Command.withHandler((flags) =>
+      resolveProjectId(flags, flags.project).pipe(
+        Effect.flatMap((projectId) =>
+          runAsOwner(
+            flags,
+            (service) =>
+              localEnvironmentId.pipe(
+                Effect.flatMap((environmentId) =>
+                  service.bind(OWNER, {
+                    workspaceId: flags.org,
+                    environmentId,
+                    projectId,
+                    ...Option.match(flags.lead, {
+                      onNone: () => ({}),
+                      onSome: (leadSubjectId) => ({ leadSubjectId }),
+                    }),
+                  }),
+                ),
+              ),
+            (binding) =>
+              `Bound ${binding.projectId} to ${binding.workspaceId}${binding.leadSubjectId === undefined ? "" : `, led by ${binding.leadSubjectId}`}.`,
           ),
         ),
-      (binding) =>
-        `Bound ${binding.projectId} to ${binding.workspaceId}${binding.leadSubjectId === undefined ? "" : `, led by ${binding.leadSubjectId}`}.`,
+      ),
     ),
-  ),
-);
+  );
 
 export const projectUnbindCommand = Command.make("unbind", {
   ...common,

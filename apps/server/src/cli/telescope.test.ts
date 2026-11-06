@@ -52,7 +52,7 @@ const makeHome = Effect.gen(function* () {
         ),
       ),
     );
-  return { t3, join };
+  return { t3, join, baseDir };
 });
 
 const failureOf = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
@@ -149,7 +149,12 @@ it.layer(layer)("telescope CLI", (it) => {
 
   it.effect("project bind and unbind tie a local project to a workspace", () =>
     Effect.gen(function* () {
-      const { t3, join } = yield* makeHome;
+      const { t3, join, baseDir } = yield* makeHome;
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const root = path.join(baseDir, "alpha");
+      yield* fs.makeDirectory(root);
+      const projectId = /^Added project (\S+) /.exec(yield* t3("project", "add", root))![1]!;
       const org = yield* t3("org", "init", "--name", "Acme", "--kind", "enterprise");
       const lead = yield* join(
         yield* t3("member", "invite", "--org", org, "--role", "project_lead"),
@@ -158,28 +163,36 @@ it.layer(layer)("telescope CLI", (it) => {
       const binding = yield* t3(
         "project",
         "bind",
+        root,
         "--org",
         org,
-        "--project",
-        "project-1",
         "--lead",
         lead.subjectId,
         "--json",
       ).pipe(Effect.flatMap(decodeJson(Telescope.ProjectBinding)));
-      assert.deepEqual([binding.projectId, binding.leadSubjectId], ["project-1", lead.subjectId]);
+      assert.deepEqual(
+        [binding.environmentId, binding.projectId, binding.leadSubjectId],
+        [
+          (yield* fs.readFileString(path.join(baseDir, "userdata", "environment-id"))).trim(),
+          projectId,
+          lead.subjectId,
+        ],
+      );
       assert.include(
-        yield* failureOf(
-          t3("project", "bind", "--org", org, "--project", "project-2", "--lead", "nobody"),
-        ),
+        yield* failureOf(t3("project", "bind", path.join(baseDir, "missing"), "--org", org)),
+        "No active project found for",
+      );
+      assert.include(
+        yield* failureOf(t3("project", "bind", projectId, "--org", org, "--lead", "nobody")),
         "That person is not an active member.",
       );
       assert.match(
         yield* t3("project", "bindings", "--org", org),
-        new RegExp(`^ENVIRONMENT\\s+PROJECT\\s+LEAD\\n\\S+\\s+project-1\\s+${lead.subjectId}$`),
+        new RegExp(`^ENVIRONMENT\\s+PROJECT\\s+LEAD\\n\\S+\\s+${projectId}\\s+${lead.subjectId}$`),
       );
       assert.strictEqual(
-        yield* t3("project", "unbind", "--org", org, "--project", "project-1"),
-        `Unbound project-1 from ${org}.`,
+        yield* t3("project", "unbind", "--org", org, "--project", projectId),
+        `Unbound ${projectId} from ${org}.`,
       );
       const { bindings } = yield* t3("project", "bindings", "--org", org, "--json").pipe(
         Effect.flatMap(decodeJson(Telescope.ProjectListBindingsResult)),
