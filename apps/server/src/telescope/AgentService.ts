@@ -29,6 +29,59 @@ const AgentRow = Schema.Struct({
   updated_at: Schema.String,
 });
 const decodeAgents = Schema.decodeUnknownEffect(Schema.Array(AgentRow));
+const decodeMembers = Schema.decodeUnknownEffect(
+  Schema.Array(
+    Schema.Struct({
+      subject_id: Schema.String,
+      role: Telescope.WorkspaceRole,
+      revoked_at: Schema.NullOr(Schema.String),
+    }),
+  ),
+);
+const decodeBindings = Schema.decodeUnknownEffect(
+  Schema.Array(
+    Schema.Struct({ project_id: ProjectId, lead_subject_id: Schema.NullOr(Schema.String) }),
+  ),
+);
+
+/** Active members' roles and each bound project's lead, read fresh for every check. */
+interface Ownership {
+  readonly roles: ReadonlyMap<string, Telescope.WorkspaceRole>;
+  readonly leads: ReadonlyMap<ProjectId, string | null>;
+}
+
+const canMergePRs = (ownership: Ownership, owner: string, projectId: ProjectId | undefined) =>
+  ownership.roles.get(owner) === "admin" ||
+  (projectId !== undefined && ownership.leads.get(projectId) === owner);
+
+/** Agents of former members, and Chief Agents of unbound projects, are out of reach. */
+const reachable = (ownership: Ownership, agent: Telescope.Agent) =>
+  agent.ownerSubjectId === null ||
+  (ownership.roles.has(agent.ownerSubjectId) &&
+    (agent.kind !== "chief_agent" ||
+      (agent.projectId !== undefined && ownership.leads.has(agent.projectId))));
+
+const NO_POWERS: Telescope.StandingPowers = {
+  openTickets: false,
+  dispatchWorkers: false,
+  answerMembers: false,
+  mergePRs: false,
+};
+
+/** Stored powers capped by what the owner's current role still allows. */
+const effectivePowers = (
+  ownership: Ownership,
+  agent: Telescope.Agent,
+): Telescope.StandingPowers => {
+  const owner = agent.ownerSubjectId;
+  if (owner === null) return agent.standingPowers;
+  if (!ownership.roles.has(owner)) return NO_POWERS;
+  const { mergePRs } = agent.standingPowers;
+  return {
+    ...agent.standingPowers,
+    mergePRs: mergePRs && canMergePRs(ownership, owner, agent.projectId),
+  };
+};
 
 const toAgent = (row: typeof AgentRow.Type): Telescope.Agent => ({
   id: row.agent_id,
@@ -90,8 +143,11 @@ const POWER_SKILLS = [
 ] as const;
 
 /** The A2A Agent Card for an agent, derived from its row. */
-const agentCard = (agent: Telescope.Agent): Telescope.AgentCard => {
-  const skills = POWER_SKILLS.filter(([power]) => agent.standingPowers[power]);
+const agentCard = (
+  agent: Telescope.Agent,
+  powers: Telescope.StandingPowers,
+): Telescope.AgentCard => {
+  const skills = POWER_SKILLS.filter(([power]) => powers[power]);
   return {
     name: agent.name,
     description: KIND_DESCRIPTIONS[agent.kind],
@@ -111,7 +167,7 @@ const fail = (reason: Telescope.WorkspaceError["reason"], message: string) =>
   Effect.fail(new Telescope.WorkspaceError({ reason, message }));
 const notFound = () => fail("not_found", "Agent not found.");
 
-type Caller = Telescope.SubjectId;
+type Caller = WorkspaceService.Caller;
 type AgentId = Telescope.Agent["id"];
 type Failure = Telescope.WorkspaceError | PersistenceSqlError | PersistenceDecodeError;
 type Rpcs = (typeof Telescope.AgentRpcs)[number];
@@ -121,7 +177,7 @@ type Method<Tag extends Rpcs["_tag"]> = (
   input: In<Tag>,
 ) => Effect.Effect<Rpc.Success<Rpc.ExtractTag<Rpcs, Tag>>, Failure>;
 
-/** Personal and company agents. `caller` is the session subject. */
+/** Personal and company agents. `caller` is the auth session; agents are owned by member ids. */
 export class AgentService extends Context.Service<
   AgentService,
   {
@@ -131,11 +187,15 @@ export class AgentService extends Context.Service<
     readonly update: Method<"telescope.agent.update">;
     readonly listCompany: Method<"telescope.agent.listCompany">;
     readonly updateCompany: Method<"telescope.agent.updateCompany">;
-    /** The gate for a company agent reaching an agent; hidden agents answer as missing. */
+    /**
+     * The gate for a company agent reaching an agent. Only the 主代理 dispatches; personal
+     * agents answer as missing while hidden or out of reach.
+     */
     readonly companyRecipient: (
       workspaceId: Telescope.WorkspaceId,
       agentId: AgentId,
-      intent: "contact" | "dispatch",
+      mode: "contact" | "dispatch",
+      senderAgentId: AgentId,
     ) => Effect.Effect<Telescope.Agent, Failure>;
   }
 >()("t3/telescope/AgentService") {}
@@ -149,7 +209,7 @@ const make = Effect.gen(function* () {
 
   const newAgent = (
     workspaceId: Telescope.WorkspaceId,
-    ownerSubjectId: Caller | null,
+    ownerSubjectId: string | null,
     kind: Telescope.AgentKind,
     name: string,
     at: string,
@@ -188,11 +248,28 @@ const make = Effect.gen(function* () {
       .bindings(caller, { workspaceId })
       .pipe(Effect.map(({ bindings }) => bindings.map((binding) => binding.projectId)));
 
+  const ownershipOf = (workspaceId: Telescope.WorkspaceId) =>
+    Effect.all([
+      db.select(workspaceId, "members", decodeMembers, { revoked_at: null }),
+      db.select(workspaceId, "project_bindings", decodeBindings),
+    ]).pipe(
+      Effect.map(([members, bindings]): Ownership => ({
+        roles: new Map(members.map((member) => [member.subject_id, member.role])),
+        leads: new Map(bindings.map((binding) => [binding.project_id, binding.lead_subject_id])),
+      })),
+    );
+
   // Projects on other environments have no local title; their id stands in.
   const projectTitles = (projectIds: ReadonlyArray<ProjectId>) =>
     projects.list({ projectIds }).pipe(
       Effect.map((rows) => new Map(rows.map((row) => [row.projectId, row.title]))),
-      Effect.orElseSucceed(() => new Map<ProjectId, string>()),
+      Effect.mapError(
+        () =>
+          new Telescope.WorkspaceError({
+            reason: "storage",
+            message: "Project titles are unavailable.",
+          }),
+      ),
     );
 
   const writeAgent = Effect.fn("AgentService.writeAgent")(function* (
@@ -208,19 +285,19 @@ const make = Effect.gen(function* () {
     caller: Caller,
     { workspaceId }: In<"telescope.agent.listMine">,
   ) {
+    const { self } = yield* workspaces.get(caller, { workspaceId });
+    const owner = self.subjectId;
     const bound = yield* boundProjectIds(caller, workspaceId);
     return yield* db.transaction(
       Effect.gen(function* () {
         const rows = yield* db.select(workspaceId, "agents", decodeAgents, {
-          owner_subject_id: caller,
+          owner_subject_id: owner,
         });
         const mine = rows.map(toAgent);
         const at = yield* now;
         const created: Array<Telescope.Agent> = [];
         if (!mine.some((agent) => agent.kind === "chief_of_staff"))
-          created.push(
-            yield* newAgent(workspaceId, caller, "chief_of_staff", "Chief of Staff", at),
-          );
+          created.push(yield* newAgent(workspaceId, owner, "chief_of_staff", "Chief of Staff", at));
         const covered = new Set(
           mine.flatMap((agent) => (agent.kind === "chief_agent" ? [agent.projectId] : [])),
         );
@@ -228,9 +305,7 @@ const make = Effect.gen(function* () {
         const titles = uncovered.length === 0 ? new Map() : yield* projectTitles(uncovered);
         for (const projectId of uncovered) {
           const name = `${titles.get(projectId) ?? projectId} Chief Agent`;
-          created.push(
-            yield* newAgent(workspaceId, caller, "chief_agent", name, at, { projectId }),
-          );
+          created.push(yield* newAgent(workspaceId, owner, "chief_agent", name, at, { projectId }));
         }
         yield* insertAll(workspaceId, created);
         const agents = [...mine, ...created]
@@ -253,25 +328,28 @@ const make = Effect.gen(function* () {
     caller: Caller,
     input: In<"telescope.agent.get">,
   ) {
-    yield* workspaces.get(caller, input);
+    const { self } = yield* workspaces.get(caller, input);
     const agent = yield* findAgent(input.workspaceId, input.agentId);
+    if (agent === undefined) return yield* notFound();
+    const ownership = yield* ownershipOf(input.workspaceId);
     const visible =
-      agent !== undefined &&
-      (agent.ownerSubjectId === null ||
-        agent.ownerSubjectId === caller ||
-        agent.exposure !== "hidden");
+      agent.ownerSubjectId === null ||
+      agent.ownerSubjectId === self.subjectId ||
+      (agent.exposure !== "hidden" && reachable(ownership, agent));
     if (!visible) return yield* notFound();
-    return { agent, card: agentCard(agent) };
+    const powers = effectivePowers(ownership, agent);
+    return { agent, effectivePowers: powers, card: agentCard(agent, powers) };
   });
 
   const createCustom = Effect.fn("AgentService.createCustom")(function* (
     caller: Caller,
     { workspaceId, name, ...extra }: In<"telescope.agent.createCustom">,
   ) {
+    const { self } = yield* workspaces.get(caller, { workspaceId });
     const bound = yield* boundProjectIds(caller, workspaceId);
     if (extra.projectId !== undefined && !bound.includes(extra.projectId))
       return yield* fail("not_found", "That project is not bound to this workspace.");
-    const agent = yield* newAgent(workspaceId, caller, "custom", name, yield* now, extra);
+    const agent = yield* newAgent(workspaceId, self.subjectId, "custom", name, yield* now, extra);
     yield* insertAll(workspaceId, [agent]);
     return agent;
   });
@@ -281,22 +359,28 @@ const make = Effect.gen(function* () {
     input: In<"telescope.agent.update">,
   ) {
     const { workspace, self } = yield* workspaces.get(caller, input);
-    const { bindings } = yield* workspaces.bindings(caller, input);
     return yield* db.transaction(
       Effect.gen(function* () {
         const agent = yield* findAgent(input.workspaceId, input.agentId);
         if (agent === undefined || agent.ownerSubjectId === null) return yield* notFound();
-        if (agent.ownerSubjectId !== caller)
-          return yield* agent.exposure === "hidden"
+        const ownership = yield* ownershipOf(input.workspaceId);
+        if (agent.ownerSubjectId !== self.subjectId) {
+          const former = !ownership.roles.has(agent.ownerSubjectId);
+          if (former && self.role === "admin") {
+            const { workspaceId: _, agentId: __, ...patch } = input;
+            if (patch.exposure !== "hidden" || Object.keys(patch).length !== 1)
+              return yield* fail("forbidden", "Admins can only hide a former member's agent.");
+            return yield* writeAgent(agent, input);
+          }
+          return yield* agent.exposure === "hidden" || former
             ? notFound()
             : fail("forbidden", "Only the owner can change this agent.");
-        if (input.standingPowers?.mergePRs === true) {
-          const lead = bindings.some(
-            (binding) => binding.projectId === agent.projectId && binding.leadSubjectId === caller,
-          );
-          if (self.role !== "admin" && self.role !== "project_lead" && !lead)
-            return yield* fail("forbidden", "Your role in this project cannot merge PRs.");
         }
+        if (
+          input.standingPowers?.mergePRs === true &&
+          !canMergePRs(ownership, self.subjectId, agent.projectId)
+        )
+          return yield* fail("forbidden", "Your role in this project cannot merge PRs.");
         if (input.exposure !== undefined) {
           if (exposureRank(input.exposure) > exposureRank(agent.exposure) + 1)
             return yield* fail("forbidden", "Exposure opens one level at a time.");
@@ -329,8 +413,11 @@ const make = Effect.gen(function* () {
             created.push(yield* newAgent(input.workspaceId, null, "department", name, at));
           yield* insertAll(input.workspaceId, created);
         }
+        const ownership = yield* ownershipOf(input.workspaceId);
         const agents = [...all, ...created].filter(
-          (agent) => agent.ownerSubjectId === null || agent.exposure !== "hidden",
+          (agent) =>
+            agent.ownerSubjectId === null ||
+            (agent.exposure !== "hidden" && reachable(ownership, agent)),
         );
         return { agents };
       }),
@@ -356,12 +443,20 @@ const make = Effect.gen(function* () {
   const companyRecipient = Effect.fn("AgentService.companyRecipient")(function* (
     workspaceId: Telescope.WorkspaceId,
     agentId: AgentId,
-    intent: "contact" | "dispatch",
+    mode: "contact" | "dispatch",
+    senderAgentId: AgentId,
   ) {
+    const sender = yield* findAgent(workspaceId, senderAgentId);
+    if (sender === undefined || sender.ownerSubjectId !== null)
+      return yield* fail("forbidden", "Only company agents reach agents through this gate.");
+    if (mode === "dispatch" && sender.kind !== "company_main")
+      return yield* fail("forbidden", "Only the 主代理 dispatches agents.");
     const agent = yield* findAgent(workspaceId, agentId);
-    if (agent === undefined || agent.exposure === "hidden") return yield* notFound();
+    if (agent === undefined) return yield* notFound();
     if (agent.ownerSubjectId === null) return agent;
-    const needed = intent === "dispatch" ? "dispatchable" : "contactable";
+    const ownership = yield* ownershipOf(workspaceId);
+    if (agent.exposure === "hidden" || !reachable(ownership, agent)) return yield* notFound();
+    const needed = mode === "dispatch" ? "dispatchable" : "contactable";
     if (exposureRank(agent.exposure) < exposureRank(needed))
       return yield* fail("forbidden", `This agent is not ${needed} by company agents.`);
     return agent;

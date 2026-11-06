@@ -123,4 +123,9 @@ export const AgentUpdateInput = Schema.Struct({
 });
 export type AgentUpdateInput = typeof AgentUpdateInput.Type;
 export const AgentListResult = Schema.Struct({ agents: Schema.Array(Agent) });
-export const AgentGetResult = Schema.Struct({ agent: Agent, card: AgentCard });
+export const AgentGetResult = Schema.Struct({
+  agent: Agent,
+  /** Stored powers capped by what the owner's current role still allows. */
+  effectivePowers: StandingPowers,
+  card: AgentCard,
+});
