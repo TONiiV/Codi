@@ -126,6 +126,10 @@ export function createTelescopeWorkspaceAtoms<R, E>(
     label: "telescope:project:binding-summary",
     tag: WS_METHODS.projectBindingSummary,
   });
+  const dashboard = createEnvironmentRpcQueryAtomFamily(runtime, {
+    label: "telescope:dashboard:summary",
+    tag: WS_METHODS.dashboardSummary,
+  });
 
   const storedWorkspaceIdAtom = Atom.writable(
     () => storage.read(),
@@ -193,6 +197,7 @@ export function createTelescopeWorkspaceAtoms<R, E>(
     members,
     bindingSummary,
     switchTo,
+    dashboard,
     storedWorkspaceIdAtom,
     currentWorkspaceAtom,
     allBindingsAtom,
