@@ -1,24 +1,44 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
+import * as TestConsole from "effect/testing/TestConsole";
+import { Command } from "effect/cli";
 
+import { packCommand } from "../../cli/pack.ts";
 import * as ContextPackService from "./ContextPackService.ts";
 
-const TestLayer = ContextPackService.layer.pipe(Layer.provideMerge(NodeServices.layer));
+const TestLayer = ContextPackService.layer.pipe(
+  Layer.provideMerge(Layer.merge(NodeServices.layer, TestConsole.layer)),
+);
 
-const fixture = Effect.fn(function* (files: Record<string, string>) {
+const runCli = (args: ReadonlyArray<string>) =>
+  Command.runWith(packCommand, { version: "0.0.0" })(args);
+
+const fixture = Effect.fn(function* (
+  files: Record<string, string>,
+  links: Record<string, string> = {},
+) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const root = yield* fs.makeTempDirectoryScoped({ prefix: "t3-context-pack-" });
+  const parent = (rel: string) =>
+    fs.makeDirectory(path.dirname(path.join(root, rel)), { recursive: true });
   for (const [rel, text] of Object.entries(files)) {
-    yield* fs.makeDirectory(path.dirname(path.join(root, rel)), { recursive: true });
+    yield* parent(rel);
     yield* fs.writeFileString(path.join(root, rel), text);
   }
+  for (const [rel, target] of Object.entries(links)) {
+    yield* parent(rel);
+    yield* fs.symlink(target, path.join(root, rel));
+  }
   const read = (rel: string) => fs.readFileString(path.join(root, rel));
-  return { root, at: (rel: string) => path.join(root, rel), read };
+  const isLink = (rel: string) =>
+    Effect.map(Effect.exit(fs.readLink(path.join(root, rel))), (exit) => exit._tag === "Success");
+  return { root, at: (rel: string) => path.join(root, rel), read, isLink, exists: fs.exists };
 });
 
 const claudeProject = {
@@ -33,7 +53,11 @@ const claudeProject = {
         args: ["-y", "@github/mcp"],
         env: { GITHUB_TOKEN: "ghp_secret_value" },
       },
-      docs: { type: "http", url: "https://docs.example.com/mcp" },
+      docs: {
+        type: "sse",
+        url: "https://docs.example.com/mcp",
+        headers: { Authorization: "Bearer ${DOCS_TOKEN}" },
+      },
     },
   }),
 };
@@ -45,13 +69,14 @@ describe("ContextPackService", () => {
       const dir = yield* fixture(claudeProject);
 
       expect(yield* service.export(dir.at("project"), dir.at("pack"))).toEqual({
-        harness: "claude",
+        instructions: true,
+        skills: 1,
+        servers: 2,
       });
       const manifest = JSON.parse(yield* dir.read("pack/pack.json"));
       expect(manifest).toMatchObject({
         version: 1,
         name: "project",
-        source: { harness: "claude" },
         skills: ["deploy"],
       });
       expect(yield* dir.read("pack/instructions.md")).toContain("Run the tests.");
@@ -59,11 +84,31 @@ describe("ContextPackService", () => {
       expect(JSON.parse(yield* dir.read("pack/mcp.json"))).toEqual({
         servers: {
           github: { command: "npx", args: ["-y", "@github/mcp"], env: ["GITHUB_TOKEN"] },
-          docs: { url: "https://docs.example.com/mcp" },
+          docs: {
+            url: "https://docs.example.com/mcp",
+            transport: "sse",
+            bearerTokenEnv: "DOCS_TOKEN",
+          },
         },
       });
 
-      yield* service.import(dir.at("pack"), dir.at("codex"), "codex", false);
+      yield* service.import(dir.at("pack"), dir.at("claude"), "claude", false);
+      expect(JSON.parse(yield* dir.read("claude/.mcp.json"))).toEqual({
+        mcpServers: {
+          github: {
+            command: "npx",
+            args: ["-y", "@github/mcp"],
+            env: { GITHUB_TOKEN: "${GITHUB_TOKEN}" },
+          },
+          docs: {
+            type: "sse",
+            url: "https://docs.example.com/mcp",
+            headers: { Authorization: "Bearer ${DOCS_TOKEN}" },
+          },
+        },
+      });
+
+      yield* runCli(["import", dir.at("pack"), dir.at("codex"), "--harness", "codex"]);
       expect(yield* dir.read("codex/AGENTS.md")).toContain("Run the tests.");
       expect(yield* dir.read("codex/.agents/skills/deploy/SKILL.md")).toContain("Ship it.");
       expect(yield* dir.read("codex/.codex/config.toml")).toBe(
@@ -75,6 +120,7 @@ describe("ContextPackService", () => {
           "",
           "[mcp_servers.docs]",
           'url = "https://docs.example.com/mcp"',
+          'bearer_token_env_var = "DOCS_TOKEN"',
           "",
         ].join("\n"),
       );
@@ -90,7 +136,10 @@ describe("ContextPackService", () => {
             args: ["-y", "@github/mcp"],
             env: { GITHUB_TOKEN: "${env:GITHUB_TOKEN}" },
           },
-          docs: { url: "https://docs.example.com/mcp" },
+          docs: {
+            url: "https://docs.example.com/mcp",
+            headers: { Authorization: "Bearer ${env:DOCS_TOKEN}" },
+          },
         },
       });
 
@@ -115,6 +164,7 @@ describe("ContextPackService", () => {
           "[mcp_servers.local.env]",
           'LOCAL_KEY = "keep-me"',
           "",
+          "# profiles",
           "[profiles.fast]",
           'model = "mini"',
         ].join("\n"),
@@ -148,8 +198,173 @@ describe("ContextPackService", () => {
 
       yield* service.import(dir.at("pack"), dir.at("codex"), "codex", false);
       const replaced = yield* dir.read("codex/.codex/config.toml");
-      expect(replaced).toContain("[profiles.fast]");
+      expect(replaced).toContain("# profiles\n[profiles.fast]");
       expect(replaced).not.toContain("[mcp_servers.local");
+
+      yield* service.import(dir.at("pack"), dir.at("codex"), "codex", true);
+      yield* service.export(dir.at("codex"), dir.at("pack2"));
+      expect(yield* dir.read("pack2/instructions.md")).not.toContain("context-pack:");
+    }).pipe(Effect.scoped, Effect.provide(TestLayer)),
+  );
+
+  it.effect("exports every harness's MCP config with env names only", () =>
+    Effect.gen(function* () {
+      const service = yield* ContextPackService.ContextPackService;
+      const dir = yield* fixture({
+        "codex/AGENTS.md": "Codex rules\n",
+        "codex/.codex/config.toml": [
+          "[mcp_servers.inline]",
+          "command = 'npx'",
+          'env = { INLINE_KEY = "sk-inline-secret" }',
+          "",
+          "[mcp_servers.table]",
+          'command = "table-mcp"',
+          "args = [",
+          '  "-y",',
+          "]",
+          "",
+          "[mcp_servers.table.env]",
+          'TABLE_KEY = "sk-table-secret"',
+          "",
+          "[mcp_servers.remote]",
+          'url = "https://r.example/mcp"',
+          'bearer_token_env_var = "REMOTE_TOKEN"',
+        ].join("\n"),
+        "opencode/AGENTS.md": "OpenCode rules\n",
+        "opencode/.opencode/skills/greet/SKILL.md": "Say hi.\n",
+        "opencode/opencode.json": JSON.stringify({
+          mcp: {
+            local: {
+              type: "local",
+              command: ["oc-mcp", "--stdio"],
+              environment: { OC_KEY: "sk-opencode-secret" },
+            },
+            remote: {
+              type: "remote",
+              url: "https://oc.example/mcp",
+              headers: { Authorization: "Bearer sk-header-secret" },
+            },
+          },
+        }),
+        "cursor/.cursor/rules/a.mdc": "---\nalwaysApply: true\n---\nAlways.\n",
+        "cursor/.cursor/rules/b.mdc": "---\nglobs: src/**\nalwaysApply: false\n---\nScoped.\n",
+        "cursor/.cursor/mcp.json": JSON.stringify({
+          mcpServers: {
+            local: { command: "cur-mcp", env: { CURSOR_KEY: "sk-cursor-secret" } },
+            remote: { url: "https://c.example/mcp", headers: { "X-Api-Key": "sk-cursor-hdr" } },
+          },
+        }),
+        // Claude Code leaves this behind wherever a permission was approved.
+        "mixed/.claude/settings.local.json": "{}",
+        "mixed/AGENTS.md": "real rules\n",
+        "mixed/opencode.json": JSON.stringify({
+          mcp: { oc: { type: "remote", url: "https://o" } },
+        }),
+        "mixed/.codex/config.toml": '[mcp_servers.cx]\ncommand = "cx"\n',
+        "empty/.claude/settings.local.json": "{}",
+      });
+
+      const cases = [
+        {
+          project: "codex",
+          instructions: "Codex rules",
+          servers: {
+            inline: { command: "npx", env: ["INLINE_KEY"] },
+            table: { command: "table-mcp", env: ["TABLE_KEY"] },
+            remote: { url: "https://r.example/mcp", bearerTokenEnv: "REMOTE_TOKEN" },
+          },
+        },
+        {
+          project: "opencode",
+          instructions: "OpenCode rules",
+          servers: {
+            local: { command: "oc-mcp", args: ["--stdio"], env: ["OC_KEY"] },
+            remote: { url: "https://oc.example/mcp" },
+          },
+        },
+        {
+          project: "cursor",
+          instructions: "Always.\n\nApplies to files matching src/**:\n\nScoped.",
+          servers: {
+            local: { command: "cur-mcp", env: ["CURSOR_KEY"] },
+            remote: { url: "https://c.example/mcp" },
+          },
+        },
+        {
+          project: "mixed",
+          instructions: "real rules",
+          servers: { oc: { url: "https://o" }, cx: { command: "cx" } },
+        },
+      ];
+      for (const { project, instructions, servers } of cases) {
+        const pack = `pack-${project}`;
+        yield* service.export(dir.at(project), dir.at(pack));
+        expect((yield* dir.read(`${pack}/instructions.md`)).trim()).toBe(instructions);
+        const mcp = yield* dir.read(`${pack}/mcp.json`);
+        expect(JSON.parse(mcp)).toEqual({ servers });
+        expect(mcp).not.toContain("sk-");
+      }
+      expect(yield* dir.read("pack-opencode/skills/greet/SKILL.md")).toBe("Say hi.\n");
+
+      const empty = yield* Effect.exit(runCli(["export", dir.at("empty"), "--out", dir.at("p")]));
+      expect(Exit.isFailure(empty)).toBe(true);
+      expect(yield* dir.exists(dir.at("p"))).toBe(false);
+    }).pipe(Effect.scoped, Effect.provide(TestLayer)),
+  );
+
+  it.effect("copies symlinked skills as files and never reads outside the pack", () =>
+    Effect.gen(function* () {
+      const service = yield* ContextPackService.ContextPackService;
+      const dir = yield* fixture(
+        {
+          "outside-secret.md": "PRIVATE_KEY_MATERIAL\n",
+          "project/CLAUDE.md": "Rules\n",
+          "project/.env": "TOKEN=sk-dotenv\n",
+          "project/.agents/skills/lint/SKILL.md": "Lint it.\n",
+        },
+        {
+          "project/.claude/skills/lint": "../../.agents/skills/lint",
+          "project/.agents/skills/lint/creds": "../../../.env",
+          "project/.agents/skills/lint/self": ".",
+        },
+      );
+      yield* service.export(dir.at("project"), dir.at("pack"));
+      expect(yield* dir.isLink("pack/skills/lint")).toBe(false);
+      expect(yield* dir.read("pack/skills/lint/SKILL.md")).toBe("Lint it.\n");
+      expect(yield* dir.exists(dir.at("pack/skills/lint/creds"))).toBe(false);
+      expect(yield* dir.exists(dir.at("pack/skills/lint/self"))).toBe(false);
+
+      for (let run = 0; run < 2; run++) {
+        yield* service.import(dir.at("pack"), dir.at("target"), "claude", false);
+      }
+      expect(yield* dir.isLink("target/.claude/skills/lint")).toBe(false);
+      expect(yield* dir.read("target/.claude/skills/lint/SKILL.md")).toBe("Lint it.\n");
+
+      const manifest = JSON.parse(yield* dir.read("pack/pack.json"));
+      const fs = yield* FileSystem.FileSystem;
+      yield* fs.writeFileString(
+        dir.at("pack/pack.json"),
+        JSON.stringify({ ...manifest, instructions: "../outside-secret.md" }),
+      );
+      yield* service.import(dir.at("pack"), dir.at("codex"), "codex", false);
+      expect(yield* dir.read("codex/AGENTS.md")).toBe("Rules\n");
+
+      yield* fs.remove(dir.at("pack/instructions.md"));
+      yield* fs.symlink("../outside-secret.md", dir.at("pack/instructions.md"));
+      const error = yield* Effect.flip(
+        service.import(dir.at("pack"), dir.at("leak"), "codex", false),
+      );
+      expect(error._tag).toBe("ContextPackPathError");
+      expect(yield* dir.exists(dir.at("leak"))).toBe(false);
+
+      yield* fs.writeFileString(
+        dir.at("pack/pack.json"),
+        JSON.stringify({ ...manifest, skills: ["../lint"] }),
+      );
+      const bad = yield* Effect.flip(
+        service.import(dir.at("pack"), dir.at("leak"), "codex", false),
+      );
+      expect(bad._tag).toBe("ContextPackFormatError");
     }).pipe(Effect.scoped, Effect.provide(TestLayer)),
   );
 });

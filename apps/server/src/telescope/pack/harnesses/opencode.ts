@@ -1,4 +1,6 @@
 import {
+  bearerEnvAt,
+  bearerHeaders,
   envPlaceholders,
   jsonMcp,
   keysAt,
@@ -9,15 +11,18 @@ import {
 } from "../Pack.ts";
 
 export const opencode = makeHarness({
-  markers: ["opencode.json", ".opencode"],
   instructions: markdownInstructions("AGENTS.md"),
-  skillsDir: ".agents/skills",
+  skillsDirs: [".agents/skills", ".opencode/skills"],
   mcp: jsonMcp(
     "opencode.json",
     "mcp",
     (server) =>
       server.url !== undefined
-        ? { type: "remote", url: server.url }
+        ? {
+            type: "remote",
+            url: server.url,
+            headers: bearerHeaders(server.bearerTokenEnv, (name) => `{env:${name}}`),
+          }
         : {
             type: "local",
             command: [server.command ?? "", ...(server.args ?? [])],
@@ -30,6 +35,7 @@ export const opencode = makeHarness({
         args: command.length > 1 ? command.slice(1) : undefined,
         env: keysAt(native.environment),
         url: stringAt(native.url),
+        bearerTokenEnv: bearerEnvAt(native.headers),
       };
     },
   ),

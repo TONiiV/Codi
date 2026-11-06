@@ -19,7 +19,11 @@ const splitServers = (text: string) => {
       const name = unquote(header[1]!);
       current = blocks.get(name) ?? [];
       blocks.set(name, current);
-    } else if (ANY_HEADER.test(line)) {
+    } else if (ANY_HEADER.test(line) && current !== rest) {
+      // Comments and blank lines just above a non-MCP table belong to that table.
+      let start = current.length;
+      while (start > 0 && /^\s*(#.*)?$/.test(current[start - 1]!)) start--;
+      rest.push(...current.splice(start));
       current = rest;
     }
     current.push(line);
@@ -41,9 +45,18 @@ const parseServer = (lines: ReadonlyArray<string>): McpServer => {
     if (!match) continue;
     const key = unquote(match[1]!);
     const value = match[2]!;
-    const parsed = (): unknown => JSON.parse(value);
+    // TOML literal strings ('x') carry no escapes; anything else that is not JSON is skipped.
+    const parsed = (): unknown => {
+      if (/^'[^']*'$/.test(value)) return value.slice(1, -1);
+      try {
+        return JSON.parse(value);
+      } catch {
+        return undefined;
+      }
+    };
     if (inEnv) env.add(key);
     else if (key === "command" || key === "url") server[key] = stringAt(parsed());
+    else if (key === "bearer_token_env_var") server.bearerTokenEnv = stringAt(parsed());
     else if (key === "args") server.args = stringsAt(parsed());
     else if (key === "env_vars") for (const name of stringsAt(parsed()) ?? []) env.add(name);
     else if (key === "env") {
@@ -61,6 +74,9 @@ const renderServer = (name: string, server: McpServer) =>
       server[key] === undefined ? [] : [`${key} = ${JSON.stringify(server[key])}`],
     ),
     ...(server.env?.length ? [`env_vars = ${JSON.stringify(server.env)}`] : []),
+    ...(server.bearerTokenEnv === undefined
+      ? []
+      : [`bearer_token_env_var = ${JSON.stringify(server.bearerTokenEnv)}`]),
   ].join("\n");
 
 const writeServers = (existing: string | undefined, servers: McpServers, merge: boolean) => {
@@ -75,9 +91,8 @@ const writeServers = (existing: string | undefined, servers: McpServers, merge: 
 };
 
 export const codex = makeHarness({
-  markers: [".codex", "AGENTS.md"],
   instructions: markdownInstructions("AGENTS.md"),
-  skillsDir: ".agents/skills",
+  skillsDirs: [".agents/skills"],
   mcp: {
     file: ".codex/config.toml",
     read: (text) =>

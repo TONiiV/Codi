@@ -15,8 +15,10 @@ const exportCommand = Command.make("export", {
   Command.withHandler(
     Effect.fn("cli.pack.export")(function* ({ projectDir, out }) {
       const service = yield* ContextPackService.ContextPackService;
-      const { harness } = yield* service.export(projectDir, out);
-      yield* Console.log(`Exported ${harness} context from ${projectDir} to ${out}.`);
+      const { instructions, skills, servers } = yield* service.export(projectDir, out);
+      yield* Console.log(
+        `Exported ${instructions ? "instructions, " : ""}${skills} skills and ${servers} MCP servers from ${projectDir} to ${out}.`,
+      );
     }),
   ),
 );
@@ -31,6 +33,7 @@ const importCommand = Command.make("import", {
   ),
   merge: Flag.Boolean("merge").pipe(
     Flag.withDescription("Keep existing harness content and add the pack's on top."),
+    Flag.withDefault(false),
   ),
 }).pipe(
   Command.withDescription("Write a context pack as a harness's native files."),

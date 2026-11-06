@@ -12,6 +12,8 @@ const McpServer = Schema.Struct({
   args: Schema.optional(Schema.Array(Schema.String)),
   env: Schema.optional(Schema.Array(Schema.String)),
   url: Schema.optional(Schema.String),
+  transport: Schema.optional(Schema.Literal("sse")),
+  bearerTokenEnv: Schema.optional(Schema.String),
 });
 export type McpServer = typeof McpServer.Type;
 export type McpServers = Readonly<Record<string, McpServer>>;
@@ -21,15 +23,14 @@ const McpFile = Schema.fromJsonString(
   { space: 2 },
 );
 
+const SkillName = Schema.String.check(Schema.isPattern(/^(?!\.\.?$)[\w.-]+$/u));
+
 const Manifest = Schema.fromJsonString(
   Schema.Struct({
     version: Schema.Literal(1),
     name: Schema.String,
     createdAt: Schema.String,
-    source: Schema.Struct({ harness: Schema.Literals(HARNESSES), path: Schema.String }),
-    instructions: Schema.String,
-    skills: Schema.Array(Schema.String),
-    mcp: Schema.String,
+    skills: Schema.Array(SkillName),
   }),
   { space: 2 },
 );
@@ -38,6 +39,8 @@ const encodeManifest = Schema.encodeEffect(Manifest);
 const decodeManifest = Schema.decodeEffect(Manifest);
 const encodeMcpFile = Schema.encodeEffect(McpFile);
 const decodeMcpFile = Schema.decodeEffect(McpFile);
+
+const PACK_FILES = { manifest: "pack.json", instructions: "instructions.md", mcp: "mcp.json" };
 
 export interface Pack {
   readonly instructions: string;
@@ -54,6 +57,18 @@ export class ContextPackFormatError extends Schema.TaggedError<ContextPackFormat
   }
 }
 
+export class ContextPackPathError extends Schema.TaggedError<ContextPackPathError>()(
+  "ContextPackPathError",
+  { path: Schema.String },
+) {
+  override get message(): string {
+    return `${this.path} resolves outside the context pack.`;
+  }
+}
+
+const formatErrorAt = (path: string) =>
+  Effect.mapError((cause: Schema.SchemaError) => new ContextPackFormatError({ path, cause }));
+
 type HarnessEffect<A> = Effect.Effect<
   A,
   PlatformError | ContextPackFormatError,
@@ -61,12 +76,12 @@ type HarnessEffect<A> = Effect.Effect<
 >;
 
 export interface HarnessSpec {
-  readonly markers: ReadonlyArray<string>;
   readonly instructions: {
     readonly read: (dir: string) => HarnessEffect<string | undefined>;
     readonly write: (dir: string, text: string, merge: boolean) => HarnessEffect<void>;
   };
-  readonly skillsDir: string;
+  // Written to the first directory, read from all of them.
+  readonly skillsDirs: readonly [string, ...Array<string>];
   readonly mcp: {
     readonly file: string;
     readonly read: (text: string) => McpServers;
@@ -76,30 +91,32 @@ export interface HarnessSpec {
 
 export type Harness = ReturnType<typeof makeHarness>;
 
+// Helpers below run inside the ContextPackService.export/import spans, so they stay untraced.
 export const makeHarness = (spec: HarnessSpec) => {
   const parse = <A>(path: string, run: () => A) =>
     Effect.try({ try: run, catch: (cause) => new ContextPackFormatError({ path, cause }) });
   return {
-    detect: Effect.fnUntraced(function* (dir: string) {
-      const fs = yield* FileSystem.FileSystem;
+    // `root` is a real path; skills resolving outside it are skipped.
+    read: Effect.fnUntraced(function* (root: string) {
       const path = yield* Path.Path;
-      for (const marker of spec.markers) if (yield* fs.exists(path.join(dir, marker))) return true;
-      return false;
-    }),
-    read: Effect.fnUntraced(function* (dir: string) {
-      const path = yield* Path.Path;
-      const mcpFile = path.join(dir, spec.mcp.file);
+      const mcpFile = path.join(root, spec.mcp.file);
       const mcpText = yield* readOptionalText(mcpFile);
+      const skills: Array<Pack["skills"][number]> = [];
+      for (const dir of spec.skillsDirs) {
+        for (const skill of yield* readSkills(path.join(root, dir), root)) {
+          if (!skills.some((s) => s.name === skill.name)) skills.push(skill);
+        }
+      }
       return {
-        instructions: (yield* spec.instructions.read(dir)) ?? "",
-        skills: yield* readSkills(path.join(dir, spec.skillsDir)),
+        instructions: (yield* spec.instructions.read(root)) ?? "",
+        skills,
         mcp: mcpText === undefined ? {} : yield* parse(mcpFile, () => spec.mcp.read(mcpText)),
       } satisfies Pack;
     }),
     write: Effect.fnUntraced(function* (pack: Pack, dir: string, merge: boolean) {
       const path = yield* Path.Path;
       yield* spec.instructions.write(dir, pack.instructions, merge);
-      yield* writeSkills(pack.skills, path.join(dir, spec.skillsDir));
+      yield* writeSkills(pack.skills, path.join(dir, spec.skillsDirs[0]));
       const mcpFile = path.join(dir, spec.mcp.file);
       const existing = yield* readOptionalText(mcpFile);
       if (existing === undefined && Object.keys(pack.mcp).length === 0) return;
@@ -127,11 +144,17 @@ export const stringAt = (value: unknown) => (typeof value === "string" ? value :
 export const stringsAt = (value: unknown) =>
   Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : undefined;
 export const keysAt = (value: unknown) => (isObject(value) ? Object.keys(value) : undefined);
+// Matches `Bearer ${X}`, `Bearer ${env:X}` and `Bearer {env:X}`; any other header value is dropped.
+export const bearerEnvAt = (headers: unknown) =>
+  /^Bearer \$?\{(?:env:)?(\w+)\}$/.exec(stringAt(objectAt(headers).Authorization) ?? "")?.[1];
 
 export const envPlaceholders = (
   names: ReadonlyArray<string> | undefined,
   render: (name: string) => string,
 ) => (names?.length ? Object.fromEntries(names.map((name) => [name, render(name)])) : undefined);
+
+export const bearerHeaders = (name: string | undefined, render: (name: string) => string) =>
+  name === undefined ? undefined : { Authorization: `Bearer ${render(name)}` };
 
 const mapValues = <A, B>(record: Readonly<Record<string, A>>, f: (a: A) => B) =>
   Object.fromEntries(Object.entries(record).map(([key, value]) => [key, f(value)]));
@@ -146,6 +169,8 @@ export const jsonMcp = (
     args: stringsAt(native.args),
     env: keysAt(native.env),
     url: stringAt(native.url),
+    transport: native.type === "sse" ? "sse" : undefined,
+    bearerTokenEnv: bearerEnvAt(native.headers),
   }),
 ): HarnessSpec["mcp"] => ({
   file,
@@ -171,6 +196,7 @@ export const writeText = Effect.fnUntraced(function* (file: string, text: string
 });
 
 const BLOCK = /<!-- context-pack:begin -->[\s\S]*?<!-- context-pack:end -->/;
+const MARKER = /^<!-- context-pack:(?:begin|end) -->\n?/gm;
 
 // Merge keeps the harness file and swaps only the block a previous import wrote.
 const mergeInstructions = (existing: string | undefined, text: string, merge: boolean) => {
@@ -180,54 +206,112 @@ const mergeInstructions = (existing: string | undefined, text: string, merge: bo
   return `${existing.trimEnd()}\n\n${block}\n`;
 };
 
-const readSkills = Effect.fnUntraced(function* (skillsDir: string) {
+// Resolves links; undefined when the target is missing or outside `root` (a real path).
+const realPathInside = Effect.fnUntraced(function* (root: string, file: string) {
+  const path = yield* Path.Path;
+  const real = yield* (yield* FileSystem.FileSystem)
+    .realPath(file)
+    .pipe(Effect.orElseSucceed(() => undefined));
+  if (real === undefined) return undefined;
+  const rel = path.relative(root, real);
+  return rel === ".." || rel.startsWith(`..${path.sep}`) || path.isAbsolute(rel) ? undefined : real;
+});
+
+const readSkills = Effect.fnUntraced(function* (skillsDir: string, root: string) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   if (!(yield* fs.exists(skillsDir))) return [];
   const names = (yield* fs.readDirectory(skillsDir)).toSorted();
   const skills: Array<Pack["skills"][number]> = [];
   for (const name of names) {
-    const dir = path.join(skillsDir, name);
-    if (yield* fs.exists(path.join(dir, "SKILL.md"))) skills.push({ name, dir });
+    const dir = yield* realPathInside(root, path.join(skillsDir, name));
+    if (dir !== undefined && (yield* fs.exists(path.join(dir, "SKILL.md")))) {
+      skills.push({ name, dir });
+    }
   }
   return skills;
 });
+
+// Copies file contents, never links: a link is followed only while it stays inside the skill.
+const copyTree: (
+  from: string,
+  to: string,
+  root: string,
+  ancestors: ReadonlyArray<string>,
+) => Effect.Effect<void, PlatformError, FileSystem.FileSystem | Path.Path> = Effect.fnUntraced(
+  function* (from, to, root, ancestors) {
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    yield* fs.makeDirectory(to, { recursive: true });
+    for (const name of (yield* fs.readDirectory(from)).toSorted()) {
+      const real = yield* realPathInside(root, path.join(from, name));
+      if (real === undefined || ancestors.includes(real)) continue;
+      const info = yield* fs.stat(real);
+      if (info.type === "Directory") {
+        yield* copyTree(real, path.join(to, name), root, [...ancestors, real]);
+      } else if (info.type === "File") {
+        yield* fs.writeFile(path.join(to, name), yield* fs.readFile(real));
+      }
+    }
+  },
+);
 
 const writeSkills = Effect.fnUntraced(function* (skills: Pack["skills"], skillsDir: string) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   for (const skill of skills) {
-    yield* fs.copy(skill.dir, path.join(skillsDir, skill.name), { overwrite: true });
+    const target = path.join(skillsDir, skill.name);
+    yield* fs.remove(target, { recursive: true, force: true });
+    yield* copyTree(skill.dir, target, skill.dir, [skill.dir]);
   }
 });
 
 export const writePackDir = Effect.fn("ContextPack.writePackDir")(function* (
   pack: Pack,
   outDir: string,
-  meta: Pick<typeof Manifest.Type, "name" | "createdAt" | "source">,
+  meta: Pick<typeof Manifest.Type, "name" | "createdAt">,
 ) {
   const path = yield* Path.Path;
   const manifest: typeof Manifest.Type = {
     version: 1,
     ...meta,
-    instructions: "instructions.md",
     skills: pack.skills.map((skill) => skill.name),
-    mcp: "mcp.json",
   };
-  yield* writeText(path.join(outDir, "pack.json"), yield* encodeManifest(manifest));
-  yield* writeText(path.join(outDir, manifest.instructions), pack.instructions);
+  yield* writeText(
+    path.join(outDir, PACK_FILES.manifest),
+    yield* encodeManifest(manifest).pipe(Effect.orDie),
+  );
+  // Markers from an earlier merge would nest on the next merge import.
+  yield* writeText(
+    path.join(outDir, PACK_FILES.instructions),
+    pack.instructions.replace(MARKER, ""),
+  );
   yield* writeSkills(pack.skills, path.join(outDir, "skills"));
-  const mcp = yield* encodeMcpFile({ servers: pack.mcp });
-  yield* writeText(path.join(outDir, manifest.mcp), mcp);
+  const mcp = yield* encodeMcpFile({ servers: pack.mcp }).pipe(Effect.orDie);
+  yield* writeText(path.join(outDir, PACK_FILES.mcp), mcp);
 });
 
+// A pack is untrusted input: every file it supplies must resolve inside the pack.
 export const readPackDir = Effect.fn("ContextPack.readPackDir")(function* (packDir: string) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
-  const at = (rel: string) => path.join(packDir, rel);
-  const manifest = yield* decodeManifest(yield* fs.readFileString(at("pack.json")));
-  const mcp = yield* decodeMcpFile(yield* fs.readFileString(at(manifest.mcp)));
-  const skills = (yield* readSkills(at("skills"))).filter((s) => manifest.skills.includes(s.name));
-  const instructions = yield* fs.readFileString(at(manifest.instructions));
+  const root = yield* fs.realPath(packDir);
+  const read = Effect.fnUntraced(function* (name: string) {
+    const file = path.join(root, name);
+    const real = yield* realPathInside(root, file);
+    if (real !== undefined) return yield* fs.readFileString(real);
+    if (yield* fs.exists(file)) return yield* new ContextPackPathError({ path: file });
+    return yield* fs.readFileString(file);
+  });
+  const manifest = yield* decodeManifest(yield* read(PACK_FILES.manifest)).pipe(
+    formatErrorAt(path.join(root, PACK_FILES.manifest)),
+  );
+  const mcp = yield* decodeMcpFile(yield* read(PACK_FILES.mcp)).pipe(
+    formatErrorAt(path.join(root, PACK_FILES.mcp)),
+  );
+  const skills = (yield* readSkills(path.join(root, "skills"), root)).filter((s) =>
+    manifest.skills.includes(s.name),
+  );
+  const instructions = yield* read(PACK_FILES.instructions);
   return { instructions, skills, mcp: mcp.servers } satisfies Pack;
 });

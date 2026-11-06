@@ -2,14 +2,22 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 
-import { envPlaceholders, jsonMcp, makeHarness, writeText } from "../Pack.ts";
+import { bearerHeaders, envPlaceholders, jsonMcp, makeHarness, writeText } from "../Pack.ts";
 
 const RULES = ".cursor/rules";
 const PACK_RULE = "context-pack.mdc";
-const stripFrontmatter = (text: string) => text.replace(/^---\n[\s\S]*?\n---\n*/, "");
+const FRONTMATTER = /^---\n([\s\S]*?)\n---\n*/;
+// A rule scoped by globs keeps its scope as text, since the pack has one always-on instruction file.
+const ruleBody = (text: string) => {
+  const front = FRONTMATTER.exec(text)?.[1] ?? "";
+  const body = text.replace(FRONTMATTER, "").trim();
+  const globs = /^globs:\s*(.+)$/m.exec(front)?.[1]?.trim();
+  const always = /^alwaysApply:\s*true\s*$/m.test(front);
+  return globs && !always ? `Applies to files matching ${globs}:\n\n${body}` : body;
+};
 
 export const cursor = makeHarness({
-  markers: [".cursor"],
+  // Untraced: these run inside the ContextPackService.export/import spans.
   instructions: {
     read: Effect.fnUntraced(function* (dir) {
       const fs = yield* FileSystem.FileSystem;
@@ -19,7 +27,7 @@ export const cursor = makeHarness({
       const files = (yield* fs.readDirectory(rules)).filter((f) => f.endsWith(".mdc")).toSorted();
       const bodies: Array<string> = [];
       for (const file of files) {
-        bodies.push(stripFrontmatter(yield* fs.readFileString(path.join(rules, file))).trim());
+        bodies.push(ruleBody(yield* fs.readFileString(path.join(rules, file))));
       }
       return bodies.join("\n\n");
     }),
@@ -31,10 +39,13 @@ export const cursor = makeHarness({
       yield* writeText(target, header + text);
     }),
   },
-  skillsDir: ".cursor/skills",
+  skillsDirs: [".cursor/skills"],
   mcp: jsonMcp(".cursor/mcp.json", "mcpServers", (server) =>
     server.url !== undefined
-      ? { url: server.url }
+      ? {
+          url: server.url,
+          headers: bearerHeaders(server.bearerTokenEnv, (name) => `\${env:${name}}`),
+        }
       : {
           command: server.command,
           args: server.args,

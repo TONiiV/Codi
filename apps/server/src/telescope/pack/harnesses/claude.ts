@@ -2,6 +2,7 @@ import * as Effect from "effect/Effect";
 import * as Path from "effect/Path";
 
 import {
+  bearerHeaders,
   envPlaceholders,
   jsonMcp,
   makeHarness,
@@ -11,6 +12,7 @@ import {
 
 const claudeMd = markdownInstructions("CLAUDE.md");
 
+// Untraced: runs inside the ContextPackService.export span.
 // CLAUDE.md often only imports AGENTS.md (`@AGENTS.md`); inline those lines so the pack is complete.
 const readInlined = Effect.fnUntraced(function* (dir: string) {
   const path = yield* Path.Path;
@@ -26,12 +28,15 @@ const readInlined = Effect.fnUntraced(function* (dir: string) {
 });
 
 export const claude = makeHarness({
-  markers: ["CLAUDE.md", ".claude", ".mcp.json"],
   instructions: { read: readInlined, write: claudeMd.write },
-  skillsDir: ".claude/skills",
+  skillsDirs: [".claude/skills"],
   mcp: jsonMcp(".mcp.json", "mcpServers", (server) =>
     server.url !== undefined
-      ? { type: "http", url: server.url }
+      ? {
+          type: server.transport ?? "http",
+          url: server.url,
+          headers: bearerHeaders(server.bearerTokenEnv, (name) => `\${${name}}`),
+        }
       : {
           command: server.command,
           args: server.args,

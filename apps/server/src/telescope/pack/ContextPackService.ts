@@ -13,15 +13,19 @@ import { cursor } from "./harnesses/cursor.ts";
 import { opencode } from "./harnesses/opencode.ts";
 import {
   type ContextPackFormatError,
+  type ContextPackPathError,
   type Harness,
   type HarnessName,
+  type McpServers,
+  type Pack,
   readPackDir,
   writePackDir,
 } from "./Pack.ts";
 
 const HARNESS_BY_NAME: Record<HarnessName, Harness> = { claude, codex, cursor, opencode };
-// Codex last: its AGENTS.md marker is also what OpenCode and Claude projects carry.
-const DETECT_ORDER: ReadonlyArray<HarnessName> = ["claude", "opencode", "cursor", "codex"];
+// Every harness present contributes; earlier ones win on instructions and on name clashes.
+// OpenCode and Codex both read AGENTS.md, so the first non-empty instructions are used.
+const EXPORT_ORDER: ReadonlyArray<HarnessName> = ["claude", "opencode", "cursor", "codex"];
 
 export class ContextPackNoHarnessError extends Schema.TaggedError<ContextPackNoHarnessError>()(
   "ContextPackNoHarnessError",
@@ -32,7 +36,7 @@ export class ContextPackNoHarnessError extends Schema.TaggedError<ContextPackNoH
   }
 }
 
-type PackError = PlatformError | ContextPackFormatError | Schema.SchemaError;
+type PackError = PlatformError | ContextPackFormatError;
 
 export class ContextPackService extends Context.Service<
   ContextPackService,
@@ -40,36 +44,51 @@ export class ContextPackService extends Context.Service<
     readonly export: (
       dir: string,
       outDir: string,
-    ) => Effect.Effect<{ readonly harness: HarnessName }, PackError | ContextPackNoHarnessError>;
+    ) => Effect.Effect<
+      { readonly instructions: boolean; readonly skills: number; readonly servers: number },
+      PackError | ContextPackNoHarnessError
+    >;
     readonly import: (
       packDir: string,
       dir: string,
       harness: HarnessName,
       merge: boolean,
-    ) => Effect.Effect<void, PackError>;
+    ) => Effect.Effect<void, PackError | ContextPackPathError>;
   }
 >()("t3/telescope/pack/ContextPackService") {}
 
 const make = Effect.gen(function* () {
   const context = yield* Effect.context<FileSystem.FileSystem | Path.Path>();
+  const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
 
   const exportPack = Effect.fn("ContextPackService.export")(function* (
     dir: string,
     outDir: string,
   ) {
-    const root = path.resolve(dir);
-    for (const harness of DETECT_ORDER) {
-      if (!(yield* HARNESS_BY_NAME[harness].detect(root))) continue;
+    const root = yield* fs.realPath(path.resolve(dir));
+    let instructions = "";
+    const skills: Array<Pack["skills"][number]> = [];
+    const mcp: Record<string, McpServers[string]> = {};
+    for (const harness of EXPORT_ORDER) {
       const pack = yield* HARNESS_BY_NAME[harness].read(root);
-      yield* writePackDir(pack, path.resolve(outDir), {
-        name: path.basename(root),
-        createdAt: DateTime.formatIso(yield* DateTime.now),
-        source: { harness, path: root },
-      });
-      return { harness };
+      if (instructions === "" && pack.instructions.trim() !== "") instructions = pack.instructions;
+      skills.push(...pack.skills.filter((s) => !skills.some((k) => k.name === s.name)));
+      for (const [name, server] of Object.entries(pack.mcp)) mcp[name] ??= server;
     }
-    return yield* new ContextPackNoHarnessError({ dir: root });
+    const summary = {
+      instructions: instructions !== "",
+      skills: skills.length,
+      servers: Object.keys(mcp).length,
+    };
+    if (!summary.instructions && summary.skills === 0 && summary.servers === 0) {
+      return yield* new ContextPackNoHarnessError({ dir: root });
+    }
+    yield* writePackDir({ instructions, skills, mcp }, path.resolve(outDir), {
+      name: path.basename(root),
+      createdAt: DateTime.formatIso(yield* DateTime.now),
+    });
+    return summary;
   }, Effect.provide(context));
 
   const importPack = Effect.fn("ContextPackService.import")(function* (
