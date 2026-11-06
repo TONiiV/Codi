@@ -7,6 +7,7 @@ export const transcript = {
   prompt: (sessionId: string, minute: number, text: string, fields: Record<string, unknown> = {}) =>
     JSON.stringify({
       type: "user",
+      uuid: `prompt-${sessionId}-${minute}-${text}`,
       sessionId,
       cwd: "/repo",
       timestamp: at(minute),
@@ -24,6 +25,7 @@ export const transcript = {
   ) =>
     JSON.stringify({
       type: "assistant",
+      uuid: `${messageId}-${id}`,
       sessionId,
       cwd: "/repo",
       timestamp: at(minute),
@@ -37,6 +39,7 @@ export const transcript = {
   toolResult: (sessionId: string, minute: number, id: string, chars: number, plain = false) =>
     JSON.stringify({
       type: "user",
+      uuid: `result-${sessionId}-${id}`,
       sessionId,
       cwd: "/repo",
       timestamp: at(minute),

@@ -13,6 +13,7 @@ const read = (filePath: string, resultTokens: number, range?: string) => ({
 
 describe("token saver transcripts", () => {
   it("collects usage once per message, tool result sizes and typed prompts inside the window", () => {
+    // The last two lines come from another file of the session: a copy, then an earlier subagent call.
     const collector = makeSessionCollector({
       sinceMs: Date.UTC(2026, 10, 2, 9, 1),
       untilMs: Date.UTC(2026, 10, 2, 9, 30),
@@ -36,15 +37,21 @@ describe("token saver transcripts", () => {
       transcript.prompt("s1", 6, "[Request interrupted by user]"),
       transcript.prompt("s1", 6, "This session is being continued.", { isCompactSummary: true }),
       "not json",
+      transcript.toolResult("s1", 3, "t1", 400),
+      JSON.stringify({
+        ...JSON.parse(transcript.toolUse("s1", 1, "m0", "t0", "Grep", { pattern: "x" })),
+        agentId: "a1",
+      }),
     ];
     for (const line of lines) collector.add(line);
     const [activity] = collector.sessions();
-    assert.strictEqual(activity?.cachedInputTokens, 1000);
-    assert.strictEqual(activity?.cacheCreationTokens, 100);
-    assert.strictEqual(activity?.turns, 1);
+    assert.strictEqual(activity?.cachedInputTokens, 2000);
+    assert.strictEqual(activity?.cacheCreationTokens, 200);
+    assert.strictEqual(activity?.turns, 2);
     assert.strictEqual(activity?.userPrompts, 2);
     assert.strictEqual(activity?.cwd, "/repo");
     assert.deepStrictEqual(activity?.toolCalls, [
+      { name: "Grep", agentId: "a1", resultTokens: 0 },
       { name: "Read", filePath: "/repo/a.ts", resultTokens: 100 },
       { name: "Read", filePath: "/repo/b.ts", range: "10:", resultTokens: 2 },
       { name: "Bash", resultTokens: 10 },
@@ -141,6 +148,15 @@ describe("token saver analyzers", () => {
     // Below the saving floor.
     const small = read("/repo/small.ts", 900);
     assert.strictEqual(repeatedReads([session("s4", { toolCalls: [small, small] })]), undefined);
+    // A subagent rereading the parent's file is its own pair, not a third reread by the parent.
+    const shared = read("/repo/src/a.ts", 600);
+    const byAgent = repeatedReads([
+      session("s5", {
+        toolCalls: [shared, shared, { ...shared, agentId: "a1" }, { ...shared, agentId: "a1" }],
+      }),
+    ]);
+    assert.strictEqual(byAgent?.evidence.sessionFilePairs, 2);
+    assert.strictEqual(byAgent?.evidence.topFileRepeatsInOneSession, 1);
   });
 
   it("counts only the part of each tool result above the threshold", () => {
