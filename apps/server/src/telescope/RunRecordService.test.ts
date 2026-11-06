@@ -5,6 +5,7 @@ import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
+import * as SqlClient from "effect/sql/SqlClient";
 import * as TestClock from "effect/testing/TestClock";
 
 import { runMigrations } from "../persistence/Migrations.ts";
@@ -202,9 +203,12 @@ it.layer(layer)("Telescope run records", (it) => {
       const recent = yield* start;
       yield* runs.pruneBefore(DateTime.subtract(yield* DateTime.now, { days: 1 }));
 
-      const gone = yield* runs.get(alice, { workspaceId, runId: old.id }).pipe(Effect.flip);
-      assert.strictEqual(reason(gone), "not_found");
-      assert.deepStrictEqual((yield* runs.calls(alice, { workspaceId, runId: old.id })).calls, []);
+      const scoped = { workspaceId, runId: old.id };
+      assert.strictEqual(reason(yield* Effect.flip(runs.get(alice, scoped))), "not_found");
+      assert.strictEqual(reason(yield* Effect.flip(runs.calls(alice, scoped))), "not_found");
+      const sql = yield* SqlClient.SqlClient;
+      const calls = yield* sql`SELECT 1 FROM telescope_run_calls WHERE run_id = ${old.id}`;
+      assert.strictEqual(calls.length, 0);
       assert.strictEqual((yield* runs.get(alice, { workspaceId, runId: recent.id })).id, recent.id);
     }),
   );

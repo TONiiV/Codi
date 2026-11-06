@@ -350,6 +350,7 @@ const make = Effect.gen(function* () {
 
   const calls = Effect.fn("RunRecordService.calls")(function* (caller: Caller, run: RunRef) {
     yield* requireMember(run.workspaceId, caller);
+    yield* runRow(run);
     const where = { run_id: run.runId };
     const rows = yield* db.select(run.workspaceId, "run_calls", decodeCalls, where, {
       orderBy: ["seq"],
