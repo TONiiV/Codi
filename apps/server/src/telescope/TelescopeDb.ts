@@ -101,6 +101,11 @@ export class TelescopeDb extends Context.Service<
     >;
     /** Retention: drops every workspace's runs started before `cutoff`, with their calls. */
     readonly pruneRunsBefore: (cutoff: string) => Effect.Effect<void, PersistenceSqlError>;
+    /** The wake queue is shared by the whole machine. */
+    readonly workspaceIdsWithActiveWakes: Effect.Effect<
+      ReadonlyArray<Telescope.WorkspaceId>,
+      PersistenceSqlError
+    >;
     readonly transaction: <A, E, R>(
       effect: Effect.Effect<A, E, R>,
     ) => Effect.Effect<A, E | PersistenceSqlError, R>;
@@ -230,6 +235,13 @@ const make = Effect.gen(function* () {
       )
       .pipe(Effect.mapError(toPersistenceSqlError("TelescopeDb.pruneRunsBefore")));
   });
+  const workspaceIdsWithActiveWakes = sql<{ readonly workspace_id: string }>`
+    SELECT DISTINCT workspace_id FROM telescope_wakes WHERE status IN ('queued', 'running')
+  `.pipe(
+    Effect.map((rows) => rows.map((row) => Telescope.WorkspaceId.make(row.workspace_id))),
+    Effect.mapError(toPersistenceSqlError("TelescopeDb.workspaceIdsWithActiveWakes")),
+    Effect.withSpan("TelescopeDb.workspaceIdsWithActiveWakes"),
+  );
   const transaction = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
     sql
       .withTransaction(effect)
@@ -251,6 +263,7 @@ const make = Effect.gen(function* () {
     workspaceIdForInvitation,
     openRunsOnThread,
     pruneRunsBefore,
+    workspaceIdsWithActiveWakes,
     transaction,
   });
 });

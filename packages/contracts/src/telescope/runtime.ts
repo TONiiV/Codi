@@ -1,6 +1,6 @@
 import * as Schema from "effect/Schema";
 
-import { EventId, ProjectId, ThreadId } from "../baseSchemas.ts";
+import { EventId, PositiveInt, ProjectId, ThreadId } from "../baseSchemas.ts";
 import { Channel } from "./agent.ts";
 import {
   AgentId,
@@ -26,7 +26,14 @@ export const WakeReason = Schema.Literals([
   "board_event",
   "maintenance",
 ]);
-export const WakeStatus = Schema.Literals(["queued", "running", "done", "merged", "interrupted"]);
+export const WakeStatus = Schema.Literals([
+  "queued",
+  "running",
+  "done",
+  "failed",
+  "merged",
+  "interrupted",
+]);
 
 export const Wake = Schema.Struct({
   id: WakeId,
@@ -39,6 +46,7 @@ export const Wake = Schema.Struct({
   subjectId: SubjectId,
   threadId: Schema.optionalKey(ThreadId),
   taskId: Schema.optionalKey(TaskId),
+  projectId: Schema.optionalKey(ProjectId),
   payload: Schema.Json,
   status: WakeStatus,
   createdAt: Timestamp,
@@ -46,6 +54,14 @@ export const Wake = Schema.Struct({
   finishedAt: Schema.optionalKey(Timestamp),
 });
 export type Wake = typeof Wake.Type;
+
+/**
+ * `position` is 1-based among queued wakes on this machine, caps and hold windows ignored; absent
+ * once a wake has started.
+ */
+export const WakeListResult = Schema.Struct({
+  wakes: Schema.Array(Schema.Struct({ ...Wake.fields, position: Schema.optionalKey(PositiveInt) })),
+});
 
 export const RunResultLabel = Schema.Literals([
   "approved",
