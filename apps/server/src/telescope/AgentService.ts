@@ -197,6 +197,14 @@ export class AgentService extends Context.Service<
       mode: "contact" | "dispatch",
       senderAgentId: AgentId,
     ) => Effect.Effect<Telescope.Agent, Failure>;
+    /** For the grant computation; it does not check who is asking. */
+    readonly powersOf: (
+      workspaceId: Telescope.WorkspaceId,
+      agentId: AgentId,
+    ) => Effect.Effect<
+      { readonly agent: Telescope.Agent; readonly effectivePowers: Telescope.StandingPowers },
+      Failure
+    >;
   }
 >()("t3/telescope/AgentService") {}
 
@@ -462,6 +470,15 @@ const make = Effect.gen(function* () {
     return agent;
   });
 
+  const powersOf = Effect.fn("AgentService.powersOf")(function* (
+    workspaceId: Telescope.WorkspaceId,
+    agentId: AgentId,
+  ) {
+    const agent = yield* findAgent(workspaceId, agentId);
+    if (agent === undefined) return yield* notFound();
+    return { agent, effectivePowers: effectivePowers(yield* ownershipOf(workspaceId), agent) };
+  });
+
   return AgentService.of({
     listMine,
     get,
@@ -470,6 +487,7 @@ const make = Effect.gen(function* () {
     listCompany,
     updateCompany,
     companyRecipient,
+    powersOf,
   });
 });
 

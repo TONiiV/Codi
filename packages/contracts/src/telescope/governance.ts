@@ -2,7 +2,6 @@ import * as Schema from "effect/Schema";
 
 import {
   AgentId,
-  AuditEntryId,
   Count,
   GrantId,
   OnBehalfOf,
@@ -30,19 +29,6 @@ export const Grant = Schema.Struct({
   revokedAt: Schema.optionalKey(Timestamp),
 });
 export type Grant = typeof Grant.Type;
-
-export const AuditEntry = Schema.Struct({
-  id: AuditEntryId,
-  workspaceId: WorkspaceId,
-  grantId: GrantId,
-  onBehalfOf: OnBehalfOf,
-  tool: Text,
-  argsRedacted: Schema.Json,
-  outcome: Schema.Literals(["allowed", "denied"]),
-  reason: Schema.optionalKey(Schema.String),
-  at: Timestamp,
-});
-export type AuditEntry = typeof AuditEntry.Type;
 
 export const BudgetScope = Schema.Literals(["company", "project", "agent", "person"]);
 
