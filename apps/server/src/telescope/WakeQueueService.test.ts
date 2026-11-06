@@ -102,6 +102,37 @@ it.effect("five emails to an idle agent within the hold window produce one run a
   }).pipe(Effect.scoped, Effect.provide(layer)),
 );
 
+it.effect("holds channel, board and scheduled wakes for 90s unless they reach priority 1", () =>
+  Effect.gen(function* () {
+    const queue = yield* WakeQueue.WakeQueueService;
+    const chat = yield* queue.enqueue(
+      ws,
+      request("ann", "chat:ann", { reason: "channel", priority: 1 }),
+    );
+    assert.strictEqual((yield* queue.dequeue)?.id, chat.id);
+
+    const held = yield* queue.enqueue(ws, request("bea", "mail:bea", { reason: "channel" }));
+    assert.strictEqual(yield* queue.dequeue, undefined);
+    const raised = yield* queue.enqueue(
+      ws,
+      request("bea", "mail:bea", { reason: "channel", priority: 1 }),
+    );
+    assert.deepStrictEqual([raised.id, raised.priority], [held.id, 1]);
+    assert.strictEqual((yield* queue.dequeue)?.id, held.id);
+
+    const board = yield* queue.enqueue(ws, request("cal", "board:cal", { reason: "board_event" }));
+    const scheduled = yield* queue.enqueue(ws, request("dan", "cron:dan", { reason: "scheduled" }));
+    yield* TestClock.adjust("89 seconds");
+    assert.strictEqual(yield* queue.dequeue, undefined);
+    yield* TestClock.adjust("1 second");
+    const due = yield* Effect.forEach([1, 2], () => queue.dequeue);
+    assert.sameMembers(
+      due.map((wake) => wake?.id),
+      [board.id, scheduled.id],
+    );
+  }).pipe(Effect.provide(layer)),
+);
+
 it.effect("keeps merging into a wake whose thread is busy past its hold", () =>
   Effect.gen(function* () {
     const queue = yield* WakeQueue.WakeQueueService;
@@ -275,19 +306,17 @@ it.effect(
     }).pipe(Effect.provide(layer)),
 );
 
-// An @mention on the board is not a dispatch. No board module exists until #46 adds TaskBoardService.ts.
+// An @mention on the board is not a dispatch.
 it.effect("keeps board modules away from the wake queue", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const files = yield* fs.readDirectory(import.meta.dirname);
     assert.include(files, "WakeQueueService.ts");
     const boardFiles = files.filter((file) => /Board/.test(file) && !file.includes(".test."));
-    let checked = 0;
+    assert.isNotEmpty(boardFiles);
     for (const file of boardFiles) {
       const source = yield* fs.readFileString(`${import.meta.dirname}/${file}`);
       assert.notMatch(source, /import[^;]*WakeQueueService/, file);
-      checked++;
     }
-    assert.strictEqual(checked, boardFiles.length);
   }).pipe(Effect.provide(NodeServices.layer)),
 );
