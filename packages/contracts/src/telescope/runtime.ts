@@ -117,6 +117,18 @@ export const RunCall = Schema.Struct({
 });
 export type RunCall = typeof RunCall.Type;
 
+export const RunListInput = Schema.Struct({
+  workspaceId: WorkspaceId,
+  agentId: Schema.optionalKey(AgentId),
+  threadId: Schema.optionalKey(ThreadId),
+  /** Runs that started before this time, for paging back. */
+  before: Schema.optionalKey(Timestamp),
+  limit: Schema.optionalKey(Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 200 }))),
+});
+export const RunListResult = Schema.Struct({ runs: Schema.Array(AgentRun) });
+export const RunScopedInput = Schema.Struct({ workspaceId: WorkspaceId, runId: AgentRunId });
+export const RunCallsResult = Schema.Struct({ calls: Schema.Array(RunCall) });
+
 export const MemoryScope = Schema.Literals(["personal", "project", "person"]);
 /** `person` records belong to company agents only; the memory service enforces that. */
 export const MemoryLayer = Schema.Literals(["working", "thread", "diary", "long_term", "person"]);

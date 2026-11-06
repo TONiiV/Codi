@@ -5,6 +5,7 @@ import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 import * as SqlClient from "effect/sql/SqlClient";
 import * as SqlError from "effect/sql/SqlError";
+import type * as Statement from "effect/sql/Statement";
 
 import {
   type PersistenceDecodeError,
@@ -40,6 +41,14 @@ type Row = Readonly<Record<string, string | number | null>>;
 /** A module-level `Schema.decodeUnknownEffect(Schema.Array(RowSchema))`. */
 export type RowsDecoder<A, R> = (rows: unknown) => Effect.Effect<A, Schema.SchemaError, R>;
 
+/** `filter` is parenthesised and ANDed with the workspace filter, so it cannot widen a select. */
+interface SelectOptions {
+  readonly filter?: Statement.Fragment;
+  readonly orderBy?: string;
+  readonly descending?: boolean;
+  readonly limit?: number;
+}
+
 /**
  * The only way Telescope code reaches its tables. Every statement is bound to one workspace, so a
  * caller that forgets to filter still cannot touch another workspace's rows.
@@ -53,6 +62,7 @@ export class TelescopeDb extends Context.Service<
       table: TelescopeTable,
       decodeRows: RowsDecoder<A, R>,
       where?: Row,
+      options?: SelectOptions,
     ) => Effect.Effect<A, PersistenceSqlError | PersistenceDecodeError, R>;
     /** Keys of `row` and `set` must not name `workspace_id`; the repository writes it. */
     readonly insert: (
@@ -82,6 +92,15 @@ export class TelescopeDb extends Context.Service<
     readonly workspaceIdForInvitation: (
       code: string,
     ) => Effect.Effect<Telescope.WorkspaceId | undefined, PersistenceSqlError>;
+    readonly openRunsOnThread: (threadId: string) => Effect.Effect<
+      ReadonlyArray<{
+        readonly workspaceId: Telescope.WorkspaceId;
+        readonly runId: Telescope.AgentRunId;
+      }>,
+      PersistenceSqlError
+    >;
+    /** Retention: drops every workspace's runs started before `cutoff`, with their calls. */
+    readonly pruneRunsBefore: (cutoff: string) => Effect.Effect<void, PersistenceSqlError>;
     readonly transaction: <A, E, R>(
       effect: Effect.Effect<A, E, R>,
     ) => Effect.Effect<A, E | PersistenceSqlError, R>;
@@ -117,10 +136,17 @@ const make = Effect.gen(function* () {
     table: TelescopeTable,
     decodeRows: RowsDecoder<A, R>,
     where: Row = {},
+    options: SelectOptions = {},
   ) {
     yield* checkColumns(`TelescopeDb.select.${table}`, where, "caller");
+    const filter = options.filter === undefined ? sql`` : sql` AND (${options.filter})`;
+    const order =
+      options.orderBy === undefined
+        ? sql``
+        : sql` ORDER BY ${sql(options.orderBy)} ${sql.literal(options.descending ? "DESC" : "ASC")}`;
+    const limit = options.limit === undefined ? sql`` : sql` LIMIT ${options.limit}`;
     const rows =
-      yield* sql`SELECT * FROM ${tableName(table)} WHERE ${scoped(workspaceId, where)}`.pipe(
+      yield* sql`SELECT * FROM ${tableName(table)} WHERE ${scoped(workspaceId, where)}${filter}${order}${limit}`.pipe(
         Effect.mapError(toPersistenceSqlError(`TelescopeDb.select.${table}`)),
       );
     return yield* decodeRows(rows).pipe(
@@ -182,6 +208,27 @@ const make = Effect.gen(function* () {
     `.pipe(Effect.mapError(toPersistenceSqlError("TelescopeDb.workspaceIdForInvitation")));
     return rows[0] === undefined ? undefined : Telescope.WorkspaceId.make(rows[0].workspace_id);
   });
+  const openRunsOnThread = Effect.fn("TelescopeDb.openRunsOnThread")(function* (threadId: string) {
+    const rows = yield* sql<{ readonly workspace_id: string; readonly run_id: string }>`
+      SELECT workspace_id, run_id FROM telescope_runs
+      WHERE thread_id = ${threadId} AND finished_at IS NULL
+    `.pipe(Effect.mapError(toPersistenceSqlError("TelescopeDb.openRunsOnThread")));
+    return rows.map((row) => ({
+      workspaceId: Telescope.WorkspaceId.make(row.workspace_id),
+      runId: Telescope.AgentRunId.make(row.run_id),
+    }));
+  });
+  const pruneRunsBefore = Effect.fn("TelescopeDb.pruneRunsBefore")(function* (cutoff: string) {
+    yield* sql
+      .withTransaction(
+        Effect.all([
+          sql`DELETE FROM telescope_run_calls WHERE run_id IN
+          (SELECT run_id FROM telescope_runs WHERE started_at < ${cutoff})`,
+          sql`DELETE FROM telescope_runs WHERE started_at < ${cutoff}`,
+        ]),
+      )
+      .pipe(Effect.mapError(toPersistenceSqlError("TelescopeDb.pruneRunsBefore")));
+  });
   const transaction = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
     sql
       .withTransaction(effect)
@@ -201,6 +248,8 @@ const make = Effect.gen(function* () {
     workspaceIdsOf,
     allWorkspaceIds,
     workspaceIdForInvitation,
+    openRunsOnThread,
+    pruneRunsBefore,
     transaction,
   });
 });

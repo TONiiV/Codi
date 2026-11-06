@@ -11,6 +11,13 @@ import {
   AgentUpdateInput,
 } from "./agent.ts";
 import {
+  AgentRun,
+  RunCallsResult,
+  RunListInput,
+  RunListResult,
+  RunScopedInput,
+} from "./runtime.ts";
+import {
   Invitation,
   Member,
   MemberAcceptInput,
@@ -71,6 +78,9 @@ export const WS_METHODS = {
   agentUpdate: "telescope.agent.update",
   agentListCompany: "telescope.agent.listCompany",
   agentUpdateCompany: "telescope.agent.updateCompany",
+  runList: "telescope.run.list",
+  runGet: "telescope.run.get",
+  runCalls: "telescope.run.calls",
 } as const;
 
 const error = Schema.Union([WorkspaceError, EnvironmentAuthorizationError]);
@@ -124,4 +134,10 @@ export const AgentRpcs = [
   make(WS_METHODS.agentUpdate, AgentUpdateInput, Agent),
   make(WS_METHODS.agentListCompany, WorkspaceScopedInput, AgentListResult),
   make(WS_METHODS.agentUpdateCompany, AgentUpdateInput, Agent),
+] as const;
+
+export const RunRpcs = [
+  make(WS_METHODS.runList, RunListInput, RunListResult),
+  make(WS_METHODS.runGet, RunScopedInput, AgentRun),
+  make(WS_METHODS.runCalls, RunScopedInput, RunCallsResult),
 ] as const;
