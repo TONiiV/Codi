@@ -45,7 +45,13 @@ describe("review actions", () => {
 });
 
 describe("describeFailure", () => {
-  it("refreshes on a conflict, not on other errors", () => {
+  it("refreshes on a stale task version or a conflict, not on other errors", () => {
+    const stale = new Telescope.StaleTaskVersionError({
+      taskId: Telescope.TaskId.make("t1"),
+      baseVersion: 7,
+      currentVersion: 8,
+    });
+    expect(describeFailure(stale)).toMatchObject({ refresh: true, title: "任务已更新" });
     const conflict = new Telescope.WorkspaceError({ reason: "conflict", message: "superseded" });
     expect(describeFailure(conflict)).toMatchObject({ refresh: true, title: "内容已更新" });
     expect(
