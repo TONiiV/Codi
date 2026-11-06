@@ -24,10 +24,14 @@ const STATUS_RANK = new Map<Schema.Json, number>([
 const sameJson = (a: unknown, b: unknown) =>
   JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
 
-/** Status only moves forward and `dropped` is terminal. `undefined` when neither rule decides. */
+/**
+ * Status only moves forward; `dropped` is terminal and `needs_decision` holds until a person
+ * moves it. `undefined` when neither rule decides.
+ */
 const statusWinner = (mine: Schema.Json, current: Schema.Json) => {
-  if (current === "dropped") return "theirs";
-  if (mine === "dropped") return current === "done" ? undefined : "mine";
+  if (current === "dropped" || current === "needs_decision") return "theirs";
+  if (mine === "dropped" || mine === "needs_decision")
+    return current === "done" ? undefined : "mine";
   const m = STATUS_RANK.get(mine);
   const c = STATUS_RANK.get(current);
   if (m === undefined || c === undefined) return undefined;
@@ -68,23 +72,24 @@ export const mergeStale = (input: {
     }
     if (sameJson(value, base[key])) continue;
     const holder = input.leaseHolder;
-    const byLease = holder !== undefined && (input.authorId === holder || theirs.has(holder));
-    const winner = byLease
-      ? input.authorId === holder
-        ? "mine"
-        : "theirs"
-      : key === "status"
-        ? statusWinner(value, input.current.status)
-        : undefined;
+    const byStatus = key === "status" ? statusWinner(value, input.current.status) : undefined;
+    const byLease =
+      holder === undefined
+        ? undefined
+        : input.authorId === holder
+          ? "mine"
+          : theirs.has(holder)
+            ? "theirs"
+            : undefined;
+    const winner = byStatus ?? byLease;
     if (winner === undefined) {
       conflicts.push(key);
       continue;
     }
     if (winner === "mine") fields[key] = value;
     const kept = JSON.stringify(winner === "mine" ? value : (current[key] ?? null));
-    reasons.push(
-      `${key}: ${byLease ? "lease holder wins" : "status only moves forward"}, kept ${kept}`,
-    );
+    const rule = byStatus === undefined ? "lease holder wins" : "status only moves forward";
+    reasons.push(`${key}: ${rule}, kept ${kept}`);
   }
   if (conflicts.length > 0) return { kind: "conflict", fields: conflicts };
   const rebased = `rebased from version ${input.baseVersion}`;

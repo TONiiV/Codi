@@ -417,6 +417,33 @@ it.layer(layer)("Telescope task board", (it) => {
         (yield* lastCommit)?.mergeReason,
         'rebased from version 5; title: lease holder wins, kept "Holder\'s plan"',
       );
+
+      const race = yield* board.createTask(alice, { workspaceId: a, title: "Race" });
+      const write = (actor: TaskBoardService.Actor, baseVersion: number, set: object) =>
+        board.updateTask(actor, { workspaceId: a, taskId: race.id, baseVersion, set });
+      const raceCommit = Effect.map(
+        board.listCommits(alice, { workspaceId: a, taskId: race.id }),
+        ({ commits }) => commits.at(-1),
+      );
+      yield* board.acquireLease(alice, {
+        workspaceId: a,
+        taskId: race.id,
+        agentId: Telescope.AgentId.make("agent-h"),
+      });
+      yield* write(bob, 2, { status: "done" });
+      const forward = yield* write(holder, 2, { status: "in_progress" });
+      assert.deepStrictEqual([forward.status, forward.version], ["done", 4]);
+      assert.strictEqual(
+        (yield* raceCommit)?.mergeReason,
+        'rebased from version 2; status: status only moves forward, kept "done"',
+      );
+
+      yield* write(alice, 4, { status: "needs_decision" });
+      const held = yield* write(bob, 4, { status: "in_progress" });
+      assert.deepStrictEqual([held.status, held.version], ["needs_decision", 6]);
+      assert.strictEqual((yield* raceCommit)?.mergeLevel, 1);
+      const { decisions } = yield* board.listDecisions(alice, { workspaceId: a });
+      assert.strictEqual(decisions.length, 1);
     }),
   );
 });
