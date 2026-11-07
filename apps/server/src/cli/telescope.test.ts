@@ -126,6 +126,12 @@ it.layer(layer)("telescope CLI", (it) => {
         "does not match",
       );
       assert.strictEqual(yield* fs.readFileString(file), "an earlier manifest\n");
+      const fresh = path.join(baseDir, "fresh-manifest.json");
+      assert.include(
+        yield* failureOf(t3("org", "delete", org, "--confirm", "acme", "--manifest", fresh)),
+        "does not match",
+      );
+      assert.isFalse(yield* fs.exists(fresh));
       const unwritable = path.join(baseDir, "missing", "manifest.json");
       const fileError = yield* Effect.flip(
         t3("org", "delete", org, "--confirm", "Acme", "--manifest", unwritable),

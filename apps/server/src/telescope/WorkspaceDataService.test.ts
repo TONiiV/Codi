@@ -1,17 +1,22 @@
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
+import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, it } from "@effect/vitest";
-import { AuthSessionId, EnvironmentId } from "@t3tools/contracts";
+import { AuthSessionId, EnvironmentId, Telescope } from "@t3tools/contracts";
 import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
+import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import * as SqlClient from "effect/sql/SqlClient";
 
+import { ServerConfig } from "../config.ts";
 import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
 import { runMigrations } from "../persistence/Migrations.ts";
 import * as SqlitePersistence from "../persistence/Sqlite.ts";
+import * as ContextAssembler from "./ContextAssembler.ts";
 import * as TelescopeDb from "./TelescopeDb.ts";
 import * as WorkspaceDataService from "./WorkspaceDataService.ts";
 import * as WorkspaceService from "./WorkspaceService.ts";
@@ -22,6 +27,11 @@ const database = Layer.effectDiscard(runMigrations()).pipe(
 const services = (random: Layer.Layer<SecureRandom.SecureRandom>) =>
   Layer.mergeAll(WorkspaceDataService.layer, WorkspaceService.layer, TelescopeDb.layer).pipe(
     Layer.provideMerge(Layer.merge(database, random)),
+    Layer.provideMerge(
+      ServerConfig.layerTest(process.cwd(), { prefix: "telescope-data-test-" }).pipe(
+        Layer.provideMerge(NodeServices.layer),
+      ),
+    ),
     Layer.provide(
       Layer.succeed(ServerEnvironment.ServerEnvironmentIdentity, {
         getEnvironmentId: Effect.succeed(EnvironmentId.make("env-local")),
@@ -42,8 +52,7 @@ const reasonOf = <A, E extends { readonly _tag: string }, R>(effect: Effect.Effe
 const decodeBundle = Schema.decodeUnknownEffect(
   Schema.fromJsonString(
     Schema.Struct({
-      withheldMemories: Schema.Number,
-      withheldAgents: Schema.Number,
+      withheld: Schema.Record(Schema.String, Schema.Number),
       tables: Schema.Record(
         Schema.String,
         Schema.Array(Schema.Record(Schema.String, Schema.Unknown)),
@@ -93,7 +102,9 @@ const seededWorkspace = (caller: WorkspaceService.Caller, name: string, tag: str
       displayName: name,
     });
     for (const table of yield* telescopeTables("table")) {
-      if (table !== "telescope_workspaces") yield* seed(workspace.id, table, tag);
+      // A company agent, which every admin sees, so no row of its own is withheld.
+      const row = table === "telescope_agents" ? { owner_subject_id: null } : {};
+      if (table !== "telescope_workspaces") yield* seed(workspace.id, table, tag, row);
     }
     return workspace;
   });
@@ -171,79 +182,186 @@ it.layer(layer)("WorkspaceDataService", (it) => {
     }),
   );
 
-  it.effect("leaves out invitation codes, and memories and agents the exporter cannot see", () =>
+  it.effect(
+    "leaves out invitation codes, and memories, agents and agents' rows the app hides",
+    () =>
+      Effect.gen(function* () {
+        const service = yield* WorkspaceService.WorkspaceService;
+        const data = yield* WorkspaceDataService.WorkspaceDataService;
+        const [alice, bob, carol] = [
+          session("private-alice"),
+          session("private-bob"),
+          session("private-carol"),
+        ];
+        const { id: workspaceId } = yield* service.create(alice, {
+          kind: "enterprise",
+          name: "Private",
+          displayName: "Alice",
+        });
+        const used = yield* service.invite(alice, { workspaceId, role: "admin" });
+        const { subjectId: bobId } = yield* service.accept(bob, {
+          code: used.code,
+          displayName: "Bob",
+        });
+        const carolCode = yield* service.invite(alice, { workspaceId, role: "member" });
+        const { subjectId: carolId } = yield* service.accept(carol, {
+          code: carolCode.code,
+          displayName: "Carol",
+        });
+        yield* service.revoke(alice, { workspaceId, subjectId: carolId });
+        const unused = yield* service.invite(alice, { workspaceId, role: "member" });
+        const aliceId = (yield* service.get(alice, { workspaceId })).self.subjectId;
+        yield* seed(workspaceId, "telescope_project_bindings", "bound", { project_id: "bound" });
+        for (const [agent, owner, exposure, project] of [
+          ["agent-alice", aliceId, "hidden", null],
+          ["agent-bob", bobId, "hidden", null],
+          ["agent-shared", bobId, "visible", null],
+          ["agent-company", null, "hidden", null],
+          ["agent-carol", carolId, "visible", null],
+          ["agent-chief", bobId, "visible", "unbound"],
+          ["agent-chief-bound", bobId, "visible", "bound"],
+        ] as const) {
+          yield* seed(workspaceId, "telescope_agents", agent, {
+            agent_id: agent,
+            owner_subject_id: owner,
+            exposure,
+            ...(project === null ? {} : { kind: "chief_agent", project_id: project }),
+          });
+        }
+        for (const [id, agent, level, about] of [
+          ["own-private", "agent-alice", "private", null],
+          ["bob-private", "agent-bob", "private", null],
+          ["about-alice", "agent-bob", "internal", aliceId],
+          ["about-bob", "agent-alice", "internal", bobId],
+        ] as const) {
+          yield* seed(workspaceId, "telescope_memories", id, {
+            memory_id: id,
+            agent_id: agent,
+            level,
+            scope: about === null ? "personal" : "person",
+            about_subject_id: about,
+          });
+        }
+        const via = (agent: string) => JSON.stringify([aliceId, agent]);
+        for (const [table, id, row] of [
+          ["delegations", "to-bob", { from_agent_id: "agent-alice", to_agent_id: "agent-bob" }],
+          [
+            "delegations",
+            "to-shared",
+            { from_agent_id: "agent-alice", to_agent_id: "agent-shared" },
+          ],
+          ["runs", "run-bob", { run_id: "run-bob", agent_id: "agent-bob" }],
+          ["runs", "run-via", { agent_id: "agent-shared", on_behalf_of_json: via("agent-bob") }],
+          ["runs", "run-shared", { run_id: "run-shared", agent_id: "agent-shared" }],
+          ["run_calls", "call-bob", { run_id: "run-bob" }],
+          ["run_calls", "call-shared", { run_id: "run-shared" }],
+          ["audit", "audit-carol", { agent_id: "agent-carol" }],
+          ["grants", "grant-bob", { on_behalf_of_json: via("agent-bob") }],
+          ["wakes", "wake-bob", { agent_id: "agent-bob" }],
+          ["leases", "lease-bob", { holder_agent_id: "agent-bob" }],
+          ["kill_switches", "kill-chief", { agent_id: "agent-chief" }],
+          ["channel_bindings", "binding-carol", { agent_id: "agent-carol" }],
+          ["budgets", "budget-bob", { scope: "agent", scope_id: "agent-bob" }],
+          ["budgets", "budget-shared", { scope: "agent", scope_id: "agent-shared" }],
+        ] as const) {
+          yield* seed(workspaceId, `telescope_${table}`, id, row);
+        }
+
+        const { files } = yield* data.export(alice, { workspaceId });
+        const bundle = yield* bundleOf(files);
+        assert.deepStrictEqual(
+          bundle.tables.telescope_memories?.map((row) => row.memory_id),
+          ["own-private", "about-alice"],
+        );
+        const agentIds = (tables: typeof bundle.tables) =>
+          tables.telescope_agents?.map((row) => row.agent_id);
+        assert.deepStrictEqual(agentIds(bundle.tables), [
+          "agent-alice",
+          "agent-shared",
+          "agent-company",
+          "agent-chief-bound",
+        ]);
+        assert.deepStrictEqual(
+          bundle.tables.telescope_delegations?.map((row) => row.to_agent_id),
+          ["agent-shared"],
+        );
+        assert.deepStrictEqual(
+          bundle.tables.telescope_runs?.map((row) => row.run_id),
+          ["run-shared"],
+        );
+        assert.deepStrictEqual(
+          bundle.tables.telescope_budgets?.map((row) => row.scope_id),
+          ["agent-shared"],
+        );
+        assert.deepStrictEqual(bundle.withheld, {
+          telescope_agents: 3,
+          telescope_leases: 1,
+          telescope_grants: 1,
+          telescope_audit: 1,
+          telescope_budgets: 1,
+          telescope_kill_switches: 1,
+          telescope_wakes: 1,
+          telescope_runs: 2,
+          telescope_run_calls: 1,
+          telescope_memories: 2,
+          telescope_channel_bindings: 1,
+          telescope_delegations: 1,
+        });
+        const readme = files.find((file) => file.path === "README.md")?.text;
+        assert.include(readme, "\n- 2 memories the exporting member cannot read");
+        assert.include(readme, "\n- 3 agents the app hides from the exporting member");
+        assert.include(readme, "\n- Rows of those agents: telescope_leases 1, telescope_grants 1,");
+        assert.deepStrictEqual(
+          bundle.tables.telescope_invitations?.map((row) => "code" in row),
+          [false, false, false],
+        );
+        for (const file of files) {
+          assert.notInclude(file.text, used.code);
+          assert.notInclude(file.text, unused.code);
+          assert.notInclude(file.text, "bob-private");
+          assert.notInclude(file.text, "name agent-bob");
+          assert.notInclude(file.text, "name agent-carol");
+          assert.notInclude(file.text, "run-bob");
+        }
+        const bobs = yield* bundleOf((yield* data.export(bob, { workspaceId })).files);
+        assert.deepStrictEqual(agentIds(bobs.tables), [
+          "agent-bob",
+          "agent-shared",
+          "agent-company",
+          "agent-chief",
+          "agent-chief-bound",
+        ]);
+        assert.deepStrictEqual(
+          bobs.tables.telescope_runs?.map((row) => row.run_id),
+          ["run-bob", "run_id run-via", "run-shared"],
+        );
+      }),
+  );
+
+  it.effect("refuses an export over the size cap and points to the CLI", () =>
     Effect.gen(function* () {
       const service = yield* WorkspaceService.WorkspaceService;
       const data = yield* WorkspaceDataService.WorkspaceDataService;
-      const [alice, bob] = [session("private-alice"), session("private-bob")];
+      const alice = session("large-alice");
       const { id: workspaceId } = yield* service.create(alice, {
         kind: "enterprise",
-        name: "Private",
+        name: "Large",
         displayName: "Alice",
       });
-      const used = yield* service.invite(alice, { workspaceId, role: "admin" });
-      const { subjectId: bobId } = yield* service.accept(bob, {
-        code: used.code,
-        displayName: "Bob",
+      yield* seed(workspaceId, "telescope_tasks", "large", {
+        kind: "task",
+        title: "x".repeat(Telescope.WORKSPACE_EXPORT_MAX_BYTES),
       });
-      const unused = yield* service.invite(alice, { workspaceId, role: "member" });
-      const aliceId = (yield* service.get(alice, { workspaceId })).self.subjectId;
-      for (const [agent, owner, exposure] of [
-        ["agent-alice", aliceId, "hidden"],
-        ["agent-bob", bobId, "hidden"],
-        ["agent-shared", bobId, "visible"],
-        ["agent-company", null, "hidden"],
-      ] as const) {
-        yield* seed(workspaceId, "telescope_agents", agent, {
-          agent_id: agent,
-          owner_subject_id: owner,
-          exposure,
-        });
-      }
-      for (const [id, agent, level, about] of [
-        ["own-private", "agent-alice", "private", null],
-        ["bob-private", "agent-bob", "private", null],
-        ["about-alice", "agent-bob", "internal", aliceId],
-        ["about-bob", "agent-alice", "internal", bobId],
-      ] as const) {
-        yield* seed(workspaceId, "telescope_memories", id, {
-          memory_id: id,
-          agent_id: agent,
-          level,
-          scope: about === null ? "personal" : "person",
-          about_subject_id: about,
-        });
-      }
-
-      const { files } = yield* data.export(alice, { workspaceId });
-      const bundle = yield* bundleOf(files);
-      assert.deepStrictEqual(
-        bundle.tables.telescope_memories?.map((row) => row.memory_id),
-        ["own-private", "about-alice"],
+      const refusal = yield* Effect.flip(data.export(alice, { workspaceId }));
+      assert.strictEqual(refusal._tag, "TelescopeWorkspaceError");
+      assert.include(refusal.message, "over the 10.0 MiB the app downloads");
+      assert.include(refusal.message, `t3 org export ${workspaceId} --out <directory>`);
+      const { files } = yield* data.export(
+        alice,
+        { workspaceId },
+        { maxBytes: Number.POSITIVE_INFINITY },
       );
-      assert.strictEqual(bundle.withheldMemories, 2);
-      const agentIds = (tables: typeof bundle.tables) =>
-        tables.telescope_agents?.map((row) => row.agent_id);
-      assert.deepStrictEqual(agentIds(bundle.tables), [
-        "agent-alice",
-        "agent-shared",
-        "agent-company",
-      ]);
-      assert.strictEqual(bundle.withheldAgents, 1);
-      const readme = files.find((file) => file.path === "README.md")?.text;
-      assert.include(readme, "\n- 1 agents other members keep hidden, because");
-      assert.deepStrictEqual(
-        bundle.tables.telescope_invitations?.map((row) => "code" in row),
-        [false, false],
-      );
-      for (const file of files) {
-        assert.notInclude(file.text, used.code);
-        assert.notInclude(file.text, unused.code);
-        assert.notInclude(file.text, "bob-private");
-        assert.notInclude(file.text, "name agent-bob");
-      }
-      const bobs = yield* bundleOf((yield* data.export(bob, { workspaceId })).files);
-      assert.deepStrictEqual(agentIds(bobs.tables), ["agent-bob", "agent-shared", "agent-company"]);
+      assert.include(files.find((file) => file.path === "tasks.md")?.text, "x".repeat(1000));
     }),
   );
 
@@ -262,6 +380,14 @@ it.layer(layer)("WorkspaceDataService", (it) => {
         wake_id: "running",
         status: "running",
       });
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const { stateDir } = yield* ServerConfig;
+      const [alphaContext, bravoContext] = ["run_id delete-alpha", "run_id delete-bravo"].map(
+        (runId) => ContextAssembler.contextFile(path, stateDir, runId),
+      ) as [string, string];
+      yield* fs.makeDirectory(path.dirname(alphaContext), { recursive: true });
+      for (const file of [alphaContext, bravoContext]) yield* fs.writeFileString(file, "context");
       const alphaBefore = yield* rowCounts(alpha.id);
       const bravoBefore = yield* rowCounts(bravo.id);
       const confirm = { workspaceId: alpha.id, confirmName: "Alpha" };
@@ -279,11 +405,15 @@ it.layer(layer)("WorkspaceDataService", (it) => {
       );
       assert.deepStrictEqual(busy.toSorted(), ["open-run", "queued", "running"]);
       assert.deepStrictEqual(yield* rowCounts(alpha.id), alphaBefore);
+      assert.isTrue(yield* fs.exists(alphaContext));
 
       yield* sql`UPDATE telescope_runs SET finished_at = 'later' WHERE run_id = 'open-run'`;
       yield* sql`UPDATE telescope_wakes SET status = 'done' WHERE wake_id IN ('queued', 'running')`;
       const manifest = yield* data.delete(alice, confirm);
       assert.strictEqual(manifest.workspace.id, alpha.id);
+      assert.deepStrictEqual(manifest.contextFiles, [path.relative(stateDir, alphaContext)]);
+      assert.isFalse(yield* fs.exists(alphaContext));
+      assert.isTrue(yield* fs.exists(bravoContext));
       assert.deepStrictEqual(
         manifest.tables.map(({ table, count }) => [table, count] as const).toSorted(),
         alphaBefore.toSorted(),
