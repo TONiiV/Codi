@@ -160,6 +160,8 @@ const make = Effect.gen(function* () {
   const changes = yield* BoardChanges.BoardChanges;
   const random = yield* SecureRandom.SecureRandom;
   const now = DateTime.now.pipe(Effect.map(DateTime.formatIso));
+  /** Every board write: its notices reach a watcher together once it commits. */
+  const transact = <A, E, R>(write: Effect.Effect<A, E, R>) => db.transaction(changes.batch(write));
   const requireMember = (actor: Actor, workspaceId: Telescope.WorkspaceId) =>
     workspaces.get(actor.caller, { workspaceId }).pipe(
       Effect.map(({ self }): Author => ({
@@ -397,9 +399,7 @@ const make = Effect.gen(function* () {
       updatedAt: at,
       version: 0,
     };
-    return yield* db.transaction(
-      commitTask(author, { workspaceId, taskId, baseVersion: 0, set }, blank),
-    );
+    return yield* transact(commitTask(author, { workspaceId, taskId, baseVersion: 0, set }, blank));
   });
 
   const updateTask = Effect.fn("TaskBoardService.updateTask")(function* (
@@ -409,7 +409,7 @@ const make = Effect.gen(function* () {
     const author = yield* requireMember(actor, input.workspaceId);
     if (actor.onBehalfOf !== undefined && "conflictDecisionId" in (input.set ?? {}))
       return yield* forMember("Only a member can clear a conflict marker.");
-    return yield* db.transaction(
+    return yield* transact(
       findTask(input.workspaceId, input.taskId).pipe(
         Effect.flatMap((current) => commitTask(author, input, current)),
       ),
@@ -534,7 +534,7 @@ const make = Effect.gen(function* () {
     { workspaceId, ...input }: In<"telescope.decision.create">,
   ) {
     const author = yield* requireMember(actor, workspaceId);
-    return yield* db.transaction(writeDecision(author, workspaceId, input, yield* now));
+    return yield* transact(writeDecision(author, workspaceId, input, yield* now));
   });
 
   const listDecisions = Effect.fn("TaskBoardService.listDecisions")(function* (
@@ -577,7 +577,7 @@ const make = Effect.gen(function* () {
     const expired = (all: ReadonlyArray<Telescope.Lease>) => all.filter((l) => isExpired(l, at));
     if (expired(yield* leases).length === 0) return;
     // Re-read under the writer lock so a heartbeat that committed after the first read survives.
-    yield* db.transaction(
+    yield* transact(
       Effect.flatMap(leases, (all) =>
         Effect.forEach(expired(all), (lease) => dropLease(SERVER, lease, at)),
       ),
@@ -591,7 +591,7 @@ const make = Effect.gen(function* () {
     const author = yield* requireMember(actor, workspaceId);
     const time = yield* DateTime.now;
     const at = DateTime.formatIso(time);
-    return yield* db.transaction(
+    return yield* transact(
       Effect.gen(function* () {
         const where = { task_id: taskId };
         const [held] = yield* db.select(workspaceId, "leases", decodeLeases, where);
@@ -639,7 +639,7 @@ const make = Effect.gen(function* () {
     const member = yield* requireMember(actor, input.workspaceId);
     const time = yield* DateTime.now;
     const at = DateTime.formatIso(time);
-    return yield* db.transaction(
+    return yield* transact(
       Effect.gen(function* () {
         const lease = yield* heldLease(member, input, at);
         // A renewal keeps the holder's span, whoever renews (D59).
@@ -658,7 +658,7 @@ const make = Effect.gen(function* () {
   ) {
     const member = yield* requireMember(actor, input.workspaceId);
     const at = yield* now;
-    yield* db.transaction(
+    yield* transact(
       heldLease(member, input, at).pipe(Effect.flatMap((lease) => dropLease(member, lease, at))),
     );
     return {};
