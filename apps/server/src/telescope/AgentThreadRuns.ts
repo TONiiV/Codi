@@ -6,6 +6,7 @@ import type {
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 
+import * as ProjectionStore from "../orchestration-v2/ProjectionStore.ts";
 import { PROMPT_VERSION } from "./AgentInstructions.ts";
 import * as DelegationService from "./DelegationService.ts";
 import * as RunRecordService from "./RunRecordService.ts";
@@ -59,10 +60,26 @@ export const makeHandler = Effect.gen(function* () {
   const db = yield* TelescopeDb.TelescopeDb;
   const runs = yield* RunRecordService.RunRecordService;
   const delegations = yield* DelegationService.DelegationService;
+  const projections = yield* ProjectionStore.ProjectionStoreV2;
   // A Codi run is updated many times; open for it once. A repeated terminal event finds no open run.
   const opened = new Set<string>();
   // The Codi run each agent thread's provider turns belong to, for their tokens.
   const serving = new Map<ThreadId, string>();
+
+  // A failed Codi run, such as a queued one Codi refused to start (D118), says why it failed.
+  const failureOf = (run: OrchestrationV2Run) =>
+    projections
+      .getThreadRecords(run.threadId, ["turnItems"], {
+        turnItemRunIds: [run.id],
+        turnItemTypes: ["error"],
+      })
+      .pipe(
+        Effect.map(({ turnItems }) =>
+          turnItems.flatMap((item) => (item.type === "error" ? [item.failure.message] : [])).at(-1),
+        ),
+        Effect.orElseSucceed(() => undefined),
+        Effect.map((message) => message ?? UNREPORTED),
+      );
 
   // Untraced: runs for every orchestration event; only agent threads reach the traced services.
   const handle = Effect.fnUntraced(function* (event: OrchestrationV2DomainEvent) {
@@ -97,12 +114,13 @@ export const makeHandler = Effect.gen(function* () {
         delegation.toAgentId === owner.agentId,
     );
     const memberId = owner.ownerSubjectId;
+    const blockedOn = run.status === "failed" ? yield* failureOf(run) : UNREPORTED;
     yield* Effect.forEach(
       working,
       ({ id }) =>
         delegations.abandon(
           { workspaceId: owner.workspaceId, delegationId: id, memberId },
-          UNREPORTED,
+          blockedOn,
         ),
       { discard: true },
     );

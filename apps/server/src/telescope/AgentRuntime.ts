@@ -196,7 +196,7 @@ const make = Effect.gen(function* () {
         threadId,
         messageId,
         modelSelection: selection,
-        text: AgentInstructions.renderTurn(agent, items, { firstTurn: reuse === null }),
+        text: AgentInstructions.renderTurn(items),
         attachments: [],
         mode: "queue",
         ...provenance,

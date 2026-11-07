@@ -144,6 +144,12 @@ function curatedCauseMessages(cause: unknown): {
               "T3 could not confirm whether conversation history reached the provider. Retry the turn to recover the session.",
             category: categoryMessage(),
           };
+        case "ProviderSwitchPlanError": {
+          // A refused model or provider move carries the transition policy's fixed reason.
+          const refusal = (cause as Record<string, unknown>).cause;
+          if (typeof refusal === "string") return { known: refusal, category: categoryMessage() };
+          break;
+        }
         case "ProviderAdapterProtocolError": {
           const typedReason = (cause as Record<string, unknown>).reason;
           if (
