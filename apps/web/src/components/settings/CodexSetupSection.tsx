@@ -53,7 +53,7 @@ import {
   settleHandoffAuthorizationPage,
   settleProviderInstall,
 } from "./CodexSetupSection.logic";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 const noop = () => undefined;
 
@@ -124,17 +124,20 @@ export function CodexSetupSection(props: CodexSetupSectionProps) {
         description={
           existingReady ? (
             props.provider?.auth.email?.trim() ? (
-              <>
-                Signed in as{" "}
-                <RedactedSensitiveText
-                  value={props.provider.auth.email.trim()}
-                  ariaLabel={t("settings.text.toggleAccountEmailVisibility")}
-                  revealTooltip={t("settings.text.clickToRevealEmail")}
-                  hideTooltip={t("settings.text.clickToHideEmail")}
-                  className="break-all"
-                />
-                .
-              </>
+              <Trans
+                i18nKey="settings.parallelProviders.signedInAsEmailSentence"
+                components={{
+                  email: (
+                    <RedactedSensitiveText
+                      value={props.provider.auth.email.trim()}
+                      ariaLabel={t("settings.text.toggleAccountEmailVisibility")}
+                      revealTooltip={t("settings.text.clickToRevealEmail")}
+                      hideTooltip={t("settings.text.clickToHideEmail")}
+                      className="break-all"
+                    />
+                  ),
+                }}
+              />
             ) : (
               t("settings.text.connectedWithYourCodexCli")
             )
@@ -612,7 +615,7 @@ function ManagedCodexSetup({
         ? t("settings.parallelProviders.downloadingSizeMb", {
             size: (installation.downloadedBytes / 1_000_000).toFixed(1),
           })
-        : t("settings.parallelProviders.downloadingSizeMbOfTotal", {
+        : t("settings.parallelProviders.codexDownloadingSizeOfTotalMb", {
             size: (installation.downloadedBytes / 1_000_000).toFixed(1),
             total: (installation.totalBytes / 1_000_000).toFixed(1),
           })
@@ -648,16 +651,19 @@ function ManagedCodexSetup({
     )
   ) : authenticated ? (
     provider?.auth.email?.trim() ? (
-      <>
-        Signed in as{" "}
-        <RedactedSensitiveText
-          value={provider.auth.email.trim()}
-          ariaLabel={t("settings.text.toggleAccountEmailVisibility")}
-          revealTooltip={t("settings.text.clickToRevealEmail")}
-          hideTooltip={t("settings.text.clickToHideEmail")}
-        />
-        .
-      </>
+      <Trans
+        i18nKey="settings.parallelProviders.signedInAsEmailSentence"
+        components={{
+          email: (
+            <RedactedSensitiveText
+              value={provider.auth.email.trim()}
+              ariaLabel={t("settings.text.toggleAccountEmailVisibility")}
+              revealTooltip={t("settings.text.clickToRevealEmail")}
+              hideTooltip={t("settings.text.clickToHideEmail")}
+            />
+          ),
+        }}
+      />
     ) : (
       t("settings.text.signedInWithChatgpt")
     )
@@ -832,17 +838,20 @@ function ManagedCodexSetup({
               runtimeDescription
             ) : authenticated ? (
               provider?.auth.email?.trim() ? (
-                <>
-                  Signed in as{" "}
-                  <RedactedSensitiveText
-                    value={provider.auth.email.trim()}
-                    ariaLabel={t("settings.text.toggleAccountEmailVisibility")}
-                    revealTooltip={t("settings.text.clickToRevealEmail")}
-                    hideTooltip={t("settings.text.clickToHideEmail")}
-                    className="break-all"
-                  />
-                  .
-                </>
+                <Trans
+                  i18nKey="settings.parallelProviders.signedInAsEmailSentence"
+                  components={{
+                    email: (
+                      <RedactedSensitiveText
+                        value={provider.auth.email.trim()}
+                        ariaLabel={t("settings.text.toggleAccountEmailVisibility")}
+                        revealTooltip={t("settings.text.clickToRevealEmail")}
+                        hideTooltip={t("settings.text.clickToHideEmail")}
+                        className="break-all"
+                      />
+                    ),
+                  }}
+                />
               ) : (
                 t("settings.text.connectedToChatgpt")
               )
