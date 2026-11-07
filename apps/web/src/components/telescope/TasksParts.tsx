@@ -25,6 +25,7 @@ import { Button } from "../ui/button";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "../ui/empty";
 import { Spinner } from "../ui/spinner";
 import { toastManager } from "../ui/toast";
+import { ErrorNote } from "./TelescopeAccountDialogs";
 import { telescope, telescopeBoard, useTelescopeWorkspaces } from "./telescopeState";
 
 export interface BoardTarget {
@@ -155,11 +156,18 @@ export function useBoardCommand<W, A, E>(
 
 /** Toolbar, refresh, and the loading and error states around a board query. */
 export function BoardFrame(props: {
-  query: { data: unknown; isPending: boolean; error: string | null; refresh: () => void };
+  query: {
+    data: unknown;
+    isPending: boolean;
+    error: string | null;
+    failure: unknown;
+    refresh: () => void;
+  };
   actions?: ReactNode;
   children: ReactNode;
 }) {
   const { query } = props;
+  const error = query.error === null ? null : failureText(AsyncResult.fail(query.failure));
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex items-center gap-1 border-b px-4 py-2">
@@ -176,12 +184,19 @@ export function BoardFrame(props: {
         </Button>
       </div>
       {query.data !== null ? (
-        props.children
-      ) : query.error !== null ? (
+        <>
+          {error === null ? null : (
+            <div className="border-b px-4 py-2">
+              <ErrorNote text={`没有读到最新内容：${error}`} onRetry={query.refresh} />
+            </div>
+          )}
+          {props.children}
+        </>
+      ) : error !== null ? (
         <Empty>
           <EmptyHeader>
             <EmptyTitle>没有读到</EmptyTitle>
-            <EmptyDescription>{query.error}</EmptyDescription>
+            <EmptyDescription>{error}</EmptyDescription>
           </EmptyHeader>
           <Button size="xs" variant="outline" onClick={query.refresh}>
             重试
