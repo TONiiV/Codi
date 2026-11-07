@@ -334,7 +334,7 @@ function GovernanceSection({ environmentId, workspace, self }: Scoped) {
         title={title}
         description={budgetUsageText(budget)}
         control={
-          <>
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
             <CallLimitForm
               key={budget?.limitCalls ?? "none"}
               label={title}
@@ -343,7 +343,7 @@ function GovernanceSection({ environmentId, workspace, self }: Scoped) {
               onSave={saveBudget(scope, scopeId)}
             />
             {extra}
-          </>
+          </div>
         }
       />
     );

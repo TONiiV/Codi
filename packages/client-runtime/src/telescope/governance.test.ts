@@ -119,13 +119,17 @@ describe("telescope governance rows", () => {
 
   it("lists company, bound projects, current members, then every agent the server sends", () => {
     expect(
-      rows({
-        agents: [
-          agent("co", "Company", null),
-          agent("max-chief", "Chief Agent", "max"),
-          agent("stray", "Stray", "unknown-subject"),
-        ],
-      }),
+      rows(
+        {
+          agents: [
+            agent("co", "Company", null),
+            agent("max-chief", "Chief Agent", "max"),
+            agent("gone-chief", "Old Agent", "gone"),
+            agent("stray", "Stray", "unknown-subject"),
+          ],
+        },
+        { projects: [...page.projects, { value: "p1", label: "Alpha (laptop)" }] },
+      ),
     ).toEqual([
       "company:ws:整个公司",
       "project:p2:Beta",
@@ -134,6 +138,7 @@ describe("telescope governance rows", () => {
       "person:max:Max",
       "agent:co:Company",
       "agent:max-chief:Max 的 Chief Agent",
+      "agent:gone-chief:Gone 的 Old Agent",
       "agent:stray:unknown-subject 的 Stray",
     ]);
   });

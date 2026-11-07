@@ -48,6 +48,7 @@ export type GovernanceRow =
 
 /**
  * Budget rows in page order: company, bound projects, members, agents.
+ * A project bound from two environments is one budget, so it gets one row.
  * An older server sends no `agents`; then the caller's own and company lists stand in.
  */
 export function governanceRows(
@@ -60,14 +61,14 @@ export function governanceRows(
     readonly fallbackAgents: ReadonlyArray<Telescope.GovernanceAgent>;
   },
 ): ReadonlyArray<GovernanceRow> {
-  const agents = (state.agents ?? page.fallbackAgents).filter(
-    (agent, index, all) => all.findIndex((other) => other.id === agent.id) === index,
-  );
+  const firstOf = <T>(items: ReadonlyArray<T>, key: (item: T) => string) =>
+    items.filter((item, index) => items.findIndex((other) => key(other) === key(item)) === index);
+  const agents = firstOf(state.agents ?? page.fallbackAgents, (agent) => agent.id);
   const ownerName = (owner: Telescope.SubjectId) =>
     page.members.find((member) => member.subjectId === owner)?.displayName ?? owner;
   return [
     { scope: "company", scopeId: page.company.id, title: page.company.title },
-    ...page.projects.map((project): GovernanceRow => ({
+    ...firstOf(page.projects, (project) => project.value).map((project): GovernanceRow => ({
       scope: "project",
       scopeId: project.value,
       title: project.label,
