@@ -545,6 +545,7 @@ describe("ContextPackService", () => {
         service.import(dir.at("pack"), dir.at("leak"), "codex", false),
       );
       expect(error._tag).toBe("ContextPackPathError");
+      expect(error.message).not.toContain("run the command again");
       expect(yield* dir.exists(dir.at("leak"))).toBe(false);
 
       yield* fs.writeFileString(
@@ -637,6 +638,12 @@ describe("ContextPackService", () => {
             service.import(dir.at("pack"), dir.at(target), "claude", merge),
           );
           expect([target, error._tag]).toEqual([target, "ContextPackPathError"]);
+          if (target === "instructions") {
+            const root = yield* fs.realPath(dir.at(target));
+            expect(error.message).toContain(
+              `Copy what ${root}/CLAUDE.md links to into ${root}, or remove the link, then run the command again.`,
+            );
+          }
         }
       }
       expect(yield* dir.read("dotfiles/deploy.md")).toBe("MY OWN SKILL\n");

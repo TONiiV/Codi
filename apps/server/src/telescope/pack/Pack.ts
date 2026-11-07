@@ -59,11 +59,18 @@ export class ContextPackFormatError extends Schema.TaggedError<ContextPackFormat
 
 export class ContextPackPathError extends Schema.TaggedError<ContextPackPathError>()(
   "ContextPackPathError",
-  { path: Schema.String, root: Schema.String, target: Schema.optional(Schema.String) },
+  {
+    path: Schema.String,
+    root: Schema.String,
+    target: Schema.optional(Schema.String),
+    write: Schema.optional(Schema.Boolean),
+  },
 ) {
   override get message(): string {
     const to = this.target === undefined ? "" : ` (it resolves to ${this.target})`;
-    return `${this.path} does not resolve to a path inside ${this.root}${to}. Any files written before it are kept.`;
+    const refused = `${this.path} does not resolve to a path inside ${this.root}${to}.`;
+    if (this.write !== true) return refused;
+    return `${refused} Any files written before it are kept. Copy what ${this.path} links to into ${this.root}, or remove the link, then run the command again.`;
   }
 }
 
@@ -285,7 +292,7 @@ const writeTargetInside = Effect.fnUntraced(function* (root: string, file: strin
     // One directory spelled two ways in one sentence reads like a tool bug, so the refused path is
     // resolved through its parents, without following the link itself.
     const at = path.join(yield* plannedRealPath(path.dirname(file)), path.basename(file));
-    return yield* new ContextPackPathError({ path: at, root: realRoot, target: real });
+    return yield* new ContextPackPathError({ path: at, root: realRoot, target: real, write: true });
   }
   return real;
 });
