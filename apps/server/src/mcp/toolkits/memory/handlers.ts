@@ -1,23 +1,17 @@
-import { OrchestratorMcpFailure } from "@t3tools/contracts";
+import type * as Schema from "effect/Schema";
 import * as Effect from "effect/Effect";
+import * as Struct from "effect/Struct";
 
 import * as MemoryService from "../../../telescope/MemoryService.ts";
 import * as McpInvocationContext from "../../McpInvocationContext.ts";
 import * as McpToolAccess from "../../McpToolAccess.ts";
+import { gated } from "../telescope/gate.ts";
 import { MemoryToolkit } from "./tools.ts";
 
-const toFailure = (error: MemoryService.Failure) =>
-  new OrchestratorMcpFailure(
-    error._tag !== "TelescopeWorkspaceError" || error.reason === "storage"
-      ? { code: "orchestration_error", message: "Telescope memory is unavailable." }
-      : {
-          code: error.reason === "forbidden" ? "capability_denied" : "invalid_request",
-          message: error.message,
-        },
-  );
-
-/** The calling thread's Telescope run decides the agent, workspace and member; the input cannot. */
-const asThreadAgent = Effect.fn("mcp.memory.asThreadAgent")(function* <A>(
+/** Through the gateway: the calling thread's run decides the agent, workspace and member. */
+const asRunAgent = Effect.fn("mcp.memory.asRunAgent")(function* <A>(
+  tool: "memory_search" | "memory_write",
+  args: Schema.Json,
   use: (
     memory: MemoryService.MemoryService["Service"],
     agent: MemoryService.ThreadAgent,
@@ -26,20 +20,27 @@ const asThreadAgent = Effect.fn("mcp.memory.asThreadAgent")(function* <A>(
   const scope = yield* McpInvocationContext.McpInvocationContext;
   const { thread } = yield* McpInvocationContext.requireThreadScope(scope, "Telescope memory");
   const memory = yield* MemoryService.MemoryService;
-  return yield* memory.callerForThread(thread.threadId).pipe(
-    Effect.flatMap((agent) => use(memory, agent)),
-    Effect.mapError(toFailure),
+  return yield* gated(tool, args, (caller) =>
+    use(memory, {
+      memberId: caller.memberId,
+      workspaceId: caller.workspaceId,
+      run: { runId: caller.runId, agentId: caller.agentId, threadId: thread.threadId },
+    }),
   );
 });
 
+// Gateway args are stored where any member reads them: never text, query, kind or who it is about.
+const SEARCH_ARGS = ["agentId", "scope", "projectId", "limit", "includeInvalidated"] as const;
+const WRITE_ARGS = ["op", "id", "scope", "level", "projectId", "pinned"] as const;
+
 const handlers = {
   memory_search: McpToolAccess.readsAsCaller((input) =>
-    asThreadAgent((memory, agent) =>
+    asRunAgent("memory_search", Struct.pick(input, SEARCH_ARGS), (memory, agent) =>
       memory.search(agent, { ...input, workspaceId: agent.workspaceId }),
     ),
   ),
   memory_write: McpToolAccess.actsAsCaller((input) =>
-    asThreadAgent((memory, agent) =>
+    asRunAgent("memory_write", Struct.pick(input, WRITE_ARGS), (memory, agent) =>
       memory
         .write(agent, { ...input, workspaceId: agent.workspaceId, agentId: agent.run.agentId })
         .pipe(Effect.map((written) => ({ memory: written }))),

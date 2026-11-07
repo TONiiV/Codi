@@ -45,7 +45,7 @@ const readInlined = Effect.fnUntraced(function* (dir: string, claudeMd: string) 
 });
 
 export const claude = makeHarness({
-  instructions: { read: readInlined, write: markdownInstructions.write },
+  instructions: { read: readInlined, render: markdownInstructions.render },
   mcp: jsonMcp("mcpServers", (server) =>
     server.url !== undefined
       ? {

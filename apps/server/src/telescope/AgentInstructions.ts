@@ -4,7 +4,7 @@ import * as Schema from "effect/Schema";
 /** Recorded on every run as `inputSnapshot.promptVersion`; bump it when the role text changes. */
 export const PROMPT_VERSION = "telescope-agent-instructions@4";
 
-/** What a wake carries; D3b enqueues `message`, DelegationService the other two. */
+/** What a wake carries; the chat page sends to the thread itself, not a `message` wake (D86). */
 export const WakePayload = Schema.Union([
   Schema.Struct({ kind: Schema.Literal("message"), text: Telescope.Text }),
   Schema.Struct({

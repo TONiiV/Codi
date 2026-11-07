@@ -1,3 +1,4 @@
+import { scopeProjectRef } from "@t3tools/client-runtime/environment";
 import { hasNoWorkspace } from "@t3tools/client-runtime/telescope/workspaces";
 import { type EnvironmentId, Telescope } from "@t3tools/contracts";
 import { useNavigate } from "@tanstack/react-router";
@@ -5,15 +6,16 @@ import * as Schema from "effect/Schema";
 import { useState, type ReactNode } from "react";
 
 import { readLocalStorageValue, writeLocalStorageValue } from "../../hooks/useLocalStorage";
+import { useProject } from "../../state/entities";
 import { useEnvironmentQuery, type EnvironmentQueryView } from "../../state/query";
 import { TELESCOPE_PATH } from "../sidebar/mainAppLocation";
 import { Button } from "../ui/button";
 import { CollapsibleSectionHeader } from "../ui/collapsible-section-header";
 import { SidebarMenu, SidebarMenuButton, SidebarMenuItem, useSidebar } from "../ui/sidebar";
 import { Spinner } from "../ui/spinner";
-import { telescopeAgents } from "./myTeamsShared";
+import { agentDisplayName, KIND_LABEL, telescopeAgents } from "./myTeamsShared";
 import { telescope, useTelescopeWorkspaces } from "./telescopeState";
-import { telescopeSearch, useChatAgentId, useTasksLayout } from "./telescopeViews";
+import { telescopeSearch, useIsChatAgentSelected, useTasksLayout } from "./telescopeViews";
 
 const ChatGroupId = Schema.Literals(["mine", "company"]);
 type ChatGroupId = typeof ChatGroupId.Type;
@@ -22,44 +24,46 @@ const FOLDED_KEY = "t3code:telescope:folded-chat-groups:v1";
 const FoldedGroups = Schema.Array(ChatGroupId);
 const NONE_FOLDED: ReadonlyArray<ChatGroupId> = [];
 
-const ROLE_LABEL: Record<Telescope.AgentKind, string> = {
-  chief_of_staff: "个人助理",
-  chief_agent: "Chief Agent",
-  custom: "自定义 agent",
-  company_main: "主代理",
-  department: "职能代理",
-};
-
 /** Chief Agents are named "<project> Chief Agent"; only the project part tells them apart. */
 function initials(agent: Telescope.Agent): string {
-  const own = agent.kind === "chief_agent" ? agent.name.replace(/\s+Chief Agent$/, "") : agent.name;
+  const name = agentDisplayName(agent);
+  const own = agent.kind === "chief_agent" ? name.replace(/\s+Chief Agent$/, "") : name;
   const words = own.split(/[\s_-]+/).filter(Boolean);
-  const picks = words.length > 1 ? [words[0], words.at(-1)] : words;
-  return (
-    picks
-      .map((word) => [...(word ?? "")][0] ?? "")
-      .join("")
-      .toUpperCase() || "?"
-  );
+  const [only] = words;
+  // One Latin word keeps two letters ("IT"); one CJK character already names the agent.
+  const picks =
+    words.length > 1
+      ? [words[0], words.at(-1)].map((word) => [...(word ?? "")][0] ?? "")
+      : only !== undefined && /^[A-Za-z]/.test(only)
+        ? [only.slice(0, 2)]
+        : [[...(only ?? "")][0] ?? ""];
+  return picks.join("").toUpperCase() || "?";
 }
 
 function ChatRow({
+  environmentId,
   agent,
-  active,
   onSelect,
 }: {
+  environmentId: EnvironmentId;
   agent: Telescope.Agent;
-  active: boolean;
-  onSelect: () => void;
+  onSelect: (agentId: Telescope.AgentId) => void;
 }) {
-  const role = ROLE_LABEL[agent.kind];
+  const active = useIsChatAgentSelected(agent.id);
+  const chiefOf = agent.kind === "chief_agent" ? agent.projectId : undefined;
+  const project = useProject(
+    chiefOf === undefined ? null : scopeProjectRef(environmentId, chiefOf),
+  );
+  const name = agentDisplayName(agent);
+  // A Chief Agent's name already says what it is; its project tells two apart.
+  const role = project?.title ?? KIND_LABEL[agent.kind];
   return (
     <SidebarMenuItem>
       <SidebarMenuButton
         size="lg"
         isActive={active}
         aria-current={active ? "page" : undefined}
-        onClick={onSelect}
+        onClick={() => onSelect(agent.id)}
       >
         <span
           aria-hidden
@@ -68,10 +72,8 @@ function ChatRow({
           {initials(agent)}
         </span>
         <span className="flex min-w-0 flex-1 flex-col leading-tight">
-          <span className="truncate text-sidebar-foreground">{agent.name}</span>
-          {agent.name === role ? null : (
-            <span className="truncate text-xs font-normal">{role}</span>
-          )}
+          <span className="truncate text-sidebar-foreground">{name}</span>
+          {name === role ? null : <span className="truncate text-xs font-normal">{role}</span>}
         </span>
       </SidebarMenuButton>
     </SidebarMenuItem>
@@ -152,7 +154,6 @@ function ChatGroups({
   const navigate = useNavigate();
   const { isMobile, setOpenMobile } = useSidebar();
   const layout = useTasksLayout();
-  const selected = useChatAgentId();
   // State, not useLocalStorage: folding must still work when storage refuses the key.
   const [folded, setFolded] = useState(() =>
     readLocalStorageValue(FOLDED_KEY, NONE_FOLDED, FoldedGroups),
@@ -167,20 +168,16 @@ function ChatGroups({
     setFolded(next);
     writeLocalStorageValue(FOLDED_KEY, next, NONE_FOLDED, FoldedGroups);
   };
+  const select = (agentId: Telescope.AgentId) => {
+    if (isMobile) setOpenMobile(false);
+    void navigate({
+      to: TELESCOPE_PATH,
+      search: telescopeSearch("chats", layout, undefined, agentId),
+    });
+  };
   const rows = (agents: ReadonlyArray<Telescope.Agent>) =>
     agents.map((agent) => (
-      <ChatRow
-        key={agent.id}
-        agent={agent}
-        active={agent.id === selected}
-        onSelect={() => {
-          if (isMobile) setOpenMobile(false);
-          void navigate({
-            to: TELESCOPE_PATH,
-            search: telescopeSearch("chats", layout, undefined, agent.id),
-          });
-        }}
-      />
+      <ChatRow key={agent.id} environmentId={environmentId} agent={agent} onSelect={select} />
     ));
 
   return (

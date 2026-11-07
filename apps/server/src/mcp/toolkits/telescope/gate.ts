@@ -44,7 +44,7 @@ const toFailure = (error: Failure) => {
   }
   return new OrchestratorMcpFailure({
     code: "orchestration_error",
-    message: "The Telescope board is unavailable.",
+    message: "Telescope is unavailable.",
   });
 };
 
