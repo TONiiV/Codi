@@ -1,9 +1,11 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, expect, it } from "@effect/vitest";
+import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
+import * as Logger from "effect/Logger";
 import * as Path from "effect/Path";
 import * as TestConsole from "effect/testing/TestConsole";
 import { Command } from "effect/cli";
@@ -601,8 +603,10 @@ describe("ContextPackService", () => {
       const service = yield* ContextPackService.ContextPackService;
       const dir = yield* fixture(
         {
-          "home/.claude/CLAUDE.md": "@RULES.md\n",
+          // `@~/` is Claude's own home-relative import, so a home pack inlines it too.
+          "home/.claude/CLAUDE.md": "@RULES.md\n@~/.claude/TILDE.md\n",
           "home/.claude/RULES.md": "# Mine\n\nPrefer small diffs.\n",
+          "home/.claude/TILDE.md": "Tilde rule.\n",
           "home/.claude/skills/review/SKILL.md": "Review.\n",
           "home/.claude.json": JSON.stringify({
             numStartups: 7,
@@ -623,7 +627,7 @@ describe("ContextPackService", () => {
 
       yield* runCli(["export", dir.at("home"), "--home", "--out", pack]);
       expect(yield* dir.read("home/packs/me/instructions.md")).toBe(
-        "# Mine\n\nPrefer small diffs.\n",
+        "# Mine\n\nPrefer small diffs.\nTilde rule.\n",
       );
       expect(JSON.parse(yield* dir.read("home/packs/me/pack.json")).skills).toEqual(["review"]);
       expect(JSON.parse(yield* dir.read("home/packs/me/mcp.json"))).toEqual({
@@ -649,13 +653,34 @@ describe("ContextPackService", () => {
       expect(yield* dir.read("home2/.config/opencode/AGENTS.md")).toContain("Prefer small diffs.");
       const opencode = JSON.parse(yield* dir.read("home2/.config/opencode/opencode.json"));
       expect(Object.keys(opencode.mcp).toSorted()).toEqual(["cx", "gh", "oc"]);
-      yield* service.import(pack, dir.at("home2"), "cursor", false, "home");
+      const warnings: Array<string> = [];
+      const capture = Logger.make(({ message }) => void warnings.push(String(message)));
+      yield* service
+        .import(pack, dir.at("home2"), "cursor", false, "home")
+        .pipe(Effect.provide(Logger.layer([capture], { mergeWithExisting: false })));
+      expect(warnings.join("\n")).toContain(
+        `Cursor Settings > Rules, not in a file under ${dir.at("home2")}. Paste ${pack}/instructions.md there.`,
+      );
       expect(yield* dir.read("home2/.cursor/skills/review/SKILL.md")).toBe("Review.\n");
       expect(JSON.parse(yield* dir.read("home2/.cursor/mcp.json")).mcpServers.gh).toEqual({
         command: "gh-mcp",
         env: { GH_TOKEN: "${env:GH_TOKEN}" },
       });
       expect(yield* dir.exists(dir.at("home2/.cursor/rules"))).toBe(false);
+
+      // CODEX_HOME and XDG_CONFIG_HOME move a harness's files, but never out of the home.
+      const withEnv = (env: Record<string, string>) =>
+        Effect.provide(ConfigProvider.layer(ConfigProvider.fromEnv({ env })));
+      const codexHome = { CODEX_HOME: dir.at("home3/.local/codex") };
+      yield* service.import(pack, dir.at("home3"), "codex", false, "home").pipe(withEnv(codexHome));
+      yield* service
+        .import(pack, dir.at("home3"), "opencode", false, "home")
+        .pipe(withEnv({ XDG_CONFIG_HOME: dir.at("home3/.xdg") }));
+      expect(yield* dir.read("home3/.local/codex/AGENTS.md")).toContain("Prefer small diffs.");
+      expect(yield* dir.read("home3/.local/codex/config.toml")).toContain("[mcp_servers.gh]");
+      expect(yield* dir.read("home3/.xdg/opencode/AGENTS.md")).toContain("Prefer small diffs.");
+      yield* service.import(pack, dir.at("home4"), "codex", false, "home").pipe(withEnv(codexHome));
+      expect(yield* dir.read("home4/.codex/AGENTS.md")).toContain("Prefer small diffs.");
 
       // Syncing the home in place keeps the rest of ~/.claude.json and the user's own CLAUDE.md.
       yield* service.import(pack, dir.at("home"), "claude", true, "home");
@@ -691,7 +716,7 @@ describe("ContextPackService", () => {
       );
       expect(intoPack._tag).toBe("ContextPackOverlapError");
       expect(yield* dir.read("home/packs/me/instructions.md")).toBe(
-        "# Mine\n\nPrefer small diffs.\n",
+        "# Mine\n\nPrefer small diffs.\nTilde rule.\n",
       );
     }).pipe(Effect.scoped, Effect.provide(TestLayer)),
   );
@@ -706,6 +731,7 @@ describe("ContextPackService", () => {
           "dotfiles/scripts/run.sh": "echo mine\n",
           "dotfiles/CLAUDE.md": "my own instructions\n",
           "dotfiles/mcp.json": "{}\n",
+          "dotfiles/claude-dir/keep.txt": "keep\n",
           "nested-file/.claude/skills/deploy/notes.md": "keep\n",
           "nested-dir/.claude/skills/deploy/notes.md": "keep\n",
           "new-dir/.claude/skills/deploy/notes.md": "keep\n",
@@ -770,6 +796,8 @@ describe("ContextPackService", () => {
           "skills-dir/.claude/skills": "../../dotfiles",
           "dotdot/.claude/skills": "../../project/../dotfiles",
           "instructions/CLAUDE.md": "../dotfiles/CLAUDE.md",
+          // A linked parent directory is the link the refusal names, not the file under it.
+          "parent-link/.claude": "../dotfiles/claude-dir",
           "mcp/.mcp.json": "../dotfiles/mcp.json",
           // The pack itself is the target an import must not rewrite.
           "into-pack/CLAUDE.md": "../pack/instructions.md",
@@ -807,6 +835,10 @@ describe("ContextPackService", () => {
       yield* service.export(dir.at("project"), dir.at("pack"));
       const packed = yield* dir.read("pack/mcp.json");
 
+      const linkNamed: Record<string, string> = {
+        instructions: "CLAUDE.md",
+        "parent-link": ".claude",
+      };
       // A refused import or export leaves its target exactly as it found it.
       const outside = yield* dir.tree("dotfiles");
       const changed: Array<string> = [];
@@ -828,6 +860,7 @@ describe("ContextPackService", () => {
             "dotdot-out",
             "absolute",
             "instructions",
+            "parent-link",
             "mcp",
             "into-pack",
             "segment",
@@ -849,10 +882,11 @@ describe("ContextPackService", () => {
           expect([target, error._tag]).toEqual([target, "ContextPackPathError"]);
           const after = yield* dir.tree(target);
           if (JSON.stringify(after) !== JSON.stringify(before)) changed.push(`${target} ${merge}`);
-          if (target === "instructions") {
+          const link = linkNamed[target];
+          if (link !== undefined) {
             const root = yield* fs.realPath(dir.at(target));
             expect(error.message).toContain(
-              `Copy what ${root}/CLAUDE.md links to into ${root}, or remove the link, then run the command again.`,
+              `Copy what ${root}/${link} links to into ${root}, or remove the link, then run the command again.`,
             );
           }
         }
