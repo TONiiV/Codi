@@ -597,9 +597,7 @@ function BlockedStep({
     <>
       <DialogHeader>
         <DialogTitle>{t("settings.text.couldnTImportFromName", { name: source.name })}</DialogTitle>
-        <DialogDescription>
-          {message ?? browserImportFailureText(reason, BROWSER_IMPORT_FAILURE_COPY[reason], t)}
-        </DialogDescription>
+        <DialogDescription>{message ?? browserImportFailureText(reason, t)}</DialogDescription>
       </DialogHeader>
       <DialogFooter>
         <Button variant="outline" onClick={onClose}>

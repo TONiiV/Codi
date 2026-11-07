@@ -144,15 +144,27 @@ export function isRetryableReason(reason: BrowserImportFailureReason): boolean {
   }
 }
 
-/** Falls back to the contract's English copy for a reason without a translation. */
+const BROWSER_IMPORT_FAILURE_KEYS: Readonly<Record<BrowserImportFailureReason, string>> = {
+  notInstalled: "settings.parallelA.biFailNotInstalled",
+  needsKeychainApproval: "settings.parallelA.biFailNeedsKeychainApproval",
+  keychainItemMissing: "settings.parallelA.biFailKeychainItemMissing",
+  needsFullDiskAccess: "settings.parallelA.biFailNeedsFullDiskAccess",
+  browserRunning: "settings.parallelA.biFailBrowserRunning",
+  unsupportedPlatform: "settings.parallelA.biFailUnsupportedPlatform",
+  keychainUnavailable: "settings.parallelA.biFailKeychainUnavailable",
+  unknownSource: "settings.parallelA.biFailUnknownSource",
+  unknownSourceProfile: "settings.parallelA.biFailUnknownSourceProfile",
+  sessionUnavailable: "settings.parallelA.biFailSessionUnavailable",
+  profileNotSaved: "settings.parallelA.biFailProfileNotSaved",
+  profileLimitReached: "settings.parallelA.biFailProfileLimitReached",
+  readFailed: "settings.parallelA.biFailReadFailed",
+};
+
 export function browserImportFailureText(
   reason: BrowserImportFailureReason,
-  fallback: string,
-  t: TFunction,
+  t: TFunction = englishT,
 ): string {
-  return t(`settings.parallelA.biFail${reason[0]!.toUpperCase()}${reason.slice(1)}`, {
-    defaultValue: fallback,
-  });
+  return t(BROWSER_IMPORT_FAILURE_KEYS[reason]);
 }
 
 export function formatSkippedDomains(
