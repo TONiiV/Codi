@@ -87,11 +87,20 @@ const sameJson = (a: unknown, b: unknown) =>
   JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
 
 const LEASE_TTL = { minutes: 2 };
+// An agent renews only between tool calls, so its lease outlasts a long step (D59).
+const AGENT_LEASE_TTL = { minutes: 15 };
+const leaseExpiry = (time: DateTime.Utc, author: Pick<Actor, "onBehalfOf">) =>
+  DateTime.formatIso(
+    DateTime.add(time, author.onBehalfOf === undefined ? LEASE_TTL : AGENT_LEASE_TTL),
+  );
 const isExpired = (lease: Telescope.Lease, at: string) =>
   Date.parse(lease.expiresAt) <= Date.parse(at);
 
 const fail = (reason: Telescope.WorkspaceError["reason"], message: string) =>
   Effect.fail(new Telescope.WorkspaceError({ reason, message }));
+/** D57: what waits for a member is not an agent's to change. */
+const forMember = (message: string) =>
+  fail("forbidden", `${message} Leave a note or tell your member.`);
 
 /**
  * Who writes. `caller` is the auth session; `WorkspaceService` resolves it to the member it acts
@@ -271,6 +280,18 @@ const make = Effect.gen(function* () {
       if (key === "conflictDecisionId" && input.baseVersion !== current.version) continue;
       if (key in set && !sameJson(set[key], current[key])) mine[key] = set[key] ?? null;
     }
+    if (author.onBehalfOf !== undefined) {
+      // Every open proposal holds its fields, not just the one the marker names.
+      const where = { kind: "decision", status: "proposed" };
+      const proposals = yield* db.select(current.workspaceId, "tasks", decodeDecisions, where);
+      const held = proposals.flatMap(({ conflict }) =>
+        conflict?.taskId === current.id ? Object.keys(conflict.incoming) : [],
+      );
+      if (current.status === "needs_decision") held.push("status");
+      const blocked = held.filter((key) => key in mine);
+      if (blocked.length > 0)
+        return yield* forMember(`A member must decide ${blocked.join(", ")} first.`);
+    }
     const at = yield* now;
     const notes =
       input.note === undefined ? [] : [{ authorId: author.authorId, text: input.note, at }];
@@ -299,6 +320,11 @@ const make = Effect.gen(function* () {
         current.conflictDecisionId === undefined
           ? undefined
           : yield* findDecision(current.workspaceId, current.conflictDecisionId);
+      // An agent may not move the marker off an open proposal: deciding it would do nothing.
+      if (author.onBehalfOf !== undefined && open?.status === "proposed")
+        return yield* forMember(
+          `A member must decide ${Object.keys(open.conflict?.incoming ?? {}).join(", ")} first.`,
+        );
       // A resent stale write reuses the proposal it already opened.
       const reused =
         open?.status === "proposed" && sameJson(open.conflict?.incoming, incoming)
@@ -381,6 +407,8 @@ const make = Effect.gen(function* () {
     input: In<"telescope.task.update">,
   ) {
     const author = yield* requireMember(actor, input.workspaceId);
+    if (actor.onBehalfOf !== undefined && "conflictDecisionId" in (input.set ?? {}))
+      return yield* forMember("Only a member can clear a conflict marker.");
     return yield* db.transaction(
       findTask(input.workspaceId, input.taskId).pipe(
         Effect.flatMap((current) => commitTask(author, input, current)),
@@ -464,6 +492,13 @@ const make = Effect.gen(function* () {
       // Two decisions replacing the same one is a conflict for a person to settle.
       if (old.status === "superseded")
         return yield* fail("conflict", "That decision has already been superseded.");
+      if (author.onBehalfOf !== undefined) {
+        if (old.status === "proposed")
+          return yield* forMember("Only a member settles or replaces a proposal.");
+        const where = { kind: "decision", supersedes: old.id, status: "proposed" };
+        if ((yield* db.count(workspaceId, "tasks", where)) > 0)
+          return yield* forMember("A proposal to replace this decision waits for a member.");
+      }
       if (status === "decided") {
         // Deciding a proposal also retires what it proposed to replace: one step, no recursion.
         const target =
@@ -566,7 +601,7 @@ const make = Effect.gen(function* () {
           holderSubjectId: author.memberId,
           acquiredAt: at,
           heartbeatAt: at,
-          expiresAt: DateTime.formatIso(DateTime.add(time, LEASE_TTL)),
+          expiresAt: leaseExpiry(time, author),
         };
         yield* db.insert(workspaceId, "leases", toColumns(lease, "lease_id"));
         yield* applyCommit(author, task, { leaseId: lease.id }, [], at);
@@ -601,7 +636,9 @@ const make = Effect.gen(function* () {
     return yield* db.transaction(
       Effect.gen(function* () {
         const lease = yield* heldLease(member, input, at);
-        const expiresAt = DateTime.formatIso(DateTime.add(time, LEASE_TTL));
+        // A renewal keeps the holder's span, whoever renews (D59).
+        const milliseconds = Date.parse(lease.expiresAt) - Date.parse(lease.heartbeatAt);
+        const expiresAt = DateTime.formatIso(DateTime.add(time, { milliseconds }));
         const set = { heartbeat_at: at, expires_at: expiresAt };
         yield* db.update(input.workspaceId, "leases", set, { lease_id: lease.id });
         return { ...lease, heartbeatAt: at, expiresAt };

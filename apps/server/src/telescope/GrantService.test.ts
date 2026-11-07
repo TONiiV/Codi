@@ -35,7 +35,7 @@ const layer = Layer.mergeAll(
   ),
 );
 
-const session = (name: string): WorkspaceService.Caller => ({
+const session = (name: string): WorkspaceService.SessionCaller => ({
   sessionId: AuthSessionId.make(`session-${name}`),
   subject: "one-time-token",
 });

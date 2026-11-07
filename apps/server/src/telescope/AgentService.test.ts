@@ -40,7 +40,7 @@ const fileLayer = services(
   ).pipe(Layer.provide(NodeServices.layer)),
 );
 
-const session = (name: string): WorkspaceService.Caller => ({
+const session = (name: string): WorkspaceService.SessionCaller => ({
   sessionId: AuthSessionId.make(`session-${name}`),
   subject: "one-time-token",
 });
@@ -339,7 +339,7 @@ it.layer(layer)("Telescope agents", (it) => {
 
       const department = company[1];
       assert.isDefined(department);
-      const rename = (caller: WorkspaceService.Caller) =>
+      const rename = (caller: WorkspaceService.SessionCaller) =>
         agents.updateCompany(caller, { workspaceId, agentId: department.id, name: "HR" });
       assert.strictEqual(yield* reasonOf(rename(as.bea)), "forbidden");
       assert.strictEqual(

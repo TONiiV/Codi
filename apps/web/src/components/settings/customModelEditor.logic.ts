@@ -4,6 +4,8 @@ import {
   type ProviderOptionDescriptor,
 } from "@t3tools/contracts";
 import { type CustomModelDefinition, createModelCapabilities } from "@t3tools/shared/model";
+import type { TFunction } from "i18next";
+import { englishT } from "~/i18n/englishT";
 
 export interface EditorChoice {
   readonly key: string;
@@ -31,82 +33,118 @@ export interface CustomModelDraft {
 
 export interface DescriptorPreset {
   readonly id: string;
-  readonly label: string;
+  readonly labelKey: string;
   readonly type: "select" | "boolean";
-  readonly choices?: ReadonlyArray<{ id: string; label: string; isDefault?: boolean }>;
+  readonly choices?: ReadonlyArray<{ id: string; labelKey: string; isDefault?: boolean }>;
 }
 
 const EFFORT_CHOICES = [
-  { id: "low", label: "Low" },
-  { id: "medium", label: "Medium", isDefault: true },
-  { id: "high", label: "High" },
-  { id: "xhigh", label: "Extra High" },
+  { id: "low", labelKey: "settings.parallelProviders.presetLow" },
+  { id: "medium", labelKey: "settings.parallelProviders.presetMedium", isDefault: true },
+  { id: "high", labelKey: "settings.parallelProviders.presetHigh" },
+  { id: "xhigh", labelKey: "settings.parallelProviders.presetExtraHigh" },
 ] as const;
 
 export const DESCRIPTOR_PRESETS_BY_KIND: Partial<
   Record<ProviderDriverKind, ReadonlyArray<DescriptorPreset>>
 > = {
   [ProviderDriverKind.make("codex")]: [
-    { id: "reasoningEffort", label: "Reasoning", type: "select", choices: EFFORT_CHOICES },
+    {
+      id: "reasoningEffort",
+      labelKey: "settings.parallelProviders.presetReasoning",
+      type: "select",
+      choices: EFFORT_CHOICES,
+    },
     {
       id: "serviceTier",
-      label: "Speed",
+      labelKey: "settings.parallelProviders.presetSpeed",
       type: "select",
       choices: [
-        { id: "default", label: "Standard", isDefault: true },
-        { id: "fast", label: "Fast" },
+        { id: "default", labelKey: "settings.parallelProviders.presetStandard", isDefault: true },
+        { id: "fast", labelKey: "settings.parallelProviders.presetFast" },
       ],
     },
   ],
   [ProviderDriverKind.make("claudeAgent")]: [
     {
       id: "effort",
-      label: "Reasoning",
+      labelKey: "settings.parallelProviders.presetReasoning",
       type: "select",
       choices: [
-        { id: "low", label: "Low" },
-        { id: "medium", label: "Medium" },
-        { id: "high", label: "High", isDefault: true },
-        { id: "xhigh", label: "Extra High" },
-        { id: "max", label: "Max" },
+        { id: "low", labelKey: "settings.parallelProviders.presetLow" },
+        { id: "medium", labelKey: "settings.parallelProviders.presetMedium" },
+        { id: "high", labelKey: "settings.parallelProviders.presetHigh", isDefault: true },
+        { id: "xhigh", labelKey: "settings.parallelProviders.presetExtraHigh" },
+        { id: "max", labelKey: "settings.parallelProviders.presetMax" },
       ],
     },
-    { id: "fastMode", label: "Fast Mode", type: "boolean" },
-    { id: "thinking", label: "Thinking", type: "boolean" },
+    {
+      id: "fastMode",
+      labelKey: "settings.parallelProviders.presetFastMode",
+      type: "boolean",
+    },
+    {
+      id: "thinking",
+      labelKey: "settings.parallelProviders.presetThinking",
+      type: "boolean",
+    },
   ],
   [ProviderDriverKind.make("cursor")]: [
-    { id: "reasoning", label: "Reasoning", type: "select", choices: EFFORT_CHOICES },
-    { id: "fastMode", label: "Fast Mode", type: "boolean" },
-    { id: "thinking", label: "Thinking", type: "boolean" },
+    {
+      id: "reasoning",
+      labelKey: "settings.parallelProviders.presetReasoning",
+      type: "select",
+      choices: EFFORT_CHOICES,
+    },
+    {
+      id: "fastMode",
+      labelKey: "settings.parallelProviders.presetFastMode",
+      type: "boolean",
+    },
+    {
+      id: "thinking",
+      labelKey: "settings.parallelProviders.presetThinking",
+      type: "boolean",
+    },
   ],
   [ProviderDriverKind.make("grok")]: [
-    { id: "reasoningEffort", label: "Reasoning", type: "select", choices: EFFORT_CHOICES },
+    {
+      id: "reasoningEffort",
+      labelKey: "settings.parallelProviders.presetReasoning",
+      type: "select",
+      choices: EFFORT_CHOICES,
+    },
   ],
   [ProviderDriverKind.make("pi")]: [
     {
       id: "thinking",
-      label: "Thinking",
+      labelKey: "settings.parallelProviders.presetThinking",
       type: "select",
       choices: [
-        { id: "off", label: "Off" },
-        { id: "minimal", label: "Minimal" },
-        { id: "low", label: "Low" },
-        { id: "medium", label: "Medium", isDefault: true },
-        { id: "high", label: "High" },
-        { id: "xhigh", label: "Extra High" },
-        { id: "max", label: "Max" },
+        { id: "off", labelKey: "settings.parallelProviders.presetOff" },
+        { id: "minimal", labelKey: "settings.parallelProviders.presetMinimal" },
+        { id: "low", labelKey: "settings.parallelProviders.presetLow" },
+        { id: "medium", labelKey: "settings.parallelProviders.presetMedium", isDefault: true },
+        { id: "high", labelKey: "settings.parallelProviders.presetHigh" },
+        { id: "xhigh", labelKey: "settings.parallelProviders.presetExtraHigh" },
+        { id: "max", labelKey: "settings.parallelProviders.presetMax" },
       ],
     },
   ],
   [ProviderDriverKind.make("opencode")]: [
-    { id: "variant", label: "Reasoning", type: "select", choices: EFFORT_CHOICES },
+    {
+      id: "variant",
+      labelKey: "settings.parallelProviders.presetReasoning",
+      type: "select",
+      choices: EFFORT_CHOICES,
+    },
     {
       id: "agent",
-      label: "Agent",
+      labelKey: "settings.parallelProviders.presetAgent",
       type: "select",
       choices: [
-        { id: "build", label: "Build", isDefault: true },
-        { id: "plan", label: "Plan" },
+        { id: "build", labelKey: "settings.parallelProviders.presetBuild", isDefault: true },
+        { id: "plan", labelKey: "settings.parallelProviders.presetPlan" },
       ],
     },
   ],
@@ -118,21 +156,32 @@ function newEditorKey(): string {
   return `k${nextKey}`;
 }
 
-export function choiceFromPreset(choice: {
-  id: string;
-  label: string;
-  isDefault?: boolean;
-}): EditorChoice {
-  return { key: newEditorKey(), id: choice.id, label: choice.label, isDefault: !!choice.isDefault };
+export function choiceFromPreset(
+  choice: {
+    id: string;
+    labelKey: string;
+    isDefault?: boolean;
+  },
+  t: TFunction = englishT,
+): EditorChoice {
+  return {
+    key: newEditorKey(),
+    id: choice.id,
+    label: t(choice.labelKey),
+    isDefault: !!choice.isDefault,
+  };
 }
 
-export function descriptorFromPreset(preset: DescriptorPreset): EditorDescriptor {
+export function descriptorFromPreset(
+  preset: DescriptorPreset,
+  t: TFunction = englishT,
+): EditorDescriptor {
   return {
     key: newEditorKey(),
     type: preset.type,
     id: preset.id,
-    label: preset.label,
-    choices: (preset.choices ?? []).map(choiceFromPreset),
+    label: t(preset.labelKey),
+    choices: (preset.choices ?? []).map((choice) => choiceFromPreset(choice, t)),
   };
 }
 
@@ -194,23 +243,25 @@ export function descriptorsFromCapabilities(
     .map(descriptorToEditor);
 }
 
-export function validateDraft(draft: CustomModelDraft): string | null {
+export function validateDraft(draft: CustomModelDraft, t: TFunction = englishT): string | null {
   const seenIds = new Set<string>();
   for (const [index, descriptor] of draft.descriptors.entries()) {
-    const position = `Option ${index + 1}`;
+    const position = t("settings.parallelProviders.optionNumber", { number: index + 1 });
     const id = descriptor.id.trim();
-    if (!id) return `${position} needs an id.`;
-    if (seenIds.has(id)) return `${position}: id "${id}" is used twice.`;
+    if (!id) return t("settings.text.positionNeedsAnId", { position });
+    if (seenIds.has(id)) return t("settings.text.positionIdIdIsUsedTwice", { position, id });
     seenIds.add(id);
-    if (!descriptor.label.trim()) return `${position} needs a label.`;
+    if (!descriptor.label.trim())
+      return t("settings.parallelProviders.positionNeedsALabel", { position });
     if (descriptor.type !== "select") continue;
-    if (descriptor.choices.length === 0) return `${position} needs at least one choice.`;
+    if (descriptor.choices.length === 0)
+      return t("settings.text.positionNeedsAtLeastOneChoice", { position });
     const seenChoices = new Set<string>();
     for (const choice of descriptor.choices) {
       const choiceId = choice.id.trim();
-      if (!choiceId) return `${position} has a choice without a value.`;
+      if (!choiceId) return t("settings.text.positionHasAChoiceWithoutA", { position });
       if (seenChoices.has(choiceId)) {
-        return `${position}: choice "${choiceId}" is used twice.`;
+        return t("settings.text.positionChoiceChoiceidIsUsedTwice", { position, choiceId });
       }
       seenChoices.add(choiceId);
     }

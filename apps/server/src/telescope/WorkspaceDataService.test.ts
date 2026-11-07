@@ -1,0 +1,390 @@
+import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
+import { assert, it } from "@effect/vitest";
+import { AuthSessionId, EnvironmentId } from "@t3tools/contracts";
+import * as SecureRandom from "effect/crypto/SecureRandom";
+import * as Deferred from "effect/Deferred";
+import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
+import * as Layer from "effect/Layer";
+import * as Schema from "effect/Schema";
+import * as SqlClient from "effect/sql/SqlClient";
+
+import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
+import { runMigrations } from "../persistence/Migrations.ts";
+import * as SqlitePersistence from "../persistence/Sqlite.ts";
+import * as TelescopeDb from "./TelescopeDb.ts";
+import * as WorkspaceDataService from "./WorkspaceDataService.ts";
+import * as WorkspaceService from "./WorkspaceService.ts";
+
+const database = Layer.effectDiscard(runMigrations()).pipe(
+  Layer.provideMerge(SqlitePersistence.layerMemory),
+);
+const services = (random: Layer.Layer<SecureRandom.SecureRandom>) =>
+  Layer.mergeAll(WorkspaceDataService.layer, WorkspaceService.layer, TelescopeDb.layer).pipe(
+    Layer.provideMerge(Layer.merge(database, random)),
+    Layer.provide(
+      Layer.succeed(ServerEnvironment.ServerEnvironmentIdentity, {
+        getEnvironmentId: Effect.succeed(EnvironmentId.make("env-local")),
+      }),
+    ),
+  );
+const layer = services(NodeCrypto.layer);
+
+const session = (name: string): WorkspaceService.Caller => ({
+  sessionId: AuthSessionId.make(`session-${name}`),
+  subject: "one-time-token",
+});
+const reasonOf = <A, E extends { readonly _tag: string }, R>(effect: Effect.Effect<A, E, R>) =>
+  effect.pipe(
+    Effect.flip,
+    Effect.map((error) => ("reason" in error ? error.reason : error._tag)),
+  );
+const decodeBundle = Schema.decodeUnknownEffect(
+  Schema.fromJsonString(
+    Schema.Struct({
+      withheldMemories: Schema.Number,
+      withheldAgents: Schema.Number,
+      tables: Schema.Record(
+        Schema.String,
+        Schema.Array(Schema.Record(Schema.String, Schema.Unknown)),
+      ),
+    }),
+  ),
+);
+const decodeMemoryIds = Schema.decodeUnknownEffect(
+  Schema.Array(Schema.Struct({ memory_id: Schema.String })),
+);
+const bundleOf = (files: ReadonlyArray<{ readonly path: string; readonly text: string }>) =>
+  decodeBundle(files.find((file) => file.path === "workspace.json")?.text);
+
+/** `telescope_` tables of the given `pragma_table_list` types, by name. */
+const telescopeTables = (...types: ReadonlyArray<string>) =>
+  SqlClient.SqlClient.pipe(
+    Effect.flatMap(
+      (sql) => sql<{ readonly name: string }>`
+        SELECT name FROM pragma_table_list
+        WHERE name LIKE 'telescope\\_%' ESCAPE '\\' AND ${sql.in("type", types)} ORDER BY name`,
+    ),
+    Effect.map((rows) => rows.map((row) => row.name)),
+  );
+/** Fills every column, text ones with their name and `tag`, then applies `row`. */
+const seed = (
+  workspaceId: string,
+  table: string,
+  tag: string,
+  row: Readonly<Record<string, string | number | null>> = {},
+) =>
+  Effect.gen(function* () {
+    const sql = yield* SqlClient.SqlClient;
+    const columns = yield* sql<{ readonly name: string; readonly type: string }>`
+      SELECT name, type FROM pragma_table_info(${table})`;
+    const filled = Object.fromEntries(
+      columns.map(({ name, type }) => [name, type === "TEXT" ? `${name} ${tag}` : 0] as const),
+    );
+    yield* sql`INSERT INTO ${sql(table)} ${sql.insert({ ...filled, ...row, workspace_id: workspaceId })}`;
+  });
+/** A workspace `caller` created, with one more row in every other Telescope table. */
+const seededWorkspace = (caller: WorkspaceService.Caller, name: string, tag: string) =>
+  Effect.gen(function* () {
+    const service = yield* WorkspaceService.WorkspaceService;
+    const workspace = yield* service.create(caller, {
+      kind: "enterprise",
+      name,
+      displayName: name,
+    });
+    for (const table of yield* telescopeTables("table")) {
+      if (table !== "telescope_workspaces") yield* seed(workspace.id, table, tag);
+    }
+    return workspace;
+  });
+const rowCounts = (workspaceId: string) =>
+  Effect.gen(function* () {
+    const sql = yield* SqlClient.SqlClient;
+    const counts: Array<readonly [string, number]> = [];
+    for (const table of yield* telescopeTables("table")) {
+      const [row] = yield* sql<{ readonly count: number }>`
+        SELECT COUNT(*) AS count FROM ${sql(table)} WHERE workspace_id = ${workspaceId}`;
+      counts.push([table, row?.count ?? 0]);
+    }
+    return counts;
+  });
+
+it.layer(layer)("WorkspaceDataService", (it) => {
+  it.effect("exports one workspace's rows by table and as Markdown, and none of another's", () =>
+    Effect.gen(function* () {
+      const data = yield* WorkspaceDataService.WorkspaceDataService;
+      const alice = session("export-alice");
+      const alpha = yield* seededWorkspace(alice, "Alpha", "export-alpha");
+      const bravo = yield* seededWorkspace(session("export-bob"), "Bravo", "export-bravo");
+      yield* seed(alpha.id, "telescope_tasks", "export-task", {
+        item_id: "export-task",
+        kind: "task",
+        title: "Ship the export",
+        status: "doing",
+      });
+      yield* seed(alpha.id, "telescope_task_commits", "export-task", {
+        task_id: "export-task",
+        changed_fields_json: '{"status":"doing"}',
+      });
+      yield* seed(alpha.id, "telescope_tasks", "export-decision", {
+        kind: "decision",
+        title: "Keep SQLite",
+        options_json: '[{"label":"SQLite"},{"label":"Postgres"}]',
+      });
+
+      const { files } = yield* data.export(alice, { workspaceId: alpha.id });
+      const text = new Map(files.map((file) => [file.path, file.text]));
+      assert.deepStrictEqual(
+        [...text.keys()],
+        ["README.md", "workspace.json", "tasks.md", "decisions.md", "memory.md", "runs.md"],
+      );
+      for (const file of files) {
+        assert.notInclude(file.text, "export-bravo");
+        assert.notInclude(file.text, bravo.id);
+      }
+      const counts = new Map(yield* rowCounts(alpha.id));
+      for (const [table, rows] of Object.entries((yield* bundleOf(files)).tables)) {
+        assert.strictEqual(rows.length, counts.get(table), table);
+        for (const row of rows) assert.strictEqual(row.workspace_id, alpha.id, table);
+      }
+      assert.include(text.get("tasks.md"), "## Ship the export\n- Status: doing");
+      assert.include(text.get("tasks.md"), "author_id export-task: status doing");
+      assert.include(text.get("decisions.md"), "- Options: SQLite, Postgres");
+      assert.include(text.get("memory.md"), "text export-alpha");
+      assert.include(text.get("runs.md"), "## Run run_id export-alpha");
+      assert.include(text.get("runs.md"), "tool export-alpha");
+    }),
+  );
+
+  it.effect("exports every Telescope table or names the reason it leaves one out", () =>
+    Effect.gen(function* () {
+      const data = yield* WorkspaceDataService.WorkspaceDataService;
+      const alice = session("coverage-alice");
+      const workspace = yield* seededWorkspace(alice, "Coverage", "coverage");
+      const { tables } = yield* bundleOf(
+        (yield* data.export(alice, { workspaceId: workspace.id })).files,
+      );
+      const missing = (yield* telescopeTables("table", "virtual")).filter(
+        (table) => !(table in tables) && !(table in WorkspaceDataService.NOT_EXPORTED),
+      );
+      assert.deepStrictEqual(missing, []);
+    }),
+  );
+
+  it.effect("leaves out invitation codes, and memories and agents the exporter cannot see", () =>
+    Effect.gen(function* () {
+      const service = yield* WorkspaceService.WorkspaceService;
+      const data = yield* WorkspaceDataService.WorkspaceDataService;
+      const [alice, bob] = [session("private-alice"), session("private-bob")];
+      const { id: workspaceId } = yield* service.create(alice, {
+        kind: "enterprise",
+        name: "Private",
+        displayName: "Alice",
+      });
+      const used = yield* service.invite(alice, { workspaceId, role: "admin" });
+      const { subjectId: bobId } = yield* service.accept(bob, {
+        code: used.code,
+        displayName: "Bob",
+      });
+      const unused = yield* service.invite(alice, { workspaceId, role: "member" });
+      const aliceId = (yield* service.get(alice, { workspaceId })).self.subjectId;
+      for (const [agent, owner, exposure] of [
+        ["agent-alice", aliceId, "hidden"],
+        ["agent-bob", bobId, "hidden"],
+        ["agent-shared", bobId, "visible"],
+        ["agent-company", null, "hidden"],
+      ] as const) {
+        yield* seed(workspaceId, "telescope_agents", agent, {
+          agent_id: agent,
+          owner_subject_id: owner,
+          exposure,
+        });
+      }
+      for (const [id, agent, level, about] of [
+        ["own-private", "agent-alice", "private", null],
+        ["bob-private", "agent-bob", "private", null],
+        ["about-alice", "agent-bob", "internal", aliceId],
+        ["about-bob", "agent-alice", "internal", bobId],
+      ] as const) {
+        yield* seed(workspaceId, "telescope_memories", id, {
+          memory_id: id,
+          agent_id: agent,
+          level,
+          scope: about === null ? "personal" : "person",
+          about_subject_id: about,
+        });
+      }
+
+      const { files } = yield* data.export(alice, { workspaceId });
+      const bundle = yield* bundleOf(files);
+      assert.deepStrictEqual(
+        bundle.tables.telescope_memories?.map((row) => row.memory_id),
+        ["own-private", "about-alice"],
+      );
+      assert.strictEqual(bundle.withheldMemories, 2);
+      const agentIds = (tables: typeof bundle.tables) =>
+        tables.telescope_agents?.map((row) => row.agent_id);
+      assert.deepStrictEqual(agentIds(bundle.tables), [
+        "agent-alice",
+        "agent-shared",
+        "agent-company",
+      ]);
+      assert.strictEqual(bundle.withheldAgents, 1);
+      const readme = files.find((file) => file.path === "README.md")?.text;
+      assert.include(readme, "\n- 1 agents other members keep hidden, because");
+      assert.deepStrictEqual(
+        bundle.tables.telescope_invitations?.map((row) => "code" in row),
+        [false, false],
+      );
+      for (const file of files) {
+        assert.notInclude(file.text, used.code);
+        assert.notInclude(file.text, unused.code);
+        assert.notInclude(file.text, "bob-private");
+        assert.notInclude(file.text, "name agent-bob");
+      }
+      const bobs = yield* bundleOf((yield* data.export(bob, { workspaceId })).files);
+      assert.deepStrictEqual(agentIds(bobs.tables), ["agent-bob", "agent-shared", "agent-company"]);
+    }),
+  );
+
+  it.effect("deletes every row of one workspace in one transaction and lists them", () =>
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      const db = yield* TelescopeDb.TelescopeDb;
+      const service = yield* WorkspaceService.WorkspaceService;
+      const data = yield* WorkspaceDataService.WorkspaceDataService;
+      const alice = session("delete-alice");
+      const alpha = yield* seededWorkspace(alice, "Alpha", "delete-alpha");
+      const bravo = yield* seededWorkspace(alice, "Bravo", "delete-bravo");
+      yield* seed(alpha.id, "telescope_runs", "open", { run_id: "open-run", finished_at: null });
+      yield* seed(alpha.id, "telescope_wakes", "queued", { wake_id: "queued", status: "queued" });
+      yield* seed(alpha.id, "telescope_wakes", "running", {
+        wake_id: "running",
+        status: "running",
+      });
+      const alphaBefore = yield* rowCounts(alpha.id);
+      const bravoBefore = yield* rowCounts(bravo.id);
+      const confirm = { workspaceId: alpha.id, confirmName: "Alpha" };
+
+      assert.strictEqual(
+        yield* reasonOf(data.delete(alice, { ...confirm, confirmName: "alpha" })),
+        "invalid",
+      );
+      const busy = yield* data.delete(alice, confirm).pipe(
+        Effect.map(() => ["deleted"]),
+        Effect.catchTags({
+          TelescopeWorkspaceBusyError: (error) =>
+            Effect.succeed([...error.runIds, ...error.wakeIds].map(String)),
+        }),
+      );
+      assert.deepStrictEqual(busy.toSorted(), ["open-run", "queued", "running"]);
+      assert.deepStrictEqual(yield* rowCounts(alpha.id), alphaBefore);
+
+      yield* sql`UPDATE telescope_runs SET finished_at = 'later' WHERE run_id = 'open-run'`;
+      yield* sql`UPDATE telescope_wakes SET status = 'done' WHERE wake_id IN ('queued', 'running')`;
+      const manifest = yield* data.delete(alice, confirm);
+      assert.strictEqual(manifest.workspace.id, alpha.id);
+      assert.deepStrictEqual(
+        manifest.tables.map(({ table, count }) => [table, count] as const).toSorted(),
+        alphaBefore.toSorted(),
+      );
+      for (const { table, count, ids } of manifest.tables) {
+        assert.strictEqual(new Set(ids).size, count, table);
+      }
+      const idsOf = (name: string) =>
+        manifest.tables.find(({ table }) => table === name)?.ids ?? [];
+      assert.include(idsOf("telescope_memories"), "memory_id delete-alpha");
+      assert.include(idsOf("telescope_budgets"), "scope delete-alpha/scope_id delete-alpha");
+      assert.isTrue((yield* rowCounts(alpha.id)).every(([, count]) => count === 0));
+      assert.deepStrictEqual(yield* rowCounts(bravo.id), bravoBefore);
+      const search = (workspaceId: typeof alpha.id, query: string) =>
+        db.searchMemories(workspaceId, query, decodeMemoryIds, { where: {}, validAt: undefined });
+      assert.deepStrictEqual(yield* search(alpha.id, "delete-alpha"), []);
+      assert.deepStrictEqual(yield* search(bravo.id, "delete-bravo"), [
+        { memory_id: "memory_id delete-bravo" },
+      ]);
+      assert.deepStrictEqual(
+        (yield* service.list(alice, {})).workspaces.map((workspace) => workspace.id),
+        [bravo.id],
+      );
+
+      const again = yield* service.create(alice, {
+        kind: "enterprise",
+        name: "Alpha",
+        displayName: "Alice",
+      });
+      const { tables } = yield* bundleOf(
+        (yield* data.export(alice, { workspaceId: again.id })).files,
+      );
+      for (const table of ["telescope_tasks", "telescope_memories", "telescope_runs"]) {
+        assert.deepStrictEqual(tables[table], [], table);
+      }
+    }),
+  );
+
+  it.effect("lets only workspace admins export or delete", () =>
+    Effect.gen(function* () {
+      const service = yield* WorkspaceService.WorkspaceService;
+      const data = yield* WorkspaceDataService.WorkspaceDataService;
+      const [alice, bob] = [session("admin-alice"), session("admin-bob")];
+      const { id: workspaceId } = yield* service.create(alice, {
+        kind: "enterprise",
+        name: "Acme",
+        displayName: "Alice",
+      });
+      const { code } = yield* service.invite(alice, { workspaceId, role: "member" });
+      yield* service.accept(bob, { code, displayName: "Bob" });
+      for (const caller of [bob, session("admin-stranger")]) {
+        assert.strictEqual(yield* reasonOf(data.export(caller, { workspaceId })), "forbidden");
+        assert.strictEqual(
+          yield* reasonOf(data.delete(caller, { workspaceId, confirmName: "Acme" })),
+          "forbidden",
+        );
+      }
+    }),
+  );
+});
+
+it.effect("adds no rows to a workspace deleted between a write's member check and its insert", () =>
+  Effect.gen(function* () {
+    const paused = yield* Deferred.make<void>();
+    const resume = yield* Deferred.make<void>();
+    // Only invitation codes draw random bytes, after invite's member check and before its insert.
+    const gated = Layer.effect(
+      SecureRandom.SecureRandom,
+      SecureRandom.SecureRandom.use((random) =>
+        Effect.succeed({
+          ...random,
+          randomBytes: (size: number) =>
+            Deferred.succeed(paused, undefined).pipe(
+              Effect.andThen(Deferred.await(resume)),
+              Effect.andThen(random.randomBytes(size)),
+            ),
+        }),
+      ),
+    ).pipe(Layer.provide(NodeCrypto.layer));
+    yield* Effect.gen(function* () {
+      const db = yield* TelescopeDb.TelescopeDb;
+      const service = yield* WorkspaceService.WorkspaceService;
+      const data = yield* WorkspaceDataService.WorkspaceDataService;
+      const alice = session("late-alice");
+      const { id: workspaceId } = yield* service.create(alice, {
+        kind: "enterprise",
+        name: "Late",
+        displayName: "Alice",
+      });
+      const invite = yield* Effect.forkChild(
+        service.invite(alice, { workspaceId, role: "member" }),
+      );
+      yield* Deferred.await(paused);
+      yield* data.delete(alice, { workspaceId, confirmName: "Late" });
+      yield* Deferred.succeed(resume, undefined);
+      assert.strictEqual((yield* Effect.flip(Fiber.join(invite)))._tag, "PersistenceSqlError");
+      const at = "2026-11-07T00:00:00.000Z";
+      const task = { item_id: "late", kind: "task", title: "Late", status: "todo" };
+      const late = db.insert(workspaceId, "tasks", { ...task, created_at: at, updated_at: at });
+      assert.strictEqual((yield* Effect.flip(late))._tag, "PersistenceSqlError");
+      assert.isTrue((yield* rowCounts(workspaceId)).every(([, count]) => count === 0));
+    }).pipe(Effect.provide(services(gated)));
+  }),
+);

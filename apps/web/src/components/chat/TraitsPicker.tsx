@@ -23,6 +23,8 @@ import {
   normalizeModelSlug,
 } from "@t3tools/shared/model";
 import { memo } from "react";
+import type { TFunction } from "i18next";
+import { useTranslation } from "react-i18next";
 import { GaugeIcon } from "lucide-react";
 import {
   Menu,
@@ -100,10 +102,65 @@ type TraitsPersistence =
       onModelOptionsChange: (nextOptions: ProviderOptions | undefined) => void;
     };
 
+// Labels come from provider data, user-typed option labels and client-runtime's " · "-joined
+// trigger text. A segment is translated only when it is a known phrase, or a known phrase plus the
+// On/Off or speed word the trigger appends; anything else passes through untouched.
+const TRAIT_PHRASE_KEYS: ReadonlyMap<string, string> = new Map([
+  ["Reasoning effort", "settings.parallelFinalUI.trait_reasoning_effort"],
+  ["Service Tier", "settings.parallelFinalUI.trait_service_tier"],
+  ["Extra High Effort", "settings.parallelFinalUI.trait_extra_high_effort"],
+  ["Medium Effort", "settings.parallelFinalUI.trait_medium_effort"],
+  ["High Effort", "settings.parallelFinalUI.trait_high_effort"],
+  ["Low Effort", "settings.parallelFinalUI.trait_low_effort"],
+  ["Context Window", "settings.parallelFinalUI.trait_context_window"],
+  ["Fast Mode", "settings.parallelFinalUI.trait_fast_mode"],
+  ["Extra High", "settings.parallelFinalUI.trait_extra_high"],
+  ["Ultrathink", "settings.parallelFinalUI.trait_ultrathink"],
+  ["Ultrafast", "settings.parallelFinalUI.trait_ultrafast"],
+  ["Effort", "settings.parallelFinalUI.trait_effort"],
+  ["Reasoning", "settings.parallelFinalUI.trait_reasoning"],
+  ["Thinking", "settings.parallelFinalUI.trait_thinking"],
+  ["Medium", "settings.parallelFinalUI.trait_medium"],
+  ["Minimal", "settings.parallelFinalUI.trait_minimal"],
+  ["Normal", "settings.parallelFinalUI.trait_normal"],
+  ["Standard", "settings.parallelFinalUI.trait_standard"],
+  ["Agent", "settings.parallelFinalUI.trait_agent"],
+  ["High", "settings.parallelFinalUI.trait_high"],
+  ["Low", "settings.parallelFinalUI.trait_low"],
+  ["Max", "settings.parallelFinalUI.trait_max"],
+  ["Ultra", "settings.parallelFinalUI.trait_ultra"],
+  ["None", "settings.parallelFinalUI.trait_none"],
+  ["Fast", "settings.parallelFinalUI.trait_fast"],
+  ["Default", "settings.parallelFinalUI.trait_default"],
+  ["On", "settings.parallelFinalUI.trait_on"],
+  ["Off", "settings.parallelFinalUI.trait_off"],
+]);
+const TRAIT_SUFFIXES: ReadonlySet<string> = new Set(["On", "Off", "Fast", "Ultrafast"]);
+
+function traitSegment(segment: string, t: TFunction): string {
+  const key = TRAIT_PHRASE_KEYS.get(segment);
+  if (key) return t(key);
+  const space = segment.lastIndexOf(" ");
+  const tail = segment.slice(space + 1);
+  const headKey = TRAIT_PHRASE_KEYS.get(segment.slice(0, space));
+  const tailKey = TRAIT_PHRASE_KEYS.get(tail);
+  return space > 0 && TRAIT_SUFFIXES.has(tail) && headKey && tailKey
+    ? `${t(headKey)} ${t(tailKey)}`
+    : segment;
+}
+
+export function traitText(text: string, t: TFunction): string {
+  return text
+    .split(" · ")
+    .map((segment) => traitSegment(segment, t))
+    .join(" · ");
+}
+
 function DefaultBadge() {
+  const { t } = useTranslation();
   return (
     <Badge variant="outline" size="sm" className="min-w-0">
-      Default
+      {traitText("Default", t)}
     </Badge>
   );
 }
@@ -369,10 +426,8 @@ export function useTraitsSelection({
   };
 }
 
-export const ULTRATHINK_IN_BODY_NOTE =
-  'Your prompt contains "ultrathink" in the text. Remove it to change this option.';
-
 const TraitsMenuContent = memo(function TraitsMenuContentImpl(props: TraitsSelectionInput) {
+  const { t } = useTranslation();
   const traits = useTraitsSelection(props);
   const {
     descriptors,
@@ -399,9 +454,11 @@ const TraitsMenuContent = memo(function TraitsMenuContentImpl(props: TraitsSelec
               {index > 0 ? <MenuDivider /> : null}
               <MenuGroup>
                 <div className="px-2 pt-1.5 pb-1 font-medium text-muted-foreground text-xs">
-                  {descriptor.label}
+                  {traitText(descriptor.label, t)}
                 </div>
-                <div className="px-2 pb-1.5 text-muted-foreground/80 text-xs">{value}</div>
+                <div className="px-2 pb-1.5 text-muted-foreground/80 text-xs">
+                  {traitText(value, t)}
+                </div>
               </MenuGroup>
             </div>
           );
@@ -417,11 +474,11 @@ const TraitsMenuContent = memo(function TraitsMenuContentImpl(props: TraitsSelec
           {index > 0 ? <MenuDivider /> : null}
           <MenuGroup>
             <div className="px-2 pt-1.5 pb-1 font-medium text-muted-foreground text-xs">
-              {descriptor.label}
+              {traitText(descriptor.label, t)}
             </div>
             {ultrathinkInBodyText && descriptor.id === primarySelectDescriptor?.id ? (
               <div className="px-2 pb-1.5 text-muted-foreground/80 text-xs">
-                {ULTRATHINK_IN_BODY_NOTE}
+                {t("settings.parallelFinalUI.ultrathinkInBodyNote")}
               </div>
             ) : null}
             <MenuRadioGroup
@@ -438,7 +495,7 @@ const TraitsMenuContent = memo(function TraitsMenuContentImpl(props: TraitsSelec
                 >
                   <span className="flex w-full min-w-0 flex-col">
                     <span className="flex min-w-0 items-center gap-1">
-                      <span className="min-w-0 truncate">{option.label}</span>
+                      <span className="min-w-0 truncate">{traitText(option.label, t)}</span>
                       {option.isDefault ? <DefaultBadge /> : null}
                     </span>
                     {option.description ? (
@@ -458,7 +515,7 @@ const TraitsMenuContent = memo(function TraitsMenuContentImpl(props: TraitsSelec
           {index > 0 || selectDescriptors.length > 0 ? <MenuDivider /> : null}
           <MenuGroup>
             <div className="px-2 py-1.5 font-medium text-muted-foreground text-xs">
-              {descriptor.label}
+              {traitText(descriptor.label, t)}
             </div>
             <MenuRadioGroup
               value={descriptor.currentValue === true ? "on" : "off"}
@@ -467,7 +524,7 @@ const TraitsMenuContent = memo(function TraitsMenuContentImpl(props: TraitsSelec
               {(["on", "off"] as const).map((value) => (
                 <MenuRadioItem key={value} value={value} hideIndicator closeOnClick>
                   <span className="flex w-full min-w-0 items-center justify-between gap-3">
-                    <span>{value === "on" ? "On" : "Off"}</span>
+                    <span>{traitText(value === "on" ? "On" : "Off", t)}</span>
                   </span>
                 </MenuRadioItem>
               ))}
@@ -489,12 +546,13 @@ export const TraitsPicker = memo(function TraitsPicker({
   hidden?: boolean;
   disabled?: boolean;
 }) {
+  const { t } = useTranslation();
   const [isMenuOpen, setIsMenuOpen] = useComposerMenuState(hidden || disabled);
   const traits = useTraitsSelection(props);
   if (!traits.hasAnyControls) {
     return null;
   }
-  const { label: triggerLabel } = buildTraitsTriggerDisplay({
+  const { label: sourceTriggerLabel } = buildTraitsTriggerDisplay({
     provider: props.provider,
     descriptors: traits.descriptors,
     primarySelectDescriptorId: traits.primarySelectDescriptor?.id ?? null,
@@ -505,6 +563,7 @@ export const TraitsPicker = memo(function TraitsPicker({
         : null,
     reportedModelSelection: props.reportedModelSelection,
   });
+  const triggerLabel = traitText(sourceTriggerLabel, t);
   const isCodexStyle = props.provider === "codex";
 
   return (

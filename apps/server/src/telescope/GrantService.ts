@@ -111,7 +111,8 @@ export interface AuditInput {
 const fail = (reason: Telescope.WorkspaceError["reason"], message: string) =>
   Effect.fail(new Telescope.WorkspaceError({ reason, message }));
 
-type Caller = WorkspaceService.Caller;
+// People manage grants and read the audit; an agent run never does, whatever its member's role.
+type Caller = WorkspaceService.SessionCaller;
 type Failure = Telescope.WorkspaceError | PersistenceSqlError | PersistenceDecodeError;
 type Out<A> = Effect.Effect<A, Failure>;
 type Rpcs = (typeof Telescope.GrantRpcs)[number];

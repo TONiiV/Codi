@@ -2,9 +2,13 @@ import { AuthSessionId, ProjectId, Telescope } from "@t3tools/contracts";
 import * as Console from "effect/Console";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Path from "effect/Path";
+import type { PlatformError } from "effect/PlatformError";
 import * as References from "effect/References";
+import * as Schema from "effect/Schema";
 import { Argument, Command, Flag, GlobalFlag } from "effect/cli";
 import * as CliError from "effect/cli/CliError";
 
@@ -13,6 +17,7 @@ import * as ServerConfig from "../config.ts";
 import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
 import type { PersistenceDecodeError, PersistenceSqlError } from "../persistence/Errors.ts";
 import * as SqlitePersistence from "../persistence/Sqlite.ts";
+import * as WorkspaceDataService from "../telescope/WorkspaceDataService.ts";
 import * as WorkspaceService from "../telescope/WorkspaceService.ts";
 import {
   type CliAuthLocationFlags,
@@ -49,11 +54,24 @@ const projectFlag = Flag.String("project").pipe(
 );
 
 type Flags = { readonly baseDir: Option.Option<string>; readonly json: boolean };
-type Services = WorkspaceService.WorkspaceService | ServerEnvironment.ServerEnvironmentIdentity;
-type Failure = Telescope.WorkspaceError | PersistenceSqlError | PersistenceDecodeError;
+type Services =
+  | WorkspaceService.WorkspaceService
+  | WorkspaceDataService.WorkspaceDataService
+  | ServerEnvironment.ServerEnvironmentIdentity
+  | FileSystem.FileSystem
+  | Path.Path;
+type Failure =
+  | Telescope.WorkspaceError
+  | Telescope.WorkspaceBusyError
+  | PersistenceSqlError
+  | PersistenceDecodeError
+  | PlatformError
+  | CliError.UserError;
 
 const render = <A>(json: boolean, result: A, human: (result: A) => string) =>
   json ? JSON.stringify(result, null, 2) : human(result);
+const userError = (error: Error) =>
+  Effect.fail(new CliError.UserError({ cause: error, userMessage: error.message }));
 
 /** Opens this T3 home's database, runs one service call as the owner, and prints its result. */
 const runAsOwner = Effect.fn("cli.telescope.runAsOwner")(function* <A>(
@@ -70,11 +88,12 @@ const runAsOwner = Effect.fn("cli.telescope.runAsOwner")(function* <A>(
   const result = yield* WorkspaceService.WorkspaceService.pipe(
     Effect.flatMap(run),
     Effect.catchTags({
-      TelescopeWorkspaceError: (error) =>
-        Effect.fail(new CliError.UserError({ cause: error, userMessage: error.message })),
+      TelescopeWorkspaceError: userError,
+      TelescopeWorkspaceBusyError: userError,
+      PlatformError: userError,
     }),
     Effect.provide(
-      WorkspaceService.layer.pipe(
+      Layer.merge(WorkspaceService.layer, WorkspaceDataService.layer).pipe(
         Layer.provideMerge(ServerEnvironment.layerIdentity),
         Layer.provide(SqlitePersistence.layerConfig),
         Layer.provide(ServerConfig.layer(config)),
@@ -154,9 +173,93 @@ const orgListCommand = Command.make("list", common).pipe(
   ),
 );
 
+const workspaceArgument = Argument.String("workspace").pipe(
+  Argument.withSchema(Telescope.WorkspaceId),
+  Argument.withDescription("Workspace id, from `t3 org list`."),
+);
+
+const orgExportCommand = Command.make("export", {
+  ...common,
+  workspace: workspaceArgument,
+  out: Flag.String("out").pipe(
+    Flag.withDescription("A new or empty directory to write the export into."),
+  ),
+}).pipe(
+  Command.withDescription("Export a workspace's data as JSON and Markdown files."),
+  Command.withHandler((flags) =>
+    runAsOwner(
+      flags,
+      () =>
+        Effect.gen(function* () {
+          const fs = yield* FileSystem.FileSystem;
+          const path = yield* Path.Path;
+          if ((yield* fs.exists(flags.out)) && (yield* fs.readDirectory(flags.out)).length > 0)
+            return yield* new CliError.UserError({
+              cause: flags.out,
+              userMessage: `${flags.out} is not empty. Export into a new or empty directory.`,
+            });
+          const data = yield* WorkspaceDataService.WorkspaceDataService;
+          const { files } = yield* data.export(OWNER, { workspaceId: flags.workspace });
+          yield* fs.makeDirectory(flags.out, { recursive: true });
+          for (const file of files)
+            yield* fs.writeFileString(path.join(flags.out, file.path), file.text);
+          return { directory: flags.out, files: files.map((file) => file.path) };
+        }),
+      ({ directory, files }) => `Exported ${files.join(", ")} to ${directory}.`,
+    ),
+  ),
+);
+
+const encodeManifest = Schema.encodeSync(
+  Schema.fromJsonString(Telescope.WorkspaceDeleteManifest, { space: 2 }),
+);
+
+const orgDeleteCommand = Command.make("delete", {
+  ...common,
+  workspace: workspaceArgument,
+  confirm: Flag.String("confirm").pipe(
+    Flag.withSchema(Telescope.Text),
+    Flag.withDescription("The workspace's name, typed out to confirm the deletion."),
+  ),
+  manifest: Flag.String("manifest").pipe(
+    Flag.withDescription("Write the deletion manifest, with every deleted row's id, to this file."),
+    Flag.optional,
+  ),
+}).pipe(
+  Command.withDescription("Delete a workspace and all its data, and print what was deleted."),
+  Command.withHandler((flags) =>
+    runAsOwner(
+      flags,
+      () =>
+        Effect.gen(function* () {
+          const fs = yield* FileSystem.FileSystem;
+          const file = Option.getOrUndefined(flags.manifest);
+          // The manifest is the only record of the deletion, so its path is proven writable first,
+          // by appending nothing: a refused deletion leaves an earlier manifest there intact.
+          if (file !== undefined) yield* fs.writeFileString(file, "", { flag: "a" });
+          const data = yield* WorkspaceDataService.WorkspaceDataService;
+          const manifest = yield* data.delete(OWNER, {
+            workspaceId: flags.workspace,
+            confirmName: flags.confirm,
+          });
+          if (file !== undefined) yield* fs.writeFileString(file, `${encodeManifest(manifest)}\n`);
+          return manifest;
+        }),
+      (manifest) =>
+        [
+          `Deleted ${manifest.workspace.name} (${manifest.workspace.id}).`,
+          table(
+            ["TABLE", "ROWS"],
+            manifest.tables.map((row) => [row.table, String(row.count)]),
+          ),
+        ].join("\n"),
+    ),
+  ),
+);
+
 export const orgCommand = Command.make("org").pipe(
   Command.withDescription("Manage Telescope workspaces."),
-  Command.withSubcommands([orgInitCommand, orgListCommand]),
+  Command.withSubcommands([orgInitCommand, orgListCommand, orgExportCommand, orgDeleteCommand]),
 );
 
 const memberInviteCommand = Command.make("invite", {

@@ -98,7 +98,7 @@ it.layer(layer)("Telescope board changes", (it) => {
       assert.strictEqual(yield* Effect.flip(sql.withTransaction(rolledBack)), "rollback");
       yield* board.acquireLease(agent, { workspaceId: a, taskId: task.id });
       assert.deepStrictEqual(yield* next, notice(3));
-      yield* TestClock.adjust("3 minutes");
+      yield* TestClock.adjust("16 minutes");
       yield* board.listTasks(alice, { workspaceId: a });
       assert.deepStrictEqual(yield* next, notice(4));
 
