@@ -1,4 +1,4 @@
-import { OrchestratorMcpFailure, Telescope } from "@t3tools/contracts";
+import { OrchestratorMcpFailure, Telescope, ThreadId } from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
 import * as Struct from "effect/Struct";
 import { Tool, Toolkit } from "effect/ai";
@@ -8,6 +8,7 @@ import * as AgentService from "../../../telescope/AgentService.ts";
 import * as DelegationService from "../../../telescope/DelegationService.ts";
 import * as TaskBoardService from "../../../telescope/TaskBoardService.ts";
 import * as ToolGateway from "../../../telescope/ToolGateway.ts";
+import * as WorkerDispatch from "../../../telescope/WorkerDispatch.ts";
 import * as McpInvocationContext from "../../McpInvocationContext.ts";
 
 const dependencies = [
@@ -17,6 +18,7 @@ const dependencies = [
   TaskBoardService.TaskBoardService,
   AgentService.AgentService,
   DelegationService.DelegationService,
+  WorkerDispatch.WorkerDispatch,
 ];
 /** The thread's Telescope run names the workspace, so no tool takes one. */
 const boardTool = <
@@ -160,6 +162,20 @@ const DelegateTool = boardTool("delegate", {
   readonly: false,
 });
 
+const DispatchWorkerTool = boardTool("dispatch_worker", {
+  title: "Open a Worker",
+  description:
+    "Open a Worker for a task delegated to you (`delegationId`): a new thread in your project whose only message is `brief`, so state the goal, constraints, acceptance criteria and `goalChain`; never paste the chat. Returns the Worker task's `delegationId` and the thread's `link`. When the Worker's turn ends you get a new turn; do not wait for it. Then close the Worker task with `delegation_report` and report on your own task with the Worker thread's link.",
+  parameters: Schema.Struct({ ...DelegationIdInput, brief: Telescope.DelegationBrief }),
+  success: Schema.Struct({
+    delegationId: Telescope.DelegationId,
+    state: Telescope.A2ATaskState,
+    threadId: Schema.optionalKey(ThreadId),
+    link: Schema.optionalKey(Schema.String),
+  }),
+  readonly: false,
+});
+
 const DelegationListTool = boardTool("delegation_list", {
   title: "List delegations",
   description: `List the delegations you sent and the ones sent to you, oldest first, with their briefs, states and reports. ${DELEGATION_TEXT}`,
@@ -202,6 +218,7 @@ export const TelescopeToolkit = Toolkit.make(
   DecisionRecordTool,
   AgentListTool,
   DelegateTool,
+  DispatchWorkerTool,
   DelegationListTool,
   DelegationReportTool,
   DelegationCancelTool,

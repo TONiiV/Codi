@@ -1208,8 +1208,9 @@ export const layerDeviceToolkit = Layer.mergeAll(
 /**
  * Out of `layerTools`: only threads with an open Telescope run, or an agent's resident thread, see
  * these, so other lists keep their size. Providers cache the list, so a resident thread keeps it.
+ * A Worker's thread lists memory but not the board (plan 2.8).
  */
-const visibleToTelescopeRuns = McpServer.visibility(
+const telescopeThread = (workers: boolean) =>
   Effect.map(
     Effect.all({ memory: MemoryService.MemoryService, db: TelescopeDb.TelescopeDb }),
     (services) => () =>
@@ -1219,7 +1220,16 @@ const visibleToTelescopeRuns = McpServer.visibility(
           return thread === undefined
             ? Effect.succeed(false)
             : services.memory.callerForThread(thread.threadId).pipe(
-                Effect.as(true),
+                Effect.flatMap(({ workspaceId }) =>
+                  workers
+                    ? Effect.succeed(true)
+                    : services.db
+                        .count(workspaceId, "delegations", {
+                          thread_id: thread.threadId,
+                          hop: "worker",
+                        })
+                        .pipe(Effect.map((count) => count === 0)),
+                ),
                 Effect.catch(() =>
                   services.db
                     .agentThread(thread.threadId)
@@ -1229,17 +1239,16 @@ const visibleToTelescopeRuns = McpServer.visibility(
               );
         }),
       ),
-  ),
-);
+  );
 
 export const layerMemoryToolkit = toolkitRegistration(MemoryToolkit, MemoryHandlers.layer).pipe(
-  Layer.provide(visibleToTelescopeRuns.layer),
+  Layer.provide(McpServer.visibility(telescopeThread(true)).layer),
 );
 
 export const layerTelescopeToolkit = toolkitRegistration(
   TelescopeToolkit,
   TelescopeHandlers.layer,
-).pipe(Layer.provide(visibleToTelescopeRuns.layer));
+).pipe(Layer.provide(McpServer.visibility(telescopeThread(false)).layer));
 
 /**
  * `McpServer` for in-process calls, which provide `McpInvocationContext`
