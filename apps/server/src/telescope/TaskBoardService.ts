@@ -307,9 +307,10 @@ const make = Effect.gen(function* () {
       .toSorted((a, b) => b.baseVersion - a.baseVersion);
     const overwrote = Object.keys(mine).flatMap((key) => {
       const last = later.find((commit) => key in commit.changedFields);
-      return last === undefined || last.authorId === author.authorId
-        ? []
-        : [{ key, by: last.authorId, at: last.createdAt }];
+      // One agent can act for several members; its change for another member is not its own.
+      const own =
+        last?.authorId === author.authorId && last.onBehalfOf?.[0] === author.onBehalfOf?.[0];
+      return last === undefined || own ? [] : [{ key, by: last.authorId, at: last.createdAt }];
     });
     const next = yield* applyCommit(author, current, mine, notes, at, {
       mergeLevel: 0,

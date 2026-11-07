@@ -438,7 +438,7 @@ it.layer(layer)("Telescope task board", (it) => {
       const { workspaces, board, a, aliceId, agent } = yield* setup;
       const bob = { caller: session("bob") };
       const { code } = yield* workspaces.invite(alice.caller, { workspaceId: a, role: "member" });
-      yield* workspaces.accept(bob.caller, { code, displayName: "Bob" });
+      const bobId = (yield* workspaces.accept(bob.caller, { code, displayName: "Bob" })).subjectId;
       const task = yield* board.createTask(alice, { workspaceId: a, title: "Plan" });
       const update = (actor: TaskBoardService.Actor, baseVersion: number, set: object) =>
         board.updateTask(actor, { workspaceId: a, taskId: task.id, baseVersion, set });
@@ -503,6 +503,16 @@ it.layer(layer)("Telescope task board", (it) => {
         Effect.flip(update(agent, 12, { status: "in_progress" })),
       ]);
       assert.deepStrictEqual(moved.map(reasonOf), ["forbidden", "forbidden"]);
+
+      // A company agent serving two members is one author but writes for each of them.
+      const forAlice = { ...alice, authorId: "agent-co", onBehalfOf: [aliceId, "agent-co"] };
+      const forBob = { ...bob, authorId: "agent-co", onBehalfOf: [bobId, "agent-co"] };
+      const viaCo = yield* update(forAlice, 13, { title: "Alice's via co" });
+      const lateCo = yield* update(forBob, 13, { title: "Bob's via co" });
+      assert.deepStrictEqual(
+        [lateCo.title, lateCo.version, lateCo.overwrote],
+        ["Bob's via co", 15, [{ key: "title", by: "agent-co", at: viaCo.updatedAt }]],
+      );
       assert.deepStrictEqual((yield* board.listDecisions(alice, { workspaceId: a })).decisions, []);
     }),
   );
