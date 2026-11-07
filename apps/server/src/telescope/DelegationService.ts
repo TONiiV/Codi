@@ -232,7 +232,6 @@ export class DelegationService extends Context.Service<
     /** A member sees and cancels the delegations of a chain holding one of its agents (D70). */
     readonly listForMember: MemberMethod<"telescope.delegation.list">;
     readonly getForMember: MemberMethod<"telescope.delegation.get">;
-    readonly cancelForMember: MemberMethod<"telescope.delegation.cancel">;
   }
 >()("t3/telescope/DelegationService") {}
 
@@ -714,13 +713,6 @@ const make = Effect.gen(function* () {
     if (!(yield* chainOwnedBy(row, memberId))) return yield* notFound("Delegation");
     return toDelegation(row);
   });
-  const cancelForMember: DelegationService["Service"]["cancelForMember"] = Effect.fn(
-    "DelegationService.cancelForMember",
-  )(function* (caller, input) {
-    const member = yield* memberOf(caller, input.workspaceId);
-    const cancelled = yield* cancel(member, input.delegationId);
-    return { canceled: cancelled.map((row) => row.id) };
-  });
 
   return DelegationService.of({
     delegate,
@@ -737,7 +729,6 @@ const make = Effect.gen(function* () {
     waiting,
     listForMember,
     getForMember,
-    cancelForMember,
   });
 });
 

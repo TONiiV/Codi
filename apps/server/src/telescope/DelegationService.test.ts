@@ -755,6 +755,11 @@ it.effect("an answer for a stopped agent fails its delegation instead of a turn 
 it.effect("a member lists, reads and cancels only delegations of its own chain (D70, D98)", () =>
   Effect.gen(function* () {
     const delegations = yield* setup;
+    // The RPC's cancel is WorkerDispatch.cancelForMember, which resolves the member and calls this.
+    const cancelAs = (memberId: string, delegationId: Telescope.DelegationId) =>
+      delegations
+        .cancel({ workspaceId: ws, memberId }, delegationId)
+        .pipe(Effect.map((rows) => rows.map((row) => row.id)));
     const task = yield* delegations.delegate(actor(pa), { toAgentId: chief, brief });
     yield* delegations.start({ workspaceId: ws, delegationId: task.id });
     const hop = yield* delegations.recordWorker(actor(chief), {
@@ -794,8 +799,8 @@ it.effect("a member lists, reads and cancels only delegations of its own chain (
     const attempts: ReadonlyArray<Effect.Effect<object, { readonly _tag: string }>> = [
       delegations.getForMember(session("bea"), mine),
       delegations.getForMember(session("bea"), unknown),
-      delegations.cancelForMember(session("bea"), mine),
-      delegations.cancelForMember(session("bea"), unknown),
+      cancelAs("bea", mine.delegationId),
+      cancelAs("bea", unknown.delegationId),
     ];
     for (const attempt of attempts) {
       assert.strictEqual(yield* failure(attempt), "not_found");
@@ -809,16 +814,8 @@ it.effect("a member lists, reads and cancels only delegations of its own chain (
     yield* TelescopeDb.TelescopeDb.use((db) =>
       db.update(ws, "agents", { owner_subject_id: "bea" }, { agent_id: chief }),
     );
-    assert.deepStrictEqual(yield* delegations.cancelForMember(session("bea"), mine), {
-      canceled: [hop.id],
-    });
-    assert.deepStrictEqual(
-      yield* delegations.cancelForMember(session("ann"), {
-        workspaceId: ws,
-        delegationId: task.id,
-      }),
-      { canceled: [task.id] },
-    );
+    assert.deepStrictEqual(yield* cancelAs("bea", mine.delegationId), [hop.id]);
+    assert.deepStrictEqual(yield* cancelAs("ann", task.id), [task.id]);
   }).pipe(Effect.provide(layer)),
 );
 

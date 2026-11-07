@@ -690,7 +690,10 @@ it.effect.each([
   ),
 );
 
-it.effect("cancel interrupts the Worker turn and keeps the thread", () =>
+it.effect.each([
+  { by: "cancel", member: false },
+  { by: "a member cancel of a chain with a Worker hop", member: true },
+] as const)("$by interrupts the Worker turn and keeps the thread", ({ member }) =>
   withHarness((harness) =>
     Effect.gen(function* () {
       const seeded = yield* seed;
@@ -702,14 +705,14 @@ it.effect("cancel interrupts the Worker turn and keeps the thread", () =>
       yield* Queue.take(harness.sessions);
       yield* Queue.take(harness.started);
       const workers = yield* WorkerDispatch.WorkerDispatch;
-      const cancelled = yield* workers.cancel(seeded.actor, delegation.id);
-      assert.deepStrictEqual(
-        cancelled.map((row) => [row.id, row.state]),
-        [
-          [delegation.id, "CANCELED"],
-          [opened.delegationId, "CANCELED"],
-        ],
-      );
+      const delegations = yield* DelegationService.DelegationService;
+      const ref = { workspaceId: seeded.workspaceId, delegationId: delegation.id };
+      const cancelled = member
+        ? (yield* workers.cancelForMember(alice, ref)).canceled
+        : (yield* workers.cancel(seeded.actor, delegation.id)).map((row) => row.id);
+      assert.deepStrictEqual(cancelled, [delegation.id, opened.delegationId]);
+      for (const delegationId of cancelled)
+        assert.equal((yield* delegations.get({ ...ref, delegationId })).state, "CANCELED");
       assert.deepStrictEqual(
         (yield* Ref.get(harness.log))
           .filter((entry) => entry.endsWith(opened.threadId))

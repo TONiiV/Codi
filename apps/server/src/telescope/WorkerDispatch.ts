@@ -22,6 +22,7 @@ import * as GrantService from "./GrantService.ts";
 import * as RoutingService from "./RoutingService.ts";
 import * as RunRecordService from "./RunRecordService.ts";
 import type { ToolCaller } from "./ToolGateway.ts";
+import * as WorkspaceService from "./WorkspaceService.ts";
 
 const WORKER_TASK_TYPE = "worker";
 const NO_TOKENS = { input: 0, cachedInput: 0, cacheCreation: 0, output: 0 };
@@ -77,6 +78,11 @@ export class WorkerDispatch extends Context.Service<
       by: DelegationService.Actor | DelegationService.MemberActor,
       delegationId: Telescope.DelegationId,
     ) => Effect.Effect<ReadonlyArray<Telescope.Delegation>, Failure>;
+    /** `telescope.delegation.cancel`: the same cancel, as the calling member (D98). */
+    readonly cancelForMember: (
+      caller: WorkspaceService.Caller,
+      input: typeof Telescope.DelegationCancelInput.Type,
+    ) => Effect.Effect<typeof Telescope.DelegationCancelResult.Type, Failure>;
   }
 >()("t3/telescope/WorkerDispatch") {}
 
@@ -88,6 +94,7 @@ const make = Effect.gen(function* () {
   const threads = yield* ThreadManagementService.ThreadManagementService;
   const settings = yield* ServerSettingsService;
   const random = yield* SecureRandom.SecureRandom;
+  const workspaces = yield* WorkspaceService.WorkspaceService;
 
   const route = Effect.fn("WorkerDispatch.route")(function* (
     caller: ToolCaller,
@@ -235,7 +242,17 @@ const make = Effect.gen(function* () {
     return cancelled;
   });
 
-  return WorkerDispatch.of({ dispatch, cancel });
+  const cancelForMember = Effect.fn("WorkerDispatch.cancelForMember")(function* (
+    caller: WorkspaceService.Caller,
+    input: typeof Telescope.DelegationCancelInput.Type,
+  ) {
+    const { self } = yield* workspaces.get(caller, { workspaceId: input.workspaceId });
+    const member = { workspaceId: input.workspaceId, memberId: self.subjectId };
+    const cancelled = yield* cancel(member, input.delegationId);
+    return { canceled: cancelled.map((row) => row.id) };
+  });
+
+  return WorkerDispatch.of({ dispatch, cancel, cancelForMember });
 });
 
 export const layer = Layer.effect(WorkerDispatch, make);
