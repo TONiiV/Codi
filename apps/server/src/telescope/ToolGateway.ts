@@ -448,9 +448,10 @@ const make = Effect.gen(function* () {
             });
         }
         const [existing] = yield* db.select(workspaceId, "budgets", decodeBudgets, where);
-        yield* existing === undefined
-          ? db.insert(workspaceId, "budgets", { ...where, ...fields })
-          : db.update(workspaceId, "budgets", fields, where);
+        if (existing === undefined)
+          yield* db.insert(workspaceId, "budgets", { ...where, ...fields });
+        else if (Object.keys(fields).length > 0)
+          yield* db.update(workspaceId, "budgets", fields, where);
         return toBudget({
           ...(existing ?? { ...EMPTY_BUDGET, workspace_id: workspaceId, ...where }),
           ...fields,

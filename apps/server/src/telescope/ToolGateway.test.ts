@@ -511,6 +511,11 @@ it.layer(layer)("Telescope tool gateway", (it) => {
           [true, 8],
           "a limit keeps the pause",
         );
+        assert.deepStrictEqual(
+          yield* gateway.setBudget(as.ann, budget),
+          kept,
+          "a request naming no field keeps the budget",
+        );
         assert.strictEqual(yield* denial("memory_search"), `budget_paused:${level}`);
         const resumed = yield* gateway.setBudget(as.ann, { ...budget, paused: false });
         assert.deepStrictEqual(
