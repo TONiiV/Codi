@@ -724,6 +724,10 @@ const SEARCH_ENGINE_LABELS: Readonly<Record<Exclude<BrowserSearchEngine, "custom
   ecosia: "Ecosia",
 };
 
+// Built-in profile names are contract literals that cannot be renamed; only the label is translated.
+const browserProfileLabel = (profile: Pick<BrowserProfile, "id" | "name">, t: TFunction): string =>
+  profile.id === DEFAULT_BROWSER_PROFILE_ID ? t("settings.text.default") : profile.name;
+
 const searchEngineLabel = (engine: BrowserSearchEngine, t: TFunction): string =>
   engine === "custom" ? t("settings.text.custom3") : SEARCH_ENGINE_LABELS[engine];
 
@@ -1427,7 +1431,7 @@ function BrowserProfilesSetting({ disabled }: { readonly disabled: boolean }) {
                       profileWritesDisabled && "opacity-64",
                     )}
                   >
-                    {profile.name}
+                    {browserProfileLabel(profile, t)}
                   </span>
                 ) : (
                   <DraftInput
@@ -1454,7 +1458,9 @@ function BrowserProfilesSetting({ disabled }: { readonly disabled: boolean }) {
                       size="icon-xs"
                       variant="ghost-muted"
                       disabled={profileWritesDisabled || importInFlight}
-                      aria-label={t("settings.text.nameOptions", { name: profile.name })}
+                      aria-label={t("settings.text.nameOptions", {
+                        name: browserProfileLabel(profile, t),
+                      })}
                     />
                   }
                 >
@@ -1476,7 +1482,7 @@ function BrowserProfilesSetting({ disabled }: { readonly disabled: boolean }) {
                     onClick={() => {
                       if (serverProfileData.environmentIds.length > 0) {
                         setProfilePendingClear(profile);
-                      } else clearProfileData(profile.id, profile.name);
+                      } else clearProfileData(profile.id, browserProfileLabel(profile, t));
                     }}
                   >
                     {t("settings.text.clearCookiesAndCache")}
@@ -1568,7 +1574,9 @@ function BrowserProfilesSetting({ disabled }: { readonly disabled: boolean }) {
         <AlertDialogPopup>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              {t("settings.text.clearNameSCookiesAndCache", { name: profilePendingClear?.name })}
+              {t("settings.text.clearNameSCookiesAndCache", {
+                name: profilePendingClear ? browserProfileLabel(profilePendingClear, t) : undefined,
+              })}
             </AlertDialogTitle>
             <AlertDialogDescription>
               {t("settings.text.youAreSignedOutOfIts")}
@@ -1582,7 +1590,10 @@ function BrowserProfilesSetting({ disabled }: { readonly disabled: boolean }) {
               variant="destructive"
               onClick={() => {
                 if (profilePendingClear)
-                  clearProfileData(profilePendingClear.id, profilePendingClear.name);
+                  clearProfileData(
+                    profilePendingClear.id,
+                    browserProfileLabel(profilePendingClear, t),
+                  );
                 setProfilePendingClear(null);
               }}
             >
@@ -1595,7 +1606,10 @@ function BrowserProfilesSetting({ disabled }: { readonly disabled: boolean }) {
         <BrowserImportWizard
           source={importSession.source}
           destinationEnvironmentName={importSession.environmentName}
-          targetProfiles={listedProfiles.map((profile) => ({ id: profile.id, name: profile.name }))}
+          targetProfiles={listedProfiles.map((profile) => ({
+            id: profile.id,
+            name: browserProfileLabel(profile, t),
+          }))}
           canCreateProfile={settingsHydrated && !atProfileLimit}
           onImport={(input) =>
             runWizardImport(importSession.source, importSession.environmentId, input)
