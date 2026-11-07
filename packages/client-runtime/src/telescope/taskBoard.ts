@@ -1,13 +1,14 @@
 import { EnvironmentId, Telescope } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
+import * as Duration from "effect/Duration";
 import * as Exit from "effect/Exit";
-import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import { AsyncResult, Atom, type AtomRegistry } from "effect/reactivity";
 
 import type { EnvironmentRegistry } from "../connection/registry.ts";
-import { subscribe } from "../rpc/client.ts";
+import type * as EnvironmentSupervisor from "../connection/supervisor.ts";
+import { type EnvironmentRpcStreamFailure, subscribe } from "../rpc/client.ts";
 import {
   createEnvironmentRpcCommand,
   createEnvironmentRpcQueryAtomFamily,
@@ -143,28 +144,38 @@ export function decideFailureText(error: unknown): string | null {
 }
 
 /**
- * What one board watch has seen, counted by the reads each item makes stale. `live` once it has
- * synchronized; `epoch` moves when it comes back after a failure, so every read re-reads once.
+ * What one board watch has seen, counted by the reads each item makes stale. `live` while it is
+ * subscribed; `epoch` moves when it comes back after a failure, so every read re-reads once.
  */
 interface BoardNotices {
   readonly live: boolean;
+  readonly lost: boolean;
   readonly epoch: number;
   readonly tasks: number;
   readonly decisions: number;
   readonly byTask: Readonly<Record<string, number>>;
 }
-const NO_NOTICES: BoardNotices = { live: false, epoch: 0, tasks: 0, decisions: 0, byTask: {} };
-const RESYNCHRONIZED = { kind: "resynchronized" } as const;
+const NO_NOTICES: BoardNotices = {
+  live: false,
+  lost: false,
+  epoch: 0,
+  tasks: 0,
+  decisions: 0,
+  byTask: {},
+};
+/** The watch failed and waits to be opened again. */
+const LOST = { kind: "lost" } as const;
 
 function countNotice(
   seen: BoardNotices,
-  item: Telescope.BoardWatchItem | typeof RESYNCHRONIZED,
+  item: Telescope.BoardWatchItem | typeof LOST,
 ): BoardNotices {
   switch (item.kind) {
+    case "lost":
+      return { ...seen, live: false, lost: true };
     case "synchronized":
+      if (seen.lost) return { ...seen, live: true, lost: false, epoch: seen.epoch + 1 };
       return seen.live ? seen : { ...seen, live: true };
-    case "resynchronized":
-      return { ...seen, live: true, epoch: seen.epoch + 1 };
     case "changes": {
       const byTask = { ...seen.byTask };
       for (const { kind, id } of item.changes)
@@ -181,16 +192,8 @@ function countNotice(
   }
 }
 
-/** A refused member's watch stays failed; anything else opens it again after 1 s, up to 30 s. */
-const WATCH_RETRY = Schedule.min([
-  Schedule.exponential("1 second"),
-  Schedule.spaced("30 seconds"),
-]).pipe(
-  Schedule.while(
-    ({ input }) =>
-      !(isWorkspaceError(input) && (input.reason === "forbidden" || input.reason === "not_found")),
-  ),
-);
+const isRefused = (error: unknown) =>
+  isWorkspaceError(error) && (error.reason === "forbidden" || error.reason === "not_found");
 
 interface BoardTarget {
   readonly environmentId: EnvironmentId;
@@ -207,20 +210,33 @@ export function createTelescopeBoardAtoms<R, E>(
   // query already re-reads on a new session, which covers notices missed while disconnected.
   const watch = Atom.family((key: string) => {
     const [environmentId, workspaceId]: [string, string] = JSON.parse(key);
-    const watched = Stream.suspend(() => {
-      let failed = false;
-      return subscribe(WS_METHODS.boardWatch, {
-        workspaceId: Telescope.WorkspaceId.make(workspaceId),
-      }).pipe(
-        Stream.tapError(() => Effect.sync(() => (failed = true))),
-        Stream.retry(WATCH_RETRY),
-        Stream.map((item) => {
-          if (item.kind !== "synchronized" || !failed) return item;
-          failed = false;
-          return RESYNCHRONIZED;
-        }),
-      );
-    });
+    // A refused member's watch stays failed. Anything else opens it again after 1 s, doubling to
+    // 30 s, and back to 1 s once a watch has delivered.
+    const watchFrom = (
+      failures: number,
+    ): Stream.Stream<
+      Telescope.BoardWatchItem | typeof LOST,
+      EnvironmentRpcStreamFailure<typeof WS_METHODS.boardWatch>,
+      EnvironmentSupervisor.EnvironmentSupervisor
+    > =>
+      Stream.suspend(() => {
+        let delivered = false;
+        return subscribe(WS_METHODS.boardWatch, {
+          workspaceId: Telescope.WorkspaceId.make(workspaceId),
+        }).pipe(
+          Stream.tap(() => Effect.sync(() => (delivered = true))),
+          Stream.catch((error) => {
+            if (isRefused(error)) return Stream.fail(error);
+            const next = delivered ? 0 : failures;
+            const backoff = Effect.sleep(Duration.seconds(Math.min(2 ** next, 30)));
+            return Stream.make(LOST).pipe(
+              Stream.concat(Stream.drain(Stream.fromEffect(backoff))),
+              Stream.concat(watchFrom(next + 1)),
+            );
+          }),
+        );
+      });
+    const watched = watchFrom(0);
     return runtime
       .atom(
         followStreamInEnvironment(EnvironmentId.make(environmentId), watched).pipe(
