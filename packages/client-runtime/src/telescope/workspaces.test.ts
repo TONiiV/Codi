@@ -13,6 +13,7 @@ import {
   canManageMember,
   dashboardListCounts,
   failureText,
+  hasNoWorkspace,
   hiddenOutsideWorkspace,
   resolveCurrentWorkspace,
   WORKSPACE_ERROR_TEXT,
@@ -43,6 +44,15 @@ describe("telescope current workspace", () => {
     expect(resolveCurrentWorkspace(workspaces, Telescope.WorkspaceId.make("gone"))?.id).toBe("a");
     expect(resolveCurrentWorkspace(workspaces, null)?.id).toBe("a");
     expect(resolveCurrentWorkspace([], Telescope.WorkspaceId.make("a"))).toBeNull();
+  });
+
+  it.each([
+    ["without an environment", null, null, true],
+    ["while the list loads or failed", local, null, false],
+    ["with an empty list", local, { workspaces: [] }, true],
+    ["with a workspace", local, { workspaces: [workspace("a")] }, false],
+  ] as const)("knows there is no workspace %s", (_name, environmentId, list, expected) => {
+    expect(hasNoWorkspace(environmentId, list)).toBe(expected);
   });
 });
 

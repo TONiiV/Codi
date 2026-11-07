@@ -29,17 +29,13 @@ export function budgetOf(
   return state.budgets.find((budget) => budget.scope === scope && budget.scopeId === scopeId);
 }
 
-/** A level without a budget row has used nothing and has no limit. */
+/** The gateway counts a level only once it has a budget row, so a missing row is uncounted, not zero. */
 export function budgetUsageText(budget: Telescope.Budget | undefined): string {
-  const used = budget?.usedCalls ?? 0;
-  const limit = budget?.limitCalls;
-  const calls =
-    limit === undefined
-      ? `已用 ${used} 次调用，不限次数`
-      : `已用 ${used} / ${limit} 次调用${used >= limit ? "，已用完" : ""}`;
-  const tokens = budget && budget.usedTokens > 0 ? [`${budget.usedTokens} tokens`] : [];
-  const usd = budget && budget.usedUsd > 0 ? [`$${budget.usedUsd.toFixed(2)}`] : [];
-  return [calls, ...tokens, ...usd].join("，");
+  if (budget === undefined) return "不限次数，设上限后开始计数";
+  const { usedCalls: used, limitCalls: limit } = budget;
+  return limit === undefined
+    ? `已用 ${used} 次调用，不限次数`
+    : `已用 ${used} / ${limit} 次调用${used >= limit ? "，已用完" : ""}`;
 }
 
 /** Blank removes the limit; anything but a whole number from 0 up is null. */

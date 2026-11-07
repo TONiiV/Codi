@@ -53,6 +53,14 @@ export function resolveCurrentWorkspace(
   return workspaces.find((workspace) => workspace.id === storedId) ?? workspaces[0] ?? null;
 }
 
+/** No workspace and none loading: no environment to ask, or a loaded list that is empty. */
+export function hasNoWorkspace(
+  environmentId: EnvironmentId | null,
+  list: { readonly workspaces: ReadonlyArray<Telescope.Workspace> } | null,
+): boolean {
+  return environmentId === null || (list !== null && list.workspaces.length === 0);
+}
+
 /** The environment owner's built-in member: an admin of every workspace, never removable. */
 export function isEnvironmentOwner(member: Telescope.Member): boolean {
   return member.subjectId === Telescope.OWNER_MEMBER_ID;

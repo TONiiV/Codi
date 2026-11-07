@@ -6,7 +6,11 @@ import {
   killSwitchState,
   parseCallLimit,
 } from "@t3tools/client-runtime/telescope/governance";
-import { canManageMember, failureText } from "@t3tools/client-runtime/telescope/workspaces";
+import {
+  canManageMember,
+  failureText,
+  hasNoWorkspace,
+} from "@t3tools/client-runtime/telescope/workspaces";
 import { type EnvironmentId, Telescope } from "@t3tools/contracts";
 import type { AtomCommandResult } from "@t3tools/client-runtime/state/runtime";
 import * as Schema from "effect/Schema";
@@ -25,12 +29,13 @@ import { Toggle, ToggleGroup } from "../ui/toggle-group";
 import { AgentSettingsDialog } from "./MyTeamsAgentDialog";
 import { KIND_LABEL, powerSummary, telescopeAgents } from "./myTeamsShared";
 import { ErrorNote, useFreshMembers, WORKSPACE_ROLE_LABEL } from "./TelescopeAccountDialogs";
-import { telescope, useTelescopeWorkspaces } from "./telescopeState";
+import { telescope, useTelescopeWorkspaces, WORKSPACE_KIND_LABEL } from "./telescopeState";
 
 const governance = createTelescopeGovernanceAtoms(connectionAtomRuntime);
 
 const isRole = Schema.is(Telescope.WorkspaceRole);
 const KILL_SWITCH_LABEL = { running: "运行", paused: "暂停", terminated: "终止" } as const;
+const COMPANY_LEVEL_LABEL = { enterprise: "整个公司", personal: "整个工作区" } as const;
 const isKillSwitchState = Schema.is(Telescope.KillSwitch.fields.state);
 
 interface Scoped {
@@ -68,8 +73,15 @@ function MembersSection({ environmentId, workspace, self }: Scoped) {
   const revoke = useAtomCommand(telescope.revoke, "移除成员");
   const restore = useAtomCommand(telescope.restore, "恢复成员");
   const [confirming, setConfirming] = useState<string | null>(null);
+  const [pending, setPending] = useState<ReadonlyArray<string>>([]);
   const [error, setError] = useState<string | null>(null);
-  const settle = (result: AtomCommandResult<unknown, unknown>) => {
+  const send = async (
+    member: Telescope.Member,
+    command: () => Promise<AtomCommandResult<unknown, unknown>>,
+  ) => {
+    setPending((ids) => [...ids, member.subjectId]);
+    const result = await command();
+    setPending((ids) => ids.filter((id) => id !== member.subjectId));
     setConfirming(null);
     setError(failureText(result));
   };
@@ -86,6 +98,8 @@ function MembersSection({ environmentId, workspace, self }: Scoped) {
       {members.map((member) => {
         const manageable = canManageMember(self, member);
         const revoked = member.revokedAt !== undefined;
+        // Each change re-reads the list; until it lands, a row may offer a change already made.
+        const busy = query.isPending || pending.includes(member.subjectId);
         return (
           <SettingsRow
             key={member.subjectId}
@@ -98,8 +112,8 @@ function MembersSection({ environmentId, workspace, self }: Scoped) {
                 <Button
                   size="sm"
                   variant="outline"
-                  disabled={!mayRestore}
-                  onClick={async () => settle(await restore(target(member)))}
+                  disabled={!mayRestore || busy}
+                  onClick={() => send(member, () => restore(target(member)))}
                 >
                   恢复
                 </Button>
@@ -108,11 +122,17 @@ function MembersSection({ environmentId, workspace, self }: Scoped) {
                   <Button
                     size="sm"
                     variant="destructive"
-                    onClick={async () => settle(await revoke(target(member)))}
+                    disabled={busy}
+                    onClick={() => send(member, () => revoke(target(member)))}
                   >
                     确认移除
                   </Button>
-                  <Button size="sm" variant="ghost-muted" onClick={() => setConfirming(null)}>
+                  <Button
+                    size="sm"
+                    variant="ghost-muted"
+                    disabled={busy}
+                    onClick={() => setConfirming(null)}
+                  >
                     取消
                   </Button>
                 </>
@@ -121,11 +141,11 @@ function MembersSection({ environmentId, workspace, self }: Scoped) {
                   <div className="w-36">
                     <Select
                       value={member.role}
-                      disabled={!maySetRole}
+                      disabled={!maySetRole || busy}
                       onValueChange={async (role) => {
                         if (!isRole(role) || role === member.role) return;
                         const { input, ...rest } = target(member);
-                        settle(await setRole({ ...rest, input: { ...input, role } }));
+                        await send(member, () => setRole({ ...rest, input: { ...input, role } }));
                       }}
                     >
                       <SelectTrigger
@@ -147,7 +167,7 @@ function MembersSection({ environmentId, workspace, self }: Scoped) {
                   <Button
                     size="sm"
                     variant="destructive-outline"
-                    disabled={!mayRevoke}
+                    disabled={!mayRevoke || busy}
                     onClick={() => setConfirming(member.subjectId)}
                   >
                     移除
@@ -277,6 +297,7 @@ function GovernanceSection({ environmentId, workspace, self }: Scoped) {
   const agents = [...(mine.data?.agents ?? []), ...(company.data?.agents ?? [])].filter(
     (agent, index, all) => all.findIndex((other) => other.id === agent.id) === index,
   );
+  const failedList = [mine, company].find((list) => list.data === null && list.error !== null);
   const saveBudget =
     (scope: Telescope.Budget["scope"], scopeId: string) =>
     async (limit: { readonly limitCalls?: number }) => {
@@ -320,7 +341,7 @@ function GovernanceSection({ environmentId, workspace, self }: Scoped) {
         <QueryStatus query={state} what="预算" />
       ) : (
         <>
-          {budgetRow("整个公司", "company", workspace.id)}
+          {budgetRow(COMPANY_LEVEL_LABEL[workspace.kind], "company", workspace.id)}
           {agents.map((agent) =>
             budgetRow(
               agent.name,
@@ -348,6 +369,7 @@ function GovernanceSection({ environmentId, workspace, self }: Scoped) {
               </ToggleGroup>,
             ),
           )}
+          {failedList === undefined ? null : <QueryStatus query={failedList} what="agent 列表" />}
         </>
       )}
       {error === null ? null : <StatusRow text={error} failed />}
@@ -371,6 +393,15 @@ export function TelescopeSettingsPanel() {
     <SettingsPageContainer>
       {environmentId !== null && loaded !== null ? (
         <>
+          <SettingsSection title="当前工作区">
+            <SettingsRow
+              title={loaded.workspace.name}
+              description="这一页的修改都作用于这个工作区，可在 Telescope 侧栏底部的账号菜单里切换。"
+              control={
+                <Badge variant="outline">{WORKSPACE_KIND_LABEL[loaded.workspace.kind]}</Badge>
+              }
+            />
+          </SettingsSection>
           <MembersSection environmentId={environmentId} {...loaded} />
           {loaded.workspace.kind === "enterprise" ? (
             <CompanyAgentsSection environmentId={environmentId} {...loaded} />
@@ -379,7 +410,7 @@ export function TelescopeSettingsPanel() {
         </>
       ) : (
         <SettingsSection id="telescope-members" title="成员与角色">
-          {list.data !== null && current === null ? (
+          {hasNoWorkspace(environmentId, list.data) ? (
             <StatusRow text="还没有工作区。在 Telescope 里新建或加入一个工作区后，可以在这里管理成员、agents、预算和急停。" />
           ) : (
             <QueryStatus query={list.error !== null ? list : detail} what="工作区" />
