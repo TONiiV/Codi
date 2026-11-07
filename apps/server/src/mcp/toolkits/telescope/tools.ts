@@ -169,8 +169,9 @@ const DispatchWorkerTool = boardTool("dispatch_worker", {
   parameters: Schema.Struct({ ...DelegationIdInput, brief: Telescope.DelegationBrief }),
   success: Schema.Struct({
     delegationId: Telescope.DelegationId,
-    threadId: ThreadId,
-    link: Schema.String,
+    state: Telescope.A2ATaskState,
+    threadId: Schema.optionalKey(ThreadId),
+    link: Schema.optionalKey(Schema.String),
   }),
   readonly: false,
 });

@@ -143,8 +143,8 @@ const handlers = {
         const scope = yield* McpInvocationContext.McpInvocationContext;
         return {
           delegationId: delegation.id,
-          threadId,
-          link: McpInvocationContext.threadLinkFor(scope, threadId),
+          state: delegation.state,
+          ...(threadId && { threadId, link: McpInvocationContext.threadLinkFor(scope, threadId) }),
         };
       }),
     ),

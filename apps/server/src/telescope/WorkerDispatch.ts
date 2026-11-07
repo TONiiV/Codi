@@ -3,6 +3,7 @@ import {
   MessageId,
   type ModelSelection,
   type ProjectId,
+  resolveProjectProviderInstanceEnabled,
   Telescope,
   ThreadId,
 } from "@t3tools/contracts";
@@ -15,7 +16,7 @@ import * as ThreadManagementService from "../orchestration-v2/ThreadManagementSe
 import type { PersistenceDecodeError, PersistenceSqlError } from "../persistence/Errors.ts";
 import { ServerSettingsService } from "../serverSettings.ts";
 import { renderBrief } from "./AgentInstructions.ts";
-import { runSnapshot } from "./AgentThreadRuns.ts";
+import { isOpen, runSnapshot } from "./AgentThreadRuns.ts";
 import * as DelegationService from "./DelegationService.ts";
 import * as GrantService from "./GrantService.ts";
 import * as RoutingService from "./RoutingService.ts";
@@ -24,6 +25,7 @@ import type { ToolCaller } from "./ToolGateway.ts";
 
 const WORKER_TASK_TYPE = "worker";
 const NO_TOKENS = { input: 0, cachedInput: 0, cacheCreation: 0, output: 0 };
+const CANCELLED = "The task was cancelled before its Worker started.";
 const NO_MODEL =
   "The project's routing allows no model for a Worker, so none was opened. Report it on your task with `delegation_report`.";
 
@@ -59,12 +61,15 @@ const fail = (reason: Telescope.WorkspaceError["reason"], message: string) =>
 export class WorkerDispatch extends Context.Service<
   WorkerDispatch,
   {
-    /** A Worker for a task the calling Chief holds in WORKING; its run exists before its session. */
+    /**
+     * A Worker for a task the calling Chief holds in WORKING; its run exists before its session.
+     * No thread when the task was cancelled before it was created.
+     */
     readonly dispatch: (
       caller: ToolCaller,
       input: DispatchInput,
     ) => Effect.Effect<
-      { readonly delegation: Telescope.Delegation; readonly threadId: ThreadId },
+      { readonly delegation: Telescope.Delegation; readonly threadId: ThreadId | undefined },
       Failure
     >;
     /** `DelegationService.cancel`, then each cancelled Worker's turn is interrupted; threads stay. */
@@ -97,11 +102,13 @@ const make = Effect.gen(function* () {
       resolved.source === "none"
         ? yield* grants.routingAllowlist(caller.workspaceId, projectId)
         : undefined;
-    const { defaultModelSelection } = yield* settings.getSettings.pipe(Effect.orDie);
-    return (
-      workerModel(resolved, defaultModelSelection, allowlist) ??
-      (yield* fail("forbidden", NO_MODEL))
-    );
+    const current = yield* settings.getSettings.pipe(Effect.orDie);
+    const selection = workerModel(resolved, current.defaultModelSelection, allowlist);
+    // `RoutingService` already checked a resolved model; this covers the fallback.
+    return selection !== undefined &&
+      resolveProjectProviderInstanceEnabled(current, projectId, selection.instanceId)
+      ? selection
+      : yield* fail("forbidden", NO_MODEL);
   });
 
   const dispatch = Effect.fn("WorkerDispatch.dispatch")(function* (
@@ -141,9 +148,18 @@ const make = Effect.gen(function* () {
             delegations.abandon({ workspaceId, delegationId: worker.id, memberId }, error.message),
           ),
         );
-    const started = yield* delegations
+    yield* delegations
       .start({ workspaceId, delegationId: worker.id })
       .pipe(Effect.tapError(notStarted));
+    const latest = delegations.get({ workspaceId, delegationId: worker.id });
+    const beforeCreate = yield* latest;
+    if (!isOpen(beforeCreate)) {
+      yield* runs.finish(
+        { workspaceId, runId: run.id },
+        { outputSummary: CANCELLED, tokens: NO_TOKENS, resultLabels: [] },
+      );
+      return { delegation: beforeCreate, threadId: undefined };
+    }
     const provenance = { createdBy: "agent", creationSource: "server" } as const;
     const { defaultRuntimeMode } = yield* settings.getSettings.pipe(Effect.orDie);
     yield* threads
@@ -179,17 +195,20 @@ const make = Effect.gen(function* () {
           (error) => new Telescope.WorkspaceError({ reason: "conflict", message: error.message }),
         ),
       );
-    return { delegation: started, threadId };
+    // A cancel before the send found no turn to interrupt.
+    const afterSend = yield* latest;
+    if (!isOpen(afterSend)) yield* interrupt(`telescope-cancel:${worker.id}:sent`, threadId);
+    return { delegation: afterSend, threadId };
   });
 
-  const interrupt = (delegationId: Telescope.DelegationId, threadId: ThreadId) =>
+  const interrupt = (commandId: string, threadId: ThreadId) =>
     threads.getThreadShell(threadId).pipe(
       Effect.flatMap((shell) =>
         shell === null
           ? Effect.void
           : threads.interruptThread({
               projectId: shell.projectId,
-              commandId: CommandId.make(`telescope-cancel:${delegationId}`),
+              commandId: CommandId.make(commandId),
               threadId,
               reason: "The Worker's task was cancelled.",
             }),
@@ -209,7 +228,7 @@ const make = Effect.gen(function* () {
       cancelled,
       (row) =>
         row.hop === "worker" && row.threadId !== undefined
-          ? interrupt(row.id, row.threadId)
+          ? interrupt(`telescope-cancel:${row.id}`, row.threadId)
           : Effect.void,
       { discard: true },
     );

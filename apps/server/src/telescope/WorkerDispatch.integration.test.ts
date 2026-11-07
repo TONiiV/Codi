@@ -104,6 +104,14 @@ const makeHarness = Effect.gen(function* () {
   const interrupts =
     yield* Queue.unbounded<ThreadManagementService.ThreadManagementInterruptInput>();
   const route = yield* Ref.make(byAgentDefault);
+  // Runs after each delegation start and run finish, and before each send.
+  type Step = "started" | "finished" | "send";
+  const hook = yield* Ref.make<(step: Step) => Effect.Effect<void>>(() => Effect.void);
+  const runHook = (step: Step) => Effect.flatMap(Ref.get(hook), (run) => run(step));
+  // Thread creates, sends and interrupt results, in order.
+  const log = yield* Ref.make<ReadonlyArray<string>>([]);
+  const record = (entry: string, threadId: ThreadId) =>
+    Ref.update(log, (calls) => [...calls, `${entry}:${threadId}`]);
   const db = yield* Deferred.make<TelescopeDb.TelescopeDb["Service"]>();
   const adapter: ProviderAdapter.ProviderAdapterV2["Service"] = {
     instanceId,
@@ -243,19 +251,41 @@ const makeHarness = Effect.gen(function* () {
     Effect.map(RunRecordService.RunRecordService, (runs) => ({
       ...runs,
       finish: (ref, input) =>
-        runs.finish(ref, input).pipe(Effect.tap((run) => Queue.offer(finished, run))),
+        runs.finish(ref, input).pipe(
+          Effect.tap((run) => Queue.offer(finished, run)),
+          Effect.tap(runHook("finished")),
+        ),
     })),
   );
   const threads = Layer.effect(
     ThreadManagementService.ThreadManagementService,
     Effect.map(ThreadManagementService.ThreadManagementService, (service) => ({
       ...service,
+      dispatch: (command) =>
+        (command.type === "thread.create" ? record("create", command.threadId) : Effect.void).pipe(
+          Effect.andThen(service.dispatch(command)),
+        ),
+      sendToThread: (input) =>
+        runHook("send").pipe(
+          Effect.andThen(record("send", input.threadId)),
+          Effect.andThen(service.sendToThread(input)),
+        ),
       interruptThread: (input) =>
-        Queue.offer(interrupts, input).pipe(Effect.andThen(service.interruptThread(input))),
+        Queue.offer(interrupts, input).pipe(
+          Effect.andThen(service.interruptThread(input)),
+          Effect.tap((result) => record(result.type, input.threadId)),
+        ),
     })),
   );
   const routing = Layer.mock(RoutingService.RoutingService)({ resolve: () => Ref.get(route) });
-  const services = Layer.mergeAll(recordingRuns, threads);
+  const hookedDelegations = Layer.effect(
+    DelegationService.DelegationService,
+    Effect.map(DelegationService.DelegationService, (delegations) => ({
+      ...delegations,
+      start: (ref) => delegations.start(ref).pipe(Effect.tap(runHook("started"))),
+    })),
+  );
+  const services = Layer.mergeAll(recordingRuns, threads, hookedDelegations);
   const runtime = Layer.mergeAll(
     AgentRuntime.layer,
     ThreadTurnTokens.layer,
@@ -272,7 +302,7 @@ const makeHarness = Effect.gen(function* () {
     ),
     Layer.provideMerge(Layer.merge(telescope, orchestration)),
   );
-  return { runtime, db, sessions, started, finished, interrupts, route, complete };
+  return { runtime, db, sessions, started, finished, interrupts, route, hook, log, complete };
 });
 type Harness = Effect.Success<typeof makeHarness>;
 
@@ -439,9 +469,17 @@ it.effect("the Worker's first message is the rendered brief and nothing else", (
   ),
 );
 
-it.effect(
-  "a Chief turn that ends after dispatch_worker leaves its task WORKING, and the Worker's turn end wakes the Chief once with the task id (D82)",
-  () =>
+it.effect.each([
+  { order: "the Chief's turn ends first", workerFirst: false, takeEarly: false },
+  { order: "a fast Worker ends first", workerFirst: true, takeEarly: false },
+  {
+    order: "a fast Worker's wake starts before the Chief's run end is handled",
+    workerFirst: true,
+    takeEarly: true,
+  },
+] as const)(
+  "a Chief turn that ends after dispatch_worker leaves its task WORKING ($order), the Worker's turn end wakes the Chief once with the task id, and a follow-up turn without a report fails the task and its Worker (D134)",
+  ({ workerFirst, takeEarly }) =>
     withHarness((harness) =>
       Effect.gen(function* () {
         const seeded = yield* seed;
@@ -454,20 +492,37 @@ it.effect(
         })) as Opened;
         yield* Queue.take(harness.sessions);
         const workerTurn = yield* Queue.take(harness.started);
+        const endWorker = Effect.gen(function* () {
+          yield* harness.complete(workerTurn);
+          assert.equal((yield* Queue.take(harness.finished)).threadId, opened.threadId);
+        });
+        if (workerFirst) yield* endWorker;
+        // The queue's worker may start the settled wake once the Chief's wake is done.
+        const early = yield* Deferred.make<WakeQueueService.WakeRun>();
+        if (takeEarly)
+          yield* Ref.set(harness.hook, (step) =>
+            step === "finished"
+              ? Ref.set(harness.hook, () => Effect.void).pipe(
+                  Effect.andThen(Effect.orDie(wakes.take)),
+                  Effect.flatMap((run) => Deferred.succeed(early, run)),
+                  Effect.asVoid,
+                )
+              : Effect.void,
+          );
         yield* harness.complete(turn);
         yield* Fiber.join(runner);
         assert.equal((yield* Queue.take(harness.finished)).threadId, turn.threadId);
         const ref = { workspaceId: seeded.workspaceId, delegationId: delegation.id };
         assert.equal((yield* delegations.get(ref)).state, "WORKING");
-        assert.isUndefined(yield* wakes.dequeue);
-
-        yield* harness.complete(workerTurn);
-        const workerRun = yield* Queue.take(harness.finished);
-        assert.equal(workerRun.threadId, opened.threadId);
-        const settled = yield* wakes.take;
+        if (!workerFirst) {
+          assert.isUndefined(yield* wakes.dequeue);
+          yield* endWorker;
+        }
+        const settled = takeEarly ? yield* Deferred.await(early) : yield* wakes.take;
         assert.equal(settled.wake.agentId, seeded.chief);
         assert.deepStrictEqual(settled.payloads, [{ kind: "worker", delegationId: delegation.id }]);
         assert.isUndefined(yield* wakes.dequeue);
+        assert.equal((yield* delegations.get(ref)).state, "WORKING");
 
         const next = yield* runWake(settled);
         const followUp = yield* Queue.take(harness.started);
@@ -479,6 +534,70 @@ it.effect(
         assert.deepStrictEqual(missingTools(followUp.message.text), []);
         yield* harness.complete(followUp);
         yield* Fiber.join(next);
+        const report = yield* wakes.take;
+        assert.equal(report.wake.agentId, seeded.pa);
+        assert.deepStrictEqual(report.payloads, [{ kind: "report", delegationId: delegation.id }]);
+        for (const delegationId of [delegation.id, opened.delegationId]) {
+          const failed = yield* delegations.get({ workspaceId: seeded.workspaceId, delegationId });
+          assert.deepInclude(failed, { state: "FAILED" });
+          assert.equal(failed.report?.blockedOn, "没有汇报");
+        }
+      }),
+    ),
+);
+
+it.effect(
+  "with two Workers on one task, a follow-up turn without a report fails the task only once neither Worker is live (D134)",
+  () =>
+    withHarness((harness) =>
+      Effect.gen(function* () {
+        const seeded = yield* seed;
+        const delegations = yield* DelegationService.DelegationService;
+        const wakes = yield* WakeQueueService.WakeQueueService;
+        const { delegation, runner, turn, call } = yield* chiefWorking(harness, seeded);
+        const dispatchOne = Effect.gen(function* () {
+          const opened = (yield* call("dispatch_worker", {
+            delegationId: delegation.id,
+            brief,
+          })) as Opened;
+          yield* Queue.take(harness.sessions);
+          return { opened, turn: yield* Queue.take(harness.started) };
+        });
+        const first = yield* dispatchOne;
+        const second = yield* dispatchOne;
+        yield* harness.complete(turn);
+        yield* Fiber.join(runner);
+        yield* Queue.take(harness.finished);
+        /** The `worker` wake's follow-up turn ends with no tool call. */
+        const followUp = Effect.gen(function* () {
+          const next = yield* runWake(yield* wakes.take);
+          yield* harness.complete(yield* Queue.take(harness.started));
+          yield* Fiber.join(next);
+        });
+        const state = (delegationId: Telescope.DelegationId) =>
+          delegations
+            .get({ workspaceId: seeded.workspaceId, delegationId })
+            .pipe(Effect.map((row) => [row.state, row.report?.blockedOn]));
+
+        yield* harness.complete(first.turn);
+        assert.equal((yield* Queue.take(harness.finished)).threadId, first.opened.threadId);
+        yield* followUp;
+        assert.equal((yield* Queue.take(harness.finished)).threadId, turn.threadId);
+        // One fiber handles run ends, so the second Worker's run end follows the follow-up's.
+        yield* harness.complete(second.turn);
+        assert.equal((yield* Queue.take(harness.finished)).threadId, second.opened.threadId);
+        assert.deepStrictEqual(yield* state(delegation.id), ["WORKING", undefined]);
+        assert.deepStrictEqual(yield* state(first.opened.delegationId), ["WORKING", undefined]);
+
+        yield* followUp;
+        const report = yield* wakes.take;
+        assert.deepStrictEqual(report.payloads, [{ kind: "report", delegationId: delegation.id }]);
+        for (const delegationId of [
+          delegation.id,
+          first.opened.delegationId,
+          second.opened.delegationId,
+        ])
+          assert.deepStrictEqual(yield* state(delegationId), ["FAILED", "没有汇报"]);
       }),
     ),
 );
@@ -487,14 +606,22 @@ it.effect.each([
   {
     route: { source: "none", skipped: [] },
     allowlist: { models: ["other-model"] },
+    disabled: false,
     name: "routing none with a default outside the allowlist",
+  },
+  {
+    route: { source: "none", skipped: [] },
+    allowlist: undefined,
+    disabled: true,
+    name: "routing none with a default whose provider the project disabled",
   },
   {
     route: { source: "none_allowed", skipped: [{ reason: "model_not_allowed" }] },
     allowlist: undefined,
+    disabled: false,
     name: "routing none_allowed",
   },
-] as const)("$name refuses the Worker and opens nothing", ({ route, allowlist }) =>
+] as const)("$name refuses the Worker and opens nothing", ({ route, allowlist, disabled }) =>
   withHarness((harness) =>
     Effect.gen(function* () {
       const seeded = yield* seed;
@@ -509,6 +636,12 @@ it.effect.each([
           updated_at: "2026-11-07T00:00:00.000Z",
         });
       const { delegation, call } = yield* chiefWorking(harness, seeded);
+      if (disabled)
+        yield* (yield* ServerSettings.ServerSettingsService).updateSettings({
+          projectSettingsOverrides: {
+            [gripper]: { providerInstances: { [instanceId]: { enabled: false } } },
+          },
+        });
       assert.deepInclude(yield* call("dispatch_worker", { delegationId: delegation.id, brief }), {
         code: "capability_denied",
         message:
@@ -556,4 +689,71 @@ it.effect("cancel interrupts the Worker turn and keeps the thread", () =>
       assert.isNull(shell?.archivedAt);
     }),
   ),
+);
+
+it.effect(
+  "a task cancelled before its Worker thread is created opens no thread, starts no turn and finishes the Worker run",
+  () =>
+    withHarness((harness) =>
+      Effect.gen(function* () {
+        const seeded = yield* seed;
+        const { delegation, call } = yield* chiefWorking(harness, seeded);
+        const workers = yield* WorkerDispatch.WorkerDispatch;
+        const cancel = Effect.orDie(workers.cancel(seeded.actor, delegation.id));
+        yield* Ref.set(harness.hook, (step) =>
+          step === "started" ? Effect.asVoid(cancel) : Effect.void,
+        );
+        const result = yield* call("dispatch_worker", { delegationId: delegation.id, brief });
+        const [worker] = (yield* (yield* DelegationService.DelegationService).listForAgent(
+          seeded.workspaceId,
+          seeded.chief,
+        )).filter((row) => row.hop === "worker");
+        const threadId = worker!.threadId!;
+        assert.deepStrictEqual(
+          (yield* Ref.get(harness.log)).filter((entry) => entry.endsWith(threadId)),
+          [],
+        );
+        assert.isNull(
+          yield* (yield* ThreadManagementService.ThreadManagementService).getThreadShell(threadId),
+        );
+        assert.deepStrictEqual(result, { delegationId: worker!.id, state: "CANCELED" });
+        const run = yield* Queue.take(harness.finished);
+        assert.equal(run.threadId, threadId);
+        assert.include(run.outputSummary, "cancelled");
+      }),
+    ),
+);
+
+it.effect(
+  "a task cancelled between its Worker thread's creation and the brief interrupts the Worker turn and keeps the thread",
+  () =>
+    withHarness((harness) =>
+      Effect.gen(function* () {
+        const seeded = yield* seed;
+        const { delegation, call } = yield* chiefWorking(harness, seeded);
+        const workers = yield* WorkerDispatch.WorkerDispatch;
+        const cancel = Effect.orDie(workers.cancel(seeded.actor, delegation.id));
+        yield* Ref.set(harness.hook, (step) =>
+          step === "send" ? Effect.asVoid(cancel) : Effect.void,
+        );
+        const result = (yield* call("dispatch_worker", {
+          delegationId: delegation.id,
+          brief,
+        })) as Opened & { readonly state: string };
+        // The cancel's own interrupt finds no turn yet; the Worker turn needs one after the send.
+        assert.deepStrictEqual(
+          (yield* Ref.get(harness.log))
+            .filter((entry) => entry.endsWith(result.threadId))
+            .map((entry) => entry.split(":")[0]),
+          ["create", "no_active_run", "send", "interrupt_requested"],
+        );
+        assert.equal(result.state, "CANCELED");
+        const shell =
+          yield* (yield* ThreadManagementService.ThreadManagementService).getThreadShell(
+            result.threadId,
+          );
+        assert.isNotNull(shell);
+        assert.isNull(shell?.archivedAt);
+      }),
+    ),
 );

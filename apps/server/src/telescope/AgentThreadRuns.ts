@@ -5,6 +5,7 @@ import type {
   ThreadId,
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
 
 import { PROMPT_VERSION } from "./AgentInstructions.ts";
 import * as DelegationService from "./DelegationService.ts";
@@ -23,8 +24,13 @@ const TERMINAL: ReadonlySet<OrchestrationV2Run["status"]> = new Set([
 const NO_TOKENS = { input: 0, cachedInput: 0, cacheCreation: 0, output: 0 };
 const UNREPORTED = "没有汇报";
 /** Every state but a terminal one can still be cancelled. */
-const isOpen = (delegation: Telescope.Delegation) =>
+export const isOpen = (delegation: Telescope.Delegation) =>
   DelegationService.canMove(delegation.state, "CANCELED");
+
+const workerWakeKey = (taskId: Telescope.DelegationId) => `delegation:${taskId}:worker`;
+const decodeWakes = Schema.decodeUnknownEffect(
+  Schema.Array(Schema.Struct({ wake_id: Schema.String, status: Schema.String })),
+);
 
 const STARTED: ReadonlySet<OrchestrationV2Run["status"]> = new Set([
   "starting",
@@ -57,8 +63,8 @@ const remember = (seen: Set<string>, id: string) => {
 /**
  * Each Telescope run on an agent thread serves one Codi run, linked by its user message (D84). A
  * Codi run with no linked run (the member typing) opens one when it starts; a terminal Codi run
- * finishes its own, and a task that run served still WORKING fails as unreported (D66) unless
- * a Worker on it is still open (D82). A Worker thread's ended run wakes its Chief.
+ * finishes its own, and a task that run served still WORKING fails as unreported (D66), with
+ * its open Workers, unless one of them is live (D134). A Worker thread's ended run wakes its Chief.
  */
 export const makeHandler = Effect.gen(function* () {
   const db = yield* TelescopeDb.TelescopeDb;
@@ -82,7 +88,7 @@ export const makeHandler = Effect.gen(function* () {
         priority: 2,
         agentId: worker.toAgentId,
         subjectId: memberId,
-        coalesceKey: `delegation:${worker.parentId}:worker`,
+        coalesceKey: workerWakeKey(worker.parentId),
         payload: { kind: "worker", delegationId: worker.parentId },
       });
     }
@@ -127,19 +133,35 @@ export const makeHandler = Effect.gen(function* () {
         : (yield* delegations.listForAgent(owner.workspaceId, owner.agentId)).filter(
             (delegation) => delegation.hop === "worker" && isOpen(delegation),
           );
-    const working = unreported.filter(
-      ({ id }) => !workers.some((worker) => worker.parentId === id),
-    );
+    // A Worker is live while its run is open or its settled wake has not served a turn: queued, or
+    // running for a turn other than this one (AgentRuntime's message id for a wake's turn).
+    const live = Effect.fnUntraced(function* (taskId: Telescope.DelegationId) {
+      const hops = workers.filter((worker) => worker.parentId === taskId);
+      if (hops.length === 0) return false;
+      for (const { threadId } of hops)
+        if (threadId !== undefined && (yield* db.openRunsOnThread(threadId)).length > 0)
+          return true;
+      const wakeRows = yield* db.select(
+        owner.workspaceId,
+        "wakes",
+        decodeWakes,
+        { coalesce_key: workerWakeKey(taskId) },
+        { columns: ["wake_id", "status"] },
+      );
+      return wakeRows.some(
+        ({ wake_id, status }) =>
+          status === "queued" ||
+          (status === "running" && run.userMessageId !== `telescope-wake:${wake_id}`),
+      );
+    });
     const memberId = owner.ownerSubjectId;
-    yield* Effect.forEach(
-      working,
-      ({ id }) =>
-        delegations.abandon(
-          { workspaceId: owner.workspaceId, delegationId: id, memberId },
-          UNREPORTED,
-        ),
-      { discard: true },
-    );
+    const abandon = (delegationId: Telescope.DelegationId) =>
+      delegations.abandon({ workspaceId: owner.workspaceId, delegationId, memberId }, UNREPORTED);
+    for (const { id } of unreported) {
+      if (yield* live(id)) continue;
+      for (const worker of workers) if (worker.parentId === id) yield* abandon(worker.id);
+      yield* abandon(id);
+    }
   });
   return {
     servingOn: (threadId: ThreadId) => serving.get(threadId),
