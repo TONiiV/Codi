@@ -260,6 +260,7 @@ const RPC_AGGREGATES = {
   [Telescope.WS_METHODS.leaseAcquire]: "telescope",
   [Telescope.WS_METHODS.leaseHeartbeat]: "telescope",
   [Telescope.WS_METHODS.leaseRelease]: "telescope",
+  [Telescope.WS_METHODS.leaseGet]: "telescope",
   [Telescope.WS_METHODS.wakeList]: "telescope",
   [Telescope.WS_METHODS.dashboardSummary]: "telescope",
   [Telescope.WS_METHODS.tokenSaverRun]: "telescope",

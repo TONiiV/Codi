@@ -83,6 +83,13 @@ export function decisionOptionsLocked(state: {
   return state.sentAt !== null && (state.isPending || state.dataUpdatedAt <= state.sentAt);
 }
 
+/** Reports oldest first; an offline commit can append an entry older than the last one. */
+export function reportsInOrder(
+  entries: Telescope.Task["freeText"],
+): ReadonlyArray<Telescope.Task["freeText"][number]> {
+  return [...entries].sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
+}
+
 /** Pins the write to the version the user saw, so a concurrent change is merged, not lost. */
 export function taskUpdateInput(
   task: Telescope.Task,
@@ -167,6 +174,10 @@ export function createTelescopeBoardAtoms<R, E>(
     tasks,
     task,
     decisions,
+    lease: createEnvironmentRpcQueryAtomFamily(runtime, {
+      label: "telescope:lease:get",
+      tag: WS_METHODS.leaseGet,
+    }),
     agents: createEnvironmentRpcQueryAtomFamily(runtime, {
       label: "telescope:agent:list-mine",
       tag: WS_METHODS.agentListMine,

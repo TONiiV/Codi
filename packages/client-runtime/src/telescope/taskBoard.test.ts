@@ -7,6 +7,7 @@ import {
   decideInput,
   decisionOptionsLocked,
   isStaleTaskVersion,
+  reportsInOrder,
   sortDecisions,
   TASK_STATUSES,
   tasksByStatus,
@@ -172,5 +173,32 @@ describe("task writes", () => {
       message: "That decision has already been superseded.",
     });
     expect(decideFailureText(error)).toBe(text);
+  });
+});
+
+describe("reportsInOrder", () => {
+  const entry = (text: string, at: string) => ({ authorId: "agent", text, at });
+  it.each([
+    { name: "empty", entries: [], texts: [] },
+    {
+      name: "already in order",
+      entries: [entry("a", "2026-11-01T00:00:00.000Z"), entry("b", "2026-11-01T00:01:00.000Z")],
+      texts: ["a", "b"],
+    },
+    {
+      name: "an older entry appended late",
+      entries: [entry("new", "2026-11-01T00:05:00.000Z"), entry("old", "2026-11-01T00:01:00.000Z")],
+      texts: ["old", "new"],
+    },
+    {
+      name: "equal times keep append order",
+      entries: [
+        entry("first", "2026-11-01T00:00:00.000Z"),
+        entry("second", "2026-11-01T00:00:00Z"),
+      ],
+      texts: ["first", "second"],
+    },
+  ])("$name", ({ entries, texts }) => {
+    expect(reportsInOrder(entries).map((e) => e.text)).toEqual(texts);
   });
 });

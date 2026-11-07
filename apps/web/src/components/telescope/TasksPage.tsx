@@ -26,7 +26,7 @@ import {
   useBoardTarget,
 } from "./TasksParts";
 import { TasksBoard, TasksTable } from "./TasksViews";
-import { type TasksLayout, useTasksLayout } from "./telescopeViews";
+import { type TasksLayout, telescopeSearch, useTasksLayout } from "./telescopeViews";
 
 function NewTaskDialog({ target }: { target: BoardTarget }) {
   const [open, setOpen] = useState(false);
@@ -91,7 +91,7 @@ function TasksBody({ target }: { target: BoardTarget }) {
       onClick={() =>
         void navigate({
           to: TELESCOPE_PATH,
-          search: { view: "tasks", ...(id === "board" ? { layout: id } : {}) },
+          search: telescopeSearch("tasks", id),
           replace: true,
         })
       }

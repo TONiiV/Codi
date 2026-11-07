@@ -329,6 +329,8 @@ it.layer(layer)("Telescope task board", (it) => {
       const lease = first._tag === "Success" ? first.success : yield* Effect.die("no lease");
       const leased = yield* board.getTask(bob, { workspaceId: a, taskId: task.id });
       assert.deepStrictEqual([leased.leaseId, leased.version], [lease.id, 2]);
+      const read = { workspaceId: a, taskId: task.id };
+      assert.deepStrictEqual(yield* board.getLease(bob, read), { lease });
 
       yield* TestClock.adjust("90 seconds");
       const scoped = { workspaceId: a, leaseId: lease.id };
@@ -342,6 +344,7 @@ it.layer(layer)("Telescope task board", (it) => {
       yield* TestClock.adjust("60 seconds");
       const lapsed = yield* board.getTask(bob, { workspaceId: a, taskId: task.id });
       assert.deepStrictEqual([lapsed.leaseId, lapsed.version], [undefined, 3]);
+      assert.deepStrictEqual(yield* board.getLease(bob, read), {});
       const expired = yield* board.heartbeatLease(alice, scoped).pipe(Effect.flip);
       assert.strictEqual(reasonOf(expired), "not_found");
 

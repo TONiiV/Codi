@@ -3,10 +3,12 @@ import {
   type DashboardListCount,
 } from "@t3tools/client-runtime/telescope/workspaces";
 import type { Telescope } from "@t3tools/contracts";
+import { Link } from "@tanstack/react-router";
 import { LayoutDashboardIcon } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { useEnvironmentQuery } from "../../state/query";
+import { TELESCOPE_PATH } from "../sidebar/mainAppLocation";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import {
@@ -22,6 +24,7 @@ import { Skeleton } from "../ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
 import { NeedsYouBadge, NoWorkspace, TASK_STATUS } from "./TasksParts";
 import { telescope, useTelescopeWorkspaces } from "./telescopeState";
+import { telescopeSearch, useTasksLayout } from "./telescopeViews";
 
 const MINUTE = 60_000;
 /** How long from `since` to `now`, rounded down to the largest unit that fits. */
@@ -71,6 +74,7 @@ function SummaryView({ summary }: { summary: Telescope.DashboardSummary }) {
   const now = summary.generatedAt;
   const { openTasks, tasks, runs, wakes } = summary;
   const counts = dashboardListCounts(summary);
+  const layout = useTasksLayout();
   return (
     <>
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -113,7 +117,13 @@ function SummaryView({ summary }: { summary: Telescope.DashboardSummary }) {
             {tasks.map((task) => (
               <TableRow key={task.id}>
                 <TableCell>
-                  <span className="block max-w-80 truncate">{task.title}</span>
+                  <Link
+                    to={TELESCOPE_PATH}
+                    search={telescopeSearch("dashboard", layout, task.id)}
+                    className="block max-w-80 truncate hover:underline"
+                  >
+                    {task.title}
+                  </Link>
                 </TableCell>
                 <TableCell>
                   <span className="flex items-center gap-1">

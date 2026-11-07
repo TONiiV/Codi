@@ -1,10 +1,12 @@
 import { TASK_STATUSES, tasksByStatus } from "@t3tools/client-runtime/telescope/taskBoard";
 import { Telescope } from "@t3tools/contracts";
-import { ChevronDownIcon, ChevronRightIcon } from "lucide-react";
+import { Link } from "@tanstack/react-router";
+import { ChevronDownIcon, ChevronRightIcon, PanelRightOpenIcon } from "lucide-react";
 import { useState } from "react";
 
 import { cn } from "../../lib/utils";
 import { useEnvironmentQuery } from "../../state/query";
+import { TELESCOPE_PATH } from "../sidebar/mainAppLocation";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
@@ -19,6 +21,7 @@ import {
   useBoardNames,
   useTaskWrite,
 } from "./TasksParts";
+import { telescopeSearch } from "./telescopeViews";
 
 type Write = ReturnType<typeof useTaskWrite>;
 type Names = ReturnType<typeof useBoardNames>;
@@ -123,6 +126,16 @@ function TaskRow(props: { target: BoardTarget; task: Telescope.Task; write: Writ
             </Button>
             <TitleCell task={task} write={write} />
             <NeedsYouBadge task={task} />
+            <Button
+              size="icon-xs"
+              variant="ghost-muted"
+              aria-label="任务详情"
+              render={
+                <Link to={TELESCOPE_PATH} search={telescopeSearch("tasks", "table", task.id)} />
+              }
+            >
+              <PanelRightOpenIcon />
+            </Button>
           </span>
         </TableCell>
         <TableCell>
@@ -237,7 +250,14 @@ export function TasksBoard(props: { target: BoardTarget; tasks: ReadonlyArray<Te
               }}
               className="flex cursor-grab flex-col gap-1.5 rounded-lg border bg-card p-3 text-sm shadow-xs"
             >
-              <span className="font-medium wrap-anywhere">{task.title}</span>
+              <Link
+                to={TELESCOPE_PATH}
+                search={telescopeSearch("tasks", "board", task.id)}
+                draggable={false}
+                className="font-medium wrap-anywhere hover:underline"
+              >
+                {task.title}
+              </Link>
               <span className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                 <NeedsYouBadge task={task} />
                 {task.ownerAgentId && (names(task.ownerAgentId) ?? "其他成员的 agent")}
