@@ -74,14 +74,10 @@ function QueryState<A>({
 }
 
 function AgentRow({
-  environmentId,
-  workspace,
   agent,
   powers,
   action,
 }: {
-  environmentId: EnvironmentId;
-  workspace: Telescope.Workspace;
   agent: Telescope.Agent;
   powers: Telescope.StandingPowers;
   action: ReactNode;
@@ -89,7 +85,7 @@ function AgentRow({
   const name = agentDisplayName(agent);
   return (
     <li className="flex items-start gap-3 px-4 py-3">
-      <AgentAvatar environmentId={environmentId} workspace={workspace} agent={agent} size="lg" />
+      <AgentAvatar agent={agent} size="lg" />
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-baseline gap-x-2">
           <span className="font-medium">{name}</span>
@@ -191,8 +187,6 @@ function Teams({
                       {agents.map((agent) => (
                         <AgentRow
                           key={agent.id}
-                          environmentId={environmentId}
-                          workspace={workspace}
                           agent={agent}
                           powers={cappedPowers(
                             agent.standingPowers,
@@ -231,8 +225,6 @@ function Teams({
                   {own.map((agent) => (
                     <AgentRow
                       key={agent.id}
-                      environmentId={environmentId}
-                      workspace={workspace}
                       agent={agent}
                       powers={agent.standingPowers}
                       action={mayConfigureCompany ? settingsButton(agent) : null}

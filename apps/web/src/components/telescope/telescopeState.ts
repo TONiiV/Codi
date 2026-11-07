@@ -30,10 +30,7 @@ export const telescope = createTelescopeWorkspaceAtoms(connectionAtomRuntime, {
 
 export const telescopeBoard = createTelescopeBoardAtoms(connectionAtomRuntime);
 
-export const telescopeGovernance = createTelescopeGovernanceAtoms(
-  connectionAtomRuntime,
-  telescope.get,
-);
+export const governance = createTelescopeGovernanceAtoms(connectionAtomRuntime, telescope.get);
 
 export const WORKSPACE_KIND_LABEL = { enterprise: "企业", personal: "个人" } as const;
 

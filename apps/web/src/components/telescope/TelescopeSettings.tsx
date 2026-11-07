@@ -51,7 +51,7 @@ import {
 } from "./telescopeSettingsParts";
 import {
   telescope,
-  telescopeGovernance as governance,
+  governance,
   useTelescopeWorkspaces,
   WORKSPACE_KIND_LABEL,
 } from "./telescopeState";

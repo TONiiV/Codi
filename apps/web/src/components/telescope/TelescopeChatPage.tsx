@@ -172,13 +172,7 @@ function AgentCrumb(props: ChatScope) {
     <>
       <WorkspaceBreadcrumbSeparator />
       <WorkspaceBreadcrumbItem current className="gap-2">
-        <AgentAvatar
-          environmentId={props.environmentId}
-          workspace={props.workspace}
-          agent={agent}
-          size="sm"
-        />
-        {/* Phones keep only the bloub: the chat's own header names the agent below. */}
+        <AgentAvatar agent={agent} size="sm" />
         <WorkspaceBreadcrumbText className="max-w-56 max-sm:sr-only">
           {agentDisplayName(agent)}
         </WorkspaceBreadcrumbText>

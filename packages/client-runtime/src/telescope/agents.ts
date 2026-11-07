@@ -65,10 +65,8 @@ export function offersOpenThread(agent: Telescope.Agent, self: Telescope.Member)
 
 export type AgentActivity = "idle" | "working" | "waiting" | "blocked";
 
-/**
- * What an agent is doing, read from its resident thread, the 需要你定 questions it asked, and its
- * kill switch (only admins can read those). A stop outranks a question, which outranks its run.
- */
+// What an agent is doing, from its resident thread, its 需要你定 questions and its kill switch
+// (admins only). A stop outranks a question, which outranks its run.
 export function agentActivity(
   agentId: Telescope.AgentId,
   thread: Pick<
@@ -80,12 +78,8 @@ export function agentActivity(
 ): AgentActivity {
   if (killSwitches.some((row) => row.agentId === agentId && row.state !== "running"))
     return "blocked";
-  if (
-    thread?.hasPendingApprovals === true ||
-    thread?.hasPendingUserInput === true ||
-    questions.some((question) => question.delegation.toAgentId === agentId)
-  )
-    return "waiting";
+  const asked = questions.some((question) => question.delegation.toAgentId === agentId);
+  if (thread?.hasPendingApprovals || thread?.hasPendingUserInput || asked) return "waiting";
   return threadRuntimeIsActive(thread?.runtime) ? "working" : "idle";
 }
 

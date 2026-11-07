@@ -27,12 +27,10 @@ const NONE_FOLDED: ReadonlyArray<ChatGroupId> = [];
 
 function ChatRow({
   environmentId,
-  workspace,
   agent,
   onSelect,
 }: {
   environmentId: EnvironmentId;
-  workspace: Telescope.Workspace;
   agent: Telescope.Agent;
   onSelect: (agentId: Telescope.AgentId) => void;
 }) {
@@ -52,7 +50,7 @@ function ChatRow({
         aria-current={active ? "page" : undefined}
         onClick={() => onSelect(agent.id)}
       >
-        <AgentAvatar environmentId={environmentId} workspace={workspace} agent={agent} />
+        <AgentAvatar agent={agent} />
         <span className="flex min-w-0 flex-1 flex-col leading-tight">
           <span className="truncate text-sidebar-foreground">{name}</span>
           {name === role ? null : <span className="truncate text-xs font-normal">{role}</span>}
@@ -159,13 +157,7 @@ function ChatGroups({
   };
   const rows = (agents: ReadonlyArray<Telescope.Agent>) =>
     agents.map((agent) => (
-      <ChatRow
-        key={agent.id}
-        environmentId={environmentId}
-        workspace={workspace}
-        agent={agent}
-        onSelect={select}
-      />
+      <ChatRow key={agent.id} environmentId={environmentId} agent={agent} onSelect={select} />
     ));
 
   return (
