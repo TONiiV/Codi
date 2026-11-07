@@ -62,5 +62,6 @@ export const layer = Layer.effectDiscard(
         ),
       ),
     );
+    yield* forkParked(agentThreadRuns.settleOrphans);
   }),
 );

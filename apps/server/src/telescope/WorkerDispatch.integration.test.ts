@@ -48,6 +48,7 @@ import * as ServerSettings from "../serverSettings.ts";
 import * as AgentInstructions from "./AgentInstructions.ts";
 import * as AgentRuntime from "./AgentRuntime.ts";
 import * as AgentService from "./AgentService.ts";
+import * as AgentThreadRuns from "./AgentThreadRuns.ts";
 import * as BoardChanges from "./BoardChanges.ts";
 import * as DelegationAnswers from "./DelegationAnswers.ts";
 import * as DelegationService from "./DelegationService.ts";
@@ -95,8 +96,11 @@ const byAgentDefault: Telescope.RoutingResolution = {
   skipped: [],
 };
 
-/** A provider whose session start records the thread's open Telescope run, as tools/list would. */
-const makeHarness = Effect.gen(function* () {
+/**
+ * A provider whose session start records the thread's open Telescope run, as tools/list would.
+ * Without `listening`, no run listener sees Codi runs end, as while the server is down.
+ */
+const makeHarness = Effect.fn("makeHarness")(function* (listening: boolean) {
   const cwd = yield* checkpointWorkspace("telescope-worker-dispatch");
   const events = yield* Queue.unbounded<ProviderAdapter.ProviderAdapterV2Event>();
   const sessions = yield* Queue.unbounded<{
@@ -291,7 +295,7 @@ const makeHarness = Effect.gen(function* () {
   const services = Layer.mergeAll(recordingRuns, threads, hookedDelegations);
   const runtime = Layer.mergeAll(
     AgentRuntime.layerWakeRunner,
-    ThreadTurnTokens.layer,
+    listening ? ThreadTurnTokens.layer : Layer.empty,
     McpToolAccess.HandlersLayer.layer(TelescopeHandlers.layer),
   ).pipe(
     Layer.provideMerge(AgentRuntime.layer),
@@ -308,14 +312,15 @@ const makeHarness = Effect.gen(function* () {
   );
   return { runtime, db, sessions, started, finished, route, hook, log, complete };
 });
-type Harness = Effect.Success<typeof makeHarness>;
+type Harness = Effect.Success<ReturnType<typeof makeHarness>>;
 
 const withHarness = <A, E>(
   body: (harness: Harness) => Effect.Effect<A, E, Layer.Success<Harness["runtime"]> | Scope.Scope>,
+  listening = true,
 ) =>
   Effect.scoped(
     Effect.gen(function* () {
-      const harness = yield* makeHarness;
+      const harness = yield* makeHarness(listening);
       return yield* Effect.gen(function* () {
         yield* Deferred.succeed(harness.db, yield* TelescopeDb.TelescopeDb);
         return yield* body(harness);
@@ -634,6 +639,64 @@ it.effect(
         ])
           assert.deepStrictEqual(yield* state(delegationId), ["FAILED", "没有汇报"]);
       }),
+    ),
+);
+
+it.effect.each([
+  { worker: "ended its turn", started: true },
+  { worker: "never got its thread", started: false },
+] as const)(
+  "a restart finishes the runs left open while it was down, where the Worker $worker, and wakes the Chief once for its task; settling again changes nothing (D144)",
+  ({ started }) =>
+    withHarness(
+      (harness) =>
+        Effect.gen(function* () {
+          const seeded = yield* seed;
+          const db = yield* TelescopeDb.TelescopeDb;
+          const delegations = yield* DelegationService.DelegationService;
+          const { delegation, runner, turn, call } = yield* chiefWorking(harness, seeded);
+          // Stopping before the Worker's thread exists leaves its run with no Codi run at all.
+          if (!started)
+            yield* Ref.set(harness.hook, (step) =>
+              step === "create" ? Effect.die("server stopped") : Effect.void,
+            );
+          yield* Effect.exit(call("dispatch_worker", { delegationId: delegation.id, brief }));
+          const worker = (yield* delegations.listForAgent(seeded.workspaceId, seeded.chief)).find(
+            (row) => row.hop === "worker",
+          )!;
+          if (started) {
+            yield* Queue.take(harness.sessions);
+            yield* harness.complete(yield* Queue.take(harness.started));
+            yield* (yield* ThreadManagementService.ThreadManagementService).waitForThread({
+              projectId: gripper,
+              threadId: worker.threadId!,
+              timeoutMs: 60_000,
+            });
+          }
+          yield* harness.complete(turn);
+          yield* Fiber.join(runner);
+
+          const restarted = yield* AgentThreadRuns.makeHandler;
+          yield* restarted.settleOrphans;
+          const ended = [yield* Queue.take(harness.finished), yield* Queue.take(harness.finished)];
+          assert.sameMembers(
+            ended.map((run) => run.threadId),
+            [turn.threadId, worker.threadId],
+          );
+          const chiefWake = [[seeded.chief, { kind: "worker", delegationId: delegation.id }]];
+          assert.deepStrictEqual(yield* queued(seeded), chiefWake);
+          for (const delegationId of [delegation.id, worker.id]) {
+            const ref = { workspaceId: seeded.workspaceId, delegationId };
+            assert.equal((yield* delegations.get(ref)).state, "WORKING");
+          }
+          const wakeRows = yield* db.count(seeded.workspaceId, "wakes");
+
+          yield* restarted.settleOrphans;
+          assert.strictEqual(yield* Queue.size(harness.finished), 0);
+          assert.strictEqual(yield* db.count(seeded.workspaceId, "wakes"), wakeRows);
+          assert.deepStrictEqual(yield* queued(seeded), chiefWake);
+        }),
+      false,
     ),
 );
 

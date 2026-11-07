@@ -6,6 +6,7 @@ import type {
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
+import * as Semaphore from "effect/Semaphore";
 
 import * as ProjectionStore from "../orchestration-v2/ProjectionStore.ts";
 import { PROMPT_VERSION } from "./AgentInstructions.ts";
@@ -77,6 +78,17 @@ export const makeHandler = Effect.gen(function* () {
   const opened = new Set<string>();
   // The Codi run each agent thread's provider turns belong to, for their tokens.
   const serving = new Map<ThreadId, string>();
+  // The startup pass and the event handler must not interleave, as two events never do.
+  const lock = yield* Semaphore.make(1);
+  // Read before the server takes commands: a run opened later may not have its Codi run yet.
+  const leftOpen = yield* Effect.forEach(yield* db.allWorkspaceIds, (workspaceId) =>
+    db.select(workspaceId, "runs", RunRecordService.decodeRuns, { finished_at: null }),
+  ).pipe(
+    Effect.map((rows) => rows.flat()),
+    Effect.catchCause((cause) =>
+      Effect.logWarning("reading open Telescope runs failed", { cause }).pipe(Effect.as([])),
+    ),
+  );
 
   // A failed Codi run, such as a queued one Codi refused to start (D118), says why it failed.
   const failureOf = Effect.fn("AgentThreadRuns.failureOf")(function* (run: OrchestrationV2Run) {
@@ -112,33 +124,21 @@ export const makeHandler = Effect.gen(function* () {
     }
   });
 
-  // Untraced: runs for every orchestration event; only agent threads reach the traced services.
-  const handle = Effect.fnUntraced(function* (event: OrchestrationV2DomainEvent) {
-    if (event.type !== "run.created" && event.type !== "run.updated") return;
-    const run = event.payload;
-    const ending = TERMINAL.has(run.status);
-    if (!ending && (!STARTED.has(run.status) || opened.has(run.id))) return;
-    if (!ending) remember(opened, run.id);
-    const owner = yield* db.agentThread(run.threadId);
-    if (!ending) {
-      if (owner === undefined) return;
-      serving.set(run.threadId, run.userMessageId);
-      if ((yield* db.openRunsOnThread(run.threadId, run.userMessageId)).length > 0) return;
-      yield* runs.startFor(owner.workspaceId, owner.ownerSubjectId, {
-        agentId: owner.agentId,
-        threadId: run.threadId,
-        inputSnapshot: runSnapshot(run.modelSelection, { codiMessageId: run.userMessageId }),
-      });
-      return;
-    }
-    const outputSummary = `Codi run ${run.status}.`;
+  // A Codi run's end, or its absence (`run` undefined): its Telescope runs finish and follow up.
+  const settle = Effect.fn("AgentThreadRuns.settle")(function* (
+    threadId: ThreadId,
+    codiMessageId: string,
+    run: OrchestrationV2Run | undefined,
+  ) {
+    const owner = yield* db.agentThread(threadId);
+    const outputSummary = `Codi run ${run?.status ?? "missing"}.`;
     const ended = yield* Effect.forEach(
-      yield* db.openRunsOnThread(run.threadId, run.userMessageId),
+      yield* db.openRunsOnThread(threadId, codiMessageId),
       (ref) => runs.finish(ref, { outputSummary, tokens: NO_TOKENS, resultLabels: [] }),
     );
     if (owner === undefined) return yield* Effect.forEach(ended, wakeChief, { discard: true });
     const served = new Set(ended.flatMap((done) => done.inputSnapshot.delegationIds ?? []));
-    const unreported = (yield* delegations.byThread(owner.workspaceId, run.threadId)).filter(
+    const unreported = (yield* delegations.byThread(owner.workspaceId, threadId)).filter(
       (delegation) =>
         served.has(delegation.id) &&
         delegation.state === "WORKING" &&
@@ -171,11 +171,11 @@ export const makeHandler = Effect.gen(function* () {
       return wakeRows.some(
         ({ wake_id, status }) =>
           status === "queued" ||
-          (status === "running" && run.userMessageId !== `telescope-wake:${wake_id}`),
+          (status === "running" && codiMessageId !== `telescope-wake:${wake_id}`),
       );
     });
     const memberId = owner.ownerSubjectId;
-    const blockedOn = run.status === "failed" ? yield* failureOf(run) : UNREPORTED;
+    const blockedOn = run?.status === "failed" ? yield* failureOf(run) : UNREPORTED;
     const abandon = (delegationId: Telescope.DelegationId, reason: string) =>
       delegations.abandon({ workspaceId: owner.workspaceId, delegationId, memberId }, reason);
     for (const { id } of unreported) {
@@ -185,13 +185,55 @@ export const makeHandler = Effect.gen(function* () {
       yield* abandon(id, blockedOn);
     }
   });
+
+  // Untraced: runs for every orchestration event; only agent threads reach the traced services.
+  const handle = Effect.fnUntraced(function* (event: OrchestrationV2DomainEvent) {
+    if (event.type !== "run.created" && event.type !== "run.updated") return;
+    const run = event.payload;
+    if (TERMINAL.has(run.status)) return yield* settle(run.threadId, run.userMessageId, run);
+    if (!STARTED.has(run.status) || opened.has(run.id)) return;
+    remember(opened, run.id);
+    const owner = yield* db.agentThread(run.threadId);
+    if (owner === undefined) return;
+    serving.set(run.threadId, run.userMessageId);
+    if ((yield* db.openRunsOnThread(run.threadId, run.userMessageId)).length > 0) return;
+    yield* runs.startFor(owner.workspaceId, owner.ownerSubjectId, {
+      agentId: owner.agentId,
+      threadId: run.threadId,
+      inputSnapshot: runSnapshot(run.modelSelection, { codiMessageId: run.userMessageId }),
+    });
+  });
+
+  // D144: a run whose Codi run ended or went missing while the server was down settles at startup.
+  // After orchestration's recovery, a Codi run still there and not terminal is live (a queued run
+  // kept across the restart); its own end event settles it later.
+  const settleOrphan = Effect.fn("AgentThreadRuns.settleOrphan")(function* (
+    row: (typeof leftOpen)[number],
+  ) {
+    const codiMessageId = row.input_snapshot_json.codiMessageId;
+    if (row.thread_id === null || codiMessageId === undefined) return;
+    const { runs: codiRuns } = yield* projections.getThreadRecords(row.thread_id, ["runs"]).pipe(
+      Effect.catchTags({
+        ProjectionStoreThreadNotFoundError: () => Effect.succeed({ runs: [] }),
+      }),
+    );
+    const run = codiRuns.find((candidate) => candidate.userMessageId === codiMessageId);
+    if (run === undefined || TERMINAL.has(run.status))
+      yield* settle(row.thread_id, codiMessageId, run);
+  });
+  const logged = (message: string) =>
+    Effect.catchCause((cause) => Effect.logWarning(message, { cause }));
+
   return {
     servingOn: (threadId: ThreadId) => serving.get(threadId),
     handle: (event: OrchestrationV2DomainEvent) =>
-      handle(event).pipe(
-        Effect.catchCause((cause) =>
-          Effect.logWarning("updating Telescope runs on an agent thread failed", { cause }),
-        ),
-      ),
+      lock
+        .withPermit(handle(event))
+        .pipe(logged("updating Telescope runs on an agent thread failed")),
+    settleOrphans: Effect.forEach(
+      leftOpen,
+      (row) => settleOrphan(row).pipe(logged("settling a Telescope run left open failed")),
+      { discard: true },
+    ).pipe(lock.withPermit),
   };
 });

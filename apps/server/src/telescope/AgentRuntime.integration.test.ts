@@ -50,6 +50,7 @@ import * as ServerSettings from "../serverSettings.ts";
 import * as AgentLeases from "./AgentLeases.ts";
 import * as AgentRuntime from "./AgentRuntime.ts";
 import * as AgentService from "./AgentService.ts";
+import * as AgentThreadRuns from "./AgentThreadRuns.ts";
 import * as AgentTurnContext from "./AgentTurnContext.ts";
 import * as ContextAssembler from "./ContextAssembler.ts";
 import * as DelegationService from "./DelegationService.ts";
@@ -102,6 +103,8 @@ const makeHarness = Effect.fn("makeHarness")(function* (options: {
   /** Each wake's send waits for a permit, so a member turn can start between its wait and send. */
   readonly holdSend?: boolean;
   readonly holdScratch?: boolean;
+  /** False: no run listener sees Codi runs end, as while the server is down. */
+  readonly listening?: boolean;
 }) {
   const cwd = yield* checkpointWorkspace(`telescope-agent-runtime-${options.mcp}`);
   const events = yield* Queue.unbounded<ProviderAdapter.ProviderAdapterV2Event>();
@@ -332,7 +335,7 @@ const makeHarness = Effect.fn("makeHarness")(function* (options: {
   );
   const runtime = Layer.mergeAll(
     AgentRuntime.layerWakeRunner,
-    ThreadTurnTokens.layer,
+    options.listening === false ? Layer.empty : ThreadTurnTokens.layer,
     AgentTurnContext.layer.pipe(
       Layer.provide(Layer.merge(ContextAssembler.layer, TurnPreamble.layer)),
     ),
@@ -1232,6 +1235,59 @@ it.effect.each([
       yield* Queue.take(harness.sending);
       yield* TestClock.adjust("1 minute");
       assert.deepStrictEqual(yield* board.getLease({ caller: alice }, read), {});
+    }),
+  ),
+);
+
+it.effect.each([
+  { left: "ended", outcome: "fails its task as unreported and its leases lapse" },
+  { left: "running", outcome: "stays open with its task and leases" },
+] as const)("after a restart, a Chief run whose Codi run $left $outcome (D144)", ({ left }) =>
+  withHarness({ mcp: true, listening: false }, (harness) =>
+    Effect.gen(function* () {
+      const seeded = yield* seed;
+      const db = yield* TelescopeDb.TelescopeDb;
+      const board = yield* TaskBoardService.TaskBoardService;
+      const delegations = yield* DelegationService.DelegationService;
+      const wakes = yield* WakeQueueService.WakeQueueService;
+      const { workspaceId } = seeded;
+      const task = yield* board.createTask(
+        { caller: alice },
+        { workspaceId, title: "电机选型", ownerAgentId: seeded.chief },
+      );
+      const read = { workspaceId, taskId: task.id };
+      const chief = { caller: alice, authorId: seeded.chief, onBehalfOf: [seeded.member] };
+      const lease = yield* board.acquireLease(chief, read);
+      const delegation = yield* delegations.delegate(seeded.actor, {
+        toAgentId: seeded.chief,
+        brief,
+      });
+      const runner = yield* runWake(yield* wakes.take);
+      const turn = yield* Queue.take(harness.started);
+      if (left === "ended") {
+        yield* harness.complete(turn, 1);
+        yield* Fiber.join(runner);
+      }
+
+      yield* (yield* AgentThreadRuns.makeHandler).settleOrphans;
+      yield* TestClock.adjust("40 minutes");
+      const ref = { workspaceId, delegationId: delegation.id };
+      const held = yield* board.getLease({ caller: alice }, read);
+      const open = yield* db.openRunsOnThread(turn.threadId);
+      if (left === "running") {
+        assert.lengthOf(open, 1);
+        assert.equal((yield* delegations.get(ref)).state, "WORKING");
+        assert.isTrue(held.lease!.expiresAt > lease.expiresAt);
+        return;
+      }
+      assert.lengthOf(open, 0);
+      const report = yield* wakes.take;
+      assert.equal(report.wake.agentId, seeded.pa);
+      assert.deepStrictEqual(report.payloads, [{ kind: "report", delegationId: delegation.id }]);
+      const failed = yield* delegations.get(ref);
+      assert.equal(failed.state, "FAILED");
+      assert.equal(failed.report?.blockedOn, "没有汇报");
+      assert.deepStrictEqual(held, {});
     }),
   ),
 );
