@@ -206,6 +206,28 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(t3-mobil
   --inset-shadow-control-highlight: 0 1px rgb(255 255 255 / 16%);
   --inset-shadow-control-pressed: 0 1px rgb(0 0 0 / 8%);
   --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+  /* anticipate swells a little before it shrinks away; spring overshoots by
+     about an eighth, then settles. */
+  --ease-anticipate: cubic-bezier(0.55, -0.6, 0.7, 0.05);
+  --ease-spring: linear(
+    0,
+    0.143,
+    0.437,
+    0.734,
+    0.955,
+    1.081,
+    1.125,
+    1.115,
+    1.081,
+    1.042,
+    1.011,
+    0.993,
+    0.985,
+    0.985,
+    0.989,
+    0.994,
+    1
+  );
   /* The composer's elevation: a soft drop pulled in under the surface, shared
      by the composer, its context strip and attached banners. */
   --shadow-composer: 0 1px 2px rgb(0 0 0 / 5%);
