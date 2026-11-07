@@ -243,6 +243,10 @@
       "types": "./src/telescope/taskBoard.ts",
       "default": "./src/telescope/taskBoard.ts"
     },
+    "./telescope/governance": {
+      "types": "./src/telescope/governance.ts",
+      "default": "./src/telescope/governance.ts"
+    },
     "./state/environmentHttpAuth": {
       "types": "./src/state/environmentHttpAuth.ts",
       "default": "./src/state/environmentHttpAuth.ts"

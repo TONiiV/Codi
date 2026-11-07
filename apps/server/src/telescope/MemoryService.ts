@@ -7,6 +7,7 @@ import * as Layer from "effect/Layer";
 import type * as Rpc from "effect/rpc/Rpc";
 import * as Schema from "effect/Schema";
 import * as Struct from "effect/Struct";
+import * as SqlClient from "effect/sql/SqlClient";
 
 import type { PersistenceDecodeError, PersistenceSqlError } from "../persistence/Errors.ts";
 import * as TelescopeDb from "./TelescopeDb.ts";
@@ -113,6 +114,10 @@ export class MemoryService extends Context.Service<
     readonly search: Method<"telescope.memory.search">;
     readonly write: Method<"telescope.memory.write">;
     readonly pin: Method<"telescope.memory.pin">;
+    /** The run's own agent's pinned memories that are valid now, newest first. */
+    readonly pinned: (
+      agent: ThreadAgent,
+    ) => Effect.Effect<ReadonlyArray<Telescope.Memory>, Failure>;
     /** Resolves the agent behind a thread from its newest unfinished Telescope run. */
     readonly callerForThread: (threadId: ThreadId) => Effect.Effect<ThreadAgent, Failure>;
   }
@@ -122,6 +127,7 @@ const make = Effect.gen(function* () {
   const db = yield* TelescopeDb.TelescopeDb;
   const workspaces = yield* WorkspaceService.WorkspaceService;
   const random = yield* SecureRandom.SecureRandom;
+  const sql = yield* SqlClient.SqlClient;
   const now = DateTime.now.pipe(Effect.map(DateTime.formatIso));
 
   const agentsOf = (workspaceId: Telescope.WorkspaceId) =>
@@ -322,6 +328,23 @@ const make = Effect.gen(function* () {
     return toMemory({ ...current, pinned });
   });
 
+  const pinned = Effect.fn("MemoryService.pinned")(function* (agent: ThreadAgent) {
+    yield* actingMember(agent, agent.workspaceId);
+    const at = yield* now;
+    const rows = yield* db.select(
+      agent.workspaceId,
+      "memories",
+      decodeMemories,
+      { agent_id: agent.run.agentId, pinned: 1, deleted: 0 },
+      {
+        filter: sql`valid_from <= ${at} AND (invalid_at IS NULL OR invalid_at > ${at})`,
+        orderBy: ["valid_from"],
+        descending: true,
+      },
+    );
+    return rows.map(toMemory);
+  });
+
   const callerForThread = Effect.fn("MemoryService.callerForThread")(function* (
     threadId: ThreadId,
   ) {
@@ -337,7 +360,7 @@ const make = Effect.gen(function* () {
     return agent;
   });
 
-  return MemoryService.of({ search, write, pin, callerForThread });
+  return MemoryService.of({ search, write, pin, pinned, callerForThread });
 });
 
 export const layer = Layer.effect(MemoryService, make).pipe(

@@ -25,6 +25,7 @@ import { SettingsSection } from "../settings/components/SettingsSection";
 import { telescopeBoard } from "./telescopeAtoms";
 import {
   decideInput,
+  describeDecideFailure,
   describeFailure,
   formatBoardDate,
   reviewQueue,
@@ -67,9 +68,13 @@ function StatusText(props: { readonly text: string; readonly tone?: "danger" }) 
   );
 }
 
-function reportFailure(result: AtomCommandResult<unknown, unknown>, onStale: () => void) {
+function reportFailure(
+  result: AtomCommandResult<unknown, unknown>,
+  onStale: () => void,
+  describe = describeFailure,
+) {
   if (result._tag !== "Failure" || isAtomCommandInterrupted(result)) return;
-  const outcome = describeFailure(squashAtomCommandFailure(result));
+  const outcome = describe(squashAtomCommandFailure(result));
   if (outcome.refresh) onStale();
   Dialog.alert(outcome.title, outcome.message);
 }
@@ -236,7 +241,7 @@ function DecisionList(props: {
           input: decideInput(proposal, option.id),
         }).then((result) => {
           setPendingId(null);
-          reportFailure(result, query.refresh);
+          reportFailure(result, query.refresh, describeDecideFailure);
         });
       },
     });
