@@ -256,7 +256,7 @@ function CallLimitForm({
   label: string;
   budget: Telescope.Budget | undefined;
   disabled: boolean;
-  onSave: (limit: { readonly limitCalls?: number }) => Promise<void>;
+  onSave: (limit: { readonly limitCalls: number | null }) => Promise<void>;
 }) {
   const saved = budget?.limitCalls?.toString() ?? "";
   const [text, setText] = useState(saved);
@@ -323,7 +323,7 @@ function GovernanceSection({ environmentId, workspace, self }: Scoped) {
   );
   const saveBudget =
     (scope: Telescope.Budget["scope"], scopeId: string) =>
-    async (limit: { readonly limitCalls?: number }) => {
+    async (limit: { readonly limitCalls: number | null }) => {
       const result = await setBudget({
         environmentId,
         input: { workspaceId: workspace.id, scope, scopeId, ...limit },

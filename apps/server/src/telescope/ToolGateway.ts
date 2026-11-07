@@ -94,6 +94,7 @@ const decodeBudgets = Schema.decodeUnknownEffect(Schema.Array(BudgetRow));
 const EMPTY_BUDGET = {
   limit_tokens: null,
   limit_usd: null,
+  limit_calls: null,
   used_tokens: 0,
   used_usd: 0,
   used_calls: 0,
@@ -434,7 +435,7 @@ const make = Effect.gen(function* () {
       yield* requireAdmin(caller, workspaceId);
       const where = { scope, scope_id: scope === "company" ? workspaceId : input.scopeId };
       const fields = {
-        limit_calls: input.limitCalls ?? null,
+        ...(input.limitCalls === undefined ? {} : { limit_calls: input.limitCalls }),
         ...(input.paused === undefined ? {} : { paused: input.paused ? 1 : 0 }),
       };
       const save = Effect.gen(function* () {

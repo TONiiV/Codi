@@ -92,9 +92,9 @@ export function governanceRows(
 }
 
 /** Blank removes the limit; anything but a whole number from 0 up is null. */
-export function parseCallLimit(text: string): { readonly limitCalls?: number } | null {
+export function parseCallLimit(text: string): { readonly limitCalls: number | null } | null {
   const trimmed = text.trim();
-  if (trimmed === "") return {};
+  if (trimmed === "") return { limitCalls: null };
   const limit = Number(trimmed);
   return /^\d+$/.test(trimmed) && Number.isSafeInteger(limit) ? { limitCalls: limit } : null;
 }

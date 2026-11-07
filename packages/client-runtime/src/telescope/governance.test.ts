@@ -57,8 +57,8 @@ describe("telescope budget text", () => {
   });
 
   it.each([
-    ["", {}],
-    ["  ", {}],
+    ["", { limitCalls: null }],
+    ["  ", { limitCalls: null }],
     ["0", { limitCalls: 0 }],
     [" 25 ", { limitCalls: 25 }],
     ["-1", null],
@@ -159,9 +159,16 @@ describe("telescope governance atoms", () => {
     const get = vi.fn(() => Effect.sync(() => ({ budgets, killSwitches: [] })));
     const client = {
       [Telescope.WS_METHODS.governanceGet]: get,
-      [Telescope.WS_METHODS.budgetSet]: (input: typeof Telescope.BudgetSetInput.Type) =>
+      [Telescope.WS_METHODS.budgetSet]: ({
+        limitCalls,
+        ...input
+      }: typeof Telescope.BudgetSetInput.Type) =>
         Effect.sync(() => {
-          const saved = budget({ ...input, scope: input.scope });
+          const saved = budget({
+            ...input,
+            scope: input.scope,
+            ...(typeof limitCalls === "number" ? { limitCalls } : {}),
+          });
           budgets = [saved];
           return saved;
         }),

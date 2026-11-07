@@ -53,8 +53,8 @@ export const BudgetSetInput = Schema.Struct({
   workspaceId: WorkspaceId,
   scope: BudgetScope,
   scopeId: Text,
-  /** Absent removes the limit; the count carries on. */
-  limitCalls: Schema.optionalKey(Count),
+  /** Absent keeps the limit; null removes it and the count carries on. */
+  limitCalls: Schema.optionalKey(Schema.NullOr(Count)),
   /** A paused budget refuses every call at its level and counts none; absent keeps the state. */
   paused: Schema.optionalKey(Schema.Boolean),
 });

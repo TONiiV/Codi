@@ -490,22 +490,34 @@ it.layer(layer)("Telescope tool gateway", (it) => {
         assert.strictEqual(denied?.tool, "memory_search");
         assert.strictEqual(denied?.reason, "budget");
 
-        const lifted = yield* gateway.setBudget(as.ann, budget);
+        const lifted = yield* gateway.setBudget(as.ann, { ...budget, limitCalls: null });
         assert.deepStrictEqual([lifted.usedCalls, lifted.limitCalls], [2, undefined]);
-        const { budgets } = yield* gateway.governance(as.ann, { workspaceId });
-        assert.deepStrictEqual(budgets, [lifted]);
+        const stored = gateway
+          .governance(as.ann, { workspaceId })
+          .pipe(Effect.map(({ budgets }) => budgets));
+        assert.deepStrictEqual(yield* stored, [lifted]);
         yield* call("open_ticket");
 
-        assert.isTrue((yield* gateway.setBudget(as.ann, { ...budget, paused: true })).paused);
-        const kept = yield* gateway.setBudget(as.ann, { ...budget, limitCalls: 9 });
-        assert.isTrue(kept.paused, "a limit change keeps the pause");
+        yield* gateway.setBudget(as.ann, { ...budget, limitCalls: 9 });
+        const paused = yield* gateway.setBudget(as.ann, { ...budget, paused: true });
+        assert.deepStrictEqual(
+          [paused.paused, paused.limitCalls],
+          [true, 9],
+          "a pause keeps the limit",
+        );
+        const kept = yield* gateway.setBudget(as.ann, { ...budget, limitCalls: 8 });
+        assert.deepStrictEqual(
+          [kept.paused, kept.limitCalls],
+          [true, 8],
+          "a limit keeps the pause",
+        );
         assert.strictEqual(yield* denial("memory_search"), `budget_paused:${level}`);
-        const resumed = yield* gateway.setBudget(as.ann, {
-          ...budget,
-          limitCalls: 9,
-          paused: false,
-        });
-        assert.deepStrictEqual([resumed.paused, resumed.usedCalls], [false, 3]);
+        const resumed = yield* gateway.setBudget(as.ann, { ...budget, paused: false });
+        assert.deepStrictEqual(
+          [resumed.paused, resumed.usedCalls, resumed.limitCalls],
+          [false, 3, 8],
+        );
+        assert.deepStrictEqual(yield* stored, [resumed]);
         yield* call("open_ticket");
       }),
     ),
@@ -551,15 +563,20 @@ const endRunAfter = (other: NodeSqlite.DatabaseSync, runId: string, step: string
 };
 
 it.effect.each([
-  ["TelescopeDb.latestRunForThread", ["ended", "no_run", []]],
-  ["GrantService.compute", ["database is locked", "ran", ["allowed"]]],
-] as const)(
-  "allows and audits a call only on a run that stays open: ended after %s",
-  ([step, expected]) =>
+  { after: "TelescopeDb.latestRunForThread", end: "ended", outcome: "no_run", audited: [] },
+  {
+    after: "GrantService.compute",
+    end: "database is locked",
+    outcome: "ran",
+    audited: ["allowed"],
+  },
+])(
+  "allows and audits a call only on a run that stays open: ended after $after",
+  ({ after, ...expected }) =>
     onFile((other) =>
       Effect.gen(function* () {
         const { threadId, runId, gateway, audit } = yield* setup;
-        const { tracer, attempt } = endRunAfter(other, runId, step);
+        const { tracer, attempt } = endRunAfter(other, runId, after);
         const outcome = yield* gateway
           .call(threadId, "open_ticket", {}, () => Effect.succeed("ran"))
           .pipe(
@@ -568,8 +585,8 @@ it.effect.each([
               TelescopeToolGatewayDenied: (error) => Effect.succeed(error.reason),
             }),
           );
-        const outcomes = (yield* audit).map((entry) => entry.outcome);
-        assert.deepStrictEqual([attempt.result, outcome, outcomes], expected);
+        const audited: ReadonlyArray<string> = (yield* audit).map((entry) => entry.outcome);
+        assert.deepStrictEqual({ end: attempt.result, outcome, audited }, expected);
       }),
     ),
 );
