@@ -21,6 +21,7 @@ export type TelescopeTable =
   | "member_sessions"
   | "invitations"
   | "project_bindings"
+  | "project_rules"
   | "agents"
   | "tasks"
   | "task_commits"
@@ -42,7 +43,9 @@ type Row = Readonly<Record<string, string | number | null>>;
 export type RowsDecoder<A, R> = (rows: unknown) => Effect.Effect<A, Schema.SchemaError, R>;
 
 /** `filter` is parenthesised and ANDed with the workspace filter, so it cannot widen a select. */
-interface SelectOptions {
+export interface SelectOptions {
+  /** Defaults to every column. */
+  readonly columns?: ReadonlyArray<string>;
   readonly filter?: Statement.Fragment;
   readonly orderBy?: ReadonlyArray<string>;
   readonly descending?: boolean;
@@ -64,6 +67,12 @@ export class TelescopeDb extends Context.Service<
       where?: Row,
       options?: SelectOptions,
     ) => Effect.Effect<A, PersistenceSqlError | PersistenceDecodeError, R>;
+    /** The number of rows `select` returns for the same `where`, without reading them. */
+    readonly count: (
+      workspaceId: Telescope.WorkspaceId,
+      table: TelescopeTable,
+      where?: Row,
+    ) => Effect.Effect<number, PersistenceSqlError>;
     /** Keys of `row` and `set` must not name `workspace_id`; the repository writes it. */
     readonly insert: (
       workspaceId: Telescope.WorkspaceId,
@@ -81,7 +90,28 @@ export class TelescopeDb extends Context.Service<
       table: TelescopeTable,
       where: Row,
     ) => Effect.Effect<void, PersistenceSqlError>;
+    /** Trigram full-text search over `telescope_memories`: pinned first, then by relevance. */
+    readonly searchMemories: <A, R>(
+      workspaceId: Telescope.WorkspaceId,
+      query: string,
+      decodeRows: RowsDecoder<A, R>,
+      options: { readonly where: Row; readonly validAt: string | undefined },
+    ) => Effect.Effect<A, PersistenceSqlError | PersistenceDecodeError, R>;
+    /** Deletes every memory of the workspace with its search index rows. */
+    readonly removeAllMemories: (
+      workspaceId: Telescope.WorkspaceId,
+    ) => Effect.Effect<void, PersistenceSqlError>;
+    /** Adds one to `uses` in SQL, so concurrent searches do not overwrite each other's counts. */
+    readonly markMemoriesRetrieved: (
+      workspaceId: Telescope.WorkspaceId,
+      memoryIds: ReadonlyArray<string>,
+      at: string,
+    ) => Effect.Effect<void, PersistenceSqlError>;
     /** Cross-workspace lookups, each keyed by something no workspace owns. */
+    readonly latestRunForThread: <A, R>(
+      threadId: string,
+      decodeRows: RowsDecoder<A, R>,
+    ) => Effect.Effect<A, PersistenceSqlError | PersistenceDecodeError, R>;
     readonly workspaceIdsOf: (
       deviceKey: string,
     ) => Effect.Effect<ReadonlyArray<Telescope.WorkspaceId>, PersistenceSqlError>;
@@ -99,7 +129,7 @@ export class TelescopeDb extends Context.Service<
       }>,
       PersistenceSqlError
     >;
-    /** Retention: drops every workspace's runs started before `cutoff`, with their calls. */
+    /** Retention: drops every workspace's runs that finished before `cutoff`, with their calls. */
     readonly pruneRunsBefore: (cutoff: string) => Effect.Effect<void, PersistenceSqlError>;
     /** The wake queue is shared by the whole machine. */
     readonly workspaceIdsWithActiveWakes: Effect.Effect<
@@ -144,6 +174,14 @@ const make = Effect.gen(function* () {
     options: SelectOptions = {},
   ) {
     yield* checkColumns(`TelescopeDb.select.${table}`, where, "caller");
+    const columns = options.columns ?? [];
+    yield* checkColumns(
+      `TelescopeDb.select.${table}`,
+      Object.fromEntries(columns.map((column) => [column, null])),
+      "caller",
+    );
+    const selected =
+      columns.length === 0 ? sql`*` : sql.csv(columns.map((column) => sql`${sql(column)}`));
     const filter = options.filter === undefined ? sql`` : sql` AND (${options.filter})`;
     const direction = sql.literal(options.descending ? "DESC" : "ASC");
     const order =
@@ -152,22 +190,47 @@ const make = Effect.gen(function* () {
         : sql` ORDER BY ${sql.csv(options.orderBy.map((column) => sql`${sql(column)} ${direction}`))}`;
     const limit = options.limit === undefined ? sql`` : sql` LIMIT ${options.limit}`;
     const rows =
-      yield* sql`SELECT * FROM ${tableName(table)} WHERE ${scoped(workspaceId, where)}${filter}${order}${limit}`.pipe(
+      yield* sql`SELECT ${selected} FROM ${tableName(table)} WHERE ${scoped(workspaceId, where)}${filter}${order}${limit}`.pipe(
         Effect.mapError(toPersistenceSqlError(`TelescopeDb.select.${table}`)),
       );
     return yield* decodeRows(rows).pipe(
       Effect.mapError(toPersistenceDecodeError(`TelescopeDb.select.${table}`)),
     );
   });
+  const count = Effect.fn("TelescopeDb.count")(function* (
+    workspaceId: Telescope.WorkspaceId,
+    table: TelescopeTable,
+    where: Row = {},
+  ) {
+    yield* checkColumns(`TelescopeDb.count.${table}`, where, "caller");
+    const rows = yield* sql<{
+      readonly n: number;
+    }>`SELECT COUNT(*) AS n FROM ${tableName(table)} WHERE ${scoped(workspaceId, where)}`.pipe(
+      Effect.mapError(toPersistenceSqlError(`TelescopeDb.count.${table}`)),
+    );
+    return rows[0]?.n ?? 0;
+  });
   const insert = Effect.fn("TelescopeDb.insert")(function* (
     workspaceId: Telescope.WorkspaceId,
     table: TelescopeTable,
     row: Row,
   ) {
-    yield* checkColumns(`TelescopeDb.insert.${table}`, row, "repository");
-    yield* sql`INSERT INTO ${tableName(table)} ${sql.insert({ ...row, workspace_id: workspaceId })}`.pipe(
-      Effect.mapError(toPersistenceSqlError(`TelescopeDb.insert.${table}`)),
+    const operation = `TelescopeDb.insert.${table}`;
+    yield* checkColumns(operation, row, "repository");
+    const values = { ...row, workspace_id: workspaceId };
+    // In the same statement, so a write that checked membership before its workspace was
+    // deleted adds nothing after the deletion.
+    const exists =
+      table === "workspaces"
+        ? sql``
+        : sql` WHERE EXISTS (SELECT 1 FROM telescope_workspaces WHERE workspace_id = ${workspaceId})`;
+    const inserted = yield* sql`INSERT INTO ${tableName(table)}
+      (${sql.csv(Object.keys(values).map((column) => sql`${sql(column)}`))})
+      SELECT ${sql.csv(Object.values(values).map((value) => sql`${value}`))}${exists} RETURNING 1`.pipe(
+      Effect.mapError(toPersistenceSqlError(operation)),
     );
+    if (inserted.length === 0)
+      return yield* new PersistenceSqlError({ operation, detail: "The workspace does not exist" });
   });
   const update = Effect.fn("TelescopeDb.update")(function* (
     workspaceId: Telescope.WorkspaceId,
@@ -189,6 +252,98 @@ const make = Effect.gen(function* () {
     yield* checkColumns(`TelescopeDb.remove.${table}`, where, "caller");
     yield* sql`DELETE FROM ${tableName(table)} WHERE ${scoped(workspaceId, where)}`.pipe(
       Effect.mapError(toPersistenceSqlError(`TelescopeDb.remove.${table}`)),
+    );
+  });
+  const searchMemories = Effect.fn("TelescopeDb.searchMemories")(function* <A, R>(
+    workspaceId: Telescope.WorkspaceId,
+    query: string,
+    decodeRows: RowsDecoder<A, R>,
+    options: { readonly where: Row; readonly validAt: string | undefined },
+  ) {
+    const terms = query.split(/\s+/).filter((term) => term.length > 0);
+    const fts = yield* sql`
+      SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'telescope_memories_fts'
+    `.pipe(Effect.mapError(toPersistenceSqlError("TelescopeDb.searchMemories")));
+    // Trigram MATCH ignores terms under three characters (most Chinese words), so those use LIKE.
+    // Without FTS5 the index does not exist (migration 082 skips it) and every term uses LIKE.
+    const phrases = fts.length === 0 ? [] : terms.filter((term) => [...term].length >= 3);
+    const likes = terms
+      .filter((term) => !phrases.includes(term))
+      .map((term) => sql`text LIKE ${`%${term.replace(/[\\%_]/g, "\\$&")}%`} ESCAPE ${"\\"}`);
+    const { validAt } = options;
+    const filters = sql.and([
+      scoped(workspaceId, options.where),
+      ...(validAt === undefined
+        ? []
+        : [sql`valid_from <= ${validAt}`, sql`(invalid_at IS NULL OR invalid_at > ${validAt})`]),
+    ]);
+    const match = sql.and([
+      sql`workspace_id = ${workspaceId}`,
+      ...(phrases.length === 0
+        ? []
+        : [
+            sql`telescope_memories_fts MATCH ${phrases.map((term) => `"${term.replaceAll('"', '""')}"`).join(" ")}`,
+          ]),
+      ...likes,
+    ]);
+    const rows = yield* (
+      fts.length === 0
+        ? sql`
+      SELECT * FROM telescope_memories WHERE ${sql.and([filters, ...likes])}
+      ORDER BY pinned DESC, valid_from DESC
+    `
+        : sql`
+      WITH hits AS (SELECT memory_id, rank AS score FROM telescope_memories_fts WHERE ${match})
+      SELECT telescope_memories.* FROM telescope_memories JOIN hits USING (memory_id)
+      WHERE ${filters}
+      ORDER BY pinned DESC, score, valid_from DESC
+    `
+    ).pipe(Effect.mapError(toPersistenceSqlError("TelescopeDb.searchMemories")));
+    return yield* decodeRows(rows).pipe(
+      Effect.mapError(toPersistenceDecodeError("TelescopeDb.searchMemories")),
+    );
+  });
+  // The index's delete trigger scans the whole index once per memory row, so it is set aside
+  // while the workspace's index rows go in one scan; the savepoint keeps it from being missing.
+  const removeAllMemories = Effect.fn("TelescopeDb.removeAllMemories")(function* (
+    workspaceId: Telescope.WorkspaceId,
+  ) {
+    yield* sql
+      .withTransaction(
+        Effect.gen(function* () {
+          const [trigger] = yield* sql<{ readonly sql: string }>`SELECT sql FROM sqlite_master
+            WHERE type = 'trigger' AND name = 'telescope_memories_fts_delete'`;
+          if (trigger !== undefined) {
+            yield* sql`DROP TRIGGER telescope_memories_fts_delete`;
+            yield* sql`DELETE FROM telescope_memories_fts WHERE workspace_id = ${workspaceId}`;
+          }
+          yield* sql`DELETE FROM telescope_memories WHERE workspace_id = ${workspaceId}`;
+          if (trigger !== undefined) yield* sql.unsafe(trigger.sql);
+        }),
+      )
+      .pipe(Effect.mapError(toPersistenceSqlError("TelescopeDb.removeAllMemories")));
+  });
+  const markMemoriesRetrieved = Effect.fn("TelescopeDb.markMemoriesRetrieved")(function* (
+    workspaceId: Telescope.WorkspaceId,
+    memoryIds: ReadonlyArray<string>,
+    at: string,
+  ) {
+    if (memoryIds.length === 0) return;
+    yield* sql`
+      UPDATE telescope_memories SET uses = uses + 1, last_retrieved_at = ${at}
+      WHERE workspace_id = ${workspaceId} AND ${sql.in("memory_id", memoryIds)}
+    `.pipe(Effect.mapError(toPersistenceSqlError("TelescopeDb.markMemoriesRetrieved")));
+  });
+  const latestRunForThread = Effect.fn("TelescopeDb.latestRunForThread")(function* <A, R>(
+    threadId: string,
+    decodeRows: RowsDecoder<A, R>,
+  ) {
+    const rows = yield* sql`
+      SELECT * FROM telescope_runs WHERE thread_id = ${threadId} AND finished_at IS NULL
+      ORDER BY started_at DESC LIMIT 1
+    `.pipe(Effect.mapError(toPersistenceSqlError("TelescopeDb.latestRunForThread")));
+    return yield* decodeRows(rows).pipe(
+      Effect.mapError(toPersistenceDecodeError("TelescopeDb.latestRunForThread")),
     );
   });
   const workspaceIdsOf = Effect.fn("TelescopeDb.workspaceIdsOf")(function* (deviceKey: string) {
@@ -229,8 +384,9 @@ const make = Effect.gen(function* () {
       .withTransaction(
         Effect.all([
           sql`DELETE FROM telescope_run_calls WHERE run_id IN
-          (SELECT run_id FROM telescope_runs WHERE started_at < ${cutoff})`,
-          sql`DELETE FROM telescope_runs WHERE started_at < ${cutoff}`,
+          (SELECT run_id FROM telescope_runs
+          WHERE finished_at IS NOT NULL AND finished_at < ${cutoff})`,
+          sql`DELETE FROM telescope_runs WHERE finished_at IS NOT NULL AND finished_at < ${cutoff}`,
         ]),
       )
       .pipe(Effect.mapError(toPersistenceSqlError("TelescopeDb.pruneRunsBefore")));
@@ -255,9 +411,14 @@ const make = Effect.gen(function* () {
 
   return TelescopeDb.of({
     select,
+    count,
     insert,
     update,
     remove,
+    searchMemories,
+    removeAllMemories,
+    markMemoriesRetrieved,
+    latestRunForThread,
     workspaceIdsOf,
     allWorkspaceIds,
     workspaceIdForInvitation,

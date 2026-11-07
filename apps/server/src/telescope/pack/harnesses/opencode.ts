@@ -11,15 +11,16 @@ import {
 } from "../Pack.ts";
 
 export const opencode = makeHarness({
-  instructions: markdownInstructions("AGENTS.md"),
-  skillsDirs: [".agents/skills", ".opencode/skills"],
+  instructions: markdownInstructions,
   mcp: jsonMcp(
-    "opencode.json",
     "mcp",
     (server) =>
       server.url !== undefined
         ? {
             type: "remote",
+            // OpenCode negotiates the transport itself and ignores keys outside its schema, so
+            // this is where the pack's SSE marker survives until the next export.
+            transport: server.transport,
             url: server.url,
             headers: bearerHeaders(server.bearerTokenEnv, (name) => `{env:${name}}`),
           }
@@ -35,6 +36,7 @@ export const opencode = makeHarness({
         args: command.length > 1 ? command.slice(1) : undefined,
         env: keysAt(native.environment),
         url: stringAt(native.url),
+        transport: native.transport === "sse" ? "sse" : undefined,
         bearerTokenEnv: bearerEnvAt(native.headers),
       };
     },

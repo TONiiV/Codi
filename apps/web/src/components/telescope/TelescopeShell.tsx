@@ -16,12 +16,23 @@ import {
   WorkspaceBreadcrumbSeparator,
 } from "../WorkspaceBreadcrumb";
 import { WorkspacePageHeader } from "../WorkspacePageHeader";
-import { TELESCOPE_VIEWS, telescopeViewEntry, type TelescopeView } from "./telescopeViews";
+import { MyTeamsPage } from "./MyTeamsPage";
+import { TaskDrawer } from "./TaskDrawer";
+import { TelescopeAccountFooter } from "./TelescopeAccount";
+import { TelescopeChatList } from "./TelescopeChatList";
+import { TelescopeDashboard } from "./TelescopeDashboard";
+import {
+  TELESCOPE_VIEWS,
+  telescopeViewEntry,
+  type TelescopeView,
+  useTasksLayout,
+} from "./telescopeViews";
 
 function TelescopeRail({ view, collapsed }: { view: TelescopeView; collapsed: boolean }) {
   const navigate = useNavigate();
   const navigateToAppMode = useNavigateToAppMode();
   const { isMobile, setOpenMobile } = useSidebar();
+  const layout = useTasksLayout();
   return (
     <nav
       aria-label="Telescope"
@@ -41,7 +52,10 @@ function TelescopeRail({ view, collapsed }: { view: TelescopeView; collapsed: bo
                 variant={item.id === view ? "secondary" : "ghost-muted"}
                 onClick={() => {
                   if (isMobile) setOpenMobile(false);
-                  void navigate({ to: TELESCOPE_PATH, search: { view: item.id } });
+                  void navigate({
+                    to: TELESCOPE_PATH,
+                    search: { view: item.id, ...(layout === "board" ? { layout } : {}) },
+                  });
                 }}
               />
             }
@@ -94,7 +108,7 @@ export function TelescopeSidebar({
   return (
     <>
       <SidebarChromeHeader isElectron={isElectron} />
-      {/* The mobile sheet sizes to its content, and this body has none yet. */}
+      {/* The mobile sheet sizes to its content, and most views' bodies are still empty. */}
       <div className={cn("flex min-h-0 flex-1", isMobile && "w-[calc(100vw-(--spacing(12)))]")}>
         <TelescopeRail view={view} collapsed={false} />
         <SidebarContent className="min-h-full">
@@ -102,16 +116,17 @@ export function TelescopeSidebar({
             <div className="px-2 py-1 text-xs font-medium text-muted-foreground">
               {telescopeViewEntry(view).label}
             </div>
-            {children}
+            {children ?? (view === "chats" ? <TelescopeChatList /> : null)}
           </SidebarGroup>
         </SidebarContent>
       </div>
+      <TelescopeAccountFooter />
       <SidebarChromeFooter />
     </>
   );
 }
 
-function TelescopeEmptyState({ view }: { view: TelescopeView }) {
+export function TelescopeEmptyState({ view }: { view: TelescopeView }) {
   const entry = telescopeViewEntry(view);
   return (
     <Empty>
@@ -163,8 +178,16 @@ export function TelescopePage({
         </WorkspaceBreadcrumb>
       </WorkspacePageHeader>
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
-        {children ?? <TelescopeEmptyState view={view} />}
+        {children ??
+          (view === "teams" ? (
+            <MyTeamsPage />
+          ) : view === "dashboard" ? (
+            <TelescopeDashboard />
+          ) : (
+            <TelescopeEmptyState view={view} />
+          ))}
       </div>
+      {background ? null : <TaskDrawer />}
     </SidebarInset>
   );
 }

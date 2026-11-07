@@ -62,7 +62,11 @@ export function ConnectionDiagnosisHeadline({
 }
 
 const HOP_MARK = { ok: "✓", failed: "✕", unchecked: "–" } as const;
-const HOP_NOTE = { ok: "", failed: "Failed", unchecked: "Not checked" } as const;
+const HOP_NOTE = {
+  ok: null,
+  failed: "settings.parallelConnections.hopFailed",
+  unchecked: "settings.parallelConnections.hopNotChecked",
+} as const;
 
 /** Ticks once per second, and only while a retry is scheduled, so the list around it does not re-render. */
 function RetryCountdown({ retryAt }: { readonly retryAt: number }) {
@@ -158,21 +162,24 @@ export function ConnectionDiagnosisPanel({
   return (
     <div className="mt-2 grid gap-3 border-t border-border/50 pt-2 text-xs">
       <ol className="grid gap-0.5">
-        {diagnosis.hops.map((hop) => (
-          <li
-            key={hop.hop}
-            className={cn(
-              "flex gap-2",
-              hop.result === "failed" ? "text-destructive" : "text-muted-foreground",
-            )}
-          >
-            <span aria-hidden className="w-3 text-center">
-              {HOP_MARK[hop.result]}
-            </span>
-            <span className={cn(hop.result === "ok" && "text-foreground")}>{hop.label}</span>
-            <span>{HOP_NOTE[hop.result]}</span>
-          </li>
-        ))}
+        {diagnosis.hops.map((hop) => {
+          const note = HOP_NOTE[hop.result];
+          return (
+            <li
+              key={hop.hop}
+              className={cn(
+                "flex gap-2",
+                hop.result === "failed" ? "text-destructive" : "text-muted-foreground",
+              )}
+            >
+              <span aria-hidden className="w-3 text-center">
+                {HOP_MARK[hop.result]}
+              </span>
+              <span className={cn(hop.result === "ok" && "text-foreground")}>{hop.label}</span>
+              <span>{note ? t(note) : null}</span>
+            </li>
+          );
+        })}
       </ol>
       <div>
         <p className="font-medium text-foreground">{t("settings.text.whatToTry")}</p>

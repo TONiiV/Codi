@@ -73,13 +73,22 @@ export const CLIENT_GUARDED_RPC_SCOPES = {
   // A link lets every agent here reach the other environment: Settings' bar.
   [WS_METHODS.peerLinksAnswerRequest]: AuthAccessWriteScope,
   // Workspace roles are checked by the service; this scope is the environment's ceiling.
+  [TELESCOPE_WS_METHODS.workspaceExport]: AuthTelescopeAdminScope,
+  [TELESCOPE_WS_METHODS.workspaceDelete]: AuthTelescopeAdminScope,
   [TELESCOPE_WS_METHODS.memberInvite]: AuthTelescopeAdminScope,
   [TELESCOPE_WS_METHODS.memberLinkCode]: AuthTelescopeAdminScope,
   [TELESCOPE_WS_METHODS.memberSetRole]: AuthTelescopeAdminScope,
   [TELESCOPE_WS_METHODS.memberRevoke]: AuthTelescopeAdminScope,
+  [TELESCOPE_WS_METHODS.memberRestore]: AuthTelescopeAdminScope,
   [TELESCOPE_WS_METHODS.projectBind]: AuthTelescopeAdminScope,
   [TELESCOPE_WS_METHODS.projectUnbind]: AuthTelescopeAdminScope,
   [TELESCOPE_WS_METHODS.agentUpdateCompany]: AuthTelescopeAdminScope,
+  [TELESCOPE_WS_METHODS.grantAuditList]: AuthTelescopeAdminScope,
+  [TELESCOPE_WS_METHODS.budgetSet]: AuthTelescopeAdminScope,
+  [TELESCOPE_WS_METHODS.killSwitchSet]: AuthTelescopeAdminScope,
+  [TELESCOPE_WS_METHODS.governanceGet]: AuthTelescopeAdminScope,
+  [TELESCOPE_WS_METHODS.routingSet]: AuthTelescopeAdminScope,
+  [TELESCOPE_WS_METHODS.routingDelete]: AuthTelescopeAdminScope,
 } as const;
 export type ClientGuardedRpcTag = keyof typeof CLIENT_GUARDED_RPC_SCOPES;
 

@@ -97,6 +97,8 @@ export const RunInputSnapshot = Schema.Struct({
   skillsVersions: Schema.Record(Schema.String, Schema.String),
   powersVersion: Text,
   model: Text,
+  /** Who serves the model, exported as OpenTelemetry `gen_ai.provider.name`; absent when unknown. */
+  provider: Schema.optionalKey(Text),
   contextManifest: Schema.Array(Schema.Struct({ kind: ContextManifestKind, id: Text, hash: Text })),
 });
 
@@ -144,6 +146,14 @@ export const RunListInput = Schema.Struct({
 export const RunListResult = Schema.Struct({ runs: Schema.Array(AgentRun) });
 export const RunScopedInput = Schema.Struct({ workspaceId: WorkspaceId, runId: AgentRunId });
 export const RunCallsResult = Schema.Struct({ calls: Schema.Array(RunCall) });
+/** A memory in a run's context manifest and the run that wrote it, when it is still stored. */
+export const RunMemorySource = Schema.Struct({
+  memoryId: MemoryId,
+  hash: Text,
+  sourceRunId: Schema.optionalKey(AgentRunId),
+  stored: Schema.Boolean,
+});
+export const RunMemorySourcesResult = Schema.Struct({ memories: Schema.Array(RunMemorySource) });
 
 export const MemoryScope = Schema.Literals(["personal", "project", "person"]);
 /** `person` records belong to company agents only; the memory service enforces that. */
