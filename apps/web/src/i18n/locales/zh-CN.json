@@ -329,7 +329,7 @@
       "continueToSignIn": "继续登录",
       "addInstance": "添加实例",
       "addACliproxyapiHub": "添加 CLIProxyAPI 中心",
-      "environmentlabelTheKeyStaysOnThat": "{{environmentLabel}}。密钥只保存在该服务器上。",
+      "showTheQuotaOfEveryAccountTheHub": "在 {{environmentLabel}} 的服务商旁显示该中心汇集的每个账号的额度。密钥只保存在该服务器上。",
       "hubUrl": "中心 URL",
       "managementKey": "管理密钥",
       "labelOptional": "标签（可选）",

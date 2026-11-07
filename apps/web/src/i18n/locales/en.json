@@ -329,7 +329,7 @@
       "continueToSignIn": "Continue to sign-in",
       "addInstance": "Add instance",
       "addACliproxyapiHub": "Add a CLIProxyAPI hub",
-      "environmentlabelTheKeyStaysOnThat": "{{environmentLabel}}. The key stays on that server.",
+      "showTheQuotaOfEveryAccountTheHub": "Show the quota of every account the hub pools, next to the providers on {{environmentLabel}}. The key stays on that server.",
       "hubUrl": "Hub URL",
       "managementKey": "Management key",
       "labelOptional": "Label (optional)",

@@ -80,8 +80,7 @@ export function AddUsageLimitSourceDialog({
         <DialogHeader>
           <DialogTitle>{t("settings.text.addACliproxyapiHub")}</DialogTitle>
           <DialogDescription>
-            Show the quota of every account the hub pools, next to the providers on{" "}
-            {t("settings.text.environmentlabelTheKeyStaysOnThat", { environmentLabel })}
+            {t("settings.text.showTheQuotaOfEveryAccountTheHub", { environmentLabel })}
           </DialogDescription>
         </DialogHeader>
         <DialogPanel>
