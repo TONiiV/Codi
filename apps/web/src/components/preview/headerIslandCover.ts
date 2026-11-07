@@ -1,7 +1,8 @@
 import { observeResize } from "../../lib/observeResize";
 import { requestWorkspaceContentFocus } from "../../lib/workspaceFocus";
 
-const ISLAND_CLEARANCE_PX = 8;
+// The chat header's last button rides 12 to 40px left of the panel edge; keep 8px clear of it.
+const ISLAND_CLEARANCE_PX = 48;
 const ISLAND_HYSTERESIS_PX = 16;
 
 /** A covered island returns only once the edge is a hysteresis band clear, so it never flickers. */

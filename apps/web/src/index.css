@@ -208,7 +208,7 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(t3-mobil
   --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
   /* anticipate swells a little before it shrinks away; spring overshoots by
      about an eighth, then settles. */
-  --ease-anticipate: cubic-bezier(0.55, -0.6, 0.7, 0.05);
+  --ease-anticipate: cubic-bezier(0.3, -0.3, 0.7, 0.4);
   --ease-spring: linear(
     0,
     0.143,
