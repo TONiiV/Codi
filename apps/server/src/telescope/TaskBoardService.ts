@@ -273,11 +273,12 @@ const make = Effect.gen(function* () {
       if (key in set && !sameJson(set[key], current[key])) mine[key] = set[key] ?? null;
     }
     if (author.onBehalfOf !== undefined) {
-      const open =
-        current.conflictDecisionId === undefined
-          ? undefined
-          : yield* findDecision(current.workspaceId, current.conflictDecisionId);
-      const held = Object.keys(open?.status === "proposed" ? (open.conflict?.incoming ?? {}) : {});
+      // Every open proposal holds its fields, not just the one the marker names.
+      const where = { kind: "decision", status: "proposed" };
+      const proposals = yield* db.select(current.workspaceId, "tasks", decodeDecisions, where);
+      const held = proposals.flatMap(({ conflict }) =>
+        conflict?.taskId === current.id ? Object.keys(conflict.incoming) : [],
+      );
       if (current.status === "needs_decision") held.push("status");
       const blocked = held.filter((key) => key in mine);
       if (blocked.length > 0)
@@ -311,6 +312,11 @@ const make = Effect.gen(function* () {
         current.conflictDecisionId === undefined
           ? undefined
           : yield* findDecision(current.workspaceId, current.conflictDecisionId);
+      // An agent may not move the marker off an open proposal: deciding it would do nothing.
+      if (author.onBehalfOf !== undefined && open?.status === "proposed")
+        return yield* forMember(
+          `A member must decide ${Object.keys(open.conflict?.incoming ?? {}).join(", ")} first.`,
+        );
       // A resent stale write reuses the proposal it already opened.
       const reused =
         open?.status === "proposed" && sameJson(open.conflict?.incoming, incoming)
@@ -622,7 +628,9 @@ const make = Effect.gen(function* () {
     return yield* db.transaction(
       Effect.gen(function* () {
         const lease = yield* heldLease(member, input, at);
-        const expiresAt = leaseExpiry(time, member);
+        // A renewal keeps the holder's span, whoever renews (D59).
+        const milliseconds = Date.parse(lease.expiresAt) - Date.parse(lease.heartbeatAt);
+        const expiresAt = DateTime.formatIso(DateTime.add(time, { milliseconds }));
         const set = { heartbeat_at: at, expires_at: expiresAt };
         yield* db.update(input.workspaceId, "leases", set, { lease_id: lease.id });
         return { ...lease, heartbeatAt: at, expiresAt };

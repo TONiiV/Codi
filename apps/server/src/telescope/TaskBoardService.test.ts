@@ -396,9 +396,10 @@ it.layer(layer)("Telescope task board", (it) => {
       const long = yield* board.acquireLease(agent, { workspaceId: a, taskId: build.id });
       yield* TestClock.adjust("14 minutes");
       const longer = yield* board.heartbeatLease(agent, { workspaceId: a, leaseId: long.id });
-      assert.strictEqual(
-        Date.parse(longer.expiresAt) - Date.parse(longer.heartbeatAt),
-        15 * 60_000,
+      const byMember = yield* board.heartbeatLease(alice, { workspaceId: a, leaseId: long.id });
+      assert.deepStrictEqual(
+        [longer, byMember].map((l) => Date.parse(l.expiresAt) - Date.parse(l.heartbeatAt)),
+        [15 * 60_000, 15 * 60_000],
       );
     }),
   );
@@ -566,14 +567,19 @@ it.layer(layer)("Telescope task board", (it) => {
       ]);
       assert.deepStrictEqual(refused.map(reasonOf), Array(4).fill("forbidden"));
       yield* update(agent, version, { status: "in_review" });
+      yield* update(alice, version + 1, { goalChain: ["Q4"] });
+      const moved = yield* Effect.flip(update(agent, version, { goalChain: ["Q1"] }));
+      assert.strictEqual(reasonOf(moved), "forbidden");
       assert.strictEqual((yield* current).conflictDecisionId, d2);
 
       yield* decide(d2, "incoming");
       const applied = yield* current;
       assert.deepStrictEqual(
         [applied.title, applied.conflictDecisionId, applied.version],
-        ["Plan C", undefined, 7],
+        ["Plan C", undefined, 8],
       );
+      const orphaned = yield* Effect.flip(update(agent, applied.version, { title: "Agent plan" }));
+      assert.strictEqual(reasonOf(orphaned), "forbidden");
       yield* decide(first.conflict?.decisionId, "incoming");
       assert.strictEqual((yield* current).title, "Plan C");
 
@@ -582,8 +588,10 @@ it.layer(layer)("Telescope task board", (it) => {
       const kept = yield* current;
       assert.deepStrictEqual(
         [kept.title, kept.conflictDecisionId, kept.version],
-        ["Plan C", undefined, 9],
+        ["Plan C", undefined, 10],
       );
+      const settled = yield* update(agent, kept.version, { title: "Agent plan" });
+      assert.strictEqual(settled.title, "Agent plan");
     }),
   );
 });
