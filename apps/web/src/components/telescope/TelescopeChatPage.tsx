@@ -24,6 +24,7 @@ import {
 import { Spinner } from "../ui/spinner";
 import { agentDisplayName, telescopeAgents } from "./myTeamsShared";
 import { ErrorNote } from "./TelescopeAccountDialogs";
+import { TelescopeNeedsYou } from "./TelescopeNeedsYou";
 import { telescope, useTelescopeWorkspaces } from "./telescopeState";
 import { useChatAgentId } from "./telescopeViews";
 
@@ -143,7 +144,20 @@ function WorkspaceChat({
     );
   if (agent !== undefined)
     return (
-      <AgentChat key={agent.id} environmentId={environmentId} workspace={workspace} agent={agent} />
+      <div className="flex min-h-0 flex-1 flex-col">
+        <TelescopeNeedsYou
+          key={agent.id}
+          environmentId={environmentId}
+          workspace={workspace}
+          agent={agent}
+        />
+        <AgentChat
+          key={agent.id}
+          environmentId={environmentId}
+          workspace={workspace}
+          agent={agent}
+        />
+      </div>
     );
   const loading =
     (mine.data === null && mine.error === null) ||
