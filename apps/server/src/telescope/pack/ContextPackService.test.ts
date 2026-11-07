@@ -629,8 +629,20 @@ describe("ContextPackService", () => {
           "home5/opencode/AGENTS.md": "old\n",
           "home6/AGENTS.md": "old\n",
           "home6/opencode/AGENTS.md": "old\n",
+          "home9/.local/codex/AGENTS.md": "old\n",
+          "home10/AGENTS.md": "my own notes\n",
+          "home10/.codex/AGENTS.md": "old\n",
+          "out10/sub/keep.md": "keep\n",
+          "home11/opencode/AGENTS.md": "old\n",
         },
-        { "linked-home/.claude/CLAUDE.md": "../../dotfiles/CLAUDE.md" },
+        {
+          "linked-home/.claude/CLAUDE.md": "../../dotfiles/CLAUDE.md",
+          home9link: "home9",
+          // Codex canonicalizes its home, so `link/..` is the parent of where the link points.
+          "home10/link": "../out10/sub",
+          // OpenCode joins XDG_CONFIG_HOME as text, so there `link/..` is the home itself.
+          "home11/link": "../out10/sub",
+        },
       );
       const pack = dir.at("home/packs/me");
 
@@ -687,10 +699,13 @@ describe("ContextPackService", () => {
         ["home5", "opencode", "XDG_CONFIG_HOME", "home5/", "home5/opencode"],
         ["home6", "codex", "CODEX_HOME", "home6/", "home6"],
         ["home6", "opencode", "XDG_CONFIG_HOME", "home6", "home6/opencode"],
+        ["home9link", "codex", "CODEX_HOME", "home9/.local/codex", "home9/.local/codex"],
+        ["home10", "codex", "CODEX_HOME", "home10/link/..", "home10/.codex"],
+        ["home11", "opencode", "XDG_CONFIG_HOME", "home11/link/..", "home11/opencode"],
       ] as const;
       warnings.length = 0;
       for (const [home, harness, name, value, files] of overrides) {
-        const env = { [name]: dir.at(value) };
+        const env = { [name]: `${dir.root}/${value}` };
         yield* service
           .import(pack, dir.at(home), harness, false, "home")
           .pipe(
@@ -706,8 +721,11 @@ describe("ContextPackService", () => {
         );
       }
       expect(warnings).toEqual([
-        `Ignored CODEX_HOME: ${dir.at("home3/.local/codex")} is not inside ${dir.at("home4")}, so .codex is used.`,
+        `Ignored CODEX_HOME: ${dir.at("home3/.local/codex")} does not resolve to a path inside ${dir.at("home4")}, so .codex is used.`,
+        `Ignored CODEX_HOME: ${dir.root}/home10/link/.. does not resolve to a path inside ${dir.at("home10")}, so .codex is used.`,
       ]);
+      expect(yield* dir.read("home10/AGENTS.md")).toBe("my own notes\n");
+      expect(yield* dir.exists(dir.at("out10/AGENTS.md"))).toBe(false);
       expect(yield* dir.read("home3/.local/codex/config.toml")).toContain("[mcp_servers.gh]");
 
       // Syncing the home in place keeps the rest of ~/.claude.json and the user's own CLAUDE.md.

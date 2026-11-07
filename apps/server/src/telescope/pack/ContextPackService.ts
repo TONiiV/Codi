@@ -25,8 +25,10 @@ import {
   type Pack,
   PACK_FILES,
   type PackScope,
+  plannedRealPath,
   readPackDir,
   writePackDir,
+  writeTarget,
 } from "./Pack.ts";
 
 type Harnesses = Record<HarnessName, Harness>;
@@ -119,17 +121,24 @@ const make = Effect.gen(function* () {
   const path = yield* Path.Path;
 
   // Untraced: runs inside the export and import spans. An override is used only inside the home,
-  // so a pack for another home never writes this one's.
-  const homeDirFrom = Effect.fnUntraced(function* (home: string, name: string, fallback: string) {
+  // so a pack for another home never writes this one's. It is judged by the real path the harness
+  // reads: Codex canonicalizes CODEX_HOME, so a `..` applies after a link, while OpenCode joins
+  // XDG_CONFIG_HOME as text, so a `..` folds first.
+  const homeDirFrom = Effect.fnUntraced(function* (
+    home: string,
+    name: "CODEX_HOME" | "XDG_CONFIG_HOME",
+    fallback: string,
+  ) {
     const value = yield* Config.String(name).pipe(
       Config.withDefault(""),
       Effect.orElseSucceed(() => ""),
     );
     if (value === "") return fallback;
-    const dir = path.resolve(value);
-    if (isInside(path, home, dir)) return path.relative(home, dir) || ".";
+    const root = yield* plannedRealPath(home);
+    const dir = yield* writeTarget(name === "CODEX_HOME" ? value : path.resolve(value));
+    if (dir !== undefined && isInside(path, root, dir)) return path.relative(root, dir) || ".";
     yield* Effect.logWarning(
-      `Ignored ${name}: ${value} is not inside ${home}, so ${fallback} is used.`,
+      `Ignored ${name}: ${value} does not resolve to a path inside ${home}, so ${fallback} is used.`,
     );
     return fallback;
   });

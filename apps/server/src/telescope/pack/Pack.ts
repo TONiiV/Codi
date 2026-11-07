@@ -311,7 +311,7 @@ export const realPathInside = Effect.fnUntraced(function* (root: string, file: s
 });
 
 // The real path `file` has or would have once created, resolving links in its existing parents.
-const plannedRealPath: (
+export const plannedRealPath: (
   file: string,
 ) => Effect.Effect<string, never, FileSystem.FileSystem | Path.Path> = Effect.fnUntraced(
   function* (file) {
@@ -358,12 +358,15 @@ const linkChainTarget = Effect.fnUntraced(function* (file: string, removed: Read
       return current;
     },
   );
-  return yield* walk(path.sep, path.resolve(file));
+  return yield* walk(path.resolve(), file);
 });
 
 // A write follows every link in its target, so what must stay inside the directory being written
 // to is the end of that chain, including the path a dangling link names.
-const writeTarget = Effect.fnUntraced(function* (file: string, removed: ReadonlyArray<string>) {
+export const writeTarget = Effect.fnUntraced(function* (
+  file: string,
+  removed: ReadonlyArray<string> = [],
+) {
   const path = yield* Path.Path;
   const named = yield* linkChainTarget(file, removed);
   return named === undefined || removed.some((entry) => isInside(path, entry, named))
