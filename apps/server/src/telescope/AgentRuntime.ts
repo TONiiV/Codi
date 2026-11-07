@@ -40,14 +40,35 @@ const decodePayload = Schema.decodeUnknownOption(AgentInstructions.WakePayload);
 const decodeStops = Schema.decodeUnknownEffect(
   Schema.Array(Schema.Struct({ agent_id: Telescope.AgentId, state: Schema.String })),
 );
+const decodeMembers = Schema.decodeUnknownEffect(
+  Schema.Array(Schema.Struct({ subject_id: Schema.String })),
+);
 
 /** D48: the agents a kill switch has stopped in this workspace. */
-export const stoppedAgents = Effect.fn("AgentRuntime.stoppedAgents")(function* (
+const stoppedAgents = Effect.fn("AgentRuntime.stoppedAgents")(function* (
   db: TelescopeDb.TelescopeDb["Service"],
   workspaceId: Telescope.WorkspaceId,
 ) {
   const rows = yield* db.select(workspaceId, "kill_switches", decodeStops);
   return new Set<string>(rows.flatMap((row) => (row.state === "running" ? [] : [row.agent_id])));
+});
+
+/**
+ * The gateway's rule (D48): a run is served while its member is active and no agent it acts
+ * through is stopped. `ToolGateway.decide` still reads it inline.
+ */
+export const servesRun = Effect.fn("AgentRuntime.servesRun")(function* (
+  db: TelescopeDb.TelescopeDb["Service"],
+  workspaceId: Telescope.WorkspaceId,
+) {
+  const stopped = yield* stoppedAgents(db, workspaceId);
+  const members = yield* db.select(workspaceId, "members", decodeMembers, { revoked_at: null });
+  const active = new Set(members.map((row) => row.subject_id));
+  return ({
+    agentId,
+    onBehalfOf: [member, ...via],
+  }: Pick<Telescope.AgentRun, "agentId" | "onBehalfOf">) =>
+    member !== undefined && active.has(member) && ![agentId, ...via].some((id) => stopped.has(id));
 });
 
 /** Runs each wake as a turn on its agent's resident thread (plan 2.3: run before session). */

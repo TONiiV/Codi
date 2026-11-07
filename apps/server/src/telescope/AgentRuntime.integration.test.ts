@@ -88,6 +88,9 @@ const missingTools = (text: string) =>
 const decodeRuns = Schema.decodeUnknownEffect(
   Schema.Array(Schema.Struct({ run_id: Telescope.AgentRunId, on_behalf_of_json: Schema.String })),
 );
+const decodeLeaseExpiry = Schema.decodeUnknownEffect(
+  Schema.Array(Schema.Struct({ expires_at: Schema.String })),
+);
 
 /** A provider whose session start records the thread's open Telescope run, as tools/list would. */
 const makeHarness = Effect.fn("makeHarness")(function* (options: {
@@ -1107,36 +1110,74 @@ it.effect.each([
   ),
 );
 
-it.effect(
-  "a lease held across a long turn is renewed on TestClock and stays lapsed after the run ends",
-  () =>
-    withHarness({ mcp: true, holdSend: true }, (harness) =>
-      Effect.gen(function* () {
-        const seeded = yield* seed;
-        const board = yield* TaskBoardService.TaskBoardService;
-        const { own } = yield* seedContext(seeded);
-        const read = { workspaceId: seeded.workspaceId, taskId: own.id };
-        const pa = { caller: alice, authorId: seeded.pa, onBehalfOf: [seeded.member] };
-        const lease = yield* board.acquireLease(pa, read);
-        const runner = yield* runWake(yield* messageWake(seeded, "去催样机"));
-        yield* Queue.take(harness.sending);
-        yield* Queue.offer(harness.sendPermits, undefined);
-        const turn = yield* Queue.take(harness.started);
-        yield* TestClock.adjust("40 minutes");
-        const held = yield* board.getLease({ caller: alice }, read);
-        assert.equal(held.lease?.id, lease.id);
-        assert.isTrue(held.lease!.expiresAt > lease.expiresAt);
-        yield* harness.complete(turn, 1);
-        yield* Fiber.join(runner);
-        yield* Queue.take(harness.finished);
-        yield* TestClock.adjust("16 minutes");
-        // The lapsed lease is still a row (expiry runs on reads), and the agent's next run opens.
-        yield* runWake(yield* messageWake(seeded, "再催一次"));
-        yield* Queue.take(harness.sending);
-        yield* TestClock.adjust("1 minute");
-        assert.deepStrictEqual(yield* board.getLease({ caller: alice }, read), {});
-      }),
-    ),
+it.effect.each([
+  { refused: undefined, renewal: "is renewed on TestClock and stays lapsed after the run ends" },
+  { refused: "upstream", renewal: "lapses once an agent the run acts through is stopped" },
+  { refused: "revoked", renewal: "lapses once the run's member is revoked" },
+] as const)("a lease held across a long turn $renewal", ({ refused }) =>
+  withHarness({ mcp: true, holdSend: true }, (harness) =>
+    Effect.gen(function* () {
+      const seeded = yield* seed;
+      const db = yield* TelescopeDb.TelescopeDb;
+      const board = yield* TaskBoardService.TaskBoardService;
+      const delegations = yield* DelegationService.DelegationService;
+      const wakes = yield* WakeQueueService.WakeQueueService;
+      const { workspaceId } = seeded;
+      const task = yield* board.createTask(
+        { caller: alice },
+        { workspaceId, title: "电机选型", ownerAgentId: seeded.chief },
+      );
+      const read = { workspaceId, taskId: task.id };
+      const chief = { caller: alice, authorId: seeded.chief, onBehalfOf: [seeded.member] };
+      const lease = yield* board.acquireLease(chief, read);
+      // Delegated by the PA, the Chief's run acts through the PA.
+      yield* delegations.delegate(seeded.actor, { toAgentId: seeded.chief, brief });
+      const runner = yield* runWake(yield* wakes.take);
+      yield* Queue.take(harness.sending);
+      if (refused === "upstream")
+        yield* db.insert(workspaceId, "kill_switches", {
+          agent_id: seeded.pa,
+          state: "stopped",
+          by_subject_id: seeded.member,
+          at: "2026-11-07T00:00:00.000Z",
+        });
+      if (refused === "revoked")
+        yield* db.update(
+          workspaceId,
+          "members",
+          { revoked_at: "2026-11-07T00:00:00.000Z" },
+          { subject_id: seeded.member },
+        );
+      yield* Queue.offer(harness.sendPermits, undefined);
+      const turn = yield* Queue.take(harness.started);
+      yield* TestClock.adjust("40 minutes");
+      if (refused !== undefined) {
+        assert.notInclude(turn.message.text, "Your context for this turn");
+        const leases = yield* db.select(workspaceId, "leases", decodeLeaseExpiry);
+        assert.deepStrictEqual(
+          leases.map((row) => row.expires_at),
+          [lease.expiresAt],
+        );
+        return;
+      }
+      assert.include(turn.message.text, "Your context for this turn");
+      const held = yield* board.getLease({ caller: alice }, read);
+      assert.equal(held.lease?.id, lease.id);
+      assert.isTrue(held.lease!.expiresAt > lease.expiresAt);
+      yield* harness.complete(turn, 1);
+      yield* Fiber.join(runner);
+      yield* Queue.take(harness.finished);
+      // The PA's report wake for the unreported task, done so the Chief's next one can be taken.
+      yield* wakes.finish((yield* wakes.take).wake, "done");
+      yield* TestClock.adjust("16 minutes");
+      // The lapsed lease is still a row (expiry runs on reads), and the agent's next run opens.
+      yield* delegations.delegate(seeded.actor, { toAgentId: seeded.chief, brief });
+      yield* runWake(yield* wakes.take);
+      yield* Queue.take(harness.sending);
+      yield* TestClock.adjust("1 minute");
+      assert.deepStrictEqual(yield* board.getLease({ caller: alice }, read), {});
+    }),
+  ),
 );
 
 it.effect(

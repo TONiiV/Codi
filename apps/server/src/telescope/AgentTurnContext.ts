@@ -3,7 +3,7 @@ import * as Layer from "effect/Layer";
 
 import * as TurnPreamble from "../orchestration-v2/TurnPreamble.ts";
 import * as AgentInstructions from "./AgentInstructions.ts";
-import { stoppedAgents } from "./AgentRuntime.ts";
+import { servesRun } from "./AgentRuntime.ts";
 import { runSnapshot } from "./AgentThreadRuns.ts";
 import * as AgentService from "./AgentService.ts";
 import * as ContextAssembler from "./ContextAssembler.ts";
@@ -31,13 +31,13 @@ export const layer = Layer.effectDiscard(
       const owner = yield* db.agentThread(turn.threadId);
       if (owner === undefined) return "";
       const { workspaceId } = owner;
-      if ((yield* stoppedAgents(db, workspaceId)).has(owner.agentId)) return "";
       const { agent } = yield* agents.powersOf(workspaceId, owner.agentId);
       const run = yield* runs.startFor(workspaceId, owner.ownerSubjectId, {
         agentId: agent.id,
         threadId: turn.threadId,
         inputSnapshot: runSnapshot(turn.modelSelection, { codiMessageId: turn.messageId }),
       });
+      if (!(yield* servesRun(db, workspaceId))(run)) return "";
       const [memberId = owner.ownerSubjectId] = run.onBehalfOf;
       const context = yield* assembler.assemble({
         caller: { runId: run.id, workspaceId, memberId },
