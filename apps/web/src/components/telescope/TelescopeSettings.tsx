@@ -39,6 +39,7 @@ import {
   useFreshMembers,
   WORKSPACE_ROLE_LABEL,
 } from "./TelescopeAccountDialogs";
+import { ProjectRulesSection } from "./TelescopeProjectRules";
 import { telescope, useTelescopeWorkspaces, WORKSPACE_KIND_LABEL } from "./telescopeState";
 
 const governance = createTelescopeGovernanceAtoms(connectionAtomRuntime);
@@ -50,13 +51,13 @@ const KILL_SWITCH_LABEL = { running: "运行", paused: "暂停", terminated: "�
 const COMPANY_LEVEL_LABEL = { enterprise: "整个公司", personal: "整个工作区" } as const;
 const isKillSwitchState = Schema.is(Telescope.KillSwitch.fields.state);
 
-interface Scoped {
+export interface Scoped {
   environmentId: EnvironmentId;
   workspace: Telescope.Workspace;
   self: Telescope.Member;
 }
 
-function StatusRow(props: { text: string; failed?: boolean; onRetry?: () => void }) {
+export function StatusRow(props: { text: string; failed?: boolean; onRetry?: () => void }) {
   return (
     <div className="px-3 py-3 text-sm text-muted-foreground sm:px-4">
       {props.failed ? <ErrorNote {...props} /> : props.text}
@@ -65,7 +66,13 @@ function StatusRow(props: { text: string; failed?: boolean; onRetry?: () => void
 }
 
 /** Loading or failed state of a query whose data is still missing. */
-function QueryStatus({ query, what }: { query: EnvironmentQueryView<unknown>; what: string }) {
+export function QueryStatus({
+  query,
+  what,
+}: {
+  query: EnvironmentQueryView<unknown>;
+  what: string;
+}) {
   const failed = query.error !== null;
   return (
     <StatusRow
@@ -422,7 +429,7 @@ function Picker<T extends string>(props: {
 }
 
 /** Bound projects and the harnesses this server runs, under the names the page shows. */
-function useRoutingNames(environmentId: EnvironmentId, workspace: Telescope.Workspace) {
+export function useRoutingNames(environmentId: EnvironmentId, workspace: Telescope.Workspace) {
   const { bindings } = useTelescopeWorkspaces();
   const bound = useEnvironmentQuery(telescope.bindingSummary({ environmentId, input: {} }));
   const allProjects = useProjects();
@@ -455,7 +462,7 @@ function useRoutingNames(environmentId: EnvironmentId, workspace: Telescope.Work
     `${project(rule.projectId)} · ${Routing.taskTypeLabel(rule.taskType)} → ${harness(rule.harness)} · ${rule.model}`;
   return { projects, harnesses, unbound, project, harness, rule };
 }
-type RoutingNames = ReturnType<typeof useRoutingNames>;
+export type RoutingNames = ReturnType<typeof useRoutingNames>;
 
 function RoutingRuleDialog(
   props: Scoped & { names: RoutingNames; rule: Telescope.RoutingRule | null; onClose: () => void },
@@ -783,6 +790,7 @@ export function TelescopeSettingsPanel() {
           ) : null}
           <GovernanceSection environmentId={environmentId} {...loaded} />
           <RoutingSection environmentId={environmentId} {...loaded} />
+          <ProjectRulesSection environmentId={environmentId} {...loaded} />
         </>
       ) : (
         <SettingsSection id="telescope-members" title="成员与角色">

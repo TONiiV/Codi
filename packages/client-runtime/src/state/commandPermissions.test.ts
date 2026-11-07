@@ -24,6 +24,7 @@ import {
   WS_METHODS,
   type AuthSessionState,
   type PeerLinkSummary,
+  ProjectId,
   ProviderInstanceId,
 } from "@t3tools/contracts";
 import * as Cause from "effect/Cause";
@@ -40,6 +41,7 @@ import {
 } from "./runtime.ts";
 import { AVAILABLE_CONNECTION_STATE, BearerConnectionTarget } from "../connection/model.ts";
 import { createPeerLinkEnvironmentAtoms } from "./peerLinks.ts";
+import { createTelescopeProjectRuleAtoms } from "../telescope/projectRules.ts";
 import { createTelescopeRoutingAtoms } from "../telescope/routing.ts";
 
 vi.mock("./session.ts", () => ({
@@ -203,26 +205,27 @@ describe("command permissions", () => {
         }),
       ),
   );
-  it.effect.each([Telescope.WS_METHODS.routingSet, Telescope.WS_METHODS.routingDelete])(
-    "offers %s to telescope admins, not members",
-    (method) =>
-      Effect.scoped(
-        Effect.gen(function* () {
-          const registry = yield* setup;
-          const permissions = createCommandPermissions(runtime, method);
-          const scoped = (
-            scope: typeof AuthTelescopeAdminScope | typeof AuthTelescopeMemberScope,
-          ) => AsyncResult.success({ ...grant(true), scopes: [scope], permissions: [scope] });
-          registry.set(sessions(env), scoped(AuthTelescopeMemberScope));
-          expect(registry.get(permissions.permissionAtom(env))).toBe(false);
-          expect((yield* permissions.authorize(registry, env).pipe(Effect.flip))._tag).toBe(
-            "EnvironmentAuthorizationError",
-          );
-          registry.set(sessions(env), scoped(AuthTelescopeAdminScope));
-          expect(registry.get(permissions.permissionAtom(env))).toBe(true);
-          yield* permissions.authorize(registry, env);
-        }),
-      ),
+  it.effect.each([
+    Telescope.WS_METHODS.routingSet,
+    Telescope.WS_METHODS.routingDelete,
+    Telescope.WS_METHODS.projectRuleSet,
+  ])("offers %s to telescope admins, not members", (method) =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const registry = yield* setup;
+        const permissions = createCommandPermissions(runtime, method);
+        const scoped = (scope: typeof AuthTelescopeAdminScope | typeof AuthTelescopeMemberScope) =>
+          AsyncResult.success({ ...grant(true), scopes: [scope], permissions: [scope] });
+        registry.set(sessions(env), scoped(AuthTelescopeMemberScope));
+        expect(registry.get(permissions.permissionAtom(env))).toBe(false);
+        expect((yield* permissions.authorize(registry, env).pipe(Effect.flip))._tag).toBe(
+          "EnvironmentAuthorizationError",
+        );
+        registry.set(sessions(env), scoped(AuthTelescopeAdminScope));
+        expect(registry.get(permissions.permissionAtom(env))).toBe(true);
+        yield* permissions.authorize(registry, env);
+      }),
+    ),
   );
   it.effect("waits for an initial grant", () =>
     Effect.scoped(
@@ -653,7 +656,7 @@ it.effect(
     ),
 );
 
-it.effect("re-reads the routing list after a refused set or delete", () =>
+it.effect("re-reads the routing and project rule lists after a refused change", () =>
   Effect.scoped(
     Effect.gen(function* () {
       const registry = yield* setup;
@@ -667,12 +670,21 @@ it.effect("re-reads the routing list after a refused set or delete", () =>
         priority: 0,
       };
       let rules: ReadonlyArray<Telescope.RoutingRule> = [gone];
+      const unbound: Telescope.ProjectRule = {
+        projectId: ProjectId.make("unbound"),
+        stored: false,
+        powers: { openTickets: true, dispatchWorkers: true, answerMembers: true, mergePRs: true },
+        routing: null,
+      };
+      let projectRules: ReadonlyArray<Telescope.ProjectRule> = [unbound];
       const refuse = () =>
         Effect.fail(new Telescope.WorkspaceError({ reason: "not_found", message: "gone" }));
       const client = {
         [Telescope.WS_METHODS.routingList]: () => Effect.sync(() => ({ rules })),
         [Telescope.WS_METHODS.routingSet]: refuse,
         [Telescope.WS_METHODS.routingDelete]: refuse,
+        [Telescope.WS_METHODS.projectRuleList]: () => Effect.sync(() => ({ rules: projectRules })),
+        [Telescope.WS_METHODS.projectRuleSet]: refuse,
       };
       const supervisor = {
         target: new BearerConnectionTarget({
@@ -686,15 +698,15 @@ it.effect("re-reads the routing list after a refused set or delete", () =>
           phase: "connected" as const,
         }),
       } as EnvironmentSupervisor["Service"];
-      const routing = createTelescopeRoutingAtoms(
-        Atom.runtime(
-          Layer.succeed(EnvironmentRegistry, {
-            run: (_id, effect) => Effect.provideService(effect, EnvironmentSupervisor, supervisor),
-            followStream: (_id, stream) =>
-              Stream.provideService(stream, EnvironmentSupervisor, supervisor),
-          } as EnvironmentRegistry["Service"]),
-        ),
+      const atomRuntime = Atom.runtime(
+        Layer.succeed(EnvironmentRegistry, {
+          run: (_id, effect) => Effect.provideService(effect, EnvironmentSupervisor, supervisor),
+          followStream: (_id, stream) =>
+            Stream.provideService(stream, EnvironmentSupervisor, supervisor),
+        } as EnvironmentRegistry["Service"]),
       );
+      const routing = createTelescopeRoutingAtoms(atomRuntime);
+      const projectRule = createTelescopeProjectRuleAtoms(atomRuntime);
       registry.set(
         sessions(env),
         AsyncResult.success({
@@ -721,6 +733,18 @@ it.effect("re-reads the routing list after a refused set or delete", () =>
       const set = { environmentId: env, input: gone };
       refused(yield* Effect.promise(() => routing.set.run(registry, set)));
       expect(yield* read).toEqual({ rules });
+
+      const ruleList = projectRule.list({ environmentId: env, input: { workspaceId } });
+      registry.mount(ruleList);
+      const readRules = AtomRegistry.getResult(registry, ruleList, { suspendOnWaiting: true });
+      expect(yield* readRules).toEqual({ rules: [unbound] });
+      projectRules = [];
+      const setRule = {
+        environmentId: env,
+        input: { workspaceId, projectId: unbound.projectId, powers: unbound.powers, routing: null },
+      };
+      refused(yield* Effect.promise(() => projectRule.set.run(registry, setRule)));
+      expect(yield* readRules).toEqual({ rules: [] });
     }),
   ),
 );

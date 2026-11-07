@@ -208,6 +208,7 @@ describe("searchSettings", () => {
       ["telescope members", "telescope-members"],
       ["kill switch", "telescope-governance"],
       ["routing rules", "telescope-routing"],
+      ["project rules", "telescope-project-rules"],
     ] as const) {
       expect(searchSettings(title)[0]?.id, title).toBe(id);
     }
@@ -219,6 +220,7 @@ describe("searchSettings", () => {
       ["成员与角色", "telescope-members"],
       ["预算与急停", "telescope-governance"],
       ["路由规则", "telescope-routing"],
+      ["项目规则", "telescope-project-rules"],
     ] as const) {
       expect(searchSettings(title, zhItems)[0]?.id, title).toBe(id);
     }
