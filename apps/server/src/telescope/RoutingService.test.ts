@@ -4,9 +4,12 @@ import {
   AuthSessionId,
   EnvironmentId,
   ProjectId,
+  ProviderDriverKind,
   ProviderInstanceId,
+  resolveProviderInstanceEnabled,
   Telescope,
 } from "@t3tools/contracts";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as TestClock from "effect/testing/TestClock";
@@ -16,6 +19,7 @@ import { runMigrations } from "../persistence/Migrations.ts";
 import type { PersistenceDecodeError, PersistenceSqlError } from "../persistence/Errors.ts";
 import * as SqlitePersistence from "../persistence/Sqlite.ts";
 import * as ProviderInstanceRegistry from "../provider/ProviderInstanceRegistry.ts";
+import { deriveProviderInstanceConfigMap } from "../provider/ProviderInstanceRegistryHydration.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import * as AgentService from "./AgentService.ts";
 import * as GrantService from "./GrantService.ts";
@@ -27,6 +31,7 @@ const codex = ProviderInstanceId.make("codex");
 const claude = ProviderInstanceId.make("claude");
 const disabled = ProviderInstanceId.make("cursor");
 const retired = ProviderInstanceId.make("retired");
+const apiOnly = ProviderInstanceId.make("grok");
 const web = ProjectId.make("project-web");
 const api = ProjectId.make("project-api");
 
@@ -206,17 +211,32 @@ const layer = Layer.mergeAll(
     }),
   ),
   Layer.provide(
-    ServerSettings.ServerSettingsService.layerTest({
-      projectSettingsOverrides: { [api]: { providerInstances: { [codex]: { enabled: false } } } },
-    }),
+    Layer.unwrap(
+      Effect.gen(function* () {
+        const settings = yield* (yield* ServerSettings.ServerSettingsService).getSettings;
+        // The registry lists what hydration derives, so it counts `apiOnly` as enabled.
+        const instances = Object.entries(deriveProviderInstanceConfigMap(settings)).map(
+          ([instanceId, config]) => ({
+            instanceId,
+            enabled: resolveProviderInstanceEnabled(config),
+          }),
+        );
+        return Layer.mock(ProviderInstanceRegistry.ProviderInstanceRegistry)({
+          listInstances: Effect.succeed(instances as never),
+        });
+      }),
+    ),
   ),
   Layer.provide(
-    Layer.mock(ProviderInstanceRegistry.ProviderInstanceRegistry)({
-      listInstances: Effect.succeed([
-        { instanceId: codex, enabled: true },
-        { instanceId: claude, enabled: true },
-        { instanceId: disabled, enabled: false },
-      ] as never),
+    ServerSettings.ServerSettingsService.layerTest({
+      providerInstances: {
+        [claude]: { driver: ProviderDriverKind.make("claudeAgent") },
+        [disabled]: { driver: ProviderDriverKind.make("cursor"), enabled: false },
+        [apiOnly]: { driver: ProviderDriverKind.make("grok"), enabled: false },
+      },
+      projectSettingsOverrides: {
+        [api]: { providerInstances: { [codex]: { enabled: false }, [apiOnly]: { enabled: true } } },
+      },
     }),
   ),
 );
@@ -353,28 +373,30 @@ it.layer(layer)("Telescope routing rules", (it) => {
       assert.isDefined(chief);
       assert.isDefined(staff);
       const db = yield* TelescopeDb.TelescopeDb;
-      const ruleB = Telescope.RoutingRuleId.make("rule-b");
-      const ruleA = Telescope.RoutingRuleId.make("rule-a");
-      const seed = (ruleId: Telescope.RoutingRuleId, createdAt: string, taskType = "docs") =>
-        db.insert(workspaceId, "routing_rules", {
-          rule_id: ruleId,
-          project_id: null,
-          task_type: taskType,
-          harness: codex,
-          model: "small",
-          priority: 0,
-          created_at: createdAt,
-        });
-      yield* seed(ruleB, "2026-11-07T00:00:00.000Z");
-      yield* seed(ruleA, "2026-11-07T00:00:01.000Z");
-      const ruleD = Telescope.RoutingRuleId.make("rule-d");
-      const ruleC = Telescope.RoutingRuleId.make("rule-c");
-      yield* seed(ruleD, "2026-11-07T00:00:02.000Z", "review");
-      yield* seed(ruleC, "2026-11-07T00:00:02.000Z", "review");
+      const docs = { workspaceId, taskType: "docs", harness: codex, model: "small", priority: 0 };
+      const made = (yield* routing.set(as.ann, docs)).id;
+      const now = yield* DateTime.now;
+      const seed = (id: string, seconds: number) =>
+        db
+          .insert(workspaceId, "routing_rules", {
+            rule_id: id,
+            project_id: null,
+            task_type: "docs",
+            harness: codex,
+            model: "small",
+            priority: 0,
+            created_at: DateTime.formatIso(DateTime.add(now, { seconds })),
+          })
+          .pipe(Effect.as(Telescope.RoutingRuleId.make(id)));
+      // Inserted after `made` yet created before it; `rule-d` and `rule-c` share a millisecond.
+      const ruleB = yield* seed("rule-b", -1);
+      const ruleD = yield* seed("rule-d", 1);
+      const ruleC = yield* seed("rule-c", 1);
+      const inOrder = [ruleB, made, ruleD, ruleC];
       assert.deepStrictEqual(
         (yield* routing.list(as.bea, { workspaceId })).rules.map((rule) => rule.id),
-        [ruleB, ruleA, ruleD, ruleC],
-        "equal rules tie in creation order, not by id, within one millisecond too",
+        inOrder,
+        "equal rules tie in creation order, not by id or table order, within one millisecond too",
       );
       assert.strictEqual(
         (yield* routing.resolve(workspaceId, { agentId: staff.id, taskType: "docs" })).ruleId,
@@ -386,11 +408,36 @@ it.layer(layer)("Telescope routing rules", (it) => {
           projectId: api,
           taskType: "docs",
         })).skipped,
-        [
-          { ruleId: ruleB, reason: "harness_unavailable" },
-          { ruleId: ruleA, reason: "harness_unavailable" },
-        ],
+        inOrder.map((ruleId) => ({ ruleId, reason: "harness_unavailable" })),
         "a harness the project turns off is skipped",
+      );
+
+      const deploy = { workspaceId, taskType: "deploy", model: "m" };
+      const onApi = yield* routing.set(as.ann, { ...deploy, harness: apiOnly, priority: 9 });
+      const fallback = yield* routing.set(as.ann, { ...deploy, harness: codex, priority: 0 });
+      const offHere: Telescope.RoutingResolution = {
+        source: "rule",
+        ruleId: fallback.id,
+        modelSelection: { instanceId: codex, model: "m" },
+        skipped: [{ ruleId: onApi.id, reason: "harness_unavailable" }],
+      };
+      assert.deepStrictEqual(
+        yield* routing.resolve(workspaceId, { agentId: chief.id, taskType: "deploy" }),
+        offHere,
+        "an instance off on this server and on only for project-api is skipped for project-web",
+      );
+      assert.deepStrictEqual(
+        yield* routing.resolve(workspaceId, { agentId: staff.id, taskType: "deploy" }),
+        offHere,
+        "and for an agent with no project",
+      );
+      assert.strictEqual(
+        (yield* routing.resolve(workspaceId, {
+          agentId: staff.id,
+          projectId: api,
+          taskType: "deploy",
+        })).ruleId,
+        onApi.id,
       );
       const sonnet = { instanceId: claude, model: "sonnet" };
       yield* agents.update(as.bea, { workspaceId, agentId: chief.id, modelSelection: sonnet });

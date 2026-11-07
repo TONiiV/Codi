@@ -1,4 +1,10 @@
-import { type ModelSelection, ProjectId, ProviderInstanceId, Telescope } from "@t3tools/contracts";
+import {
+  type ModelSelection,
+  ProjectId,
+  ProviderInstanceId,
+  resolveProjectProviderInstanceEnabled,
+  Telescope,
+} from "@t3tools/contracts";
 import * as Context from "effect/Context";
 import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as DateTime from "effect/DateTime";
@@ -233,11 +239,7 @@ const make = Effect.gen(function* () {
     const allowlist =
       projectId === undefined ? undefined : yield* grants.routingAllowlist(workspaceId, projectId);
     const instances = yield* providers.listInstances;
-    const overrides =
-      projectId === undefined
-        ? undefined
-        : (yield* serverSettings.getSettings.pipe(Effect.orDie)).projectSettingsOverrides[projectId]
-            ?.providerInstances;
+    const settings = yield* serverSettings.getSettings.pipe(Effect.orDie);
     return resolveRoute(yield* rulesOf(workspaceId), {
       projectId,
       taskType,
@@ -245,8 +247,8 @@ const make = Effect.gen(function* () {
       allowlist,
       configured: new Set(
         instances.flatMap((instance) =>
-          // The project's own setting wins, as the Worker launch decides it.
-          (overrides?.[instance.instanceId]?.enabled ?? instance.enabled)
+          // The Worker launch's check; the registry also holds instances only some project enables.
+          resolveProjectProviderInstanceEnabled(settings, projectId ?? null, instance.instanceId)
             ? [instance.instanceId]
             : [],
         ),
