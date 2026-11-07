@@ -6,6 +6,8 @@ import * as Schema from "effect/Schema";
 
 export const HARNESSES = ["claude", "codex", "cursor", "opencode"] as const;
 export type HarnessName = (typeof HARNESSES)[number];
+// A home pack holds the user-level context each harness reads from the home directory.
+export type PackScope = "project" | "home";
 
 const McpServer = Schema.Struct({
   command: Schema.optional(Schema.String),
@@ -79,7 +81,7 @@ export class ContextPackOverlapError extends Schema.TaggedError<ContextPackOverl
   { path: Schema.String, source: Schema.String },
 ) {
   override get message(): string {
-    return `${this.path} overlaps ${this.source}. Keep the context pack directory outside the project.`;
+    return `${this.path} overlaps ${this.source}. Keep the context pack directory outside it.`;
   }
 }
 
@@ -101,40 +103,60 @@ type HarnessEffect<A> = Effect.Effect<
   FileSystem.FileSystem | Path.Path
 >;
 
-export interface HarnessSpec {
-  readonly instructions: {
-    readonly read: (dir: string) => HarnessEffect<string | undefined>;
-    readonly write: (dir: string, text: string, merge: boolean) => HarnessEffect<void>;
-  };
+// Relative to the project or home directory being read or written.
+export interface HarnessPaths {
+  // Undefined where the harness keeps these instructions in its own settings, not in a file.
+  readonly instructions: string | undefined;
   // Written to the first directory, read from all of them.
   readonly skillsDirs: readonly [string, ...Array<string>];
+  readonly mcp: string;
+}
+
+export interface HarnessSpec {
+  readonly instructions: {
+    readonly read: (dir: string, file: string) => HarnessEffect<string | undefined>;
+    readonly write: (
+      dir: string,
+      file: string,
+      text: string,
+      merge: boolean,
+    ) => HarnessEffect<void>;
+  };
   readonly mcp: {
-    readonly file: string;
     readonly read: (text: string) => McpServers;
     readonly write: (existing: string | undefined, servers: McpServers, merge: boolean) => string;
   };
 }
 
-export type Harness = ReturnType<typeof makeHarness>;
+export type Harness = ReturnType<ReturnType<typeof makeHarness>>;
 
 // Helpers below run inside the ContextPackService.export/import spans, so they stay untraced.
-export const makeHarness = (spec: HarnessSpec) => {
+export const makeHarness = (spec: HarnessSpec) => (paths: HarnessPaths) => {
   const parse = <A>(path: string, run: () => A) =>
     Effect.try({ try: run, catch: (cause) => new ContextPackFormatError({ path, cause }) });
+  const instructionsFile = paths.instructions;
   return {
+    owned: [
+      ...(instructionsFile === undefined ? [] : [instructionsFile]),
+      ...paths.skillsDirs,
+      paths.mcp,
+    ],
     // `root` is a real path; skills resolving outside it are skipped.
     read: Effect.fnUntraced(function* (root: string) {
       const path = yield* Path.Path;
-      const mcpFile = path.join(root, spec.mcp.file);
+      const mcpFile = path.join(root, paths.mcp);
       const mcpText = yield* readOptionalText(mcpFile);
       const skills: Array<Pack["skills"][number]> = [];
-      for (const dir of spec.skillsDirs) {
+      for (const dir of paths.skillsDirs) {
         for (const skill of yield* readSkills(path.join(root, dir), root)) {
           if (!skills.some((s) => s.name === skill.name)) skills.push(skill);
         }
       }
       return {
-        instructions: ((yield* spec.instructions.read(root)) ?? "")
+        instructions: (instructionsFile === undefined
+          ? ""
+          : ((yield* spec.instructions.read(root, instructionsFile)) ?? "")
+        )
           .replace(IMPORTED, "\n")
           .trimStart(),
         skills,
@@ -143,9 +165,15 @@ export const makeHarness = (spec: HarnessSpec) => {
     }),
     write: Effect.fnUntraced(function* (pack: Pack, dir: string, merge: boolean) {
       const path = yield* Path.Path;
-      yield* writeSkills(pack.skills, path.join(dir, spec.skillsDirs[0]), false, dir);
-      yield* spec.instructions.write(dir, pack.instructions, merge);
-      const mcpFile = path.join(dir, spec.mcp.file);
+      yield* writeSkills(pack.skills, path.join(dir, paths.skillsDirs[0]), false, dir);
+      if (instructionsFile !== undefined) {
+        yield* spec.instructions.write(dir, instructionsFile, pack.instructions, merge);
+      } else if (pack.instructions.trim() !== "") {
+        yield* Effect.logWarning(
+          `Left out the instructions: this harness keeps them in its own settings, not in ${dir}. Add them there.`,
+        );
+      }
+      const mcpFile = path.join(dir, paths.mcp);
       const existing = yield* readOptionalText(mcpFile);
       if (existing === undefined && Object.keys(pack.mcp).length === 0) return;
       const text = yield* parse(mcpFile, () => spec.mcp.write(existing, pack.mcp, merge));
@@ -154,15 +182,15 @@ export const makeHarness = (spec: HarnessSpec) => {
   };
 };
 
-export const markdownInstructions = (file: string): HarnessSpec["instructions"] => ({
-  read: Effect.fnUntraced(function* (dir) {
+export const markdownInstructions: HarnessSpec["instructions"] = {
+  read: Effect.fnUntraced(function* (dir, file) {
     return yield* readOptionalText((yield* Path.Path).join(dir, file));
   }),
-  write: Effect.fnUntraced(function* (dir, text, merge) {
+  write: Effect.fnUntraced(function* (dir, file, text, merge) {
     const target = (yield* Path.Path).join(dir, file);
     yield* writeText(dir, target, mergeInstructions(yield* readOptionalText(target), text, merge));
   }),
-});
+};
 
 type Json = Record<string, unknown>;
 const isObject = (value: unknown): value is Json =>
@@ -189,7 +217,6 @@ const mapValues = <A, B>(record: Readonly<Record<string, A>>, f: (a: A) => B) =>
 
 // Servers live under one key of a JSON file the harness may share with other settings.
 export const jsonMcp = (
-  file: string,
   key: string,
   toNative: (server: McpServer) => Json,
   fromNative: (native: Json) => McpServer = (native) => ({
@@ -201,7 +228,6 @@ export const jsonMcp = (
     bearerTokenEnv: bearerEnvAt(native.headers),
   }),
 ): HarnessSpec["mcp"] => ({
-  file,
   read: (text) =>
     mapValues(objectAt(objectAt(JSON.parse(text))[key]), (v) => fromNative(objectAt(v))),
   write: (existing, servers, merge) => {

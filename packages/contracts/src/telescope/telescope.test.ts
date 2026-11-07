@@ -106,6 +106,7 @@ describe("telescope contracts", () => {
       workspaceId: "ws-1",
       fromAgentId: "a-1",
       toAgentId: "a-2",
+      hop: "agent",
       brief: { goal: "g", constraints: [], acceptance: [], goalChain: [] },
       messages: [
         {
@@ -134,6 +135,17 @@ describe("telescope contracts", () => {
       expect(decodeDelegation({ ...delegation, state }).state).toBe(state);
     }
     expect(() => decodeDelegation({ ...delegation, state: "working" })).toThrow();
+    const worker = decodeDelegation({
+      ...delegation,
+      state: "WORKING",
+      hop: "worker",
+      threadId: "thread-w",
+      decisionId: "d-1",
+    });
+    expect([worker.hop, worker.threadId, worker.decisionId]).toEqual(["worker", "thread-w", "d-1"]);
+    expect(() => decodeDelegation({ ...delegation, state: "WORKING", hop: "chief" })).toThrow();
+    const { hop: _hop, ...withoutHop } = delegation;
+    expect(() => decodeDelegation({ ...withoutHop, state: "WORKING" })).toThrow();
     expect(decodeMemoryWrite({ op: "add", text: "长".repeat(20_000) }).text).toHaveLength(20_000);
     expect(() => decodeMemoryWrite({ op: "add", text: "长".repeat(20_001) })).toThrow();
     const write = { op: "add", text: "t" };

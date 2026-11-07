@@ -11,10 +11,8 @@ import {
 } from "../Pack.ts";
 
 export const opencode = makeHarness({
-  instructions: markdownInstructions("AGENTS.md"),
-  skillsDirs: [".agents/skills", ".opencode/skills"],
+  instructions: markdownInstructions,
   mcp: jsonMcp(
-    "opencode.json",
     "mcp",
     (server) =>
       server.url !== undefined
