@@ -47,6 +47,7 @@ import {
   ADD_PROVIDER_WIZARD_STEPS,
   ACP_REGISTRY_WIZARD_STEPS,
   LOCAL_ACP_WIZARD_STEPS,
+  instanceIdSourceLabel,
   resolveAcpRegistryWizardNavigation,
   resolveWizardNavigation,
   updateProviderIdentityDraft,
@@ -226,7 +227,7 @@ export function AddProviderInstanceDialog({
         }
         return deriveInstanceId(driver, candidateLabel);
       },
-      label,
+      instanceIdSourceLabel(label, t),
       existingIds,
     );
   const driverSettingsFields = deriveProviderSettingsFields(driverOption, undefined, t);

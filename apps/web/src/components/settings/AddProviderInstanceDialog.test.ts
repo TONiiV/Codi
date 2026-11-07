@@ -1,7 +1,10 @@
+import { createInstance } from "i18next";
 import { describe, expect, it } from "vite-plus/test";
 
+import zhCN from "~/i18n/locales/zh-CN.json";
 import {
   getProviderIdentityDraft,
+  instanceIdSourceLabel,
   resolveAcpRegistryWizardNavigation,
   resolveWizardNavigation,
   updateProviderIdentityDraft,
@@ -69,5 +72,14 @@ describe("ACP Registry wizard", () => {
       label: "Gemini CLI",
       instanceIdOverride: "acpRegistry_gemini_cli",
     });
+  });
+});
+
+describe("instanceIdSourceLabel", () => {
+  it("derives the Local ACP instance id from the English label in every UI language", () => {
+    const zh = createInstance();
+    void zh.init({ lng: "zh-CN", resources: { "zh-CN": { translation: zhCN } } });
+    expect(instanceIdSourceLabel(zh.t("settings.text.localAcp"), zh.t)).toBe("Local ACP");
+    expect(instanceIdSourceLabel("Work", zh.t)).toBe("Work");
   });
 });
