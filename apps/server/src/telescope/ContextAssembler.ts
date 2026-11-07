@@ -44,10 +44,6 @@ interface Assembled {
   readonly compacted: boolean;
 }
 
-/** Where a run's context file is written; deleting its workspace removes it. */
-export const contextFile = (path: Path.Path, stateDir: string, runId: string) =>
-  path.join(stateDir, "telescope", "context", `${runId}.md`);
-
 const memoryItem = (memory: Telescope.Memory): ContextBudget.ContextItem => ({
   kind: memory.layer === "diary" ? "diary" : "memory",
   id: memory.id,
@@ -129,7 +125,7 @@ const make = Effect.gen(function* () {
         hash(item.text).pipe(Effect.map((h) => ({ kind: item.kind, id: item.id, hash: h }))),
     );
 
-    const file = contextFile(path, stateDir, run.id);
+    const file = RunRecordService.contextFile(path, stateDir, run.id);
     yield* fs.makeDirectory(path.dirname(file), { recursive: true });
     yield* fs.writeFileString(file, ContextBudget.renderContextFile(ordered));
     yield* runs.recordContextManifest(input.run, manifest);
