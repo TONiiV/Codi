@@ -263,7 +263,8 @@ const makeHarness = Effect.fn("makeHarness")(function* (options: {
         : service,
     ),
   );
-  const runtime = Layer.merge(AgentRuntime.layer, ThreadTurnTokens.layer).pipe(
+  const runtime = Layer.merge(AgentRuntime.layerWakeRunner, ThreadTurnTokens.layer).pipe(
+    Layer.provideMerge(AgentRuntime.layer),
     Layer.provide(Layer.mergeAll(recordingRuns, signallingAgents, threads)),
     Layer.provide(registry),
     Layer.provide(
@@ -631,4 +632,53 @@ it.effect(
         assert.equal((yield* wakes.take).wake.agentId, seeded.pa);
       }),
     ),
+);
+
+it.effect(
+  "openThread gives the owner a resident thread with no turn, and the first wake on it still carries the role text",
+  () =>
+    withHarness({ mcp: true }, (harness) =>
+      Effect.gen(function* () {
+        const seeded = yield* seed;
+        const runtime = yield* AgentRuntime.AgentRuntime;
+        const ref = { workspaceId: seeded.workspaceId, agentId: seeded.pa };
+        const { threadId } = yield* runtime.openThread(alice, ref);
+        assert.equal(yield* residentOf(seeded, seeded.pa), threadId);
+        const shell =
+          yield* (yield* ThreadManagementService.ThreadManagementService).getThreadShell(threadId);
+        assert.equal(shell?.projectId, scratch);
+        assert.isNull(shell?.latestRunId);
+        assert.deepStrictEqual(yield* runtime.openThread(alice, ref), { threadId });
+        const runner = yield* runWake(yield* messageWake(seeded, "早"));
+        const turn = yield* Queue.take(harness.started);
+        assert.equal(turn.threadId, threadId);
+        assert.include(turn.message.text, "personal assistant");
+        yield* harness.complete(turn, 1);
+        yield* Fiber.join(runner);
+      }),
+    ),
+);
+
+it.effect("openThread refuses an agent another member owns and creates no thread", () =>
+  withHarness({ mcp: true }, () =>
+    Effect.gen(function* () {
+      const seeded = yield* seed;
+      const db = yield* TelescopeDb.TelescopeDb;
+      yield* db.update(
+        seeded.workspaceId,
+        "agents",
+        { owner_subject_id: "someone-else" },
+        { agent_id: seeded.chief },
+      );
+      const error = yield* Effect.flip(
+        (yield* AgentRuntime.AgentRuntime).openThread(alice, {
+          workspaceId: seeded.workspaceId,
+          agentId: seeded.chief,
+        }),
+      );
+      assert.equal(error._tag, "TelescopeWorkspaceError");
+      assert.equal(error._tag === "TelescopeWorkspaceError" && error.reason, "not_found");
+      assert.isUndefined(yield* residentOf(seeded, seeded.chief));
+    }),
+  ),
 );

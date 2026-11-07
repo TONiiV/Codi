@@ -8,6 +8,7 @@ import {
   AgentGetInput,
   AgentGetResult,
   AgentListResult,
+  AgentOpenThreadResult,
   AgentUpdateInput,
   RoutingRule,
 } from "./agent.ts";
@@ -126,6 +127,7 @@ export const WS_METHODS = {
   agentUpdate: "telescope.agent.update",
   agentListCompany: "telescope.agent.listCompany",
   agentUpdateCompany: "telescope.agent.updateCompany",
+  agentOpenThread: "telescope.agent.openThread",
   runList: "telescope.run.list",
   runGet: "telescope.run.get",
   runCalls: "telescope.run.calls",
@@ -219,6 +221,7 @@ export const AgentRpcs = [
   make(WS_METHODS.agentUpdate, AgentUpdateInput, Agent),
   make(WS_METHODS.agentListCompany, WorkspaceScopedInput, AgentListResult),
   make(WS_METHODS.agentUpdateCompany, AgentUpdateInput, Agent),
+  make(WS_METHODS.agentOpenThread, AgentGetInput, AgentOpenThreadResult),
 ] as const;
 
 export const RunRpcs = [

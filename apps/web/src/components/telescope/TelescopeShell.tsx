@@ -16,10 +16,12 @@ import {
   WorkspaceBreadcrumbSeparator,
 } from "../WorkspaceBreadcrumb";
 import { WorkspacePageHeader } from "../WorkspacePageHeader";
+import { BackgroundThreadContext } from "../chat/backgroundThread";
 import { MyTeamsPage } from "./MyTeamsPage";
 import { TaskDrawer } from "./TaskDrawer";
 import { TelescopeAccountFooter } from "./TelescopeAccount";
 import { TelescopeChatList } from "./TelescopeChatList";
+import { TelescopeChatPage } from "./TelescopeChatPage";
 import { TelescopeDashboard } from "./TelescopeDashboard";
 import {
   TELESCOPE_VIEWS,
@@ -178,14 +180,18 @@ export function TelescopePage({
         </WorkspaceBreadcrumb>
       </WorkspacePageHeader>
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
-        {children ??
-          (view === "teams" ? (
-            <MyTeamsPage />
-          ) : view === "dashboard" ? (
-            <TelescopeDashboard />
-          ) : (
-            <TelescopeEmptyState view={view} />
-          ))}
+        <BackgroundThreadContext value={background}>
+          {children ??
+            (view === "chats" ? (
+              <TelescopeChatPage />
+            ) : view === "teams" ? (
+              <MyTeamsPage />
+            ) : view === "dashboard" ? (
+              <TelescopeDashboard />
+            ) : (
+              <TelescopeEmptyState view={view} />
+            ))}
+        </BackgroundThreadContext>
       </div>
       {background ? null : <TaskDrawer />}
     </SidebarInset>

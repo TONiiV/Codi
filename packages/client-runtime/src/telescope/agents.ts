@@ -52,6 +52,11 @@ export function cappedPowers(
   return { ...powers, mergePRs: powers.mergePRs && canMerge };
 }
 
+/** Only the owner starts an agent's chat; the server checks it again. */
+export function offersOpenThread(agent: Telescope.Agent, self: Telescope.Member): boolean {
+  return agent.ownerSubjectId === self.subjectId && self.revokedAt === undefined;
+}
+
 export function createTelescopeAgentAtoms<R, E>(
   runtime: Atom.AtomRuntime<EnvironmentRegistry | R, E>,
   bindingsRevision: Atom.Atom<number>,
@@ -110,6 +115,15 @@ export function createTelescopeAgentAtoms<R, E>(
       label: "telescope:agent:update",
       tag: WS_METHODS.agentUpdate,
       onSuccess: (target, registry, agent) => refreshAgent(target, registry, agent),
+    }),
+    openThread: createEnvironmentRpcCommand(runtime, {
+      label: "telescope:agent:open-thread",
+      tag: WS_METHODS.agentOpenThread,
+      onSuccess: ({ environmentId, input }, registry) =>
+        Effect.sync(() => {
+          refreshLists(environmentId, input.workspaceId, registry);
+          registry.refresh(get({ environmentId, input }));
+        }),
     }),
     updateCompany: createEnvironmentRpcCommand(runtime, {
       label: "telescope:agent:update-company",
