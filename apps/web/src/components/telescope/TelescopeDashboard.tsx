@@ -9,7 +9,6 @@ import type { ReactNode } from "react";
 
 import { useEnvironmentQuery } from "../../state/query";
 import { TELESCOPE_PATH } from "../sidebar/mainAppLocation";
-import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import {
   Empty,
@@ -22,7 +21,7 @@ import {
 import { RefreshIcon } from "../ui/refresh-icon";
 import { Skeleton } from "../ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
-import { NeedsYouBadge, NoWorkspace, TASK_STATUS } from "./TasksParts";
+import { NeedsYouBadge, NoWorkspace, StatusBadge, TASK_STATUS } from "./TasksParts";
 import { telescope, useTelescopeWorkspaces } from "./telescopeState";
 import { telescopeSearch, useTasksLayout } from "./telescopeViews";
 
@@ -116,24 +115,22 @@ function SummaryView({ summary }: { summary: Telescope.DashboardSummary }) {
           <TableBody>
             {tasks.map((task) => (
               <TableRow key={task.id}>
-                <TableCell>
+                <TableCell className="whitespace-normal">
                   <Link
                     to={TELESCOPE_PATH}
                     search={telescopeSearch("dashboard", layout, task.id)}
-                    className="block max-w-80 truncate hover:underline"
+                    className="line-clamp-2 max-w-80 wrap-anywhere hover:underline sm:line-clamp-1"
                   >
                     {task.title}
                   </Link>
                 </TableCell>
                 <TableCell>
-                  <span className="flex items-center gap-1">
-                    <Badge variant={TASK_STATUS[task.status].badge}>
-                      {TASK_STATUS[task.status].label}
-                    </Badge>
+                  <span className="flex flex-wrap items-center gap-1">
+                    <StatusBadge status={task.status} />
                     <NeedsYouBadge task={task} />
                   </span>
                 </TableCell>
-                <TableCell>
+                <TableCell className="whitespace-normal wrap-anywhere">
                   {task.holder ? (
                     <span>
                       {task.holder.name}
@@ -157,7 +154,7 @@ function SummaryView({ summary }: { summary: Telescope.DashboardSummary }) {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Agent</TableHead>
+              <TableHead>哪个 agent</TableHead>
               <TableHead>当前步骤</TableHead>
               <TableHead className="text-end">工具调用</TableHead>
               <TableHead className="text-end">已跑</TableHead>
@@ -166,11 +163,11 @@ function SummaryView({ summary }: { summary: Telescope.DashboardSummary }) {
           <TableBody>
             {runs.map((run) => (
               <TableRow key={run.id}>
-                <TableCell>{run.agentName}</TableCell>
-                <TableCell>
+                <TableCell className="whitespace-normal wrap-anywhere">{run.agentName}</TableCell>
+                <TableCell className="whitespace-normal">
                   {run.step ? (
                     <span>
-                      <span className="font-mono">{run.step.tool}</span>
+                      <span className="font-mono wrap-anywhere">{run.step.tool}</span>
                       <span className="ms-1 text-muted-foreground">
                         {waited(run.step.at, now)}前
                       </span>
@@ -227,14 +224,20 @@ export function TelescopeDashboard() {
   );
   if (current === null) return <NoWorkspace />;
   const summary = query.data;
-  const refresh = (
+  const refresh = (label: string) => (
     <Button size="xs" variant="outline" disabled={query.isPending} onClick={query.refresh}>
       <RefreshIcon refreshing={query.isPending} />
-      刷新
+      {label}
     </Button>
   );
   if (summary === null && query.error !== null)
-    return <Notice title="读不到数据" description={query.error} action={refresh} />;
+    return (
+      <Notice
+        title="读不到数据"
+        description="没能读到这个工作区的看板数据，请检查连接后重试。"
+        action={refresh("重试")}
+      />
+    );
   const empty =
     summary !== null &&
     summary.tasks.length === 0 &&
@@ -254,7 +257,7 @@ export function TelescopeDashboard() {
               })}
             </span>
           ) : null}
-          {refresh}
+          {refresh("刷新")}
         </span>
       </div>
       {summary === null ? (
