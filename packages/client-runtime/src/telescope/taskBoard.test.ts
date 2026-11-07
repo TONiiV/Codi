@@ -245,6 +245,7 @@ const connectedBoard = Effect.fn("TaskBoardTest.connectedBoard")(function* () {
   const reads = yield* Queue.unbounded<string>();
   type Watch = Queue.Queue<Telescope.BoardWatchItem, Telescope.WorkspaceError>;
   const watches = yield* Queue.unbounded<{ readonly notices: Watch; readonly openedAt: number }>();
+  const ended = yield* Queue.unbounded<void>();
   let newest: Watch | undefined;
   const read = <A>(name: string, value: A) => Queue.offer(reads, name).pipe(Effect.as(value));
   const client = {
@@ -270,7 +271,7 @@ const connectedBoard = Effect.fn("TaskBoardTest.connectedBoard")(function* () {
             Telescope.WorkspaceError
           >();
           yield* Queue.offer(watches, { notices, openedAt: yield* Clock.currentTimeMillis });
-          return Stream.fromQueue(notices);
+          return Stream.fromQueue(notices).pipe(Stream.ensuring(Queue.offer(ended, undefined)));
         }),
       ),
   };
@@ -316,6 +317,8 @@ const connectedBoard = Effect.fn("TaskBoardTest.connectedBoard")(function* () {
     registry,
     /** Each watch subscription's notices and when it opened, in the order the client subscribes. */
     watches,
+    /** Signals each time a watch stream ends. */
+    ended,
     /** The next watch, once it has sent `synchronized`. */
     nextWatch: Effect.gen(function* () {
       const opened = yield* Queue.take(watches);
@@ -381,14 +384,16 @@ describe("board watch", () => {
 
   it.effect("reads a write once from its echo, and on settle when refused or unwatched", () =>
     Effect.gen(function* () {
-      const { board, registry, watches, nextWatch, nextReads, unread, readsBefore } =
+      const { board, registry, watches, ended, nextWatch, nextReads, unread, readsBefore } =
         yield* connectedBoard();
       registry.mount(board.tasks(at({ workspaceId })));
       registry.mount(board.decisions(at({ workspaceId })));
+      // No notice names t2, so only the watch failing re-reads it.
+      registry.mount(board.task(at({ workspaceId, taskId: t2 })));
       // The lease read has no trigger: refreshing it marks where a write's own reads end.
       const lease = board.lease(at({ workspaceId, taskId: t1 }));
       registry.mount(lease);
-      expect(yield* nextReads(3)).toEqual(["decisions", "lease", "tasks"]);
+      expect(yield* nextReads(4)).toEqual(["decisions", "lease", "task:t2", "tasks"]);
       const settled = Effect.sync(() => registry.refresh(lease)).pipe(
         Effect.andThen(readsBefore("lease")),
       );
@@ -417,11 +422,9 @@ describe("board watch", () => {
         watch,
         Cause.fail(new Telescope.WorkspaceError({ reason: "forbidden", message: "Revoked." })),
       );
-      const reopened = TestClock.adjust("1 minute").pipe(
-        Effect.andThen(Queue.take(watches)),
-        Effect.as(["reopened"]),
-      );
-      expect(yield* Effect.raceFirst(nextReads(2), reopened)).toEqual(["decisions", "tasks"]);
+      yield* Queue.take(ended);
+      expect(yield* settled).toEqual(["decisions", "task:t2", "tasks"]);
+      yield* TestClock.adjust("1 minute");
       expect(yield* Queue.size(watches)).toBe(0);
       // With no live watch to echo it, a write re-reads on settle.
       yield* Effect.promise(() => board.updateTask.run(registry, at(write)));
@@ -473,7 +476,18 @@ describe("board watch", () => {
       expect(third.openedAt - second.openedAt).toBe(1000);
       yield* fail(third.notices);
       yield* TestClock.adjust("2 seconds");
-      expect((yield* Queue.take(watches)).openedAt - third.openedAt).toBe(2000);
+      let previous = yield* Queue.take(watches);
+      expect(previous.openedAt - third.openedAt).toBe(2000);
+      for (const delay of [4, 8, 16]) {
+        yield* fail(previous.notices);
+        yield* TestClock.adjust(`${delay} seconds`);
+        const reopened = yield* Queue.take(watches);
+        expect(reopened.openedAt - previous.openedAt).toBe(delay * 1000);
+        previous = reopened;
+      }
+      yield* fail(previous.notices);
+      yield* TestClock.adjust("1 minute");
+      expect((yield* Queue.take(watches)).openedAt - previous.openedAt).toBe(30_000);
     }),
   );
 });
