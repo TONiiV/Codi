@@ -368,6 +368,21 @@ it.effect("the retention pass prunes runs and their context files once a day", (
     const recent = yield* start;
     yield* finish(recent.id);
     yield* writeContext(recent.id);
+    const [oldOrphan, freshOrphan, notContext, folder] = [
+      "orphan-old.md",
+      "orphan-fresh.md",
+      "notes.txt",
+      "folder.md",
+    ].map((name) => path.join(path.dirname(fileOf(old.id)), name)) as [
+      string,
+      string,
+      string,
+      string,
+    ];
+    for (const file of [oldOrphan, freshOrphan, notContext]) yield* fs.writeFileString(file, "x");
+    yield* fs.makeDirectory(folder);
+    for (const file of [oldOrphan, notContext, folder]) yield* fs.utimes(file, 0, 0);
+    yield* fs.utimes(freshOrphan, (6 * day) / 1000, (6 * day) / 1000);
     const pass = yield* RunRecordService.makeRetentionPass;
 
     yield* TestClock.setTime(7 * day);
@@ -382,6 +397,15 @@ it.effect("the retention pass prunes runs and their context files once a day", (
         yield* fs.exists(fileOf(recent.id)),
       ],
       [false, false, false, true, true, true],
+    );
+    assert.deepStrictEqual(
+      [
+        yield* fs.exists(oldOrphan),
+        yield* fs.exists(freshOrphan),
+        yield* fs.exists(notContext),
+        yield* fs.exists(folder),
+      ],
+      [false, true, true, true],
     );
 
     // The next check waits a day, so a run that ages out meanwhile survives until then.

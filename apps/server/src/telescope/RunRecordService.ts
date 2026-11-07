@@ -6,6 +6,7 @@ import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import * as Struct from "effect/Struct";
@@ -20,9 +21,11 @@ import * as WorkspaceService from "./WorkspaceService.ts";
 
 const DEFAULT_LIST_LIMIT = 50;
 
+const contextDir = (path: Path.Path, stateDir: string) =>
+  path.join(stateDir, "telescope", "context");
 /** Where a run's context file is written; deleting its workspace or retention removes it. */
 export const contextFile = (path: Path.Path, stateDir: string, runId: string) =>
-  path.join(stateDir, "telescope", "context", `${runId}.md`);
+  path.join(contextDir(path, stateDir), `${runId}.md`);
 
 const RunRow = Schema.Struct({
   run_id: Telescope.AgentRunId,
@@ -185,6 +188,7 @@ export class RunRecordService extends Context.Service<
     readonly pruneBefore: (
       cutoff: DateTime.Utc,
     ) => Effect.Effect<ReadonlyArray<Telescope.AgentRunId>, PersistenceSqlError>;
+    readonly runIdsWithoutRows: TelescopeDb.TelescopeDb["Service"]["runIdsWithoutRows"];
   }
 >()("t3/telescope/RunRecordService") {}
 
@@ -466,6 +470,7 @@ const make = Effect.gen(function* () {
     runsForMemory,
     memoriesForRun,
     pruneBefore,
+    runIdsWithoutRows: db.runIdsWithoutRows,
   });
 });
 
@@ -482,24 +487,47 @@ export const makeRetentionPass = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const { stateDir } = yield* ServerConfig;
+  const removeFile = (file: string) =>
+    fs
+      .remove(file, { force: true })
+      .pipe(
+        Effect.catch((error) =>
+          Effect.logWarning("Telescope run context file left", { file, error: error.message }),
+        ),
+      );
+  const isOldPlainFile = (file: string, cutoffMs: number) =>
+    fs.lstat(file).pipe(
+      Effect.map(
+        (info) =>
+          info.type === "File" && Option.exists(info.mtime, (at) => at.getTime() < cutoffMs),
+      ),
+      Effect.orElseSucceed(() => false),
+    );
   let nextCheckMs = 0;
   return Effect.gen(function* () {
     const now = yield* Clock.currentTimeMillis;
     if (now < nextCheckMs) return;
     const { runRetentionDays } = (yield* settings.getSettings).telescope;
-    const dropped = yield* runs.pruneBefore(DateTime.makeUnsafe(now - runRetentionDays * DAY_MS));
+    const cutoffMs = now - runRetentionDays * DAY_MS;
+    const dropped = yield* runs.pruneBefore(DateTime.makeUnsafe(cutoffMs));
     // After the commit, so a file that stays never keeps its run.
+    yield* Effect.forEach(dropped, (runId) => removeFile(contextFile(path, stateDir, runId)), {
+      discard: true,
+    });
+    // Orphans of runs pruned earlier; the age check spares a file written just before its run row.
+    const names = yield* fs
+      .readDirectory(contextDir(path, stateDir))
+      .pipe(Effect.orElseSucceed((): ReadonlyArray<string> => []));
+    const orphans = yield* runs.runIdsWithoutRows(
+      names.filter((name) => name.endsWith(".md")).map((name) => name.slice(0, -3)),
+    );
     yield* Effect.forEach(
-      dropped,
+      orphans,
       (runId) => {
         const file = contextFile(path, stateDir, runId);
-        return fs
-          .remove(file, { force: true })
-          .pipe(
-            Effect.catch((error) =>
-              Effect.logWarning("Telescope run context file left", { file, error: error.message }),
-            ),
-          );
+        return isOldPlainFile(file, cutoffMs).pipe(
+          Effect.flatMap((old) => (old ? removeFile(file) : Effect.void)),
+        );
       },
       { discard: true },
     );
