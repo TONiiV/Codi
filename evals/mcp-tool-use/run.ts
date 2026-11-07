@@ -54,6 +54,9 @@ import { AttachmentToolkit } from "../../apps/server/src/mcp/toolkits/attachment
 import { DeviceToolkit } from "../../apps/server/src/mcp/toolkits/device/tools.ts";
 import { EnvironmentToolkit } from "../../apps/server/src/mcp/toolkits/environment/tools.ts";
 import { HtmlToolkit } from "../../apps/server/src/mcp/toolkits/html/tools.ts";
+import { MemoryToolkit } from "../../apps/server/src/mcp/toolkits/memory/tools.ts";
+import { TelescopeToolkit } from "../../apps/server/src/mcp/toolkits/telescope/tools.ts";
+import { boardItem, renderContextFile } from "../../apps/server/src/telescope/ContextBudget.ts";
 import { OrchestratorToolkit } from "../../apps/server/src/mcp/toolkits/orchestrator/tools.ts";
 import { PreviewToolkit } from "../../apps/server/src/mcp/toolkits/preview/tools.ts";
 import { PreviewControlsToolkit } from "../../apps/server/src/mcp/toolkits/previewControls/tools.ts";
@@ -190,6 +193,16 @@ const McpToolUseExpect = Schema.Struct({
   order: Schema.optional(Schema.Array(Schema.String)),
   minCalls: Schema.optional(Schema.Record(Schema.String, Schema.Number)),
   maxCalls: Schema.optional(Schema.Record(Schema.String, Schema.Number)),
+  /** At most `max` calls match each entry, as `calls` entries match, and none of its `except`. */
+  maxMatchingCalls: Schema.optional(
+    Schema.Array(
+      Schema.Struct({
+        ...McpToolUseCall.fields,
+        max: Schema.Number,
+        except: Schema.optional(Schema.Array(McpToolUseCall)),
+      }),
+    ),
+  ),
   /**
    * One `args`-style value per new top-level thread the agent asks for, by `t3_thread_launch` or a
    * `create_threads` entry. Each matches a different thread's request; no other thread is asked for.
@@ -272,6 +285,8 @@ const McpToolUseWorld = Schema.StructWithRest(
   Rest,
 );
 
+const ContextItems = Schema.Array(Schema.Struct({ text: Schema.String }));
+
 /** One fake thread, one JSON object per line in a case file. */
 export const McpToolUseCase = Schema.Struct({
   id: Schema.String,
@@ -287,6 +302,17 @@ export const McpToolUseCase = Schema.Struct({
     harness: Schema.optional(Schema.Literals(["claude", "codex"])),
     /** The Linked environments beta is on, so T3 lists its link tools. */
     linkedEnvironments: Schema.optional(Schema.Boolean),
+    /** The thread belongs to an open Telescope run, so T3 lists its memory and board tools. */
+    telescopeRun: Schema.optional(Schema.Boolean),
+    /** Items of the Telescope context file, rendered by T3 and given before `context`. */
+    telescopeContext: Schema.optional(
+      Schema.Struct({
+        pinned: ContextItems,
+        board: Schema.Array(Contracts.Telescope.BoardItem),
+        recall: ContextItems,
+        thread: ContextItems,
+      }),
+    ),
     /** delegate_task `role` for a delegated child. T3 builds the child's first message from it. */
     delegateRole: Schema.optional(OrchestratorMcpTaskRole),
     context: Schema.optional(Schema.String),
@@ -434,6 +460,8 @@ const t3SourceTools: ReadonlyArray<Tool.Any> = [
   PreviewToolkit,
   DeviceToolkit,
   HtmlToolkit,
+  MemoryToolkit,
+  TelescopeToolkit,
 ].flatMap((toolkit): ReadonlyArray<Tool.Any> => Object.values(toolkit.tools));
 // McpHttpServer decodes arguments with each tool's JSON codec, which drops undeclared keys.
 const t3InputDecoders = new Map(
@@ -481,10 +509,21 @@ const pastedSecret = (name: string, input: Readonly<Record<string, unknown>>) =>
 const hiddenFromSubagents = enabledWhen(McpInvocationContext.hiddenFromSubagents);
 // The Linked environments beta starts off, and T3 lists its tools only while it is on.
 const hiddenWhileLinksOff = enabledWhen(McpInvocationContext.hiddenWhileLinksOff);
-const visibleT3Tools = (options: { readonly subagent?: boolean; readonly links?: boolean }) =>
+// McpHttpServer lists these only on threads with an open Telescope run.
+const telescopeOnly = new Set(
+  [MemoryToolkit, TelescopeToolkit].flatMap((toolkit) =>
+    Object.keys(toolkit.tools).map((name) => `${T3_PREFIX}${name}`),
+  ),
+);
+const visibleT3Tools = (options: {
+  readonly subagent?: boolean;
+  readonly links?: boolean;
+  readonly telescope?: boolean;
+}) =>
   t3Tools.filter(
     (tool) =>
       (options.links === true || !hiddenWhileLinksOff.has(tool.name)) &&
+      (options.telescope === true || !telescopeOnly.has(tool.name)) &&
       !(options.subagent === true && hiddenFromSubagents.has(tool.name)),
   );
 
@@ -592,6 +631,7 @@ export const buildBase = (
     readonly keepUserInstructions: boolean;
     readonly subagent?: boolean;
     readonly links?: boolean;
+    readonly telescope?: boolean;
     /** A native subagent starts from its task: T3 appends nothing to its system prompt. */
     readonly nativeSubagent?: boolean;
     /** false: the thread has no agent device access, so T3's text leaves devices out. */
@@ -684,6 +724,7 @@ const buildCodexBase = (
     readonly effort?: string | undefined;
     readonly subagent?: boolean;
     readonly links?: boolean;
+    readonly telescope?: boolean;
     /** false: the thread has no agent device access, so T3's text leaves devices out. */
     readonly deviceAccess?: boolean;
   },
@@ -954,7 +995,7 @@ export const buildMessages = (sample: Sample) => {
     if (last?.role !== role) messages.push({ role, content: blocks });
     else messages[messages.length - 1] = { role, content: [...last.content, ...blocks] };
   };
-  const { role, context, delegateRole, priorTurns = [] } = testCase.setup;
+  const { role, context, delegateRole, priorTurns = [], telescopeContext } = testCase.setup;
   const sideChat = testCase.setup.sideChat;
   if (testCase.prompt === "" && (role !== "top" || sideChat !== undefined)) {
     throw new Error(
@@ -973,6 +1014,8 @@ export const buildMessages = (sample: Sample) => {
     native
       ? "You are a subagent started by the parent agent's Agent tool. Your final message goes to the parent agent, not to the user."
       : undefined,
+    telescopeContext &&
+      renderContextFile({ ...telescopeContext, board: telescopeContext.board.map(boardItem) }),
     context,
   ];
   const reminders = base.reminders.toSpliced(base.gitStatusAt, 0, reminder(gitStatus(testCase)));
@@ -1699,8 +1742,9 @@ export const gradeSample = (expect: McpToolUseCase["expect"], run: SampleRun, pa
   const calls = run.calls.map((call) => ({ ...call, input: withOptionsObject(call.input) }));
   const count = (tool: string) => calls.filter((call) => call.tool === tool).length;
   // `tool` may list alternatives, as in "link_pull_request|watch_pull_request".
-  const found = ({ tool, args = {} }: McpToolUseCall) =>
-    calls.some((call) => tool.split("|").includes(call.tool) && matches(args, call.input));
+  const matching = ({ tool, args = {} }: McpToolUseCall) =>
+    calls.filter((call) => tool.split("|").includes(call.tool) && matches(args, call.input));
+  const found = (call: McpToolUseCall) => matching(call).length > 0;
   const label = ({ tool, args }: McpToolUseCall) => (args ? `${tool} ${valueText(args)}` : tool);
   for (const call of expect.calls ?? []) add(`calls ${label(call)}`, found(call));
   if (expect.distinctCalls !== undefined) {
@@ -1725,6 +1769,10 @@ export const gradeSample = (expect: McpToolUseCase["expect"], run: SampleRun, pa
     add(`minCalls ${t} >= ${n}`, count(t) >= n);
   for (const [t, n] of Object.entries(expect.maxCalls ?? {}))
     add(`maxCalls ${t} <= ${n}`, count(t) <= n);
+  for (const { max, except = [], ...call } of expect.maxMatchingCalls ?? []) {
+    const counted = matching(call).filter((c) => !except.some((e) => matching(e).includes(c)));
+    add(`maxMatchingCalls ${label(call)} <= ${max}`, counted.length <= max);
+  }
   if (expect.newThreads !== undefined) {
     const requests = newThreadRequests(calls);
     add(
@@ -1773,7 +1821,7 @@ export const gradeSample = (expect: McpToolUseCase["expect"], run: SampleRun, pa
 
 // Checks that can only go from pass to fail as a sample goes on.
 const SETTLED =
-  /^(?:(?:notCalls|callsMustNot|shellMustNot|maxCalls|textMustNot) |secret\.(?:chatAsk|askTools|values|fileUse|noCardDemand|afterDecline) )/;
+  /^(?:(?:notCalls|callsMustNot|shellMustNot|maxCalls|maxMatchingCalls|textMustNot) |secret\.(?:chatAsk|askTools|values|fileUse|noCardDemand|afterDecline) )/;
 /** True once the sample has failed for good, so the rest of it cannot change the result. */
 export const failedEarly = (expect: McpToolUseCase["expect"], run: SampleRun, pasted = "") =>
   gradeSample(expect, run, pasted).some((check) => !check.pass && SETTLED.test(check.check));
@@ -2368,6 +2416,7 @@ const main = Effect.gen(function* () {
     role: McpToolUseCase["setup"]["role"],
     deviceAccess: boolean,
     links: boolean,
+    telescope: boolean,
   ): Effect.Effect<Base, Schema.SchemaError> =>
     codex
       ? decodeCodexCapture(template).pipe(
@@ -2378,6 +2427,7 @@ const main = Effect.gen(function* () {
               effort: flags.effort,
               subagent: role === "delegated-child",
               links,
+              telescope,
               deviceAccess,
             }),
           ),
@@ -2390,6 +2440,7 @@ const main = Effect.gen(function* () {
               subagent: role === "delegated-child",
               nativeSubagent: role === "native-subagent",
               links,
+              telescope,
               deviceAccess,
             });
             return role === "native-subagent"
@@ -2401,18 +2452,22 @@ const main = Effect.gen(function* () {
         );
   // Codex has no native subagents; its cases with that role run as top-level threads.
   const baseKey = ({ setup }: McpToolUseCase) =>
-    `${codex && setup.role === "native-subagent" ? "top" : setup.role}:${setup.world?.deviceAgentAccess !== false}:${setup.linkedEnvironments === true}`;
-  const base = yield* buildFor("top", true, false);
-  const bases = new Map<string, Base>([["top:true:false", base]]);
+    `${codex && setup.role === "native-subagent" ? "top" : setup.role}:${setup.world?.deviceAgentAccess !== false}:${setup.linkedEnvironments === true}:${setup.telescopeRun === true}`;
+  const base = yield* buildFor("top", true, false, false);
+  const bases = new Map<string, Base>([["top:true:false:false", base]]);
   for (const testCase of selected) {
     const key = baseKey(testCase);
     if (bases.has(key)) continue;
-    const [role = "top", access, links] = key.split(":") as [
+    const [role = "top", access, links, telescope] = key.split(":") as [
       McpToolUseCase["setup"]["role"],
       string,
       string,
+      string,
     ];
-    bases.set(key, yield* buildFor(role, access === "true", links === "true"));
+    bases.set(
+      key,
+      yield* buildFor(role, access === "true", links === "true", telescope === "true"),
+    );
   }
   const baseFor = (testCase: McpToolUseCase) => bases.get(baseKey(testCase)) ?? base;
   const effort = flags.effort ?? base.codex?.reasoning.effort ?? "high";

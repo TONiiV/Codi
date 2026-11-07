@@ -1,32 +1,12 @@
 import type { Telescope } from "@t3tools/contracts";
 
-const DECISION_ORDER = { proposed: 0, decided: 1, superseded: 2 } as const;
+import {
+  decideFailureText,
+  isStaleTaskVersion,
+  isWorkspaceConflict,
+} from "@t3tools/client-runtime/telescope/taskBoard";
 
-/** Proposals waiting on someone first, then the record, newest first within each group. */
-export function sortDecisions(
-  decisions: ReadonlyArray<Telescope.Decision>,
-): ReadonlyArray<Telescope.Decision> {
-  return [...decisions].sort(
-    (a, b) =>
-      DECISION_ORDER[a.status] - DECISION_ORDER[b.status] || b.updatedAt.localeCompare(a.updatedAt),
-  );
-}
-
-/** Choosing an option records a new decided decision that retires the proposal. */
-export function decideInput(
-  proposal: Telescope.Decision,
-  optionId: string,
-): typeof Telescope.DecisionCreateInput.Type {
-  return {
-    workspaceId: proposal.workspaceId,
-    title: proposal.title,
-    text: proposal.text,
-    status: "decided",
-    supersedes: proposal.id,
-    ...(proposal.options === undefined ? {} : { options: proposal.options }),
-    chosen: optionId,
-  };
-}
+export { decideInput, sortDecisions } from "@t3tools/client-runtime/telescope/taskBoard";
 
 const REVIEW_STATUSES: ReadonlySet<Telescope.TaskStatus> = new Set(["needs_decision", "in_review"]);
 
@@ -54,13 +34,39 @@ export function reviewUpdateInput(
   };
 }
 
-export function isStaleTaskVersion(error: unknown): boolean {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    "_tag" in error &&
-    error._tag === "TelescopeStaleTaskVersionError"
-  );
+/** What a failed decision or task command should do: refresh the list it acted on, and say what happened. */
+export function describeFailure(error: unknown): {
+  refresh: boolean;
+  title: string;
+  message: string;
+} {
+  if (isStaleTaskVersion(error)) {
+    return {
+      refresh: true,
+      title: "任务已更新",
+      message: "有人刚改过这条任务，列表已刷新，请再看一眼。",
+    };
+  }
+  if (isWorkspaceConflict(error)) {
+    return {
+      refresh: true,
+      title: "内容已更新",
+      message: "这条内容刚被改过，列表已刷新，请再看一眼。",
+    };
+  }
+  return {
+    refresh: false,
+    title: "操作没有完成",
+    message: error instanceof Error ? error.message : String(error),
+  };
+}
+
+/** A proposal someone else decided first reads as it does on web. */
+export function describeDecideFailure(error: unknown) {
+  const text = decideFailureText(error);
+  return text === null
+    ? describeFailure(error)
+    : { refresh: true, title: "没有完成", message: text };
 }
 
 export function formatBoardDate(iso: string): string {

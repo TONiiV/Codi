@@ -226,6 +226,7 @@ export const RPC_REQUIRED_SCOPES = {
   [Telescope.WS_METHODS.decisionCreate]: AuthTelescopeMemberScope,
   [Telescope.WS_METHODS.decisionList]: AuthTelescopeMemberScope,
   [Telescope.WS_METHODS.commitList]: AuthTelescopeMemberScope,
+  [Telescope.WS_METHODS.boardWatch]: AuthTelescopeMemberScope,
   [Telescope.WS_METHODS.agentListMine]: AuthTelescopeMemberScope,
   [Telescope.WS_METHODS.agentGet]: AuthTelescopeMemberScope,
   [Telescope.WS_METHODS.agentCreateCustom]: AuthTelescopeMemberScope,
@@ -237,8 +238,16 @@ export const RPC_REQUIRED_SCOPES = {
   [Telescope.WS_METHODS.leaseAcquire]: AuthTelescopeMemberScope,
   [Telescope.WS_METHODS.leaseHeartbeat]: AuthTelescopeMemberScope,
   [Telescope.WS_METHODS.leaseRelease]: AuthTelescopeMemberScope,
+  [Telescope.WS_METHODS.leaseGet]: AuthTelescopeMemberScope,
   [Telescope.WS_METHODS.wakeList]: AuthTelescopeMemberScope,
+  [Telescope.WS_METHODS.dashboardSummary]: AuthTelescopeMemberScope,
   [Telescope.WS_METHODS.tokenSaverRun]: AuthTelescopeMemberScope,
+  [Telescope.WS_METHODS.grantExplain]: AuthTelescopeMemberScope,
+  [Telescope.WS_METHODS.memorySearch]: AuthTelescopeMemberScope,
+  [Telescope.WS_METHODS.memoryWrite]: AuthTelescopeMemberScope,
+  [Telescope.WS_METHODS.memoryPin]: AuthTelescopeMemberScope,
+  [Telescope.WS_METHODS.routingList]: AuthTelescopeMemberScope,
+  [Telescope.WS_METHODS.routingResolve]: AuthTelescopeMemberScope,
 } as const satisfies Readonly<Record<WsRpcMethod, AuthEnvironmentScope>>;
 
 export function requiredScopeForRpcMethod(method: string): AuthEnvironmentScope {

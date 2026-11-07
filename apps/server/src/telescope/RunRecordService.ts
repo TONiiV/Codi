@@ -1,4 +1,5 @@
 import { EventId, Telescope, ThreadId } from "@t3tools/contracts";
+import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as DateTime from "effect/DateTime";
@@ -9,6 +10,8 @@ import * as Struct from "effect/Struct";
 import * as SqlClient from "effect/sql/SqlClient";
 
 import type { PersistenceDecodeError, PersistenceSqlError } from "../persistence/Errors.ts";
+import * as Scheduler from "../scheduling/Scheduler.ts";
+import { ServerSettingsService } from "../serverSettings.ts";
 import * as TelescopeDb from "./TelescopeDb.ts";
 import * as WorkspaceService from "./WorkspaceService.ts";
 
@@ -44,8 +47,14 @@ const CallRow = Schema.Struct({
   at: Schema.String,
 });
 
+const MemorySourceRow = Schema.Struct({
+  memory_id: Telescope.MemoryId,
+  source_json: Schema.fromJsonString(Telescope.Memory.fields.source),
+});
+
 const decodeRuns = Schema.decodeUnknownEffect(Schema.Array(RunRow));
 const decodeCalls = Schema.decodeUnknownEffect(Schema.Array(CallRow));
+const decodeMemorySources = Schema.decodeUnknownEffect(Schema.Array(MemorySourceRow));
 // The repository writes workspace_id itself and refuses rows that carry it.
 const encodeRun = Schema.encodeSync(RunRow.mapFields(Struct.omit(["workspace_id"])));
 const encodeCall = Schema.encodeSync(CallRow.mapFields(Struct.omit(["workspace_id"])));
@@ -105,6 +114,7 @@ type Caller = WorkspaceService.Caller;
 type WorkspaceId = Telescope.WorkspaceId;
 type RunRef = typeof Telescope.RunScopedInput.Type;
 type RunList = typeof Telescope.RunListResult.Type;
+type ContextManifest = Telescope.AgentRun["inputSnapshot"]["contextManifest"];
 
 interface RunStartInput {
   readonly agentId: Telescope.AgentRun["agentId"];
@@ -145,6 +155,8 @@ export class RunRecordService extends Context.Service<
     /** Later turns on the thread add their tokens to the run until it finishes. */
     readonly attachThread: (run: RunRef, threadId: ThreadId) => Out<void>;
     readonly recordCall: (run: RunRef, call: RunCallInput) => Out<Telescope.RunCall>;
+    /** Adds the entries an assembled context gave an open run to its manifest, once each. */
+    readonly recordContextManifest: (run: RunRef, entries: ContextManifest) => Out<void>;
     /** Adds a finished provider turn's tokens to every open run attached to its thread. */
     readonly recordThreadTurn: (threadId: ThreadId, tokens: Tokens) => Out<void>;
     readonly finish: (run: RunRef, input: RunFinishInput) => Out<Telescope.AgentRun>;
@@ -157,6 +169,11 @@ export class RunRecordService extends Context.Service<
       caller: Caller,
       input: { readonly workspaceId: WorkspaceId; readonly memoryId: Telescope.Memory["id"] },
     ) => Out<RunList>;
+    /** The memories a run's context manifest lists, in manifest order, with where each came from. */
+    readonly memoriesForRun: (
+      caller: Caller,
+      run: RunRef,
+    ) => Out<typeof Telescope.RunMemorySourcesResult.Type>;
     readonly pruneBefore: (cutoff: DateTime.Utc) => Effect.Effect<void, PersistenceSqlError>;
   }
 >()("t3/telescope/RunRecordService") {}
@@ -248,6 +265,24 @@ const make = Effect.gen(function* () {
     );
   });
 
+  const recordContextManifest = Effect.fn("RunRecordService.recordContextManifest")(function* (
+    run: RunRef,
+    entries: ContextManifest,
+  ) {
+    const key = (entry: ContextManifest[number]) => `${entry.kind}\0${entry.id}\0${entry.hash}`;
+    yield* db.transaction(
+      Effect.gen(function* () {
+        const row = yield* runRow(run, "open");
+        const listed = [...row.input_snapshot_json.contextManifest, ...entries];
+        const contextManifest = [...new Map(listed.map((entry) => [key(entry), entry])).values()];
+        yield* saveRun({
+          ...row,
+          input_snapshot_json: { ...row.input_snapshot_json, contextManifest },
+        });
+      }),
+    );
+  });
+
   const recordThreadTurn = Effect.fn("RunRecordService.recordThreadTurn")(function* (
     threadId: ThreadId,
     tokens: Tokens,
@@ -267,6 +302,9 @@ const make = Effect.gen(function* () {
           "gen_ai.operation.name": "invoke_agent",
           "gen_ai.agent.id": run.agentId,
           "gen_ai.request.model": run.inputSnapshot.model,
+          ...(run.inputSnapshot.provider === undefined
+            ? {}
+            : { "gen_ai.provider.name": run.inputSnapshot.provider }),
           "gen_ai.usage.input_tokens": run.tokens.input,
           "gen_ai.usage.output_tokens": run.tokens.output,
           "gen_ai.usage.cache_read.input_tokens": run.tokens.cachedInput,
@@ -374,12 +412,41 @@ const make = Effect.gen(function* () {
     return { runs: rows.map(toRun) };
   });
 
+  const memoriesForRun = Effect.fn("RunRecordService.memoriesForRun")(function* (
+    caller: Caller,
+    run: RunRef,
+  ) {
+    yield* requireMember(run.workspaceId, caller);
+    const used = (yield* runRow(run)).input_snapshot_json.contextManifest.filter(
+      (entry) => entry.kind === "memory",
+    );
+    if (used.length === 0) return { memories: [] };
+    const stored = yield* db.select(run.workspaceId, "memories", decodeMemorySources, undefined, {
+      columns: ["memory_id", "source_json"],
+      filter: sql.in("memory_id", [...new Set(used.map((entry) => entry.id))]),
+    });
+    const sources = new Map(stored.map((row) => [row.memory_id, row.source_json.runId]));
+    return {
+      memories: used.map((entry) => {
+        const memoryId = Telescope.MemoryId.make(entry.id);
+        const sourceRunId = sources.get(memoryId);
+        return {
+          memoryId,
+          hash: entry.hash,
+          stored: sources.has(memoryId),
+          ...(sourceRunId === undefined ? {} : { sourceRunId }),
+        };
+      }),
+    };
+  });
+
   const pruneBefore = (cutoff: DateTime.Utc) => db.pruneRunsBefore(DateTime.formatIso(cutoff));
 
   return RunRecordService.of({
     start,
     attachThread,
     recordCall,
+    recordContextManifest,
     recordThreadTurn,
     finish,
     label,
@@ -387,6 +454,7 @@ const make = Effect.gen(function* () {
     list,
     calls,
     runsForMemory,
+    memoriesForRun,
     pruneBefore,
   });
 });
@@ -394,3 +462,26 @@ const make = Effect.gen(function* () {
 export const layer = Layer.effect(RunRecordService, make).pipe(
   Layer.provide(Layer.merge(TelescopeDb.layer, WorkspaceService.layer)),
 );
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** One pass of the daily retention job: drops runs finished over `telescope.runRetentionDays` ago. */
+export const makeRetentionPass = Effect.gen(function* () {
+  const runs = yield* RunRecordService;
+  const settings = yield* ServerSettingsService;
+  let nextCheckMs = 0;
+  return Effect.gen(function* () {
+    const now = yield* Clock.currentTimeMillis;
+    if (now < nextCheckMs) return;
+    const { runRetentionDays } = (yield* settings.getSettings).telescope;
+    yield* runs.pruneBefore(DateTime.makeUnsafe(now - runRetentionDays * DAY_MS));
+    nextCheckMs = now + DAY_MS;
+  });
+});
+
+export const layerRetention = Layer.effectDiscard(
+  Effect.gen(function* () {
+    const scheduler = yield* Scheduler.Scheduler;
+    yield* scheduler.register("telescope.runRetention", yield* makeRetentionPass);
+  }),
+).pipe(Layer.provide(Scheduler.layer));
