@@ -584,6 +584,8 @@
       "defaultViewportWidth": "Default viewport width",
       "defaultViewportHeight": "Default viewport height",
       "rotate": "Rotate",
+      "rotateToLandscape": "Rotate to landscape",
+      "rotateToPortrait": "Rotate to portrait",
       "pageZoomAppliedToNewBrowser": "Page zoom applied to new browser tabs.",
       "defaultBrowserZoom": "default browser zoom",
       "defaultBrowserZoom2": "Default browser zoom",

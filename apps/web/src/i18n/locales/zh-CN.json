@@ -584,6 +584,8 @@
       "defaultViewportWidth": "默认视口宽度",
       "defaultViewportHeight": "默认视口高度",
       "rotate": "旋转",
+      "rotateToLandscape": "旋转为横向",
+      "rotateToPortrait": "旋转为纵向",
       "pageZoomAppliedToNewBrowser": "应用于新浏览器标签页的页面缩放。",
       "defaultBrowserZoom": "默认浏览器缩放",
       "defaultBrowserZoom2": "默认浏览器缩放",
