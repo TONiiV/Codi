@@ -558,6 +558,93 @@ describe("ContextPackService", () => {
       expect(bad._tag).toBe("ContextPackFormatError");
     }).pipe(Effect.scoped, Effect.provide(TestLayer)),
   );
+  it.effect("moves a home directory's user-level context between harnesses", () =>
+    Effect.gen(function* () {
+      const service = yield* ContextPackService.ContextPackService;
+      const dir = yield* fixture(
+        {
+          "home/.claude/CLAUDE.md": "@RULES.md\n",
+          "home/.claude/RULES.md": "# Mine\n\nPrefer small diffs.\n",
+          "home/.claude/skills/review/SKILL.md": "Review.\n",
+          "home/.claude.json": JSON.stringify({
+            numStartups: 7,
+            mcpServers: { gh: { type: "stdio", command: "gh-mcp", env: { GH_TOKEN: "ghp_x" } } },
+          }),
+          "home/.codex/config.toml": 'model = "gpt"\n\n[mcp_servers.cx]\ncommand = "cx"\n',
+          "home/.config/opencode/opencode.json": JSON.stringify({
+            mcp: { oc: { type: "remote", url: "https://oc.example/mcp" } },
+          }),
+          // A project's files are not user-level context.
+          "home/CLAUDE.md": "Project rules\n",
+          "home/.mcp.json": JSON.stringify({ mcpServers: { proj: { command: "proj" } } }),
+          "dotfiles/CLAUDE.md": "my own instructions\n",
+        },
+        { "linked-home/.claude/CLAUDE.md": "../../dotfiles/CLAUDE.md" },
+      );
+      const pack = dir.at("home/packs/me");
+
+      yield* runCli(["export", dir.at("home"), "--home", "--out", pack]);
+      expect(yield* dir.read("home/packs/me/instructions.md")).toBe(
+        "# Mine\n\nPrefer small diffs.\n",
+      );
+      expect(JSON.parse(yield* dir.read("home/packs/me/pack.json")).skills).toEqual(["review"]);
+      expect(JSON.parse(yield* dir.read("home/packs/me/mcp.json"))).toEqual({
+        servers: {
+          gh: { command: "gh-mcp", env: ["GH_TOKEN"] },
+          oc: { url: "https://oc.example/mcp" },
+          cx: { command: "cx" },
+        },
+      });
+      // Only a project is owned whole, so the same pack directory overlaps it there.
+      const project = yield* Effect.flip(service.export(dir.at("home"), dir.at("home/packs/p")));
+      expect(project._tag).toBe("ContextPackOverlapError");
+      for (const out of ["home/.claude/skills/pack", "home/.agents", "home"]) {
+        const overlap = yield* Effect.flip(service.export(dir.at("home"), dir.at(out), "home"));
+        expect([out, overlap._tag]).toEqual([out, "ContextPackOverlapError"]);
+      }
+
+      yield* runCli(["import", pack, dir.at("home2"), "--harness", "codex", "--home"]);
+      expect(yield* dir.read("home2/.codex/AGENTS.md")).toContain("Prefer small diffs.");
+      expect(yield* dir.read("home2/.agents/skills/review/SKILL.md")).toBe("Review.\n");
+      expect(yield* dir.read("home2/.codex/config.toml")).toContain("[mcp_servers.gh]");
+      yield* service.import(pack, dir.at("home2"), "opencode", false, "home");
+      expect(yield* dir.read("home2/.config/opencode/AGENTS.md")).toContain("Prefer small diffs.");
+      const opencode = JSON.parse(yield* dir.read("home2/.config/opencode/opencode.json"));
+      expect(Object.keys(opencode.mcp).toSorted()).toEqual(["cx", "gh", "oc"]);
+      yield* service.import(pack, dir.at("home2"), "cursor", false, "home");
+      expect(yield* dir.read("home2/.cursor/skills/review/SKILL.md")).toBe("Review.\n");
+      expect(JSON.parse(yield* dir.read("home2/.cursor/mcp.json")).mcpServers.gh).toEqual({
+        command: "gh-mcp",
+        env: { GH_TOKEN: "${env:GH_TOKEN}" },
+      });
+      expect(yield* dir.exists(dir.at("home2/.cursor/rules"))).toBe(false);
+
+      // Syncing the home in place keeps the rest of ~/.claude.json and the user's own CLAUDE.md.
+      yield* service.import(pack, dir.at("home"), "claude", true, "home");
+      const claudeJson = JSON.parse(yield* dir.read("home/.claude.json"));
+      expect(claudeJson.numStartups).toBe(7);
+      expect(Object.keys(claudeJson.mcpServers).toSorted()).toEqual(["cx", "gh", "oc"]);
+      const claudeMd = yield* dir.read("home/.claude/CLAUDE.md");
+      expect(claudeMd.startsWith("@RULES.md\n")).toBe(true);
+      expect(claudeMd).toContain("context-pack:begin");
+      expect(yield* dir.read("home/CLAUDE.md")).toBe("Project rules\n");
+      for (const file of ["home/packs/me/mcp.json", "home2/.codex/config.toml"]) {
+        expect(yield* dir.read(file)).not.toContain("ghp_x");
+      }
+
+      // D51: a home file linked outside the home directory is refused, never written through.
+      const linked = yield* Effect.flip(
+        service.import(pack, dir.at("linked-home"), "claude", true, "home"),
+      );
+      expect(linked._tag).toBe("ContextPackPathError");
+      const root = yield* (yield* FileSystem.FileSystem).realPath(dir.at("linked-home"));
+      expect(linked.message).toContain(
+        `Copy what ${root}/.claude/CLAUDE.md links to into ${root}, or remove the link`,
+      );
+      expect(yield* dir.read("dotfiles/CLAUDE.md")).toBe("my own instructions\n");
+    }).pipe(Effect.scoped, Effect.provide(TestLayer)),
+  );
+
   it.effect("refuses an import a link in the target would carry outside the project", () =>
     Effect.gen(function* () {
       const service = yield* ContextPackService.ContextPackService;
@@ -573,6 +660,7 @@ describe("ContextPackService", () => {
           "new-dir/.claude/skills/deploy/notes.md": "keep\n",
           "dangling/.claude/skills/deploy/notes.md": "keep\n",
           "chain-skill/.claude/skills/deploy/notes.md": "keep\n",
+          "chain-dir/.claude/skills/deploy/notes.md": "keep\n",
           "inside-chain/inner/keep.txt": "keep\n",
           "absolute/.claude/settings.local.json": "{}",
         },
@@ -592,6 +680,9 @@ describe("ContextPackService", () => {
           "chain-mcp/hop2": "../dotfiles/missing-chain.json",
           "chain-skill/.claude/skills/deploy/SKILL.md": "hop2",
           "chain-skill/.claude/skills/deploy/hop2": "../../../../dotfiles/missing-chain.md",
+          // Each hop resolves against its own link's directory, not the first one's.
+          "chain-dir/.claude/skills/deploy/SKILL.md": "../../../hop2",
+          "chain-dir/hop2": "../dotfiles/missing-chain.md",
           "chain3/CLAUDE.md": "h1",
           "chain3/h1": "h2",
           "chain3/h2": "../dotfiles/missing-chain.md",
@@ -625,6 +716,7 @@ describe("ContextPackService", () => {
           "chain-file",
           "chain-mcp",
           "chain-skill",
+          "chain-dir",
           "chain3",
           "cycle",
           "skills-dir",
