@@ -25,7 +25,7 @@ export interface ContextItem {
 }
 
 const WIDE =
-  /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}\u3000-\u303f\uff00-\uffef]/u;
+  /[\p{scx=Han}\p{scx=Hiragana}\p{scx=Katakana}\p{scx=Hangul}\u3000-\u303f\uff00-\uffef]/u;
 /** No tokenizer ships with the server: a CJK character is about a token, other text length / 4. */
 const cost = (char: string) => (WIDE.test(char) ? 1 : char.length / 4);
 
@@ -107,19 +107,25 @@ export const allocate = (input: {
   return { ...(compacted ? at(true) : full), compacted };
 };
 
-const said = (authorId: string, at: string, text: string) =>
-  `${authorId} (${at}): ${JSON.stringify(text)}`;
+/** JSON.stringify leaves NEL, LS and PS raw, but Unicode line breaking ends a line at each. */
+const quote = (text: string) =>
+  JSON.stringify(text).replaceAll(
+    /[\x85\p{Zl}\p{Zp}]/gu,
+    (char) => `\\u${char.charCodeAt(0).toString(16).padStart(4, "0")}`,
+  );
 
-/** Board free text is JSON-quoted after its author, so a line break in it cannot start a line. */
+const said = (authorId: string, at: string, text: string) => `${authorId} (${at}): ${quote(text)}`;
+
+/** Board free text is quoted after its author, so a line break in it cannot start a line. */
 export const boardItem = (item: Telescope.BoardItem): ContextItem => {
   const lines =
     item.kind === "task"
       ? [
-          `[${item.status}] ${JSON.stringify(item.title)}`,
+          `[${item.status}] ${quote(item.title)}`,
           ...item.freeText.map((note) => said(note.authorId, note.at, note.text)),
         ]
       : [
-          `[decision ${item.status}${item.chosen === undefined ? "" : `: ${JSON.stringify(item.chosen)}`}] ${JSON.stringify(item.title)}`,
+          `[decision ${item.status}${item.chosen === undefined ? "" : `: ${quote(item.chosen)}`}] ${quote(item.title)}`,
           said(item.authorId, item.createdAt, item.text),
         ];
   return { kind: "board", id: item.id, text: lines.join("\n") };
@@ -132,7 +138,10 @@ const HEADINGS: { readonly [K in BlockName]: string } = {
   thread: "Current thread",
 };
 
-/** The context file: one section per non-empty block, items in the order given. */
+/**
+ * The context file: one section per non-empty block, items in the order given. Board items must
+ * come from `boardItem`, which quotes their free text; every other item is quoted here.
+ */
 export const renderContextFile = (blocks: Blocks<{ readonly text: string }>) =>
   [
     "# Telescope context",
@@ -145,7 +154,10 @@ export const renderContextFile = (blocks: Blocks<{ readonly text: string }>) =>
             "",
             `## ${HEADINGS[name]}`,
             "",
-            ...blocks[name].map((item) => `- ${item.text.replaceAll(/\r\n?|\n/g, "\n  ")}`),
+            ...blocks[name].map((item) => {
+              const text = name === "board" ? item.text : quote(item.text);
+              return `- ${text.replaceAll(/\r\n?|[\n\x85\p{Zl}\p{Zp}]/gu, "\n  ")}`;
+            }),
           ],
     ),
     "",
