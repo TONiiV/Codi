@@ -1443,10 +1443,18 @@ it.effect("lists memory and Telescope tools only to threads with an open Telesco
         rpc("tools/list", {}).pipe(
           Effect.map((body) => body.result?.tools?.map((tool) => tool.name)),
         );
+      // Every field outside the gateway args allowlists carries the 样机周五 marker.
+      const writeArgs = {
+        op: "add",
+        text: "样机周五交付",
+        kind: "样机周五 kind",
+        aboutSubjectId: "样机周五 about",
+      };
+      const searchArgs = { query: "样机周五", aboutSubjectId: "样机周五 about" };
       const write = (rpc: Effect.Success<ReturnType<typeof rpcAs>>) =>
-        rpc("tools/call", { name: "memory_write", arguments: { op: "add", text: "样机周五交付" } });
+        rpc("tools/call", { name: "memory_write", arguments: writeArgs });
       const search = (rpc: Effect.Success<ReturnType<typeof rpcAs>>) =>
-        rpc("tools/call", { name: "memory_search", arguments: { query: "样机周五" } }).pipe(
+        rpc("tools/call", { name: "memory_search", arguments: searchArgs }).pipe(
           Effect.map((body) => body.result?.structuredContent),
         );
 
@@ -1535,7 +1543,7 @@ it.effect("lists memory and Telescope tools only to threads with an open Telesco
       const elsewhere = yield* rpcAs("alice-elsewhere");
       for (const refused of [
         write(telescopeRun),
-        elsewhere("tools/call", { name: "memory_search", arguments: { query: "样机周五" } }),
+        elsewhere("tools/call", { name: "memory_search", arguments: searchArgs }),
         telescopeRun("tools/call", { name: "ticket_list", arguments: {} }),
       ]) {
         expect(JSON.parse((yield* refused).result?.content?.[0]?.text ?? "{}")).toMatchObject({

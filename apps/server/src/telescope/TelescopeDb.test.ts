@@ -9,6 +9,8 @@ import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import * as SqlClient from "effect/sql/SqlClient";
+import * as Statement from "effect/sql/Statement";
+import * as Tracer from "effect/Tracer";
 
 import { runMigrations } from "../persistence/Migrations.ts";
 import * as SqlitePersistence from "../persistence/Sqlite.ts";
@@ -166,6 +168,24 @@ it.effect("searches memories on a reader while a write transaction holds the wri
       const db = yield* TelescopeDb.TelescopeDb;
       yield* sql`INSERT INTO telescope_workspaces ${sql.insert([workspace(wsA)])}`;
       yield* db.insert(wsA, "memories", memory("m1", "deploys on Friday"));
+      const search = db.searchMemories(wsA, "deploys", decodeIds, {
+        where: {},
+        validAt: undefined,
+      });
+      const searchSpan = yield* Deferred.make<Tracer.Span>();
+      const captureSpan: Statement.Transformer = (statement, _sql, _fiber, span) =>
+        Deferred.succeed(searchSpan, span).pipe(Effect.as(statement));
+      assert.deepStrictEqual(
+        yield* search.pipe(
+          Effect.provideService(Statement.CurrentTransformer, captureSpan),
+          Effect.provideService(Statement.SpanPropagationEnabled, true),
+        ),
+        [{ memory_id: "m1" }],
+      );
+      assert.strictEqual(
+        (yield* Deferred.await(searchSpan)).attributes.get("db.connection"),
+        "reader",
+      );
       const held = yield* Deferred.make<void>();
       const release = yield* Deferred.make<void>();
       const writer = yield* sql
@@ -180,11 +200,7 @@ it.effect("searches memories on a reader while a write transaction holds the wri
         .pipe(Effect.forkChild);
       yield* Deferred.await(held);
       // On the writer this would wait for the transaction above; the reader sees only m1.
-      const found = yield* db.searchMemories(wsA, "deploys", decodeIds, {
-        where: {},
-        validAt: undefined,
-      });
-      assert.deepStrictEqual(found, [{ memory_id: "m1" }]);
+      assert.deepStrictEqual(yield* search, [{ memory_id: "m1" }]);
       yield* Deferred.succeed(release, undefined);
       yield* Fiber.join(writer);
     }).pipe(
