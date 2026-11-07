@@ -91,7 +91,6 @@ const decodeDecisionText = (text: string) => {
   return Option.map(decodeStoredReport(json), (stored) => ({ ...stored, markdown }));
 };
 const iso = (ms: number) => DateTime.formatIso(DateTime.makeUnsafe(ms));
-const thousands = (tokens: number) => `${Math.round(tokens / 1000)}K`;
 const metric = (value: number | null) => (value === null ? "未测量" : String(value));
 
 /** Cost savings first, then token savings; each by estimated saving. */
@@ -115,7 +114,7 @@ const renderMarkdown = (report: Omit<Telescope.TokenSaverReport, "markdown">) =>
       "",
       `## ${index + 1}. ${PATTERN_LABELS[finding.pattern]}`,
       `- 证据：${evidence.join("，")}`,
-      `- 预计省：${SAVING_LABELS[finding.savingKind](thousands(finding.estimatedSavingTokens))}，把握${CONFIDENCE_LABELS[finding.confidence]}`,
+      `- 预计省：${SAVING_LABELS[finding.savingKind](compact.format(finding.estimatedSavingTokens))}，把握${CONFIDENCE_LABELS[finding.confidence]}`,
       `- 建议：${finding.suggestion}`,
     );
   }

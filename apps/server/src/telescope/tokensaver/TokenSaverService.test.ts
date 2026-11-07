@@ -97,7 +97,7 @@ const writeTranscripts = Effect.fn("writeTranscripts")(function* () {
       transcript.toolUse("s1", 2, "m-sa-e", "sa-e", "Edit", { file_path: "/repo/a.ts" }),
       ...readA(7, "sa-r"),
       transcript.toolUse("s1", 8, "m-sa-b", "sa-b", "Bash", { command: "cat build.log" }),
-      transcript.toolResult("s1", 8, "sa-b", 40_000),
+      transcript.toolResult("s1", 8, "sa-b", 41_600),
     ].map(subagent),
   );
   yield* file("-repo/s2.jsonl", [
@@ -126,15 +126,15 @@ it.layer(layer)("Telescope token saver", (it) => {
         });
         const home = yield* writeTranscripts();
 
-        const run = (claudeHome: string) =>
+        const run = (env: NodeJS.ProcessEnv) =>
           tokenSaver
             .runWeekly(alice, {
               workspaceId,
               since: "2026-11-01T00:00:00.000Z",
               until: "2026-11-08T00:00:00.000Z",
             })
-            .pipe(withHome(claudeHome));
-        const report = yield* run(home);
+            .pipe(Effect.provideService(HostProcess.Environment, env));
+        const report = yield* run({ CLAUDE_CONFIG_DIR: home });
 
         assert.strictEqual(report.sessionsAnalyzed, 1);
         assert.deepStrictEqual(
@@ -144,7 +144,7 @@ it.layer(layer)("Telescope token saver", (it) => {
             savingKind,
           ]),
           [
-            ["oversized_tool_outputs", 27000, "tokens"],
+            ["oversized_tool_outputs", 27400, "tokens"],
             ["repeated_reads", 1000, "tokens"],
           ],
         );
@@ -155,7 +155,10 @@ it.layer(layer)("Telescope token saver", (it) => {
         });
         assert.include(report.markdown, "## 1. 巨大的工具输出");
         assert.include(report.markdown, "只统计在 Codi 线程中运行的会话，其他 provider 暂不支持");
-        assert.include(report.markdown, "超过阈值的结果 2 次，这些结果共计 35K token");
+        assert.include(
+          report.markdown,
+          "超过阈值的结果 2 次，这些结果共计 35.4K token，主要工具的阈值 4K token，主要来自 Bash，主要工具超过阈值 2 次\n- 预计省：约 27.4K token，",
+        );
         assert.include(report.markdown, "- 测试通过率：未测量");
         assert.include(report.markdown, "涉及的智能体和文件组合 ");
         assert.include(report.markdown, "该文件在一个智能体里重复读 ");
@@ -173,9 +176,14 @@ it.layer(layer)("Telescope token saver", (it) => {
         );
         assert.include(decision?.text, report.markdown);
 
-        // The open proposal answers a rerun before any transcript is read: an empty home would
-        // otherwise find nothing and return no decision id.
-        const again = yield* run(yield* (yield* FileSystem.FileSystem).makeTempDirectoryScoped());
+        let readHome = false;
+        const again = yield* run({
+          get CLAUDE_CONFIG_DIR() {
+            readHome = true;
+            return home;
+          },
+        });
+        assert.isFalse(readHome);
         assert.strictEqual(again.decisionId, report.decisionId);
         assert.deepStrictEqual(again, report);
         assert.notInclude(again.markdown, "```json");
