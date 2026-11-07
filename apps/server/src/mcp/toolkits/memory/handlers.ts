@@ -1,5 +1,6 @@
 import type * as Schema from "effect/Schema";
 import * as Effect from "effect/Effect";
+import * as Struct from "effect/Struct";
 
 import * as MemoryService from "../../../telescope/MemoryService.ts";
 import * as McpInvocationContext from "../../McpInvocationContext.ts";
@@ -28,14 +29,18 @@ const asRunAgent = Effect.fn("mcp.memory.asRunAgent")(function* <A>(
   );
 });
 
+// Gateway args are stored where any member reads them: never text, query, kind or who it is about.
+const SEARCH_ARGS = ["agentId", "scope", "projectId", "limit", "includeInvalidated"] as const;
+const WRITE_ARGS = ["op", "id", "scope", "level", "projectId", "pinned"] as const;
+
 const handlers = {
   memory_search: McpToolAccess.readsAsCaller((input) =>
-    asRunAgent("memory_search", input, (memory, agent) =>
+    asRunAgent("memory_search", Struct.pick(input, SEARCH_ARGS), (memory, agent) =>
       memory.search(agent, { ...input, workspaceId: agent.workspaceId }),
     ),
   ),
   memory_write: McpToolAccess.actsAsCaller((input) =>
-    asRunAgent("memory_write", input, (memory, agent) =>
+    asRunAgent("memory_write", Struct.pick(input, WRITE_ARGS), (memory, agent) =>
       memory
         .write(agent, { ...input, workspaceId: agent.workspaceId, agentId: agent.run.agentId })
         .pipe(Effect.map((written) => ({ memory: written }))),

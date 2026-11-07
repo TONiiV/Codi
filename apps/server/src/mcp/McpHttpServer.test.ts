@@ -1554,6 +1554,19 @@ it.effect("lists memory and Telescope tools only to threads with an open Telesco
       expect(yield* search(yield* rpcAs("alice-elsewhere"))).toMatchObject({
         memories: [{ text: "样机周五交付" }],
       });
+      const storedArgs = Schema.decodeUnknownEffect(
+        Schema.Array(Schema.Record(Schema.String, Schema.String)),
+      );
+      const recorded = [
+        ...(yield* db.select(workspace.id, "audit", storedArgs, undefined, {
+          columns: ["args_redacted_json"],
+        })),
+        ...(yield* db.select(workspace.id, "run_calls", storedArgs, undefined, {
+          columns: ["args_json"],
+        })),
+      ].map((row) => Object.values(row).join());
+      expect(recorded.join()).not.toContain("样机周五");
+      expect(recorded).toContain('{"op":"add"}');
 
       yield* db.update(workspace.id, "runs", { finished_at: at }, { run_id: "run-1" });
       expect(yield* listed(telescopeRun)).toEqual([]);
