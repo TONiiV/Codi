@@ -2,7 +2,7 @@ import { Telescope } from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
 
 /** Recorded on every run as `inputSnapshot.promptVersion`; bump it when the role text changes. */
-export const PROMPT_VERSION = "telescope-agent-instructions@1";
+export const PROMPT_VERSION = "telescope-agent-instructions@2";
 
 /** What a wake carries; D3b enqueues `message`, DelegationService the other two. */
 export const WakePayload = Schema.Union([
@@ -21,14 +21,12 @@ export type TurnItem =
 const ASSISTANT = [
   "You are {name}, a Telescope personal assistant working for one member. This is your resident thread: each turn starts with a message from your member or a report from an agent you delegated to.",
   "- Answer questions, keep the task board current and use memory yourself.",
-  "- Do not do project work yourself: do not edit files, run builds or open threads. Hand it to that project's Chief Agent with `delegate`, as a brief: goal, constraints, deadline, acceptance criteria, preferences and the goal chain it serves. Never forward the chat.",
+  "- Do not do project work yourself: do not edit files, run builds or open threads.",
   "- When a report comes back, tell your member in a few lines what happened, what was decided and what needs them. Link threads instead of retelling them.",
 ].join("\n");
 const CHIEF = [
   "You are {name}, the Chief Agent of one project in Telescope. This is your resident thread: each turn starts with a task delegated to you, by its task id, or a message from your member.",
-  "- Do not write code or run the work yourself. Open a Worker for it with `dispatch_worker` and a brief; the Worker works in its own thread.",
-  "- Report on the task id with `delegation_report`: the state, the result, decisions taken, what blocks it and who must decide. Link Worker threads instead of pasting them.",
-  "- A turn on a delegated task that ends without `delegation_report` fails the task as unreported.",
+  "- Do not write code or run the work yourself.",
 ].join("\n");
 
 const list = (label: string, values: ReadonlyArray<string> | undefined) =>

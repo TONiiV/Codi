@@ -134,15 +134,30 @@ const make = Effect.gen(function* () {
       );
     // The run serves exactly the Codi run this message starts (D84).
     const messageId = MessageId.make(`telescope-wake:${wake.id}`);
-    const run = yield* runs.startFor(wake.workspaceId, wake.subjectId, {
-      agentId: agent.id,
-      via,
-      threadId,
-      inputSnapshot: runSnapshot(selection, {
-        codiMessageId: messageId,
-        delegationIds: held.map((delegation) => delegation.id),
-      }),
-    });
+    const run = yield* runs
+      .startFor(wake.workspaceId, wake.subjectId, {
+        agentId: agent.id,
+        via,
+        threadId,
+        inputSnapshot: runSnapshot(selection, {
+          codiMessageId: messageId,
+          delegationIds: held.map((delegation) => delegation.id),
+        }),
+      })
+      .pipe(
+        Effect.tapError((error) =>
+          // A later wake must not reuse a thread this wake never created.
+          (reuse === null
+            ? db.update(
+                wake.workspaceId,
+                "agents",
+                { resident_thread_id: null },
+                { agent_id: agent.id, resident_thread_id: threadId },
+              )
+            : Effect.void
+          ).pipe(Effect.andThen(abandonHeld(error.message))),
+        ),
+      );
     // D81: with no Codi turn started, no listener finishes this run, so the runtime does.
     const notStarted = (error: { readonly message: string }) =>
       runs
@@ -180,6 +195,7 @@ const make = Effect.gen(function* () {
         commandId: CommandId.make(`telescope-wake:${wake.id}`),
         threadId,
         messageId,
+        modelSelection: selection,
         text: AgentInstructions.renderTurn(agent, items, { firstTurn: reuse === null }),
         attachments: [],
         mode: "queue",

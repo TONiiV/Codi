@@ -28,6 +28,8 @@ import * as Stream from "effect/Stream";
 import * as TestClock from "effect/testing/TestClock";
 
 import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
+import { MemoryToolkit } from "../mcp/toolkits/memory/tools.ts";
+import { TelescopeToolkit } from "../mcp/toolkits/telescope/tools.ts";
 import { CodexProviderCapabilitiesV2 } from "../orchestration-v2/Adapters/CodexAdapterV2.ts";
 import * as CommandReceiptStore from "../orchestration-v2/CommandReceiptStore.ts";
 import * as EffectOutbox from "../orchestration-v2/EffectOutbox.ts";
@@ -66,6 +68,12 @@ const brief = {
   acceptance: ["样机能抓起 500g"],
   goalChain: ["夹爪项目"],
 };
+const agentTools = { ...TelescopeToolkit.tools, ...MemoryToolkit.tools };
+/** Tool names the turn text mentions that an agent's thread does not list. */
+const missingTools = (text: string) =>
+  [...text.matchAll(/`(\w+)`/g)].flatMap(([, name]) =>
+    name === undefined || name in agentTools ? [] : [name],
+  );
 const decodeRuns = Schema.decodeUnknownEffect(
   Schema.Array(Schema.Struct({ run_id: Telescope.AgentRunId, on_behalf_of_json: Schema.String })),
 );
@@ -74,6 +82,7 @@ const decodeRuns = Schema.decodeUnknownEffect(
 const makeHarness = Effect.fn("makeHarness")(function* (options: {
   readonly mcp: boolean;
   readonly rejectCreate?: boolean;
+  readonly rejectStart?: boolean;
   readonly rejectSend?: boolean;
   readonly holdTokens?: boolean;
 }) {
@@ -274,8 +283,23 @@ const makeHarness = Effect.fn("makeHarness")(function* (options: {
       };
     }),
   );
+  const startable = Layer.effect(
+    DelegationService.DelegationService,
+    Effect.map(DelegationService.DelegationService, (service) => ({
+      ...service,
+      start: (ref) =>
+        options.rejectStart === true
+          ? Effect.fail(
+              new Telescope.WorkspaceError({
+                reason: "conflict",
+                message: "Only a submitted delegation starts.",
+              }),
+            )
+          : service.start(ref),
+    })),
+  );
   const runtime = Layer.merge(AgentRuntime.layer, ThreadTurnTokens.layer).pipe(
-    Layer.provide(Layer.merge(recordingRuns, threads)),
+    Layer.provide(Layer.mergeAll(recordingRuns, threads, startable)),
     Layer.provide(registry),
     Layer.provide(
       Layer.mock(ManagedProjectFolders.ManagedProjectFolders)({
@@ -423,6 +447,7 @@ it.effect(
         assert.equal(turn.threadId, threadId);
         assert.equal(turn.appThread.projectId, scratch);
         assert.include(turn.message.text, "personal assistant");
+        assert.deepStrictEqual(missingTools(turn.message.text), []);
         assert.include(turn.message.text, "样机哪天交付？");
         yield* harness.complete(turn, 100);
         yield* Fiber.join(runner);
@@ -509,26 +534,39 @@ it.effect("an archived resident thread is replaced on the next wake", () =>
   ),
 );
 
-it.effect("a second wake for a busy agent stays queued until its turn ends (D84)", () =>
-  withHarness({ mcp: true }, (harness) =>
-    Effect.gen(function* () {
-      const seeded = yield* seed;
-      const wakes = yield* WakeQueueService.WakeQueueService;
-      yield* enqueueMessage(seeded, "早");
-      yield* enqueueMessage(seeded, "晚");
-      const first = yield* runWake(yield* wakes.take);
-      const one = yield* Queue.take(harness.started);
-      assert.isUndefined(yield* wakes.dequeue);
-      yield* harness.complete(one, 1);
-      yield* Fiber.join(first);
-      const second = yield* runWake(yield* wakes.take);
-      const two = yield* Queue.take(harness.started);
-      yield* harness.complete(two, 1);
-      yield* Fiber.join(second);
-      assert.equal(two.threadId, one.threadId);
-      assert.notInclude(two.message.text, "personal assistant");
-    }),
-  ),
+it.effect(
+  "a second wake for a busy agent stays queued until its turn ends and runs on the agent's current model (D84)",
+  () =>
+    withHarness({ mcp: true }, (harness) =>
+      Effect.gen(function* () {
+        const seeded = yield* seed;
+        const db = yield* TelescopeDb.TelescopeDb;
+        const wakes = yield* WakeQueueService.WakeQueueService;
+        yield* enqueueMessage(seeded, "早");
+        yield* enqueueMessage(seeded, "晚");
+        const first = yield* runWake(yield* wakes.take);
+        const one = yield* Queue.take(harness.started);
+        assert.isUndefined(yield* wakes.dequeue);
+        yield* harness.complete(one, 1);
+        yield* Fiber.join(first);
+        yield* Queue.take(harness.finished);
+        const changed = { instanceId, model: "other-model" };
+        yield* db.update(
+          seeded.workspaceId,
+          "agents",
+          { model_selection_json: JSON.stringify(changed) },
+          { agent_id: seeded.pa },
+        );
+        const second = yield* runWake(yield* wakes.take);
+        const two = yield* Queue.take(harness.started);
+        yield* harness.complete(two, 1);
+        yield* Fiber.join(second);
+        assert.equal(two.threadId, one.threadId);
+        assert.notInclude(two.message.text, "personal assistant");
+        assert.equal(two.modelSelection.model, changed.model);
+        assert.equal((yield* Queue.take(harness.finished)).inputSnapshot.model, changed.model);
+      }),
+    ),
 );
 
 it.effect("a Chief turn that ends without a report fails its delegation as unreported (D66)", () =>
@@ -546,6 +584,7 @@ it.effect("a Chief turn that ends without a report fails its delegation as unrep
       const turn = yield* Queue.take(harness.started);
       assert.equal(turn.appThread.projectId, gripper);
       assert.include(turn.message.text, "Chief Agent");
+      assert.deepStrictEqual(missingTools(turn.message.text), []);
       assert.include(turn.message.text, `Delegated task ${delegation.id}`);
       assert.include(turn.message.text, "样机能抓起 500g");
       // The runtime's run, acting through the PA, is the one open when the session starts.
@@ -566,35 +605,45 @@ it.effect("a Chief turn that ends without a report fails its delegation as unrep
   ),
 );
 
-it.effect("a stopped agent's wake starts no run and fails its delegation (D48)", () =>
-  withHarness({ mcp: true }, () =>
-    Effect.gen(function* () {
-      const seeded = yield* seed;
-      const db = yield* TelescopeDb.TelescopeDb;
-      const delegations = yield* DelegationService.DelegationService;
-      const wakes = yield* WakeQueueService.WakeQueueService;
-      yield* db.insert(seeded.workspaceId, "kill_switches", {
-        agent_id: seeded.chief,
-        state: "stopped",
-        by_subject_id: seeded.member,
-        at: "2026-11-07T00:00:00.000Z",
-      });
-      const delegation = yield* delegations.delegate(seeded.actor, {
-        toAgentId: seeded.chief,
-        brief,
-      });
-      yield* Fiber.join(yield* runWake(yield* wakes.take));
-      const failed = yield* delegations.get({
-        workspaceId: seeded.workspaceId,
-        delegationId: delegation.id,
-      });
-      assert.equal(failed.state, "FAILED");
-      assert.equal(failed.report?.blockedOn, "agent stopped");
-      assert.equal(yield* db.count(seeded.workspaceId, "runs"), 0);
-      assert.isUndefined(yield* residentOf(seeded, seeded.chief));
-      assert.equal((yield* wakes.take).wake.agentId, seeded.pa);
-    }),
-  ),
+it.effect.each([
+  { who: "Chief", agent: "chief" },
+  { who: "delegating PA", agent: "pa" },
+] as const)(
+  "a Chief wake whose $who is stopped starts no run and fails its delegation (D48)",
+  ({ agent }) =>
+    withHarness({ mcp: true }, (harness) =>
+      Effect.gen(function* () {
+        const seeded = yield* seed;
+        const db = yield* TelescopeDb.TelescopeDb;
+        const delegations = yield* DelegationService.DelegationService;
+        const wakes = yield* WakeQueueService.WakeQueueService;
+        yield* db.insert(seeded.workspaceId, "kill_switches", {
+          agent_id: seeded[agent],
+          state: "stopped",
+          by_subject_id: seeded.member,
+          at: "2026-11-07T00:00:00.000Z",
+        });
+        const delegation = yield* delegations.delegate(seeded.actor, {
+          toAgentId: seeded.chief,
+          brief,
+        });
+        const runner = yield* runWake(yield* wakes.take);
+        const outcome = yield* Effect.raceFirst(
+          Fiber.await(runner).pipe(Effect.as("ended without a turn")),
+          Queue.take(harness.started).pipe(Effect.as("started a turn")),
+        );
+        assert.equal(outcome, "ended without a turn");
+        const failed = yield* delegations.get({
+          workspaceId: seeded.workspaceId,
+          delegationId: delegation.id,
+        });
+        assert.equal(failed.state, "FAILED");
+        assert.equal(failed.report?.blockedOn, "agent stopped");
+        assert.equal(yield* db.count(seeded.workspaceId, "runs"), 0);
+        assert.isUndefined(yield* residentOf(seeded, seeded.chief));
+        assert.equal((yield* wakes.take).wake.agentId, seeded.pa);
+      }),
+    ),
 );
 
 it.effect(
@@ -625,11 +674,12 @@ it.effect(
 );
 
 it.effect.each([
-  { step: "created", rejected: { rejectCreate: true } },
-  { step: "sent", rejected: { rejectSend: true } },
+  { step: "started", rejected: { rejectStart: true }, error: "Only a submitted delegation starts" },
+  { step: "created", rejected: { rejectCreate: true }, error: "is disabled for project" },
+  { step: "sent", rejected: { rejectSend: true }, error: "is disabled for project" },
 ] as const)(
-  "a turn whose thread cannot be $step finishes its run as failed and fails the delegation (D81)",
-  ({ rejected }) =>
+  "a turn whose task or thread cannot be $step finishes its run as failed and fails the delegation (D81)",
+  ({ rejected, error }) =>
     withHarness({ mcp: true, ...rejected }, (harness) =>
       Effect.gen(function* () {
         const seeded = yield* seed;
@@ -648,14 +698,58 @@ it.effect.each([
         assert.lengthOf(finished, 1);
         assert.equal(finished[0]?.threadId, threadId);
         assert.isDefined(finished[0]?.finishedAt);
-        assert.include(finished[0]?.outputSummary, "is disabled for project");
+        assert.include(finished[0]?.outputSummary, error);
         const failed = yield* delegations.get({
           workspaceId: seeded.workspaceId,
           delegationId: delegation.id,
         });
         assert.equal(failed.state, "FAILED");
-        assert.include(failed.report?.blockedOn, "is disabled for project");
+        assert.include(failed.report?.blockedOn, error);
         assert.equal((yield* wakes.take).wake.agentId, seeded.pa);
+      }),
+    ),
+);
+
+it.effect(
+  "a wake for a revoked member starts nothing, and after the member is restored a wake starts a new thread",
+  () =>
+    withHarness({ mcp: true }, (harness) =>
+      Effect.gen(function* () {
+        const seeded = yield* seed;
+        const db = yield* TelescopeDb.TelescopeDb;
+        const delegations = yield* DelegationService.DelegationService;
+        const wakes = yield* WakeQueueService.WakeQueueService;
+        const revoked = (at: string | null) =>
+          db.update(
+            seeded.workspaceId,
+            "members",
+            { revoked_at: at },
+            { subject_id: seeded.member },
+          );
+        const delegation = yield* delegations.delegate(seeded.actor, {
+          toAgentId: seeded.chief,
+          brief,
+        });
+        yield* revoked("2026-11-07T00:00:00.000Z");
+        const exit = yield* Fiber.await(yield* runWake(yield* wakes.take));
+        assert.isTrue(Exit.isFailure(exit));
+        const failed = yield* delegations.get({
+          workspaceId: seeded.workspaceId,
+          delegationId: delegation.id,
+        });
+        assert.equal(failed.state, "FAILED");
+        assert.equal(failed.report?.blockedOn, "Runs act only for active members.");
+        assert.equal(yield* db.count(seeded.workspaceId, "runs"), 0);
+        assert.isUndefined(yield* residentOf(seeded, seeded.chief));
+        assert.equal((yield* wakes.take).wake.agentId, seeded.pa);
+        yield* revoked(null);
+        yield* delegations.delegate(seeded.actor, { toAgentId: seeded.chief, brief });
+        const runner = yield* runWake(yield* wakes.take);
+        const turn = yield* Queue.take(harness.started);
+        assert.equal(turn.threadId, yield* residentOf(seeded, seeded.chief));
+        assert.include(turn.message.text, "Chief Agent");
+        yield* harness.complete(turn, 1);
+        yield* Fiber.join(runner);
       }),
     ),
 );

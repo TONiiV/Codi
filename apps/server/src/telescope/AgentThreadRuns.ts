@@ -59,9 +59,8 @@ export const makeHandler = Effect.gen(function* () {
   const db = yield* TelescopeDb.TelescopeDb;
   const runs = yield* RunRecordService.RunRecordService;
   const delegations = yield* DelegationService.DelegationService;
-  // A Codi run is updated many times; open and finish for it once.
+  // A Codi run is updated many times; open for it once. A repeated terminal event finds no open run.
   const opened = new Set<string>();
-  const finished = new Set<string>();
   // The Codi run each agent thread's provider turns belong to, for their tokens.
   const serving = new Map<ThreadId, string>();
 
@@ -70,8 +69,8 @@ export const makeHandler = Effect.gen(function* () {
     if (event.type !== "run.created" && event.type !== "run.updated") return;
     const run = event.payload;
     const ending = TERMINAL.has(run.status);
-    if (ending ? finished.has(run.id) : !STARTED.has(run.status) || opened.has(run.id)) return;
-    remember(ending ? finished : opened, run.id);
+    if (!ending && (!STARTED.has(run.status) || opened.has(run.id))) return;
+    if (!ending) remember(opened, run.id);
     const owner = yield* db.agentThread(run.threadId);
     if (owner === undefined) return;
     const linked = yield* db.openRunsOnThread(run.threadId, run.userMessageId);
