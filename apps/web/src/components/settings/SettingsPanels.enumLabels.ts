@@ -1,4 +1,5 @@
 import type {
+  AuthClientMetadataDeviceType,
   AuthGrantScope,
   ProjectIconColor,
   RuntimeMode,
@@ -79,19 +80,105 @@ export function mergeMethodText(method: "merge" | "squash" | "rebase", t: TFunct
   return t(`${P}mergeMethod${method[0]!.toUpperCase()}${method.slice(1)}`);
 }
 
+const AUTH_SCOPE_TEXT_KEYS = {
+  "orchestration:read": {
+    title: "settings.parallelA.authScopeTitle_orchestrationRead",
+    description: "settings.parallelA.authScopeDescription_orchestrationRead",
+  },
+  "orchestration:operate": {
+    title: "settings.parallelA.authScopeTitle_orchestrationOperate",
+    description: "settings.parallelA.authScopeDescription_orchestrationOperate",
+  },
+  "settings:write": {
+    title: "settings.parallelA.authScopeTitle_settingsWrite",
+    description: "settings.parallelA.authScopeDescription_settingsWrite",
+  },
+  "providers:manage": {
+    title: "settings.parallelA.authScopeTitle_providersManage",
+    description: "settings.parallelA.authScopeDescription_providersManage",
+  },
+  "environment:maintain": {
+    title: "settings.parallelA.authScopeTitle_environmentMaintain",
+    description: "settings.parallelA.authScopeDescription_environmentMaintain",
+  },
+  "preview:operate": {
+    title: "settings.parallelA.authScopeTitle_previewOperate",
+    description: "settings.parallelA.authScopeDescription_previewOperate",
+  },
+  "diagnostics:read": {
+    title: "settings.parallelA.authScopeTitle_diagnosticsRead",
+    description: "settings.parallelA.authScopeDescription_diagnosticsRead",
+  },
+  "terminal:read": {
+    title: "settings.parallelA.authScopeTitle_terminalRead",
+    description: "settings.parallelA.authScopeDescription_terminalRead",
+  },
+  "terminal:operate": {
+    title: "settings.parallelA.authScopeTitle_terminalOperate",
+    description: "settings.parallelA.authScopeDescription_terminalOperate",
+  },
+  "source-control:write": {
+    title: "settings.parallelA.authScopeTitle_sourceControlWrite",
+    description: "settings.parallelA.authScopeDescription_sourceControlWrite",
+  },
+  "filesystem:read": {
+    title: "settings.parallelA.authScopeTitle_filesystemRead",
+    description: "settings.parallelA.authScopeDescription_filesystemRead",
+  },
+  "filesystem:write": {
+    title: "settings.parallelA.authScopeTitle_filesystemWrite",
+    description: "settings.parallelA.authScopeDescription_filesystemWrite",
+  },
+  "access:read": {
+    title: "settings.parallelA.authScopeTitle_accessRead",
+    description: "settings.parallelA.authScopeDescription_accessRead",
+  },
+  "access:write": {
+    title: "settings.parallelA.authScopeTitle_accessWrite",
+    description: "settings.parallelA.authScopeDescription_accessWrite",
+  },
+  "relay:read": {
+    title: "settings.parallelA.authScopeTitle_relayRead",
+    description: "settings.parallelA.authScopeDescription_relayRead",
+  },
+  "relay:write": {
+    title: "settings.parallelA.authScopeTitle_relayWrite",
+    description: "settings.parallelA.authScopeDescription_relayWrite",
+  },
+  "telescope:member": {
+    title: "settings.parallelA.authScopeTitle_telescopeMember",
+    description: "settings.parallelA.authScopeDescription_telescopeMember",
+  },
+  "telescope:admin": {
+    title: "settings.parallelA.authScopeTitle_telescopeAdmin",
+    description: "settings.parallelA.authScopeDescription_telescopeAdmin",
+  },
+} as const satisfies Record<AuthGrantScope, { title: string; description: string }>;
+
 export function authScopeText(scope: AuthGrantScope, t: TFunction) {
-  const id = scope.replace(/[:-](\w)/g, (_, character: string) => character.toUpperCase());
-  return {
-    title: t(`${P}authScopeTitle_${id}`),
-    description: t(`${P}authScopeDescription_${id}`),
-  };
+  const keys = AUTH_SCOPE_TEXT_KEYS[scope];
+  return { title: t(keys.title), description: t(keys.description) };
 }
 
 export function sessionPermissionsUnavailableText(
   input: { readonly connected: boolean; readonly failed: boolean; readonly rejected: boolean },
   t: TFunction,
 ): string {
-  if (!input.connected) return t(`${P}permNotConnected`);
-  if (input.rejected) return t(`${P}permRejected`);
-  return t(`${P}${input.failed ? "permFailed" : "permChecking"}`);
+  if (!input.connected) return t("settings.parallelA.permNotConnected");
+  if (input.rejected) return t("settings.parallelA.permRejected");
+  return t(input.failed ? "settings.parallelA.permFailed" : "settings.parallelA.permChecking");
+}
+
+const DEVICE_TYPE_KEYS = {
+  desktop: "settings.manual.deviceType.desktop",
+  mobile: "settings.manual.deviceType.mobile",
+  tablet: "settings.manual.deviceType.tablet",
+  bot: "settings.manual.deviceType.bot",
+} as const satisfies Record<Exclude<AuthClientMetadataDeviceType, "unknown">, string>;
+
+export function deviceTypeText(
+  deviceType: Exclude<AuthClientMetadataDeviceType, "unknown">,
+  t: TFunction,
+): string {
+  return t(DEVICE_TYPE_KEYS[deviceType]);
 }

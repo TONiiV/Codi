@@ -2375,6 +2375,12 @@
         "connections_one": "{{count}} connection",
         "connections_other": "{{count}} connections"
       },
+      "deviceType": {
+        "desktop": "Desktop",
+        "mobile": "Mobile",
+        "tablet": "Tablet",
+        "bot": "Bot"
+      },
       "bgPause": {
         "hostLocked": "Pause when host is locked",
         "hostLowPower": "Pause on host low power",

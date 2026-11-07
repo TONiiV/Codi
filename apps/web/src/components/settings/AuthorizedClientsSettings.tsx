@@ -72,7 +72,7 @@ import {
   endpointShareHint,
 } from "./ConnectionsSettings.logic";
 import { useTranslation } from "react-i18next";
-import { authScopeText } from "./SettingsPanels.enumLabels";
+import { authScopeText, deviceTypeText } from "./SettingsPanels.enumLabels";
 
 function AccessScopeSummary({
   scopes,
@@ -536,7 +536,7 @@ const ConnectedClientListRow = memo(function ConnectedClientListRow({
       : t("settings.text.notConnectedYet");
   const deviceInfoBits = [
     clientSession.client.deviceType !== "unknown"
-      ? clientSession.client.deviceType[0]?.toUpperCase() + clientSession.client.deviceType.slice(1)
+      ? deviceTypeText(clientSession.client.deviceType, t)
       : null,
     clientSession.client.os ?? null,
     clientSession.client.browser ?? null,

@@ -2375,6 +2375,12 @@
         "connections_one": "{{count}} 个连接",
         "connections_other": "{{count}} 个连接"
       },
+      "deviceType": {
+        "desktop": "桌面端",
+        "mobile": "移动端",
+        "tablet": "平板",
+        "bot": "机器人"
+      },
       "bgPause": {
         "hostLocked": "主机锁定时暂停",
         "hostLowPower": "主机低功耗时暂停",
