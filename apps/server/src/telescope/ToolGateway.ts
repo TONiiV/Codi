@@ -115,6 +115,8 @@ const DENIED_MESSAGES = {
   forbidden: "The agent's grant does not allow this tool.",
   budget: "A Telescope budget is used up.",
   project_only: "Only a project's agent opens Worker threads. Delegate to its Chief Agent instead.",
+  linked:
+    "Telescope agents cannot act on a linked environment yet. Leave out environmentId to work here.",
 } as const;
 
 export class ToolGatewayDenied extends Schema.TaggedError<ToolGatewayDenied>()(
@@ -127,6 +129,7 @@ export class ToolGatewayDenied extends Schema.TaggedError<ToolGatewayDenied>()(
       "forbidden",
       "budget",
       "project_only",
+      "linked",
     ]),
     tool: Schema.optionalKey(Telescope.GatewayTool),
     /** The first budget level, in `BudgetScope` order, whose call limit is reached. */
@@ -171,14 +174,17 @@ export class ToolGateway extends Context.Service<
       args: Schema.Json,
       use: (caller: ToolCaller) => Effect.Effect<A, E, R>,
     ) => Effect.Effect<A, E | ToolGatewayDenied | Failure, R>;
-    /** `call` on a thread with an open run; any other thread runs `use` as it would without Telescope. */
+    /**
+     * `call` on a thread with an open run, or that call refused and recorded as `refuse`; any
+     * other thread runs `use` as it would without Telescope.
+     */
     readonly callIfRun: <A, E, R>(
       threadId: ThreadId,
       tool: Telescope.GatewayTool,
       args: Schema.Json,
       use: Effect.Effect<A, E, R>,
+      refuse?: "linked",
     ) => Effect.Effect<A, E | ToolGatewayDenied | Failure, R>;
-    readonly hasOpenRun: (threadId: ThreadId) => Effect.Effect<boolean, Failure>;
     readonly setBudget: Method<"telescope.budget.set">;
     readonly setKillSwitch: Method<"telescope.killSwitch.set">;
     readonly governance: Method<"telescope.governance.get">;
@@ -197,6 +203,7 @@ const make = Effect.gen(function* () {
     run: OpenRun,
     tool: Telescope.GatewayTool,
     argsRedacted: Schema.Json,
+    refuse?: "linked",
   ) {
     const { workspace_id: workspaceId, agent_id: agentId, on_behalf_of_json: onBehalfOf } = run;
     const power = TOOL_POWERS[tool];
@@ -223,16 +230,18 @@ const make = Effect.gen(function* () {
           budget.used_calls >= budget.limit_calls,
       ),
     );
-    const denied = stopped
-      ? new ToolGatewayDenied({ reason: "stopped", tool })
-      : !grant.powers[power]
-        ? new ToolGatewayDenied({ reason: "forbidden", tool })
-        : // An agent without a project still holds dispatchWorkers, to pass down the chain.
-          tool === "dispatch_worker" && grant.projectId === undefined
-          ? new ToolGatewayDenied({ reason: "project_only", tool })
-          : spent !== undefined
-            ? new ToolGatewayDenied({ reason: "budget", tool, level: spent })
-            : undefined;
+    const denied = refuse
+      ? new ToolGatewayDenied({ reason: refuse, tool })
+      : stopped
+        ? new ToolGatewayDenied({ reason: "stopped", tool })
+        : !grant.powers[power]
+          ? new ToolGatewayDenied({ reason: "forbidden", tool })
+          : // An agent without a project still holds dispatchWorkers, to pass down the chain.
+            tool === "dispatch_worker" && grant.projectId === undefined
+            ? new ToolGatewayDenied({ reason: "project_only", tool })
+            : spent !== undefined
+              ? new ToolGatewayDenied({ reason: "budget", tool, level: spent })
+              : undefined;
     yield* grants.audit(workspaceId, {
       runId: run.run_id,
       agentId,
@@ -276,9 +285,10 @@ const make = Effect.gen(function* () {
     tool: Telescope.GatewayTool,
     args: Schema.Json,
     use: (caller: ToolCaller) => Effect.Effect<A, E, R>,
+    refuse?: "linked",
   ) {
     const argsRedacted = redact(args);
-    const decided = yield* db.transaction(decide(run, tool, argsRedacted));
+    const decided = yield* db.transaction(decide(run, tool, argsRedacted, refuse));
     if (isDenied(decided)) return yield* decided;
     const [duration, exit] = yield* Effect.timed(Effect.exit(use(decided)));
     yield* runs
@@ -313,13 +323,11 @@ const make = Effect.gen(function* () {
     tool: Telescope.GatewayTool,
     args: Schema.Json,
     use: Effect.Effect<A, E, R>,
+    refuse?: "linked",
   ) {
     const [run] = yield* db.latestRunForThread(threadId, decodeRuns);
-    return yield* run === undefined ? use : gate(run, tool, args, () => use);
+    return yield* run === undefined ? use : gate(run, tool, args, () => use, refuse);
   });
-
-  const hasOpenRun = (threadId: ThreadId) =>
-    db.latestRunForThread(threadId, decodeRuns).pipe(Effect.map((runs) => runs.length > 0));
 
   const requireAdmin = Effect.fn("ToolGateway.requireAdmin")(function* (
     caller: WorkspaceService.Caller,
@@ -383,7 +391,7 @@ const make = Effect.gen(function* () {
     },
   );
 
-  return ToolGateway.of({ call, callIfRun, hasOpenRun, setBudget, setKillSwitch, governance });
+  return ToolGateway.of({ call, callIfRun, setBudget, setKillSwitch, governance });
 });
 
 export const layer = Layer.effect(ToolGateway, make).pipe(

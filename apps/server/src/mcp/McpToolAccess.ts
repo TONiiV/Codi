@@ -391,7 +391,7 @@ const routed = Effect.fn("McpToolAccess.routed")(function* <Tools extends Record
       params: object,
     ) => Effect.Effect<unknown, Tool.Failure<Tools[keyof Tools]>>;
     const here = Gate.dispatchesWork(name)
-      ? (params: object) => Gate.gateDispatch(name, params, false, local(params))
+      ? (params: object) => Gate.gateDispatch(name, params, local(params))
       : local;
     handlers[name] = here;
     if (!takesLinkedEnvironment(tool)) continue;
@@ -410,7 +410,7 @@ const routed = Effect.fn("McpToolAccess.routed")(function* <Tools extends Record
         if (Option.isNone(forwarding)) return yield* linksUnavailable;
         const forward = forwarding.value.call(scope, tool, target, { ...params, environmentId });
         // A Telescope run's dispatching call is refused here, before it goes.
-        return yield* Gate.gateDispatch(name, params, true, forward);
+        return yield* Gate.gateDispatch(name, { ...params, environmentId }, forward);
       });
   }
   return handlers as Toolkit.HandlersFrom<Tools>;

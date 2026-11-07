@@ -1,8 +1,14 @@
-import { OrchestratorMcpFailure, type Telescope, type ThreadId } from "@t3tools/contracts";
+import {
+  EnvironmentId,
+  OrchestratorMcpFailure,
+  type Telescope,
+  type ThreadId,
+} from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
-import type * as Schema from "effect/Schema";
+import * as Schema from "effect/Schema";
 
+import * as PeerForwarding from "../../../peer/PeerForwarding.ts";
 import type { PersistenceDecodeError, PersistenceSqlError } from "../../../persistence/Errors.ts";
 import * as ToolGateway from "../../../telescope/ToolGateway.ts";
 import * as McpInvocationContext from "../../McpInvocationContext.ts";
@@ -20,7 +26,10 @@ const toFailure = (error: Failure) => {
     case "TelescopeToolGatewayDenied":
       return new OrchestratorMcpFailure({
         code: "capability_denied",
-        message: `${error.message} Do not retry; tell your member.`,
+        message:
+          error.reason === "linked"
+            ? error.message
+            : `${error.message} Do not retry; tell your member.`,
       });
     case "TelescopeWorkspaceError":
       if (error.reason !== "storage")
@@ -76,23 +85,28 @@ const DISPATCHES = new Map<
 
 export const dispatchesWork = (tool: string) => DISPATCHES.has(tool);
 
-const linkedRefused = new OrchestratorMcpFailure({
-  code: "capability_denied",
-  message:
-    "Telescope agents cannot act on a linked environment yet. Leave out environmentId to work here.",
-});
-
 // Decoded tool input is plain JSON once its unset optional keys are dropped.
 const asJson = (input: object): Schema.Json => JSON.parse(JSON.stringify(input));
 
+const isEnvironmentId = Schema.is(EnvironmentId);
+
+/** Where the input sends work: its own `environmentId` and each `target`'s, at any depth. */
+const destinations = (input: unknown, key = "target"): ReadonlyArray<EnvironmentId> =>
+  typeof input !== "object" || input === null
+    ? []
+    : Object.entries(input).flatMap(([name, value]) =>
+        name === "environmentId" && key === "target" && isEnvironmentId(value)
+          ? [value]
+          : destinations(value, Array.isArray(input) ? key : name),
+      );
+
 /**
  * `use` as tool `tool`: a dispatching call on a thread with an open run goes through the
- * gateway, or is refused when it is `linked` (bound for a linked environment).
+ * gateway, and is refused there when it sends work to a linked environment.
  */
 export const gateDispatch = Effect.fn("mcp.telescope.gateDispatch")(function* <A, E, R>(
   tool: string,
   input: object,
-  linked: boolean,
   use: Effect.Effect<A, E, R>,
 ) {
   const scope = yield* McpInvocationContext.McpInvocationContext;
@@ -101,12 +115,17 @@ export const gateDispatch = Effect.fn("mcp.telescope.gateDispatch")(function* <A
   const thread = scope.thread?.threadId;
   if (thread === undefined || Option.isNone(gateway) || !DISPATCHES.get(tool)?.(input, thread))
     return yield* use;
-  if (linked) {
-    const inRun = yield* gateway.value.hasOpenRun(thread).pipe(Effect.mapError(toFailure));
-    return yield* inRun ? Effect.fail(linkedRefused) : use;
-  }
+  const linked = destinations(input).some(
+    (environmentId) => PeerForwarding.remoteTarget(scope, environmentId) !== undefined,
+  );
   const exit = yield* gateway.value
-    .callIfRun(thread, "dispatch_worker", asJson(input), Effect.exit(use))
+    .callIfRun(
+      thread,
+      "dispatch_worker",
+      asJson(input),
+      Effect.exit(use),
+      linked ? "linked" : undefined,
+    )
     .pipe(Effect.mapError(toFailure));
   return yield* exit;
 });

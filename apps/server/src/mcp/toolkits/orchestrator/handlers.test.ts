@@ -16,6 +16,7 @@ import {
 import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import type * as SchemaAST from "effect/SchemaAST";
 import * as Stream from "effect/Stream";
 import type { Tool, Toolkit } from "effect/ai";
 
@@ -51,6 +52,7 @@ import * as AttachmentHandlers from "../attachment/handlers.ts";
 import { AttachmentToolkit } from "../attachment/tools.ts";
 import * as ProjectHandlers from "../project/handlers.ts";
 import { ProjectToolkit } from "../project/tools.ts";
+import * as Gate from "../telescope/gate.ts";
 import * as PullRequestsHandlers from "../pullRequests/handlers.ts";
 import { PullRequestsToolkit } from "../pullRequests/tools.ts";
 import * as ThreadHandlers from "../thread/handlers.ts";
@@ -271,7 +273,7 @@ const setup = Effect.gen(function* () {
       { agent_id: agent.id },
     );
     const threadId = ThreadId.make(`thread-${kind}-${workspaceId}`);
-    yield* (yield* RunRecordService.RunRecordService).start(ann, workspaceId, {
+    const run = yield* (yield* RunRecordService.RunRecordService).start(ann, workspaceId, {
       agentId: agent.id,
       threadId,
       inputSnapshot: {
@@ -282,7 +284,7 @@ const setup = Effect.gen(function* () {
         contextManifest: [],
       },
     });
-    return { agentId: agent.id, threadId, ...callers(threadId) };
+    return { agentId: agent.id, runId: run.id, threadId, ...callers(threadId) };
   });
   const audit = (yield* GrantService.GrantService)
     .auditList(ann, { workspaceId })
@@ -302,6 +304,11 @@ const sched = scheduledTask.scheduledTaskId;
 const opens = {
   create_threads: (run: Run) => run.call("create_threads", threads),
   delegate_task: (run: Run) => run.call("delegate_task", { task: "Fix the build" }),
+  "delegate_task naming its own environment": (run: Run) =>
+    run.call("delegate_task", {
+      task: "Fix the build",
+      target: { environmentId: EnvironmentId.make("env-local") },
+    }),
   schedule_task: (run: Run) =>
     run.call("schedule_task", {
       prompt: "Fix the build",
@@ -311,6 +318,16 @@ const opens = {
     run.call("schedule_task", { scheduledTaskId: sched, enabled: true }),
   t3_thread_launch: (run: Run) =>
     run.project("t3_thread_launch", { scratch: true, title: "Fix the build" }),
+  "t3_thread_launch delegated from another environment": (run: Run) =>
+    run.project("t3_thread_launch", {
+      scratch: true,
+      title: "Fix the build",
+      delegatedFrom: {
+        environmentId: EnvironmentId.make("env-peer"),
+        threadId: worker,
+        title: "Ops",
+      },
+    }),
   run_scheduled_task_now: (run: Run) => run.thread("run_scheduled_task_now", { taskId: sched }),
   "t3_thread_transfer fork": (run: Run) => run.thread("t3_thread_transfer", { action: "fork" }),
   "t3_thread_transfer merge_back": (run: Run) =>
@@ -412,55 +429,178 @@ it.effect("a PA run's watch_pull_request on its own thread is not gated", () => 
 });
 
 const peer = EnvironmentId.make("env-peer");
-/** Each `opens` tool that takes a linked environment, called with one. */
-const opensElsewhere = {
-  t3_thread_send: (run: Run) =>
-    run.call("t3_thread_send", { environmentId: peer, threadId: worker, message: "Go" }),
-  schedule_task: (run: Run) =>
-    run.call("schedule_task", {
-      environmentId: peer,
-      prompt: "Fix the build",
-      schedule: { type: "interval", everyMs: 60_000 },
-    }),
-  "schedule_task update": (run: Run) =>
-    run.call("schedule_task", { environmentId: peer, scheduledTaskId: sched, enabled: true }),
-  delete_scheduled_task: (run: Run) =>
-    run.call("delete_scheduled_task", { environmentId: peer, scheduledTaskId: sched }),
-  t3_thread_launch: (run: Run) =>
-    run.project("t3_thread_launch", { environmentId: peer, scratch: true, title: "Fix the build" }),
-  run_scheduled_task_now: (run: Run) =>
-    run.thread("run_scheduled_task_now", { environmentId: peer, taskId: sched }),
-  t3_thread_transfer: (run: Run) =>
-    run.thread("t3_thread_transfer", { environmentId: peer, action: "fork" }),
-  watch_pull_request: (run: Run) =>
-    run
-      .pr("watch_pull_request", {
+const pr7 = "https://github.com/acme/web/pull/7";
+/**
+ * One row per gated tool and input field that names an environment, set to a linked one.
+ * `reaches` is where an ordinary thread's same call goes.
+ */
+const opensElsewhere = [
+  {
+    tool: "t3_thread_send",
+    field: "environmentId",
+    reaches: "forwarded t3_thread_send",
+    call: (run: Run) =>
+      run.call("t3_thread_send", { environmentId: peer, threadId: worker, message: "Go" }),
+  },
+  {
+    tool: "schedule_task",
+    field: "environmentId",
+    reaches: "forwarded schedule_task",
+    call: (run: Run) =>
+      run.call("schedule_task", {
         environmentId: peer,
-        threadId: worker,
-        url: "https://github.com/acme/web/pull/7",
-      })
-      .pipe(Effect.catch(Effect.succeed)),
-};
+        prompt: "Fix the build",
+        schedule: { type: "interval", everyMs: 60_000 },
+      }),
+  },
+  {
+    tool: "schedule_task update",
+    field: "environmentId",
+    reaches: "forwarded schedule_task",
+    call: (run: Run) =>
+      run.call("schedule_task", { environmentId: peer, scheduledTaskId: sched, enabled: true }),
+  },
+  {
+    tool: "delete_scheduled_task",
+    field: "environmentId",
+    reaches: "forwarded delete_scheduled_task",
+    call: (run: Run) =>
+      run.call("delete_scheduled_task", { environmentId: peer, scheduledTaskId: sched }),
+  },
+  {
+    tool: "t3_thread_launch",
+    field: "environmentId",
+    reaches: "forwarded t3_thread_launch",
+    call: (run: Run) =>
+      run.project("t3_thread_launch", {
+        environmentId: peer,
+        scratch: true,
+        title: "Fix the build",
+      }),
+  },
+  {
+    tool: "run_scheduled_task_now",
+    field: "environmentId",
+    reaches: "forwarded run_scheduled_task_now",
+    call: (run: Run) =>
+      run.thread("run_scheduled_task_now", { environmentId: peer, taskId: sched }),
+  },
+  {
+    tool: "t3_thread_transfer",
+    field: "environmentId",
+    reaches: "forwarded t3_thread_transfer",
+    call: (run: Run) => run.thread("t3_thread_transfer", { environmentId: peer, action: "fork" }),
+  },
+  {
+    tool: "watch_pull_request",
+    field: "environmentId",
+    reaches: "forwarded watch_pull_request",
+    call: (run: Run) =>
+      run
+        .pr("watch_pull_request", { environmentId: peer, threadId: worker, url: pr7 })
+        .pipe(Effect.catch(Effect.succeed)),
+  },
+  // The service, not routing, sends these to the linked environment.
+  {
+    tool: "delegate_task",
+    field: "target.environmentId",
+    reaches: "delegate_task",
+    call: (run: Run) =>
+      run
+        .call("delegate_task", { task: "Fix the build", target: { environmentId: peer } })
+        // The mocked service step returns no task, which then fails as an error.
+        .pipe(Effect.catch(Effect.succeed)),
+  },
+  {
+    tool: "create_threads",
+    field: "threads[].target.environmentId",
+    reaches: "create_threads",
+    call: (run: Run) =>
+      run.call("create_threads", {
+        threads: [{ prompt: "Fix the build", target: { environmentId: peer } }],
+      }),
+  },
+] as const;
 
-it.effect.each(Object.keys(opensElsewhere) as Array<keyof typeof opensElsewhere>)(
-  "a Telescope run's %s naming a linked environment is refused before it routes",
-  (tool) => {
+const linkedRefusal =
+  "Telescope agents cannot act on a linked environment yet. Leave out environmentId to work here.";
+
+it.effect.each(opensElsewhere)(
+  "a Telescope run's $tool naming a linked environment in $field is refused, audited, before it routes",
+  ({ call, reaches }) => {
     const opened: Array<string> = [];
     return Effect.gen(function* () {
-      const { on, callers } = yield* setup;
+      const { workspaceId, on, callers, audit } = yield* setup;
       const chief = yield* on("chief_agent");
-      assert.deepInclude(yield* opensElsewhere[tool](chief), {
+      assert.deepInclude(yield* call(chief), {
         _tag: "OrchestratorMcpFailure",
         code: "capability_denied",
-        message:
-          "Telescope agents cannot act on a linked environment yet. Leave out environmentId to work here.",
+        message: linkedRefusal,
       });
       assert.deepStrictEqual(opened, []);
-      yield* opensElsewhere[tool](callers(ThreadId.make("thread-ordinary")));
-      assert.deepStrictEqual(opened, [`forwarded ${tool.split(" ")[0]}`]);
+      const refused = [["dispatch_worker", "denied", linkedRefusal]];
+      assert.deepStrictEqual(yield* audit, refused);
+      const { calls } = yield* (yield* RunRecordService.RunRecordService).calls(ann, {
+        workspaceId,
+        runId: chief.runId,
+      });
+      assert.deepStrictEqual(
+        calls.map((row) => [row.tool, row.grantCheck]),
+        [["dispatch_worker", "denied"]],
+      );
+      yield* call(callers(ThreadId.make("thread-ordinary")));
+      assert.deepStrictEqual(opened, [reaches]);
+      assert.deepStrictEqual(yield* audit, refused);
     }).pipe(Effect.provide(layer(opened)));
   },
 );
+
+/** Every `environmentId` an input of this schema can carry, by path. */
+const environmentFields = (ast: SchemaAST.AST): ReadonlyArray<string> => {
+  switch (ast._tag) {
+    case "Objects":
+      return ast.propertySignatures.flatMap(({ name, type }) =>
+        name === "environmentId"
+          ? ["environmentId"]
+          : environmentFields(type).map((path) => `${String(name)}.${path}`),
+      );
+    case "Arrays":
+      return [...ast.elements, ...ast.rest].flatMap(environmentFields).map((path) => `[].${path}`);
+    case "Union":
+      return ast.types.flatMap(environmentFields);
+    default:
+      return [];
+  }
+};
+
+it("every environment a gated tool's input can name has a linked-environment row", () => {
+  const gated = [
+    OrchestratorToolkit,
+    ThreadToolkit,
+    ProjectToolkit,
+    AttachmentToolkit,
+    PullRequestsToolkit,
+  ]
+    .flatMap((toolkit) => Object.values<Tool.Any>(toolkit.tools))
+    .filter((tool) => Gate.dispatchesWork(tool.name));
+  assert.deepStrictEqual(
+    new Set(gated.map((tool) => tool.name)),
+    new Set(Object.keys(opens).map((key) => key.split(" ")[0])),
+  );
+  // Where a delegated task came from, not where it runs (its `opens` row stays local).
+  const origins = new Set(["t3_thread_launch delegatedFrom.environmentId"]);
+  const named = gated
+    .flatMap((tool) =>
+      environmentFields(tool.parametersSchema.ast).map(
+        (field) => `${tool.name} ${field.replaceAll(".[]", "[]")}`,
+      ),
+    )
+    .filter((field) => !origins.has(field));
+  assert.deepStrictEqual(
+    new Set(named),
+    new Set(opensElsewhere.map(({ tool, field }) => `${tool.split(" ")[0]} ${field}`)),
+  );
+});
 
 it.effect("a Telescope run's reads still route to a linked environment", () => {
   const opened: Array<string> = [];
