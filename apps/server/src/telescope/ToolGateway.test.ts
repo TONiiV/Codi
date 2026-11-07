@@ -177,11 +177,17 @@ it.layer(layer)("Telescope tool gateway", (it) => {
       const shapes = {
         Bearer: `Bearer ${fake}`,
         Basic: `Basic ${fake}`,
+        BasicMixedCase: "Basic dXNlcjpwYXNz",
         JWT: `eyJ${fake}.${fake}.${fake}`,
         PEM: `-----BEGIN RSA PRIVATE KEY-----\n${fake}\n-----END RSA PRIVATE KEY-----`,
         ...Object.fromEntries(prefixed.map((prefix) => [prefix, `${prefix}${fake}`])),
         AKIA: `AKIA${fake.toUpperCase().slice(0, 16)}`,
       };
+      const prose = [
+        "Basic authentication for the settings page",
+        "Fix: Basic validation rejects empty briefs.",
+        "Bearer authentication.",
+      ];
       const inText = (text: (shape: string) => string) =>
         Object.fromEntries(Object.entries(shapes).map(([name, shape]) => [name, text(shape)]));
       const caller = yield* call("open_ticket", {
@@ -191,6 +197,7 @@ it.layer(layer)("Telescope tool gateway", (it) => {
           { brief: "curl -H 'Authorization: Bearer abc.def-123456' sk-proj-0123456789abcdef" },
         ],
         shapes: inText((shape) => `use ${shape} now`),
+        prose,
       });
       assert.deepStrictEqual(caller, {
         workspaceId,
@@ -224,6 +231,7 @@ it.layer(layer)("Telescope tool gateway", (it) => {
         apiKey: "[redacted]",
         nested: [{ brief: "curl -H 'Authorization: [redacted]' [redacted]" }],
         shapes: inText(() => "use [redacted] now"),
+        prose,
       });
       assert.deepStrictEqual(entries[1]?.onBehalfOf, [beaId]);
       assert.strictEqual(entries[1]?.projectId, web);
