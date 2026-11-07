@@ -58,7 +58,7 @@ const request = (
   overrides: Partial<WakeQueue.WakeRequest> = {},
 ): WakeQueue.WakeRequest => ({
   reason: "dispatch",
-  agentId: Telescope.AgentId.make("agent-1"),
+  agentId: Telescope.AgentId.make(`agent-${coalesceKey}`),
   priority: 2,
   payload: {},
   subjectId,
@@ -229,7 +229,7 @@ it.effect("runs a waiting conversation before background work and rotates subjec
   }).pipe(Effect.provide(layer)),
 );
 
-it.effect("holds the subject, thread, machine and project caps", () =>
+it.effect("holds the subject, thread, agent, machine and project caps", () =>
   Effect.gen(function* () {
     const queue = yield* WakeQueue.WakeQueueService;
     const subjectOf = queue.dequeue.pipe(Effect.map((wake) => wake?.subjectId));
@@ -255,6 +255,22 @@ it.effect("holds the subject, thread, machine and project caps", () =>
     assert.strictEqual(yield* subjectOf, "dan");
     assert.strictEqual(yield* subjectOf, "ann");
     assert.strictEqual(yield* subjectOf, undefined);
+
+    // One running wake per agent; the agent's next wake holds no slot while it waits.
+    yield* queue.setLimits({ machine: 9, perProject: 1 });
+    const agentId = Telescope.AgentId.make("agent-busy");
+    for (const n of [1, 2]) {
+      yield* queue.enqueue(ws, request("eve", `eve-${n}`, { agentId }));
+      yield* TestClock.adjust("1 second");
+    }
+    yield* queue.enqueue(ws, request("eve", "eve-other"));
+    const keyOf = queue.dequeue.pipe(Effect.map((wake) => wake?.coalesceKey));
+    const busy = yield* queue.dequeue;
+    assert.strictEqual(busy?.coalesceKey, "eve-1");
+    assert.strictEqual(yield* keyOf, "eve-other");
+    assert.strictEqual(yield* keyOf, undefined);
+    if (busy !== undefined) yield* queue.finish(busy, "done");
+    assert.strictEqual(yield* keyOf, "eve-2");
   }).pipe(Effect.provide(layer)),
 );
 

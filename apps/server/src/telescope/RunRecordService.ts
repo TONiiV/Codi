@@ -152,13 +152,26 @@ export class RunRecordService extends Context.Service<
       workspaceId: WorkspaceId,
       input: RunStartInput,
     ) => Out<Telescope.AgentRun>;
+    /** For runs the server starts itself; `memberId` must be an active member. */
+    readonly startFor: (
+      workspaceId: WorkspaceId,
+      memberId: string,
+      input: RunStartInput,
+    ) => Out<Telescope.AgentRun>;
     /** Later turns on the thread add their tokens to the run until it finishes. */
     readonly attachThread: (run: RunRef, threadId: ThreadId) => Out<void>;
     readonly recordCall: (run: RunRef, call: RunCallInput) => Out<Telescope.RunCall>;
     /** Adds the entries an assembled context gave an open run to its manifest, once each. */
     readonly recordContextManifest: (run: RunRef, entries: ContextManifest) => Out<void>;
-    /** Adds a finished provider turn's tokens to every open run attached to its thread. */
-    readonly recordThreadTurn: (threadId: ThreadId, tokens: Tokens) => Out<void>;
+    /**
+     * Adds a finished provider turn's tokens to the open runs on its thread; with `codiMessageId`,
+     * only to the runs serving that Codi run.
+     */
+    readonly recordThreadTurn: (
+      threadId: ThreadId,
+      tokens: Tokens,
+      codiMessageId?: string,
+    ) => Out<void>;
     readonly finish: (run: RunRef, input: RunFinishInput) => Out<Telescope.AgentRun>;
     readonly label: (run: RunRef, label: ResultLabel) => Out<Telescope.AgentRun>;
     readonly get: (caller: Caller, run: RunRef) => Out<Telescope.AgentRun>;
@@ -198,17 +211,21 @@ const make = Effect.gen(function* () {
   const saveRun = (row: typeof RunRow.Type) =>
     db.update(row.workspace_id, "runs", encodeRun(row), { run_id: row.run_id });
 
-  const start = Effect.fn("RunRecordService.start")(function* (
-    caller: Caller,
+  const startFor = Effect.fn("RunRecordService.startFor")(function* (
     workspaceId: WorkspaceId,
+    memberId: string,
     input: RunStartInput,
   ) {
-    const { self } = yield* requireMember(workspaceId, caller);
+    const active = yield* db.count(workspaceId, "members", {
+      subject_id: memberId,
+      revoked_at: null,
+    });
+    if (active === 0) return yield* fail("forbidden", "Runs act only for active members.");
     const row: typeof RunRow.Type = {
       run_id: Telescope.AgentRunId.make(yield* random.uuidV4()),
       workspace_id: workspaceId,
       agent_id: input.agentId,
-      on_behalf_of_json: [self.subjectId, ...(input.via ?? [])],
+      on_behalf_of_json: [memberId, ...(input.via ?? [])],
       input_snapshot_json: input.inputSnapshot,
       started_at: yield* now,
       finished_at: null,
@@ -223,6 +240,14 @@ const make = Effect.gen(function* () {
     };
     yield* db.insert(workspaceId, "runs", encodeRun(row));
     return toRun(row);
+  });
+  const start = Effect.fn("RunRecordService.start")(function* (
+    caller: Caller,
+    workspaceId: WorkspaceId,
+    input: RunStartInput,
+  ) {
+    const { self } = yield* requireMember(workspaceId, caller);
+    return yield* startFor(workspaceId, self.subjectId, input);
   });
 
   const attachThread = Effect.fn("RunRecordService.attachThread")(function* (
@@ -286,12 +311,15 @@ const make = Effect.gen(function* () {
   const recordThreadTurn = Effect.fn("RunRecordService.recordThreadTurn")(function* (
     threadId: ThreadId,
     tokens: Tokens,
+    codiMessageId?: string,
   ) {
     const open = (run: RunRef) =>
       db.transaction(
         runRow(run, "open").pipe(Effect.flatMap((row) => saveRun(withTokens(row, tokens)))),
       );
-    yield* Effect.forEach(yield* db.openRunsOnThread(threadId), open, { discard: true });
+    yield* Effect.forEach(yield* db.openRunsOnThread(threadId, codiMessageId), open, {
+      discard: true,
+    });
   });
 
   const exportSpan = (run: Telescope.AgentRun) =>
@@ -444,6 +472,7 @@ const make = Effect.gen(function* () {
 
   return RunRecordService.of({
     start,
+    startFor,
     attachThread,
     recordCall,
     recordContextManifest,

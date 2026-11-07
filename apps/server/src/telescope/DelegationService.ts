@@ -145,6 +145,14 @@ export class DelegationService extends Context.Service<
     readonly start: (
       ref: DelegationRef & { readonly threadId?: ThreadId },
     ) => Out<Telescope.Delegation>;
+    /**
+     * The runtime fails a task its agent cannot work or left unreported (D48, D66); it goes up
+     * like a report. `memberId` is the member the report wake serves.
+     */
+    readonly abandon: (
+      ref: DelegationRef & { readonly memberId: string },
+      blockedOn: string,
+    ) => Out<Telescope.Delegation>;
     /** Only the to-agent reports; a terminal agent-hop report wakes the from-agent once. */
     readonly report: (actor: Actor, input: ReportInput) => Out<Telescope.Delegation>;
     /**
@@ -376,6 +384,18 @@ const make = Effect.gen(function* () {
     return toDelegation(moved);
   }, lock.withPermit);
 
+  const abandon = Effect.fn("DelegationService.abandon")(function* (
+    ref: DelegationRef & { readonly memberId: string },
+    blockedOn: string,
+  ) {
+    const row = yield* load(ref);
+    const working = row.state === "SUBMITTED" ? yield* move(row, "WORKING", "agent", {}) : row;
+    const report = { result: "", decisions: [], blockedOn };
+    const failed = yield* move(working, "FAILED", "agent", { report }, { report_json: report });
+    if (failed.hop === "agent") yield* wakeFromAgent(failed, ref.memberId);
+    return toDelegation(failed);
+  }, lock.withPermit);
+
   const chainOwnedBy = Effect.fn("DelegationService.chainOwnedBy")(function* (
     row: DelegationRow,
     memberId: string,
@@ -479,6 +499,7 @@ const make = Effect.gen(function* () {
     delegate,
     recordWorker,
     start,
+    abandon,
     report,
     cancel,
     deliver,
