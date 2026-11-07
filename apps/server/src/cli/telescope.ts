@@ -268,6 +268,10 @@ const memberInviteCommand = Command.make("invite", {
   role: roleFlag,
   expires: Flag.String("expires").pipe(
     Flag.withSchema(DurationFromString),
+    Flag.filter(
+      (expires) => Duration.isPositive(expires) && Duration.isFinite(expires),
+      () => "Invitation codes always expire. Use a duration longer than 0s, for example `1h`.",
+    ),
     Flag.withDescription("How long the code stays valid, for example `1h` or `3d`. Default: 7d."),
     Flag.optional,
   ),
@@ -283,7 +287,7 @@ const memberInviteCommand = Command.make("invite", {
           ...Option.match(flags.expires, {
             onNone: () => ({}),
             onSome: (expires) => ({
-              expiresInSeconds: Math.max(1, Math.ceil(Duration.toSeconds(expires))),
+              expiresInSeconds: Math.ceil(Duration.toSeconds(expires)),
             }),
           }),
         }),
@@ -328,9 +332,31 @@ const memberRevokeCommand = Command.make("revoke", {
   ),
 );
 
+const memberRestoreCommand = Command.make("restore", {
+  ...common,
+  org: orgFlag,
+  member: memberFlag("member", "Member id of a revoked member, from `t3 member list`."),
+}).pipe(
+  Command.withDescription(
+    "Re-admit a revoked member with their previous role. Project leads are not restored: rebind with `--lead`.",
+  ),
+  Command.withHandler((flags) =>
+    runAsOwner(
+      flags,
+      (service) => service.restore(OWNER, { workspaceId: flags.org, subjectId: flags.member }),
+      (member) => `Restored ${describe(member)} as ${member.role}.`,
+    ),
+  ),
+);
+
 export const memberCommand = Command.make("member").pipe(
   Command.withDescription("Manage the members of a Telescope workspace."),
-  Command.withSubcommands([memberInviteCommand, memberListCommand, memberRevokeCommand]),
+  Command.withSubcommands([
+    memberInviteCommand,
+    memberListCommand,
+    memberRevokeCommand,
+    memberRestoreCommand,
+  ]),
 );
 
 const roleSetCommand = Command.make("set", {

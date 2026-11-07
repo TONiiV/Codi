@@ -66,7 +66,11 @@ const makeHome = Effect.gen(function* () {
 const failureOf = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(
     Effect.flip,
-    Effect.map((error) => String(error instanceof Error ? error.message : error)),
+    Effect.map((error) =>
+      CliError.isCliError(error) && error._tag === "ShowHelp"
+        ? error.errors.map((cause) => cause.message).join("\n")
+        : String(error instanceof Error ? error.message : error),
+    ),
   );
 
 const layer = Layer.mergeAll(
@@ -149,7 +153,7 @@ it.layer(layer)("telescope CLI", (it) => {
     }),
   );
 
-  it.effect("member invite prints a code, member list and revoke manage members", () =>
+  it.effect("member invite prints a code, member list, revoke and restore manage members", () =>
     Effect.gen(function* () {
       const { t3, join } = yield* makeHome;
       const org = yield* t3("org", "init", "--name", "Acme", "--kind", "personal");
@@ -190,6 +194,29 @@ it.layer(layer)("telescope CLI", (it) => {
         Effect.flatMap(decodeJson(Telescope.MemberListResult)),
       );
       assert.isDefined(members.find((member) => member.subjectId === bob.subjectId)?.revokedAt);
+      assert.strictEqual(
+        yield* t3("member", "restore", "--org", org, "--member", bob.subjectId),
+        `Restored Bob (${bob.subjectId}) as project_lead.`,
+      );
+      assert.match(
+        yield* t3("member", "list", "--org", org),
+        new RegExp(`${bob.subjectId}\\s+project_lead\\s+\\S+\\s+active\\s+Bob$`, "m"),
+      );
+      assert.include(
+        yield* failureOf(t3("member", "restore", "--org", org, "--member", bob.subjectId)),
+        "That person is already an active member.",
+      );
+      assert.include(
+        yield* failureOf(t3("member", "restore", "--org", org, "--member", "nobody")),
+        "That person was never a member of this workspace.",
+      );
+      for (const expires of ["0s", "0ms", "Infinity"])
+        assert.include(
+          yield* failureOf(
+            t3("member", "invite", "--org", org, "--role", "member", "--expires", expires),
+          ),
+          "Invitation codes always expire.",
+        );
 
       assert.include(
         yield* failureOf(t3("member", "revoke", "--org", org, "--member", "owner")),
