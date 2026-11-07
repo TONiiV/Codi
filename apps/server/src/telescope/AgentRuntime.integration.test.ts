@@ -69,11 +69,12 @@ const brief = {
   goalChain: ["夹爪项目"],
 };
 const agentTools = { ...TelescopeToolkit.tools, ...MemoryToolkit.tools };
-/** Tool names the turn text mentions that an agent's thread does not list. */
+/** Tool names the turn text mentions, quoted or bare snake_case, that the agent's thread lacks. */
 const missingTools = (text: string) =>
-  [...text.matchAll(/`(\w+)`/g)].flatMap(([, name]) =>
-    name === undefined || name in agentTools ? [] : [name],
-  );
+  [...text.matchAll(/`(\w+)`|\b([a-z]+(?:_[a-z]+)+)\b/g)].flatMap(([, quoted, bare]) => {
+    const name = quoted ?? bare;
+    return name === undefined || name in agentTools ? [] : [name];
+  });
 const decodeRuns = Schema.decodeUnknownEffect(
   Schema.Array(Schema.Struct({ run_id: Telescope.AgentRunId, on_behalf_of_json: Schema.String })),
 );
@@ -711,7 +712,7 @@ it.effect.each([
 );
 
 it.effect(
-  "a wake for a revoked member starts nothing, and after the member is restored a wake starts a new thread",
+  "a wake for a revoked member starts nothing; once restored a wake starts a new thread, which a later refusal keeps",
   () =>
     withHarness({ mcp: true }, (harness) =>
       Effect.gen(function* () {
@@ -750,6 +751,18 @@ it.effect(
         assert.include(turn.message.text, "Chief Agent");
         yield* harness.complete(turn, 1);
         yield* Fiber.join(runner);
+        yield* Queue.take(harness.finished);
+        // A refusal on a reused thread keeps it resident. The PA's report wakes wait behind
+        // the one taken above, so the next take is the Chief's.
+        const later = yield* delegations.delegate(seeded.actor, { toAgentId: seeded.chief, brief });
+        yield* revoked("2026-11-07T01:00:00.000Z");
+        assert.isTrue(Exit.isFailure(yield* Fiber.await(yield* runWake(yield* wakes.take))));
+        const refused = yield* delegations.get({
+          workspaceId: seeded.workspaceId,
+          delegationId: later.id,
+        });
+        assert.equal(refused.report?.blockedOn, "Runs act only for active members.");
+        assert.equal(yield* residentOf(seeded, seeded.chief), turn.threadId);
       }),
     ),
 );
