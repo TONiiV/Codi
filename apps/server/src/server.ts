@@ -81,7 +81,9 @@ import * as PeerForwarding from "./peer/PeerForwarding.ts";
 import * as RemoteDelegation from "./peer/RemoteDelegation.ts";
 import * as PeerLinkRequests from "./peer/PeerLinkRequests.ts";
 import * as TelescopeWorkspaces from "./telescope/WorkspaceService.ts";
+import * as TelescopeWorkspaceData from "./telescope/WorkspaceDataService.ts";
 import * as TelescopeBoard from "./telescope/TaskBoardService.ts";
+import * as TelescopeBoardChanges from "./telescope/BoardChanges.ts";
 import * as TelescopeAgents from "./telescope/AgentService.ts";
 import * as TelescopeRuns from "./telescope/RunRecordService.ts";
 import * as TelescopeGrants from "./telescope/GrantService.ts";
@@ -820,7 +822,8 @@ const layerMakeRoutes = Layer.mergeAll(
   Layer.provide(PeerLinkRequests.layer),
   Layer.provide(TelescopeWakeQueue.layer),
   Layer.provide(TelescopeWorkspaces.layer),
-  Layer.provide(TelescopeBoard.layer),
+  // The same notice hub TaskBoardService publishes to, by layer memoization.
+  Layer.provide(Layer.merge(TelescopeBoard.layer, TelescopeBoardChanges.layer)),
   Layer.provide(TelescopeAgents.layer),
   Layer.provide(
     Layer.mergeAll(
@@ -830,6 +833,7 @@ const layerMakeRoutes = Layer.mergeAll(
       TelescopeToolGateway.layer,
       TelescopeAttribution.layer,
       TelescopeRouting.layer,
+      TelescopeWorkspaceData.layer,
     ),
   ),
   Layer.provide(TelescopeTokenSaver.layer.pipe(Layer.provide(UsageProjectResolver.layer))),

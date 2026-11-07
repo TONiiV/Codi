@@ -112,8 +112,8 @@ type Caller = WorkspaceService.Caller;
 type Failure = Telescope.WorkspaceError | PersistenceSqlError | PersistenceDecodeError;
 type Out<A> = Effect.Effect<A, Failure>;
 type Rpcs = (typeof Telescope.RoutingRpcs)[number];
-type Method<Tag extends Rpcs["_tag"]> = (
-  caller: Caller,
+type Method<Tag extends Rpcs["_tag"], C = Caller> = (
+  caller: C,
   input: Rpc.Payload<Rpc.ExtractTag<Rpcs, Tag>>,
 ) => Out<Rpc.Success<Rpc.ExtractTag<Rpcs, Tag>>>;
 
@@ -137,7 +137,7 @@ export class RoutingService extends Context.Service<
       request: RouteRequest,
     ) => Out<Telescope.RoutingResolution>;
     /** Members resolve for the agents they can see. */
-    readonly resolveFor: Method<"telescope.routing.resolve">;
+    readonly resolveFor: Method<"telescope.routing.resolve", WorkspaceService.SessionCaller>;
   }
 >()("t3/telescope/RoutingService") {}
 
@@ -249,12 +249,12 @@ const make = Effect.gen(function* () {
     return yield* route(workspaceId, agent, request);
   });
 
-  const resolveFor: Method<"telescope.routing.resolve"> = Effect.fn("RoutingService.resolveFor")(
-    function* (caller, input) {
-      const { agent } = yield* agents.get(caller, input);
-      return yield* route(input.workspaceId, agent, input);
-    },
-  );
+  const resolveFor: Method<"telescope.routing.resolve", WorkspaceService.SessionCaller> = Effect.fn(
+    "RoutingService.resolveFor",
+  )(function* (caller, input) {
+    const { agent } = yield* agents.get(caller, input);
+    return yield* route(input.workspaceId, agent, input);
+  });
 
   return RoutingService.of({ list, set, remove, resolve, resolveFor });
 });

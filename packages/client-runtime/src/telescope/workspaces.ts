@@ -53,9 +53,27 @@ export function resolveCurrentWorkspace(
   return workspaces.find((workspace) => workspace.id === storedId) ?? workspaces[0] ?? null;
 }
 
+/** No workspace and none loading: no environment to ask, or a loaded list that is empty. */
+export function hasNoWorkspace(
+  environmentId: EnvironmentId | null,
+  list: { readonly workspaces: ReadonlyArray<Telescope.Workspace> } | null,
+): boolean {
+  return environmentId === null || (list !== null && list.workspaces.length === 0);
+}
+
 /** The environment owner's built-in member: an admin of every workspace, never removable. */
 export function isEnvironmentOwner(member: Telescope.Member): boolean {
   return member.subjectId === Telescope.OWNER_MEMBER_ID;
+}
+
+/** Whether `self` may change the role of, revoke or restore `member`; the server stays authoritative. */
+export function canManageMember(self: Telescope.Member | null, member: Telescope.Member): boolean {
+  return (
+    self?.role === "admin" &&
+    self.revokedAt === undefined &&
+    member.subjectId !== self.subjectId &&
+    !isEnvironmentOwner(member)
+  );
 }
 
 interface ProjectRef {
@@ -247,6 +265,11 @@ export function createTelescopeWorkspaceAtoms<R, E>(
     revoke: createEnvironmentRpcCommand(runtime, {
       label: "telescope:member:revoke",
       tag: WS_METHODS.memberRevoke,
+      onSuccess: refreshMembers,
+    }),
+    restore: createEnvironmentRpcCommand(runtime, {
+      label: "telescope:member:restore",
+      tag: WS_METHODS.memberRestore,
       onSuccess: refreshMembers,
     }),
     bind: createEnvironmentRpcCommand(runtime, {

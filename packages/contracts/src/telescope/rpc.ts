@@ -48,12 +48,20 @@ import {
   WorkspaceScopedInput,
 } from "./workspace.ts";
 import {
+  WorkspaceBusyError,
+  WorkspaceDeleteInput,
+  WorkspaceDeleteManifest,
+  WorkspaceExportResult,
+} from "./workspaceData.ts";
+import {
+  BoardWatchItem,
   CommitListInput,
   CommitListResult,
   DecisionCreateInput,
   DecisionListResult,
   FreeTextLimitError,
   LeaseAcquireInput,
+  LeaseGetResult,
   LeaseScopedInput,
   StaleTaskVersionError,
   TaskCreateInput,
@@ -91,6 +99,8 @@ export const WS_METHODS = {
   workspaceCreate: "telescope.workspace.create",
   workspaceList: "telescope.workspace.list",
   workspaceGet: "telescope.workspace.get",
+  workspaceExport: "telescope.workspace.export",
+  workspaceDelete: "telescope.workspace.delete",
   memberInvite: "telescope.member.invite",
   memberLinkCode: "telescope.member.linkCode",
   memberAccept: "telescope.member.accept",
@@ -109,6 +119,7 @@ export const WS_METHODS = {
   decisionCreate: "telescope.decision.create",
   decisionList: "telescope.decision.list",
   commitList: "telescope.commit.list",
+  boardWatch: "telescope.board.watch",
   agentListMine: "telescope.agent.listMine",
   agentGet: "telescope.agent.get",
   agentCreateCustom: "telescope.agent.createCustom",
@@ -121,6 +132,7 @@ export const WS_METHODS = {
   leaseAcquire: "telescope.lease.acquire",
   leaseHeartbeat: "telescope.lease.heartbeat",
   leaseRelease: "telescope.lease.release",
+  leaseGet: "telescope.lease.get",
   wakeList: "telescope.wake.list",
   tokenSaverRun: "telescope.tokensaver.run",
   grantExplain: "telescope.grant.explain",
@@ -149,6 +161,12 @@ export const WorkspaceRpcs = [
   make(WS_METHODS.workspaceCreate, WorkspaceCreateInput, Workspace),
   make(WS_METHODS.workspaceList, WorkspaceListInput, WorkspaceListResult),
   make(WS_METHODS.workspaceGet, WorkspaceScopedInput, WorkspaceGetResult),
+  make(WS_METHODS.workspaceExport, WorkspaceScopedInput, WorkspaceExportResult),
+  Rpc.make(WS_METHODS.workspaceDelete, {
+    payload: WorkspaceDeleteInput,
+    success: WorkspaceDeleteManifest,
+    error: Schema.Union([WorkspaceError, WorkspaceBusyError, EnvironmentAuthorizationError]),
+  }),
   make(WS_METHODS.memberInvite, MemberInviteInput, Invitation),
   make(WS_METHODS.memberLinkCode, MemberLinkCodeInput, Invitation),
   make(WS_METHODS.memberAccept, MemberAcceptInput, Member),
@@ -182,9 +200,16 @@ export const TaskBoardRpcs = [
   makeBoard(WS_METHODS.decisionCreate, DecisionCreateInput, Decision),
   makeBoard(WS_METHODS.decisionList, WorkspaceScopedInput, DecisionListResult),
   makeBoard(WS_METHODS.commitList, CommitListInput, CommitListResult),
+  Rpc.make(WS_METHODS.boardWatch, {
+    payload: WorkspaceScopedInput,
+    success: BoardWatchItem,
+    error,
+    stream: true,
+  }),
   makeBoard(WS_METHODS.leaseAcquire, LeaseAcquireInput, Lease),
   makeBoard(WS_METHODS.leaseHeartbeat, LeaseScopedInput, Lease),
   makeBoard(WS_METHODS.leaseRelease, LeaseScopedInput, Schema.Struct({})),
+  makeBoard(WS_METHODS.leaseGet, TaskGetInput, LeaseGetResult),
 ] as const;
 
 export const AgentRpcs = [

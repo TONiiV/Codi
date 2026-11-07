@@ -917,6 +917,31 @@ export function createEnvironmentRpcQueryAtomFamily<
   });
 }
 
+/** A read that needs a granted scope: like a command, it is refused here when the session lacks it. */
+export function createEnvironmentGuardedRpcQueryAtomFamily<
+  R,
+  ER,
+  TTag extends Extract<EnvironmentUnaryRpcTag, ClientGuardedRpcTag>,
+>(
+  runtime: Atom.AtomRuntime<EnvironmentRegistry.EnvironmentRegistry | R, ER>,
+  options: { readonly label: string; readonly tag: TTag },
+) {
+  const permissions = createCommandPermissions(runtime, options.tag);
+  const query = createEnvironmentQueryAtomFamily(runtime, {
+    label: options.label,
+    execute: Effect.fn("EnvironmentRpc.guardedQuery")(function* (input: EnvironmentRpcInput<TTag>) {
+      const registry = yield* AtomRegistry.AtomRegistry;
+      return yield* requestGuarded(options.tag, input).pipe(
+        Effect.provideService(RpcPermissionGuard, {
+          authorize: (id, method, payload) =>
+            createCommandPermissions(runtime, method).authorize(registry, id, payload),
+        }),
+      );
+    }),
+  });
+  return { query, permissionAtom: permissions.permissionAtom };
+}
+
 export function createEnvironmentRpcSubscriptionAtomFamily<
   R,
   ER,

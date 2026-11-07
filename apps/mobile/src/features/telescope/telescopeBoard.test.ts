@@ -1,7 +1,12 @@
 import { Telescope } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
-import { describeFailure, reviewQueue, reviewUpdateInput } from "./telescopeBoard";
+import {
+  describeDecideFailure,
+  describeFailure,
+  reviewQueue,
+  reviewUpdateInput,
+} from "./telescopeBoard";
 
 const workspaceId = Telescope.WorkspaceId.make("w1");
 
@@ -54,6 +59,12 @@ describe("describeFailure", () => {
     expect(describeFailure(stale)).toMatchObject({ refresh: true, title: "任务已更新" });
     const conflict = new Telescope.WorkspaceError({ reason: "conflict", message: "superseded" });
     expect(describeFailure(conflict)).toMatchObject({ refresh: true, title: "内容已更新" });
+    expect(describeDecideFailure(conflict)).toEqual({
+      refresh: true,
+      title: "没有完成",
+      message: "这条提议已经有人决定了，列表已刷新。",
+    });
+    expect(describeDecideFailure(stale)).toEqual(describeFailure(stale));
     expect(
       describeFailure(new Telescope.WorkspaceError({ reason: "forbidden", message: "nope" })),
     ).toEqual({ refresh: false, title: "操作没有完成", message: "nope" });

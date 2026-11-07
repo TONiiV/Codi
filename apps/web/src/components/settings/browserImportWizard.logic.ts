@@ -1,3 +1,5 @@
+import type { TFunction } from "i18next";
+import { englishT } from "~/i18n/englishT";
 import type { BrowserImportFailureReason, BrowserImportSource } from "@t3tools/contracts";
 
 export interface WizardTargetProfile {
@@ -142,9 +144,43 @@ export function isRetryableReason(reason: BrowserImportFailureReason): boolean {
   }
 }
 
-export function formatSkippedDomains(domains: ReadonlyArray<string>): string {
+const BROWSER_IMPORT_FAILURE_KEYS: Readonly<Record<BrowserImportFailureReason, string>> = {
+  notInstalled: "settings.parallelA.biFailNotInstalled",
+  needsKeychainApproval: "settings.parallelA.biFailNeedsKeychainApproval",
+  keychainItemMissing: "settings.parallelA.biFailKeychainItemMissing",
+  needsFullDiskAccess: "settings.parallelA.biFailNeedsFullDiskAccess",
+  browserRunning: "settings.parallelA.biFailBrowserRunning",
+  unsupportedPlatform: "settings.parallelA.biFailUnsupportedPlatform",
+  keychainUnavailable: "settings.parallelA.biFailKeychainUnavailable",
+  unknownSource: "settings.parallelA.biFailUnknownSource",
+  unknownSourceProfile: "settings.parallelA.biFailUnknownSourceProfile",
+  sessionUnavailable: "settings.parallelA.biFailSessionUnavailable",
+  profileNotSaved: "settings.parallelA.biFailProfileNotSaved",
+  profileLimitReached: "settings.parallelA.biFailProfileLimitReached",
+  readFailed: "settings.parallelA.biFailReadFailed",
+};
+
+export function browserImportFailureText(
+  reason: BrowserImportFailureReason,
+  t: TFunction = englishT,
+): string {
+  return t(BROWSER_IMPORT_FAILURE_KEYS[reason]);
+}
+
+export function formatSkippedDomains(
+  domains: ReadonlyArray<string>,
+  t: TFunction = englishT,
+): string {
   if (domains.length === 0) return "";
   if (domains.length === 1) return domains[0]!;
-  if (domains.length <= 3) return `${domains.slice(0, -1).join(", ")} and ${domains.at(-1)}`;
-  return `${domains.slice(0, 3).join(", ")} and ${domains.length - 3} more`;
+  if (domains.length <= 3) {
+    return t("settings.parallelA.domainsAnd", {
+      list: domains.slice(0, -1).join(t("settings.parallelA.listSeparator")),
+      last: domains.at(-1),
+    });
+  }
+  return t("settings.parallelA.domainsAndMore", {
+    list: domains.slice(0, 3).join(t("settings.parallelA.listSeparator")),
+    count: domains.length - 3,
+  });
 }

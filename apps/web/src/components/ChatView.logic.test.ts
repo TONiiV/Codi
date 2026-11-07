@@ -7,6 +7,7 @@ import {
   snapshotComposerSend,
   withMessageContext,
   deriveAvailableRevertTurnCounts,
+  sideChatSourceBlock,
 } from "./ChatView.logic";
 import { recallCheckoutIsRepo, rememberCheckoutIsRepo } from "./ChatView.logic";
 import { ProviderDriverKind, type ServerProvider } from "@t3tools/contracts";
@@ -724,6 +725,56 @@ describe("worktree setup visibility", () => {
     expect(resolve(base, newest)).toEqual({ snapshot: newest, isPreparingWorktree: false });
     const other = { ...base, threadId: ThreadId.make("another-thread") };
     expect(resolve(other, other)).toEqual({ snapshot: null, isPreparingWorktree: false });
+  });
+});
+
+describe("sideChatSourceBlock", () => {
+  const root = { parentThreadId: null, relationshipToParent: null, rootThreadId: threadId };
+  const child = { ...root, parentThreadId: threadId, rootThreadId: threadId };
+  const delegatedFrom = { environmentId, threadId, title: "Remote" };
+  const main = { lineage: root, delegatedFrom: null };
+  const ready = { sideChats: true };
+  it.each([
+    ["a main thread", main, ready, true, null],
+    ["an unknown thread", null, ready, true, null],
+    [
+      "a fork",
+      { lineage: { ...child, relationshipToParent: "fork" as const }, delegatedFrom: null },
+      ready,
+      true,
+      null,
+    ],
+    [
+      "a side chat",
+      {
+        lineage: { ...child, relationshipToParent: "fork" as const, sideChat: true },
+        delegatedFrom: null,
+      },
+      ready,
+      true,
+      "sideChat",
+    ],
+    [
+      "a subagent",
+      { lineage: { ...child, relationshipToParent: "subagent" as const }, delegatedFrom: null },
+      ready,
+      true,
+      "subagent",
+    ],
+    ["a delegated thread", { lineage: root, delegatedFrom }, ready, true, "subagent"],
+    ["a server without side chats", main, { sideChats: false }, true, "unsupported"],
+    ["a server older than side chats", main, {}, true, "unsupported"],
+    ["a server not loaded yet", main, null, true, "loading"],
+    ["a viewer who cannot change threads", main, ready, false, "forbidden"],
+    [
+      "a server without side chats, to a viewer who cannot change threads",
+      main,
+      { sideChats: false },
+      false,
+      "unsupported",
+    ],
+  ] as const)("%s", (_, thread, capabilities, canOperate, expected) => {
+    expect(sideChatSourceBlock(thread, capabilities, canOperate)).toBe(expected);
   });
 });
 

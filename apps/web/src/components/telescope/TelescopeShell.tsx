@@ -17,6 +17,7 @@ import {
 } from "../WorkspaceBreadcrumb";
 import { WorkspacePageHeader } from "../WorkspacePageHeader";
 import { MyTeamsPage } from "./MyTeamsPage";
+import { TaskDrawer } from "./TaskDrawer";
 import { TelescopeAccountFooter } from "./TelescopeAccount";
 import { TelescopeDashboard } from "./TelescopeDashboard";
 import {
@@ -185,6 +186,7 @@ export function TelescopePage({
             <TelescopeEmptyState view={view} />
           ))}
       </div>
+      {background ? null : <TaskDrawer />}
     </SidebarInset>
   );
 }

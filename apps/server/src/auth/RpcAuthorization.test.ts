@@ -90,6 +90,8 @@ describe("RPC authorization scopes", () => {
       expect(requiredScopeForRpcMethod(method)).toBe(AuthTelescopeMemberScope);
     }
     for (const method of [
+      Telescope.WS_METHODS.workspaceExport,
+      Telescope.WS_METHODS.workspaceDelete,
       Telescope.WS_METHODS.memberInvite,
       Telescope.WS_METHODS.memberLinkCode,
       Telescope.WS_METHODS.memberSetRole,
@@ -115,9 +117,11 @@ describe("RPC authorization scopes", () => {
       Telescope.WS_METHODS.decisionCreate,
       Telescope.WS_METHODS.decisionList,
       Telescope.WS_METHODS.commitList,
+      Telescope.WS_METHODS.boardWatch,
       Telescope.WS_METHODS.leaseAcquire,
       Telescope.WS_METHODS.leaseHeartbeat,
       Telescope.WS_METHODS.leaseRelease,
+      Telescope.WS_METHODS.leaseGet,
       Telescope.WS_METHODS.tokenSaverRun,
     ]) {
       expect(requiredScopeForRpcMethod(method)).toBe(AuthTelescopeMemberScope);
