@@ -71,11 +71,9 @@ import {
   RotateCcwIcon,
   SettingsIcon,
   MonitorIcon,
-  MicroscopeIcon,
   PinIcon,
   PinOffIcon,
   SquarePenIcon,
-  TelescopeIcon,
   TextSearchIcon,
   UserPlusIcon,
 } from "lucide-react";
@@ -260,6 +258,7 @@ import { stackedThreadToast, toastManager } from "./ui/toast";
 import { suggestAppAccessForRemote } from "./sourceControlAppAccessToast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";
 import { useNavigateToAppMode } from "./sidebar/mainAppLocation";
+import { MicroscopeGlyph, TelescopeGlyph } from "./telescope/ModeGlyphs";
 import { useTelescopeView } from "./telescope/telescopeViews";
 import { ComposerHandleContext, useComposerHandleContext } from "../composerHandleContext";
 import type { ChatComposerHandle } from "./chat/ChatComposer";
@@ -1622,7 +1621,7 @@ function OpenCommandPaletteDialog(props: {
           value: "action:code",
           searchTerms: ["code", "microscope", "threads", "back"],
           title: "Back to Code",
-          icon: <MicroscopeIcon className={ITEM_ICON_CLASS} />,
+          icon: <MicroscopeGlyph className={ITEM_ICON_CLASS} />,
           run: async () => {
             await navigateToAppMode("code");
           },
@@ -1632,7 +1631,7 @@ function OpenCommandPaletteDialog(props: {
           value: "action:telescope",
           searchTerms: ["telescope", "team", "tasks", "decisions", "dashboard"],
           title: "Open Telescope",
-          icon: <TelescopeIcon className={ITEM_ICON_CLASS} />,
+          icon: <TelescopeGlyph className={ITEM_ICON_CLASS} />,
           run: async () => {
             await navigateToAppMode("telescope");
           },

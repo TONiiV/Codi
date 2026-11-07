@@ -1,7 +1,8 @@
-import { MicroscopeIcon, TelescopeIcon } from "lucide-react";
+import { useState } from "react";
 
 import { cn } from "../../lib/utils";
 import { useNavigateToAppMode } from "../sidebar/mainAppLocation";
+import { MicroscopeGlyph, TelescopeGlyph } from "./ModeGlyphs";
 import { useTelescopeView } from "./telescopeViews";
 
 /**
@@ -11,19 +12,22 @@ import { useTelescopeView } from "./telescopeViews";
 export function TelescopeModeSwitch() {
   const navigateToAppMode = useNavigateToAppMode();
   const onTelescope = useTelescopeView() !== null;
-  const Current = onTelescope ? TelescopeIcon : MicroscopeIcon;
+  const Current = onTelescope ? TelescopeGlyph : MicroscopeGlyph;
+  // The resting icon remounts on every switch; it plays only after one, not on first load.
+  const [firstMode, setFirstMode] = useState<boolean | null>(onTelescope);
+  if (firstMode !== null && firstMode !== onTelescope) setFirstMode(null);
   const modes = [
     {
       id: "telescope",
       label: "Telescope",
-      icon: TelescopeIcon,
+      icon: TelescopeGlyph,
       active: onTelescope,
       go: () => void navigateToAppMode("telescope"),
     },
     {
       id: "microscope",
       label: "Microscope",
-      icon: MicroscopeIcon,
+      icon: MicroscopeGlyph,
       active: !onTelescope,
       go: () => void navigateToAppMode("code"),
     },
@@ -41,7 +45,7 @@ export function TelescopeModeSwitch() {
         )}
       >
         <Current
-          aria-hidden="true"
+          data-glyph-play={firstMode === null ? "" : undefined}
           className="absolute size-3.5 text-background group-hover/mode:opacity-0 group-has-[:focus-visible]/mode:opacity-0"
         />
         <div className="pointer-events-none grid h-8 w-70 shrink-0 grid-cols-2 gap-1 opacity-0 group-hover/mode:pointer-events-auto group-hover/mode:opacity-100 group-has-[:focus-visible]/mode:pointer-events-auto group-has-[:focus-visible]/mode:opacity-100">
@@ -49,6 +53,7 @@ export function TelescopeModeSwitch() {
             <button
               key={mode.id}
               type="button"
+              data-glyph-trigger=""
               aria-pressed={mode.active}
               onClick={mode.active ? undefined : mode.go}
               className={cn(
@@ -58,7 +63,7 @@ export function TelescopeModeSwitch() {
                   : "cursor-pointer text-muted-foreground hover:text-foreground",
               )}
             >
-              <mode.icon aria-hidden="true" className="size-4" />
+              <mode.icon key={String(mode.active)} className="size-4" />
               {mode.label}
             </button>
           ))}
