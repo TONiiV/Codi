@@ -61,7 +61,7 @@ import {
   visibleResourceTelemetryProcesses,
 } from "./ResourceTelemetryDiagnostics.logic";
 import { SettingsSection } from "./settingsLayout";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 
 const HISTORY_WINDOWS = [
@@ -1417,7 +1417,10 @@ function ResourceTelemetryDiagnosticsBody({
         headerAction={
           snapshot ? (
             <span className="text-3xs text-muted-foreground/55">
-              Identity: <span className="font-mono">{t("settings.text.pidStartTime")}</span>
+              <Trans
+                i18nKey="settings.text.identityPidStartTime"
+                components={{ mono: <span className="font-mono" /> }}
+              />
             </span>
           ) : null
         }

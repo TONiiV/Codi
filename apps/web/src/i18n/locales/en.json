@@ -1428,7 +1428,7 @@
       "waitingForCollectorHealth": "Waiting for collector health.",
       "resourceTimeline": "Resource timeline",
       "liveProcessTree": "Live process tree",
-      "pidStartTime": "PID + start time",
+      "identityPidStartTime": "Identity: <mono>PID + start time</mono>",
       "instrumentedApplicationIO": "Instrumented application I/O",
       "logicalBytesByOperation": "Logical bytes by operation",
       "nativeCountersIdentifyWhichProcessIs": "Native counters identify which process is reading or writing. These application-level counters identify known T3 operations so process spikes can be correlated with specific persistence and logging paths.",

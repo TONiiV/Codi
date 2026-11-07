@@ -1428,7 +1428,7 @@
       "waitingForCollectorHealth": "正在等待采集器健康状态。",
       "resourceTimeline": "资源时间线",
       "liveProcessTree": "实时进程树",
-      "pidStartTime": "PID + 启动时间",
+      "identityPidStartTime": "标识：<mono>PID + 启动时间</mono>",
       "instrumentedApplicationIO": "被检测的应用 I/O",
       "logicalBytesByOperation": "按操作统计的逻辑字节数",
       "nativeCountersIdentifyWhichProcessIs": "原生计数器能识别哪个进程在读取或写入。这些应用级计数器能识别已知的 T3 操作，从而将进程峰值与特定的持久化和日志路径关联起来。",
