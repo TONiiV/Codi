@@ -80,8 +80,7 @@ const OpenTicketTool = boardTool("open_ticket", {
 
 const TicketUpdateTool = boardTool("ticket_update", {
   title: "Update ticket",
-  description:
-    "Change a Telescope ticket's fields with `set`, or append a `note`; notes are never edited. `baseVersion`: the `version` you read. A stale write is merged; fields no rule settles go to a member as a decision, returned as `conflict`: do not write them again, tell your member. Only a member moves a ticket out of needs_decision. If you are blocked until a member answers, set `status` to needs_decision and say why in `note`.",
+  description: `Change a Telescope ticket's fields with \`set\`, or append a \`note\`; notes are never edited. \`baseVersion\`: the \`version\` you read. A stale write is merged; fields no rule settles go to a member as a decision, returned as \`conflict\`: do not write them again, tell your member. Only a member moves a ticket out of needs_decision. If you are blocked until a member answers, set \`status\` to needs_decision and say why in \`note\`. ${BOARD_TEXT}`,
   parameters: Telescope.TaskUpdateInput.mapFields((fields) => ({
     ...Struct.omit(fields, ["workspaceId"]),
     set: Schema.optionalKey(AgentTaskFields),

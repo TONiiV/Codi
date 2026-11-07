@@ -23,6 +23,7 @@ import {
 import * as PeerForwarding from "../peer/PeerForwarding.ts";
 import { assertNotLinked, assertSameLink, callerLinkOrigin } from "./linkOrigin.ts";
 import * as McpInvocationContext from "./McpInvocationContext.ts";
+import * as Gate from "./toolkits/telescope/gate.ts";
 import { resolveInteractionMode, resolveRuntimeMode } from "./delegatedTaskModes.ts";
 import {
   assertFullAccess,
@@ -385,15 +386,20 @@ const routed = Effect.fn("McpToolAccess.routed")(function* <Tools extends Record
   const handlers: Record<string, unknown> = { ...checked };
   for (const [name, declaration] of Object.entries<Declaration<unknown>>(declarations)) {
     const tool = toolkit.tools[name];
-    if (tool === undefined || !takesLinkedEnvironment(tool)) continue;
+    if (tool === undefined) continue;
+    const local = handlers[name] as (
+      params: object,
+    ) => Effect.Effect<unknown, Tool.Failure<Tools[keyof Tools]>>;
+    const here = Gate.dispatchesWork(name)
+      ? (params: object) => Gate.gateDispatch(name, params, local(params))
+      : local;
+    handlers[name] = here;
+    if (!takesLinkedEnvironment(tool)) continue;
     const remote = remoteCheckOf(declaration);
     if (remote === undefined)
       return yield* Effect.die(
         `${name} takes a linked environment, but it acts as its calling thread, which is here.`,
       );
-    const here = handlers[name] as (
-      params: object,
-    ) => Effect.Effect<unknown, Tool.Failure<Tools[keyof Tools]>>;
     handlers[name] = ({ environmentId, ...params }: { readonly environmentId?: EnvironmentId }) =>
       Effect.gen(function* () {
         const scope = yield* McpInvocationContext.McpInvocationContext;
@@ -402,7 +408,9 @@ const routed = Effect.fn("McpToolAccess.routed")(function* <Tools extends Record
         if (scope.linkedEnvironments === false) return yield* PeerForwarding.linkedEnvironmentsOff;
         yield* (remote as RemoteCheck<typeof params>)(params);
         if (Option.isNone(forwarding)) return yield* linksUnavailable;
-        return yield* forwarding.value.call(scope, tool, target, { ...params, environmentId });
+        const forward = forwarding.value.call(scope, tool, target, { ...params, environmentId });
+        // A Telescope run's dispatching call is refused here, before it goes.
+        return yield* Gate.gateDispatch(name, { ...params, environmentId }, forward);
       });
   }
   return handlers as Toolkit.HandlersFrom<Tools>;
