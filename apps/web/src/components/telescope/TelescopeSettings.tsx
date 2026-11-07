@@ -21,8 +21,6 @@ import { PlusIcon, Settings2Icon } from "lucide-react";
 import { useState, type ReactNode } from "react";
 
 import { connectionAtomRuntime } from "../../connection/runtime";
-import { useProjects } from "../../state/entities";
-import { useEnvironmentProviders } from "../../state/environments";
 import { useEnvironmentQuery, type EnvironmentQueryView } from "../../state/query";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { SettingsPageContainer, SettingsRow, SettingsSection } from "../settings/settingsLayout";
@@ -35,57 +33,36 @@ import { Toggle, ToggleGroup } from "../ui/toggle-group";
 import { AgentSettingsDialog } from "./MyTeamsAgentDialog";
 import { KIND_LABEL, powerSummary, telescopeAgents } from "./myTeamsShared";
 import {
+  CreateWorkspaceDialog,
   ErrorNote,
   FormDialog,
+  JoinWorkspaceDialog,
   TextField,
   useFreshMembers,
   WORKSPACE_ROLE_LABEL,
 } from "./TelescopeAccountDialogs";
-import { ProjectRulesSection } from "./TelescopeProjectRules";
+import { projectRules, ProjectRulesSection } from "./TelescopeProjectRules";
+import {
+  noAdminScopeText,
+  QueryStatus,
+  type RoutingNames,
+  type Scoped,
+  StatusRow,
+  useRoutingNames,
+} from "./telescopeSettingsParts";
 import { telescope, useTelescopeWorkspaces, WORKSPACE_KIND_LABEL } from "./telescopeState";
 
-const governance = createTelescopeGovernanceAtoms(connectionAtomRuntime);
-const routing = Routing.createTelescopeRoutingAtoms(connectionAtomRuntime);
+const governance = createTelescopeGovernanceAtoms(connectionAtomRuntime, telescope.get);
+const routing = Routing.createTelescopeRoutingAtoms(connectionAtomRuntime, telescope.get);
 const ALL_PROJECTS = "all";
 
 const isRole = Schema.is(Telescope.WorkspaceRole);
 const KILL_SWITCH_LABEL = { running: "运行", paused: "暂停", terminated: "终止" } as const;
 const COMPANY_LEVEL_LABEL = { enterprise: "整个公司", personal: "整个工作区" } as const;
 const isKillSwitchState = Schema.is(Telescope.KillSwitch.fields.state);
+const NO_RULES: ReadonlyArray<Telescope.RoutingRule> = [];
 
-export interface Scoped {
-  environmentId: EnvironmentId;
-  workspace: Telescope.Workspace;
-  self: Telescope.Member;
-}
-
-export function StatusRow(props: { text: string; failed?: boolean; onRetry?: () => void }) {
-  return (
-    <div className="px-3 py-3 text-sm text-muted-foreground sm:px-4">
-      {props.failed ? <ErrorNote {...props} /> : props.text}
-    </div>
-  );
-}
-
-/** Loading or failed state of a query whose data is still missing. */
-export function QueryStatus({
-  query,
-  what,
-}: {
-  query: EnvironmentQueryView<unknown>;
-  what: string;
-}) {
-  const failed = query.error !== null;
-  return (
-    <StatusRow
-      text={failed ? `${what}加载失败。` : `正在加载${what}…`}
-      failed={failed}
-      onRetry={query.refresh}
-    />
-  );
-}
-
-function MembersSection({ environmentId, workspace, self }: Scoped) {
+export function MembersSection({ environmentId, workspace, self }: Scoped) {
   const query = useFreshMembers(environmentId, workspace.id);
   const maySetRole = useAtomValue(telescope.setRole.permissionAtom(environmentId));
   const mayRevoke = useAtomValue(telescope.revoke.permissionAtom(environmentId));
@@ -124,6 +101,7 @@ function MembersSection({ environmentId, workspace, self }: Scoped) {
         return (
           <SettingsRow
             key={member.subjectId}
+            className="wrap-anywhere"
             title={`${member.displayName}${member.subjectId === self.subjectId ? "（你）" : ""}`}
             description={revoked ? "已移除，不能再进入这个工作区。" : undefined}
             control={
@@ -159,7 +137,7 @@ function MembersSection({ environmentId, workspace, self }: Scoped) {
                 </>
               ) : (
                 <>
-                  <div className="w-36">
+                  <div className="w-40">
                     <Select
                       value={member.role}
                       disabled={!maySetRole || busy}
@@ -199,6 +177,9 @@ function MembersSection({ environmentId, workspace, self }: Scoped) {
           />
         );
       })}
+      {self.role === "admin" && !(maySetRole && mayRevoke && mayRestore) ? (
+        <StatusRow text={noAdminScopeText("成员")} />
+      ) : null}
       {error === null ? null : <StatusRow text={error} failed />}
     </SettingsSection>
   );
@@ -208,9 +189,8 @@ function CompanyAgentsSection({ environmentId, workspace, self }: Scoped) {
   const company = useEnvironmentQuery(
     telescopeAgents.listCompany({ environmentId, input: { workspaceId: workspace.id } }),
   );
-  const mayConfigure =
-    useAtomValue(telescopeAgents.updateCompany.permissionAtom(environmentId)) &&
-    self.role === "admin";
+  const mayUpdate = useAtomValue(telescopeAgents.updateCompany.permissionAtom(environmentId));
+  const mayConfigure = mayUpdate && self.role === "admin";
   const [editing, setEditing] = useState<Telescope.Agent | null>(null);
   const agents = (company.data?.agents ?? []).filter((agent) => agent.ownerSubjectId === null);
   return (
@@ -219,6 +199,7 @@ function CompanyAgentsSection({ environmentId, workspace, self }: Scoped) {
       {agents.map((agent) => (
         <SettingsRow
           key={agent.id}
+          className="wrap-anywhere"
           title={agent.name}
           description={`${KIND_LABEL[agent.kind]}，直接做：${powerSummary(agent.standingPowers)}`}
           control={
@@ -231,7 +212,13 @@ function CompanyAgentsSection({ environmentId, workspace, self }: Scoped) {
         />
       ))}
       {company.data !== null && !mayConfigure ? (
-        <StatusRow text="只有公司管理员能设定公司 agents。" />
+        <StatusRow
+          text={
+            self.role === "admin"
+              ? noAdminScopeText("公司 agents")
+              : "只有公司管理员能设定公司 agents。"
+          }
+        />
       ) : null}
       {editing ? (
         <AgentSettingsDialog
@@ -314,7 +301,13 @@ function GovernanceSection({ environmentId, workspace, self }: Scoped) {
   if (!admin)
     return (
       <SettingsSection id="telescope-governance" title="预算与急停">
-        <StatusRow text="只有管理员能查看和修改预算与急停。" />
+        <StatusRow
+          text={
+            self.role === "admin"
+              ? "这个连接没有 Telescope 管理权限，看不到预算与急停。"
+              : "只有管理员能查看和修改预算与急停。"
+          }
+        />
       </SettingsSection>
     );
   const data = state.data;
@@ -338,6 +331,7 @@ function GovernanceSection({ environmentId, workspace, self }: Scoped) {
     return (
       <SettingsRow
         key={`${scope}:${scopeId}`}
+        className="wrap-anywhere"
         title={title}
         description={budgetUsageText(budget)}
         control={
@@ -436,42 +430,6 @@ function Picker<T extends string>(props: {
     </Label>
   );
 }
-
-/** Bound projects and the harnesses this server runs, under the names the page shows. */
-export function useRoutingNames(environmentId: EnvironmentId, workspace: Telescope.Workspace) {
-  const { bindings } = useTelescopeWorkspaces();
-  const bound = useEnvironmentQuery(telescope.bindingSummary({ environmentId, input: {} }));
-  const allProjects = useProjects();
-  const projects = bindings
-    .filter((binding) => binding.workspaceId === workspace.id)
-    .map((binding) => ({
-      value: binding.projectId,
-      label:
-        allProjects.find(
-          (project) =>
-            project.environmentId === binding.environmentId && project.id === binding.projectId,
-        )?.title ?? binding.projectId,
-    }));
-  const harnesses = (useEnvironmentProviders().get(environmentId) ?? [])
-    .filter((provider) => provider.enabled)
-    .map((provider) => ({
-      value: provider.instanceId,
-      label: provider.displayName ?? provider.instanceId,
-    }));
-  const unbound = (id: Telescope.RoutingRule["projectId"]) =>
-    id !== undefined && bound.data !== null && !projects.some((entry) => entry.value === id);
-  const project = (id: Telescope.RoutingRule["projectId"]) =>
-    id === undefined
-      ? "全部项目"
-      : (projects.find((entry) => entry.value === id)?.label ??
-        (unbound(id) ? `${id}（已解除绑定）` : id));
-  const harness = (id: Telescope.RoutingRule["harness"]) =>
-    harnesses.find((entry) => entry.value === id)?.label ?? id;
-  const rule = (rule: Telescope.RoutingRule) =>
-    `${project(rule.projectId)} · ${Routing.taskTypeLabel(rule.taskType)} → ${harness(rule.harness)} · ${rule.model}`;
-  return { projects, harnesses, unbound, project, harness, rule };
-}
-export type RoutingNames = ReturnType<typeof useRoutingNames>;
 
 function RoutingRuleDialog(
   props: Scoped & { names: RoutingNames; rule: Telescope.RoutingRule | null; onClose: () => void },
@@ -576,12 +534,13 @@ function RoutingPreview(
   const [taskType, setTaskType] = useState("");
   const [pending, setPending] = useState(false);
   const [answer, setAnswer] = useState<{
-    asked: { agentId: Telescope.AgentId; taskType: string };
+    asked: Parameters<typeof Routing.answersPreview>[0];
     outcome: Telescope.RoutingResolution | string | null;
   } | null>(null);
   const chosen = agents.find((agent) => agent.value === agentId)?.value ?? agents[0]?.value;
   const outcome =
-    answer !== null && Routing.answersPreview(answer.asked, { agentId: chosen, taskType })
+    answer !== null &&
+    Routing.answersPreview(answer.asked, { agentId: chosen, taskType, rules: props.rules })
       ? answer.outcome
       : null;
   const candidate = (ruleId: Telescope.RoutingRuleId | undefined) => {
@@ -599,7 +558,7 @@ function RoutingPreview(
         onSubmit={async (event) => {
           event.preventDefault();
           if (pending || chosen === undefined || Routing.taskTypeProblem(taskType) !== null) return;
-          const asked = { agentId: chosen, taskType };
+          const asked = { agentId: chosen, taskType, rules: props.rules };
           setPending(true);
           const result = await resolve({
             environmentId: props.environmentId,
@@ -669,7 +628,7 @@ function RoutingSection(props: Scoped) {
   const [confirming, setConfirming] = useState<Telescope.RoutingRuleId | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const rules = query.data?.rules ?? [];
+  const rules = query.data?.rules ?? NO_RULES;
   const confirmDelete = async (id: Telescope.RoutingRuleId) => {
     setBusy(true);
     const result = await remove({ environmentId, input: { workspaceId: workspace.id, id } });
@@ -747,11 +706,7 @@ function RoutingSection(props: Scoped) {
       ])}
       {query.data !== null && !mayEdit ? (
         <StatusRow
-          text={
-            isAdmin
-              ? "这个连接没有 Telescope 管理权限，只能查看路由规则。"
-              : "只有管理员能添加、修改和删除路由规则。"
-          }
+          text={isAdmin ? noAdminScopeText("路由规则") : "只有管理员能添加、修改和删除路由规则。"}
         />
       ) : null}
       {error === null ? null : <StatusRow text={error} failed />}
@@ -768,6 +723,74 @@ function RoutingSection(props: Scoped) {
   );
 }
 
+const settled = (query: EnvironmentQueryView<unknown>) =>
+  query.data !== null || query.error !== null;
+
+function WorkspaceSettings(props: Scoped) {
+  const { environmentId, workspace, self } = props;
+  const scoped = { environmentId, input: { workspaceId: workspace.id } };
+  const mayReadGovernance =
+    useAtomValue(governance.readPermissionAtom(environmentId)) && self.role === "admin";
+  const company = workspace.kind === "enterprise";
+  const lists = [
+    useEnvironmentQuery(telescope.members(scoped)),
+    useEnvironmentQuery(routing.list(scoped)),
+    useEnvironmentQuery(projectRules.list(scoped)),
+  ];
+  const budgets = useEnvironmentQuery(mayReadGovernance ? governance.state(scoped) : null);
+  const agents = useEnvironmentQuery(company ? telescopeAgents.listCompany(scoped) : null);
+  // A search target scrolls into view once the sections above it have their rows.
+  const ready =
+    lists.every(settled) &&
+    (!mayReadGovernance || settled(budgets)) &&
+    (!company || settled(agents));
+  return (
+    <SettingsPageContainer searchTargetReady={ready}>
+      <SettingsSection title="当前工作区">
+        <SettingsRow
+          className="wrap-anywhere"
+          title={workspace.name}
+          description="这一页的修改都作用于这个工作区，可在 Telescope 侧栏底部的账号菜单里切换。"
+          control={<Badge variant="outline">{WORKSPACE_KIND_LABEL[workspace.kind]}</Badge>}
+        />
+      </SettingsSection>
+      <MembersSection {...props} />
+      {company ? <CompanyAgentsSection {...props} /> : null}
+      <GovernanceSection {...props} />
+      <RoutingSection {...props} />
+      <ProjectRulesSection {...props} />
+    </SettingsPageContainer>
+  );
+}
+
+function NoWorkspaceRow({ environmentId }: { environmentId: EnvironmentId | null }) {
+  const [dialog, setDialog] = useState<"create" | "join" | null>(null);
+  const close = () => setDialog(null);
+  return (
+    <SettingsRow
+      title="还没有工作区"
+      description="新建或加入一个工作区后，可以在这里管理成员、agents、预算和急停。"
+      control={
+        environmentId === null ? null : (
+          <>
+            <Button size="sm" variant="outline" onClick={() => setDialog("join")}>
+              加入工作区
+            </Button>
+            <Button size="sm" onClick={() => setDialog("create")}>
+              <PlusIcon /> 新建工作区
+            </Button>
+            {dialog === "create" ? (
+              <CreateWorkspaceDialog environmentId={environmentId} defaultName="" onClose={close} />
+            ) : dialog === "join" ? (
+              <JoinWorkspaceDialog environmentId={environmentId} defaultName="" onClose={close} />
+            ) : null}
+          </>
+        )
+      }
+    />
+  );
+}
+
 /** Telescope's server settings for the current workspace; the server checks every change. */
 export function TelescopeSettingsPanel() {
   const { environmentId, current } = useTelescopeWorkspaces();
@@ -779,37 +802,18 @@ export function TelescopeSettingsPanel() {
       ? null
       : telescope.get({ environmentId, input: { workspaceId: current.id } }),
   );
-  const loaded = detail.data;
+  const empty = hasNoWorkspace(environmentId, list.data);
+  if (environmentId !== null && detail.data !== null)
+    return <WorkspaceSettings environmentId={environmentId} {...detail.data} />;
   return (
-    <SettingsPageContainer>
-      {environmentId !== null && loaded !== null ? (
-        <>
-          <SettingsSection title="当前工作区">
-            <SettingsRow
-              title={loaded.workspace.name}
-              description="这一页的修改都作用于这个工作区，可在 Telescope 侧栏底部的账号菜单里切换。"
-              control={
-                <Badge variant="outline">{WORKSPACE_KIND_LABEL[loaded.workspace.kind]}</Badge>
-              }
-            />
-          </SettingsSection>
-          <MembersSection environmentId={environmentId} {...loaded} />
-          {loaded.workspace.kind === "enterprise" ? (
-            <CompanyAgentsSection environmentId={environmentId} {...loaded} />
-          ) : null}
-          <GovernanceSection environmentId={environmentId} {...loaded} />
-          <RoutingSection environmentId={environmentId} {...loaded} />
-          <ProjectRulesSection environmentId={environmentId} {...loaded} />
-        </>
-      ) : (
-        <SettingsSection id="telescope-members" title="成员与角色">
-          {hasNoWorkspace(environmentId, list.data) ? (
-            <StatusRow text="还没有工作区。在 Telescope 里新建或加入一个工作区后，可以在这里管理成员、agents、预算和急停。" />
-          ) : (
-            <QueryStatus query={list.error !== null ? list : detail} what="工作区" />
-          )}
-        </SettingsSection>
-      )}
+    <SettingsPageContainer searchTargetReady={empty}>
+      <SettingsSection id="telescope-members" title="成员与角色">
+        {empty ? (
+          <NoWorkspaceRow environmentId={environmentId} />
+        ) : (
+          <QueryStatus query={list.error !== null ? list : detail} what="工作区" />
+        )}
+      </SettingsSection>
     </SettingsPageContainer>
   );
 }

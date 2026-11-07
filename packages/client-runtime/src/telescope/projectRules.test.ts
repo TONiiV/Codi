@@ -28,6 +28,9 @@ import {
   projectRuleDraft,
   type ProjectRuleDraft,
 } from "./projectRules.ts";
+import { createTelescopeAgentAtoms } from "./agents.ts";
+import { createTelescopeGovernanceAtoms } from "./governance.ts";
+import { createTelescopeRoutingAtoms } from "./routing.ts";
 import { createTelescopeWorkspaceAtoms } from "./workspaces.ts";
 
 vi.mock("../state/session.ts", () => ({
@@ -141,10 +144,19 @@ describe("project rule atoms", () => {
       rules: [rule({})],
       role: "admin" as Telescope.WorkspaceRole,
     };
+    const refuse = () =>
+      Effect.fail(new Telescope.WorkspaceError({ reason: "forbidden", message: "demoted" }));
     const client = {
       [Telescope.WS_METHODS.projectRuleList]: () => Effect.sync(() => ({ rules: server.rules })),
-      [Telescope.WS_METHODS.projectRuleSet]: () =>
-        Effect.fail(new Telescope.WorkspaceError({ reason: "forbidden", message: "demoted" })),
+      [Telescope.WS_METHODS.projectRuleSet]: refuse,
+      [Telescope.WS_METHODS.routingSet]: refuse,
+      [Telescope.WS_METHODS.budgetSet]: refuse,
+      [Telescope.WS_METHODS.killSwitchSet]: refuse,
+      [Telescope.WS_METHODS.memberSetRole]: refuse,
+      [Telescope.WS_METHODS.memberRevoke]: refuse,
+      [Telescope.WS_METHODS.memberRestore]: refuse,
+      [Telescope.WS_METHODS.routingDelete]: refuse,
+      [Telescope.WS_METHODS.agentUpdateCompany]: refuse,
       [Telescope.WS_METHODS.workspaceGet]: () =>
         Effect.sync(() => ({
           workspace: {
@@ -183,6 +195,50 @@ describe("project rule atoms", () => {
       write: () => {},
     });
     const projectRules = createTelescopeProjectRuleAtoms(runtime, workspaces.get);
+    const routing = createTelescopeRoutingAtoms(runtime, workspaces.get);
+    const governance = createTelescopeGovernanceAtoms(runtime, workspaces.get);
+    const agents = createTelescopeAgentAtoms(
+      runtime,
+      workspaces.bindingsRevisionAtom,
+      workspaces.get,
+    );
+    const at = <I>(input: I) => ({ environmentId: env, input: { workspaceId, ...input } });
+    const agentId = Telescope.AgentId.make("agent");
+    const projectId = ProjectId.make("project-api");
+    const refused: ReadonlyArray<readonly [string, () => Promise<{ readonly _tag: string }>]> = [
+      [
+        "project rule",
+        () => projectRules.set.run(registry, at({ projectId, powers, routing: null })),
+      ],
+      [
+        "routing rule",
+        () =>
+          routing.set.run(registry, at({ taskType: "*", harness: codex, model: "m", priority: 0 })),
+      ],
+      [
+        "budget",
+        () =>
+          governance.setBudget.run(
+            registry,
+            at({ scope: "company" as const, scopeId: workspaceId }),
+          ),
+      ],
+      [
+        "kill switch",
+        () => governance.setKillSwitch.run(registry, at({ agentId, state: "paused" as const })),
+      ],
+      [
+        "role",
+        () => workspaces.setRole.run(registry, at({ subjectId: "x", role: "member" as const })),
+      ],
+      ["company agent", () => agents.updateCompany.run(registry, at({ agentId }))],
+      ["revoke", () => workspaces.revoke.run(registry, at({ subjectId: "x" }))],
+      ["restore", () => workspaces.restore.run(registry, at({ subjectId: "x" }))],
+      [
+        "routing delete",
+        () => routing.remove.run(registry, at({ id: Telescope.RoutingRuleId.make("rule") })),
+      ],
+    ];
     const registry = AtomRegistry.make();
     yield* Effect.addFinalizer(() => Effect.sync(() => registry.dispose()));
     registry.mount(sessions(env));
@@ -205,7 +261,7 @@ describe("project rule atoms", () => {
       registry.mount(atom);
       return AtomRegistry.getResult(registry, atom, { suspendOnWaiting: true });
     };
-    return { server, workspaces, projectRules, registry, target, read };
+    return { server, workspaces, projectRules, refused, registry, target, read };
   });
 
   it.effect("opens the editor on the server's current rule, not the page's old copy", () =>
@@ -222,22 +278,18 @@ describe("project rule atoms", () => {
     }),
   );
 
-  it.effect("re-reads the caller's role after a save refused for permission", () =>
+  it.effect("re-reads the caller's role after any admin change refused for permission", () =>
     Effect.gen(function* () {
-      const { server, workspaces, projectRules, registry, target, read } = yield* setup();
-      expect((yield* read(workspaces.get(target))).self.role).toBe("admin");
-      server.role = "member";
-      const input = {
-        workspaceId,
-        projectId: ProjectId.make("project-api"),
-        powers,
-        routing: null,
-      };
-      const result = yield* Effect.promise(() =>
-        projectRules.set.run(registry, { environmentId: env, input }),
-      );
-      expect(result._tag).toBe("Failure");
-      expect((yield* read(workspaces.get(target))).self.role).toBe("member");
+      const { server, workspaces, refused, registry, target, read } = yield* setup();
+      for (const [name, run] of refused) {
+        server.role = "admin";
+        registry.refresh(workspaces.get(target));
+        expect((yield* read(workspaces.get(target))).self.role, name).toBe("admin");
+        server.role = "member";
+        const result = yield* Effect.promise(run);
+        expect(result._tag, name).toBe("Failure");
+        expect((yield* read(workspaces.get(target))).self.role, name).toBe("member");
+      }
     }),
   );
 });

@@ -90,13 +90,23 @@ describe("taskTypeProblem", () => {
 
 describe("answersPreview", () => {
   const agent = Telescope.AgentId.make("agent");
-  const asked = { agentId: agent, taskType: "review" };
+  const rules = [allExact];
+  const asked = { agentId: agent, taskType: "review", rules };
   it.each([
-    ["the same inputs", { agentId: agent, taskType: "review" }, true],
-    ["surrounding spaces ask the same", { agentId: agent, taskType: " review " }, true],
-    ["another task type", { agentId: agent, taskType: "deploy" }, false],
-    ["another agent", { agentId: Telescope.AgentId.make("other"), taskType: "review" }, false],
-    ["no agent", { agentId: undefined, taskType: "review" }, false],
+    ["the same inputs", { agentId: agent, taskType: "review", rules }, true],
+    ["surrounding spaces ask the same", { agentId: agent, taskType: " review ", rules }, true],
+    ["another task type", { agentId: agent, taskType: "deploy", rules }, false],
+    [
+      "another agent",
+      { agentId: Telescope.AgentId.make("other"), taskType: "review", rules },
+      false,
+    ],
+    ["no agent", { agentId: undefined, taskType: "review", rules }, false],
+    [
+      "the rules list changed since",
+      { agentId: agent, taskType: "review", rules: [allAny] },
+      false,
+    ],
   ] as const)("%s", (_name, current, expected) => {
     expect(answersPreview(asked, current)).toBe(expected);
   });

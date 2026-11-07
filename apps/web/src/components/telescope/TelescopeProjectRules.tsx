@@ -19,14 +19,15 @@ import { POWERS, powerSummary } from "./myTeamsShared";
 import { FormDialog } from "./TelescopeAccountDialogs";
 import { telescope } from "./telescopeState";
 import {
+  noAdminScopeText,
   QueryStatus,
   type RoutingNames,
   type Scoped,
   StatusRow,
   useRoutingNames,
-} from "./TelescopeSettings";
+} from "./telescopeSettingsParts";
 
-const projectRules = ProjectRules.createTelescopeProjectRuleAtoms(
+export const projectRules = ProjectRules.createTelescopeProjectRuleAtoms(
   connectionAtomRuntime,
   telescope.get,
 );
@@ -221,13 +222,7 @@ export function ProjectRulesSection(props: Scoped) {
         />
       ))}
       {query.data !== null && !mayEdit ? (
-        <StatusRow
-          text={
-            isAdmin
-              ? "这个连接没有 Telescope 管理权限，只能查看项目规则。"
-              : "只有管理员能修改项目规则。"
-          }
-        />
+        <StatusRow text={isAdmin ? noAdminScopeText("项目规则") : "只有管理员能修改项目规则。"} />
       ) : null}
       {error === null ? null : <StatusRow text={error} failed />}
       {editing === null ? null : (

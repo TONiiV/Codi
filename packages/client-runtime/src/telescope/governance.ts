@@ -7,6 +7,7 @@ import {
   createEnvironmentGuardedRpcQueryAtomFamily,
   createEnvironmentRpcCommand,
 } from "../state/runtime.ts";
+import { rereadRoleWhenForbidden } from "./workspaces.ts";
 
 const { WS_METHODS } = Telescope;
 
@@ -101,7 +102,9 @@ export function parseCallLimit(text: string): { readonly limitCalls?: number } |
 
 export function createTelescopeGovernanceAtoms<R, E>(
   runtime: Atom.AtomRuntime<EnvironmentRegistry | R, E>,
+  workspaceGet: Parameters<typeof rereadRoleWhenForbidden>[0],
 ) {
+  const rereadRole = rereadRoleWhenForbidden(workspaceGet);
   const { query: state, permissionAtom: readPermissionAtom } =
     createEnvironmentGuardedRpcQueryAtomFamily(runtime, {
       label: "telescope:governance:get",
@@ -126,11 +129,13 @@ export function createTelescopeGovernanceAtoms<R, E>(
       label: "telescope:budget:set",
       tag: WS_METHODS.budgetSet,
       onSuccess: refresh,
+      onSettled: rereadRole,
     }),
     setKillSwitch: createEnvironmentRpcCommand(runtime, {
       label: "telescope:kill-switch:set",
       tag: WS_METHODS.killSwitchSet,
       onSuccess: refresh,
+      onSettled: rereadRole,
     }),
   };
 }
