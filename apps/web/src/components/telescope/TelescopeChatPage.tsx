@@ -1,6 +1,7 @@
 import { useAtomValue } from "@effect/atom-react";
 import { scopeThreadRef } from "@t3tools/client-runtime/environment";
 import { offersOpenThread } from "@t3tools/client-runtime/telescope/agents";
+import { failureText, WORKSPACE_ERROR_TEXT } from "@t3tools/client-runtime/telescope/workspaces";
 import type { EnvironmentId, Telescope, ThreadId } from "@t3tools/contracts";
 import { MessagesSquareIcon } from "lucide-react";
 import { useState } from "react";
@@ -23,31 +24,30 @@ import {
 } from "../ui/empty";
 import { Spinner } from "../ui/spinner";
 import { agentDisplayName, telescopeAgents } from "./myTeamsShared";
+import { ErrorNote } from "./TelescopeAccountDialogs";
 import { telescope, useTelescopeWorkspaces } from "./telescopeState";
 import { useChatAgentId } from "./telescopeViews";
 
-function ChatEmpty({
-  title,
-  description,
-  action,
-}: {
-  title: string;
-  description: string;
-  action?: React.ReactNode;
-}) {
+function ChatEmpty(props: { title: string; description: string; children?: React.ReactNode }) {
   return (
     <Empty>
       <EmptyHeader>
         <EmptyMedia variant="icon">
           <MessagesSquareIcon />
         </EmptyMedia>
-        <EmptyTitle>{title}</EmptyTitle>
-        <EmptyDescription>{description}</EmptyDescription>
+        <EmptyTitle>{props.title}</EmptyTitle>
+        <EmptyDescription>{props.description}</EmptyDescription>
       </EmptyHeader>
-      {action === undefined ? null : <EmptyContent>{action}</EmptyContent>}
+      {props.children === undefined ? null : <EmptyContent>{props.children}</EmptyContent>}
     </Empty>
   );
 }
+
+// The server refuses when no model is chosen or the provider cannot use Codi's tools.
+const OPEN_ERROR_TEXT = {
+  ...WORKSPACE_ERROR_TEXT,
+  invalid: "现在开不了这个对话。请在设置里给它选一个能用 Codi 工具的模型。",
+};
 
 const PICK_A_CHAT = (
   <ChatEmpty title="选一个对话" description="从左边选一个 agent，和它的对话会显示在这里。" />
@@ -73,7 +73,11 @@ function AgentChat({
 }) {
   const [opened, setOpened] = useState<ThreadId | null>(null);
   const [busy, setBusy] = useState(false);
-  const openThread = useAtomCommand(telescopeAgents.openThread, "开始对话");
+  const [error, setError] = useState<string | null>(null);
+  const openThread = useAtomCommand(telescopeAgents.openThread, {
+    label: "开始对话",
+    reportFailure: false,
+  });
   const mayOpen = useAtomValue(telescopeAgents.openThread.permissionAtom(environmentId));
   const detail = useEnvironmentQuery(
     telescope.get({ environmentId, input: { workspaceId: workspace.id } }),
@@ -82,7 +86,7 @@ function AgentChat({
   const shell = useQuietThreadShell(
     threadId === null ? null : scopeThreadRef(environmentId, threadId),
   );
-  const shellLive = isThreadRouteSnapshotAuthoritative(useEnvironmentShellStatus(environmentId));
+  const live = isThreadRouteSnapshotAuthoritative(useEnvironmentShellStatus(environmentId));
   const name = agentDisplayName(agent);
 
   if (threadId !== null && shell !== null && shell.archivedAt === null && shell.deletedAt == null)
@@ -96,12 +100,8 @@ function AgentChat({
       />
     );
   // Not loaded yet, or just opened and the lists have not caught up: the shell lists it soon.
-  if (
-    threadId !== null &&
-    shell === null &&
-    (!shellLive || (threadId === opened && agent.residentThreadId !== opened))
-  )
-    return <Loading />;
+  const catchingUp = threadId === opened && agent.residentThreadId !== opened;
+  if (threadId !== null && shell === null && (!live || catchingUp)) return <Loading />;
 
   const self = detail.data?.self;
   if (self === undefined && detail.error === null) return <Loading />;
@@ -109,24 +109,23 @@ function AgentChat({
     return <ChatEmpty title={name} description="这个 agent 还没有和你的对话。" />;
   const start = async () => {
     setBusy(true);
+    setError(null);
     const result = await openThread({
       environmentId,
       input: { workspaceId: workspace.id, agentId: agent.id },
     });
     setBusy(false);
     if (AsyncResult.isSuccess(result)) setOpened(result.value.threadId);
+    else setError(failureText(result, OPEN_ERROR_TEXT));
   };
   return (
-    <ChatEmpty
-      title={name}
-      description="你们还没有对话。开始后，你在这里说的话会直接发给它。"
-      action={
-        <Button disabled={busy} onClick={() => void start()}>
-          {busy ? <Spinner /> : null}
-          开始对话
-        </Button>
-      }
-    />
+    <ChatEmpty title={name} description="你们还没有对话。开始后，你在这里说的话会直接发给它。">
+      <Button disabled={busy} onClick={() => void start()}>
+        {busy ? <Spinner /> : null}
+        开始对话
+      </Button>
+      {error === null ? null : <ErrorNote text={error} />}
+    </ChatEmpty>
   );
 }
 
