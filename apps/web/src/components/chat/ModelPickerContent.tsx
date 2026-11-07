@@ -8,7 +8,7 @@ import {
 } from "@t3tools/contracts";
 import { resolveSelectableModel } from "@t3tools/shared/model";
 import { useAtomValue } from "@effect/atom-react";
-import { formatProviderUpdateRequiredNotice } from "@t3tools/client-runtime/providerUpdateRequiredModels";
+import { resolveProviderUpdateRequired } from "@t3tools/client-runtime/providerUpdateRequiredModels";
 import { useNavigate } from "@tanstack/react-router";
 import { LegendList, type LegendListRef } from "@legendapp/list/react";
 import {
@@ -373,7 +373,7 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
   /** Closes the list column, inside the popup's fixed height. */
   listFooter?: ReactNode;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const {
     searchInputRef,
     keybindings: providedKeybindings,
@@ -734,8 +734,14 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
     const shown = isSearching
       ? matchesLockedProvider(entry)
       : entry.instanceId === selectedEntry?.instanceId;
-    const notice = shown ? formatProviderUpdateRequiredNotice(entry.snapshot, searchQuery) : null;
-    return notice ? [{ instanceId: entry.instanceId, notice }] : [];
+    const update = shown ? resolveProviderUpdateRequired(entry.snapshot, searchQuery) : null;
+    if (!update) return [];
+    const notice = t("settings.remaining.updateRequired", {
+      provider: update.providerName,
+      version: update.version,
+      models: new Intl.ListFormat(i18n.language, { type: "conjunction" }).format(update.modelNames),
+    });
+    return [{ instanceId: entry.instanceId, notice }];
   });
 
   const modelJumpModelKeys = visibleModels

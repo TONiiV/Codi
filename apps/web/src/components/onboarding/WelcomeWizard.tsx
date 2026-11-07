@@ -35,6 +35,7 @@ import {
   TerminalIcon,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 import { TYPOGRAPHY_ADVANCED_STORAGE_KEY } from "../../appearanceFonts";
 import { useLocalStorage } from "../../hooks/useLocalStorage";
@@ -111,7 +112,11 @@ type WizardStep = "connection" | "agents" | "import";
 const NO_ENVIRONMENTS: readonly EnvironmentId[] = [];
 
 const AGENT_ONBOARDING_THREAD_ID = ThreadId.make("onboarding-agent-setup");
-const ONBOARDING_STAGES = ["Connect", "Agents", "Projects"] as const;
+const ONBOARDING_STAGE_KEYS = [
+  "settings.remaining.stageConnect",
+  "settings.remaining.stageAgents",
+  "settings.remaining.stageProjects",
+] as const;
 const SCAN_LIMIT_MESSAGE = "Scan limit reached. Some projects or conversations may be missing.";
 
 export function WelcomeWizard({
@@ -123,6 +128,7 @@ export function WelcomeWizard({
   readonly resumeEnvironmentId?: EnvironmentId | undefined;
   readonly onDone: (projectRef?: ScopedProjectRef) => void | Promise<void>;
 }) {
+  const { t } = useTranslation();
   const [step, setStep] = useState<WizardStep>(resumeEnvironmentId ? "agents" : "connection");
   const { environments } = useEnvironments();
   const [selection, setSelection] = useState<ReadonlySet<EnvironmentId> | null>(null);
@@ -238,9 +244,9 @@ export function WelcomeWizard({
         bottomStickOnMobile={false}
         initialFocus={() => document.getElementById("onboarding-pairing-url") ?? true}
       >
-        <WizardHeader title="Set up Codi" identity={<CodiLockup />}>
+        <WizardHeader title={t("settings.remaining.setUpCodi")} identity={<CodiLockup />}>
           <WizardSteps
-            steps={ONBOARDING_STAGES}
+            steps={ONBOARDING_STAGE_KEYS.map((key) => t(key))}
             currentStep={stageIndex}
             isStepDisabled={(index) => isImporting || index >= stageIndex}
             onStepChange={(index) => {
@@ -308,6 +314,7 @@ function ConnectionStep({
   readonly onContinue: () => void;
   readonly onPaired: (environmentId: EnvironmentId) => void;
 }) {
+  const { t } = useTranslation();
   const { environments } = useEnvironments();
   const telemetryOff = managedTelemetryOffMessage(usePrimaryManagedPolicy());
   const cloudEnabled = hasCloudPublicConfig();
@@ -454,7 +461,7 @@ function ConnectionStep({
           disabled={!ready || isPairing}
           onClick={onContinue}
         >
-          Continue
+          {t("settings.text.continue")}
           <ArrowRightIcon className="size-3.5" />
         </Button>
       </div>
@@ -672,11 +679,12 @@ function AgentsStep({
   readonly environmentIds: readonly EnvironmentId[];
   readonly onContinue: () => void;
 }) {
+  const { t } = useTranslation();
   const { environments } = useEnvironments();
   return (
     <StepShell
-      title="Connect your agents"
-      description="Choose an agent to start coding. You can add more later."
+      title={t("settings.remaining.connectYourAgents")}
+      description={t("settings.remaining.connectYourAgentsDescription")}
     >
       <ScrollArea scrollFade className="mt-5 h-auto max-h-[min(32rem,55dvh)]">
         <div className="space-y-5 pr-3">
@@ -694,7 +702,7 @@ function AgentsStep({
       </ScrollArea>
       <div className="mt-6 flex justify-end">
         <Button autoFocus onClick={onContinue}>
-          Continue
+          {t("settings.text.continue")}
           <ArrowRightIcon className="size-3.5" />
         </Button>
       </div>
@@ -1208,6 +1216,7 @@ function ImportStep({
     importedThreadCount?: number,
   ) => Promise<boolean>;
 }) {
+  const { t } = useTranslation();
   const { environments } = useEnvironments();
   const writableEnvironments = useEnvironmentsWithScope(scans, AuthOrchestrationOperateScope);
   const createProject = useAtomCommand(projectEnvironment.create, { reportFailure: false });
@@ -1449,8 +1458,8 @@ function ImportStep({
 
   return (
     <StepShell
-      title="Import your projects"
-      description="Import projects and conversations from Claude Code and Codex on your selected computers."
+      title={t("settings.remaining.importYourProjects")}
+      description={t("settings.remaining.importYourProjectsDescription")}
     >
       {candidates.length > 0 ? (
         <div className="mt-5 flex items-center justify-between gap-3 text-xs text-muted-foreground">
