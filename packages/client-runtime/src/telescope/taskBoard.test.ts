@@ -1,11 +1,14 @@
 import { describe, expect, it } from "@effect/vitest";
 import { EnvironmentId, Telescope } from "@t3tools/contracts";
+import * as Cause from "effect/Cause";
+import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Queue from "effect/Queue";
 import * as Stream from "effect/Stream";
 import * as SubscriptionRef from "effect/SubscriptionRef";
+import * as TestClock from "effect/testing/TestClock";
 import { Atom, AtomRegistry } from "effect/reactivity";
 
 import {
@@ -220,6 +223,11 @@ describe("reportsInOrder", () => {
   });
 });
 
+const changes = (...list: ReadonlyArray<Telescope.BoardChange>): Telescope.BoardWatchItem => ({
+  kind: "changes",
+  changes: list,
+});
+
 const ENVIRONMENT = new PrimaryConnectionTarget({
   environmentId: EnvironmentId.make("board-environment"),
   label: "Board environment",
@@ -227,21 +235,41 @@ const ENVIRONMENT = new PrimaryConnectionTarget({
   wsBaseUrl: "wss://board.example.test",
 });
 
-/** Board atoms on a connected fake environment that records each read and hands out each watch. */
+/**
+ * Board atoms on a connected fake environment that records each read and hands out each watch.
+ * The atoms run on the test's clock. A write echoes `echo` on the newest watch, as the server
+ * notices a committed write before it answers; a decide is refused as already decided.
+ */
 const connectedBoard = Effect.fn("TaskBoardTest.connectedBoard")(function* () {
   const reads = yield* Queue.unbounded<string>();
-  const watches = yield* Queue.unbounded<Queue.Queue<Telescope.BoardWatchItem>>();
+  type Watch = Queue.Queue<Telescope.BoardWatchItem, Telescope.WorkspaceError>;
+  const watches = yield* Queue.unbounded<{ readonly notices: Watch; readonly openedAt: number }>();
+  let newest: Watch | undefined;
   const read = <A>(name: string, value: A) => Queue.offer(reads, name).pipe(Effect.as(value));
   const client = {
     [Telescope.WS_METHODS.taskList]: () => read("tasks", { tasks: [] }),
     [Telescope.WS_METHODS.taskGet]: (input: typeof Telescope.TaskGetInput.Type) =>
       read(`task:${input.taskId}`, task(input.taskId, "todo")),
     [Telescope.WS_METHODS.decisionList]: () => read("decisions", { decisions: [] }),
+    [Telescope.WS_METHODS.leaseGet]: () => read("lease", {}),
+    [Telescope.WS_METHODS.taskUpdate]: (input: typeof Telescope.TaskUpdateInput.Type) => {
+      const echo = { kind: "task" as const, workspaceId, id: input.taskId, version: 2 };
+      return Effect.as(
+        newest === undefined ? Effect.void : Queue.offer(newest, changes(echo)),
+        task(input.taskId, "done", 2),
+      );
+    },
+    [Telescope.WS_METHODS.decisionCreate]: () =>
+      Effect.fail(new Telescope.WorkspaceError({ reason: "conflict", message: "Decided." })),
     [Telescope.WS_METHODS.boardWatch]: () =>
       Stream.unwrap(
         Effect.gen(function* () {
-          const notices = yield* Queue.unbounded<Telescope.BoardWatchItem>();
-          yield* Queue.offer(watches, notices);
+          const notices: Watch = yield* Queue.unbounded<
+            Telescope.BoardWatchItem,
+            Telescope.WorkspaceError
+          >();
+          newest = notices;
+          yield* Queue.offer(watches, { notices, openedAt: yield* Clock.currentTimeMillis });
           return Stream.fromQueue(notices).pipe(
             Stream.prepend([{ kind: "synchronized" as const }]),
           );
@@ -278,20 +306,33 @@ const connectedBoard = Effect.fn("TaskBoardTest.connectedBoard")(function* () {
     followStream,
   } as unknown as EnvironmentRegistry.EnvironmentRegistry["Service"];
   const runtime = Atom.runtime(
-    Layer.succeed(EnvironmentRegistry.EnvironmentRegistry, environments),
+    Layer.merge(
+      Layer.succeed(EnvironmentRegistry.EnvironmentRegistry, environments),
+      Layer.succeed(Clock.Clock, yield* Clock.Clock),
+    ),
   );
   const registry = AtomRegistry.make();
   yield* Effect.addFinalizer(() => Effect.sync(() => registry.dispose()));
   return {
     board: createTelescopeBoardAtoms(runtime),
     registry,
-    /** Each watch subscription's notices, in the order the client subscribes. */
+    /** Each watch subscription's notices and when it opened, in the order the client subscribes. */
     watches,
     /** The next `count` reads, sorted, since reads started together finish in any order. */
     nextReads: (count: number) =>
       Effect.replicateEffect(Queue.take(reads), count).pipe(
         Effect.map((names) => names.toSorted()),
       ),
+    /** Reads made and not yet taken. */
+    unread: Queue.size(reads),
+    /** Reads started before `marker` is read, sorted; `marker` is a read nothing else starts. */
+    readsBefore: (marker: string) =>
+      Effect.gen(function* () {
+        const before: Array<string> = [];
+        for (let name = yield* Queue.take(reads); name !== marker; name = yield* Queue.take(reads))
+          before.push(name);
+        return before.toSorted();
+      }),
     reconnect: SubscriptionRef.set(session, Option.none()).pipe(
       Effect.andThen(SubscriptionRef.set(session, newSession())),
     ),
@@ -299,29 +340,110 @@ const connectedBoard = Effect.fn("TaskBoardTest.connectedBoard")(function* () {
 });
 
 describe("board watch", () => {
+  const at = <I>(input: I) => ({ environmentId: ENVIRONMENT.environmentId, input });
+  const [t1, t2] = [Telescope.TaskId.make("t1"), Telescope.TaskId.make("t2")];
+  const decisionId = Telescope.DecisionId.make("d1");
+  const decisionNotice = { kind: "decision", workspaceId, id: decisionId, version: 1 } as const;
+  const decided = changes(decisionNotice);
+  const taskAt = (id: Telescope.TaskId, version: number) =>
+    ({ kind: "task", workspaceId, id, version }) as const;
+
   it.effect("refreshes only the reads a notice names, and each read once after a reconnect", () =>
     Effect.gen(function* () {
       const { board, registry, watches, nextReads, reconnect } = yield* connectedBoard();
-      const at = <I>(input: I) => ({ environmentId: ENVIRONMENT.environmentId, input });
-      const [t1, t2] = [Telescope.TaskId.make("t1"), Telescope.TaskId.make("t2")];
       registry.mount(board.tasks(at({ workspaceId })));
       registry.mount(board.task(at({ workspaceId, taskId: t1 })));
       registry.mount(board.task(at({ workspaceId, taskId: t2 })));
       registry.mount(board.decisions(at({ workspaceId })));
       expect(yield* nextReads(4)).toEqual(["decisions", "task:t1", "task:t2", "tasks"]);
 
-      const watch = yield* Queue.take(watches);
-      yield* Queue.offer(watch, { kind: "task", workspaceId, id: t1, version: 2 });
+      const watch = (yield* Queue.take(watches)).notices;
+      yield* Queue.offer(watch, changes(taskAt(t1, 2)));
       expect(yield* nextReads(2)).toEqual(["task:t1", "tasks"]);
-      const decisionId = Telescope.DecisionId.make("d1");
-      yield* Queue.offer(watch, { kind: "decision", workspaceId, id: decisionId, version: 1 });
+      yield* Queue.offer(watch, decided);
       expect(yield* nextReads(1)).toEqual(["decisions"]);
+      // One write's notices re-read each list once.
+      yield* Queue.offer(watch, changes(taskAt(t1, 3), taskAt(t2, 2), decisionNotice));
+      expect(yield* nextReads(4)).toEqual(["decisions", "task:t1", "task:t2", "tasks"]);
 
       yield* reconnect;
       expect(yield* nextReads(4)).toEqual(["decisions", "task:t1", "task:t2", "tasks"]);
-      const rewatch = yield* Queue.take(watches);
-      yield* Queue.offer(rewatch, { kind: "task", workspaceId, id: t2, version: 2 });
+      const rewatch = (yield* Queue.take(watches)).notices;
+      yield* Queue.offer(rewatch, changes(taskAt(t2, 3)));
       expect(yield* nextReads(2)).toEqual(["task:t2", "tasks"]);
+    }),
+  );
+
+  it.effect("reads a write once from its echo, and on settle when refused or unwatched", () =>
+    Effect.gen(function* () {
+      const { board, registry, watches, nextReads, unread, readsBefore } = yield* connectedBoard();
+      registry.mount(board.tasks(at({ workspaceId })));
+      registry.mount(board.decisions(at({ workspaceId })));
+      // The lease read has no trigger: refreshing it marks where a write's own reads end.
+      const lease = board.lease(at({ workspaceId, taskId: t1 }));
+      registry.mount(lease);
+      expect(yield* nextReads(3)).toEqual(["decisions", "lease", "tasks"]);
+      const settled = Effect.sync(() => registry.refresh(lease)).pipe(
+        Effect.andThen(readsBefore("lease")),
+      );
+      const watch = (yield* Queue.take(watches)).notices;
+      // A read after a notice shows the watch has synchronized.
+      yield* Queue.offer(watch, decided);
+      expect(yield* nextReads(1)).toEqual(["decisions"]);
+
+      const write = { workspaceId, taskId: t1, baseVersion: 1, set: { status: "done" as const } };
+      const updated = yield* Effect.promise(() => board.updateTask.run(registry, at(write)));
+      expect(updated._tag).toBe("Success");
+      expect(yield* nextReads(1)).toEqual(["tasks"]);
+      // Nothing else was read for it: the next read is the next notice's.
+      yield* Queue.offer(watch, decided);
+      expect(yield* nextReads(1)).toEqual(["decisions"]);
+
+      const proposal = decision("p1", "proposed", "2026-11-01T00:00:00.000Z");
+      const refused = yield* Effect.promise(() =>
+        board.createDecision.run(registry, at(decideInput(proposal, "a"))),
+      );
+      expect(refused._tag).toBe("Failure");
+      expect(yield* settled).toEqual(["decisions", "tasks"]);
+
+      // A refused member's watch stays failed: each read re-reads once and no watch reopens.
+      yield* Queue.failCause(
+        watch,
+        Cause.fail(new Telescope.WorkspaceError({ reason: "forbidden", message: "Revoked." })),
+      );
+      const reopened = TestClock.adjust("1 minute").pipe(
+        Effect.andThen(Queue.take(watches)),
+        Effect.as(["reopened"]),
+      );
+      expect(yield* Effect.raceFirst(nextReads(2), reopened)).toEqual(["decisions", "tasks"]);
+      expect(yield* Queue.size(watches)).toBe(0);
+      // With no live watch to echo it, a write re-reads on settle.
+      yield* Effect.promise(() => board.updateTask.run(registry, at(write)));
+      expect(yield* settled).toEqual(["decisions", "tasks"]);
+      expect(yield* unread).toBe(0);
+    }),
+  );
+
+  it.effect("opens a failed watch again after a backoff and re-reads once when it is back", () =>
+    Effect.gen(function* () {
+      const { board, registry, watches, nextReads } = yield* connectedBoard();
+      registry.mount(board.tasks(at({ workspaceId })));
+      registry.mount(board.decisions(at({ workspaceId })));
+      expect(yield* nextReads(2)).toEqual(["decisions", "tasks"]);
+      const first = yield* Queue.take(watches);
+      yield* Queue.failCause(
+        first.notices,
+        Cause.fail(new Telescope.WorkspaceError({ reason: "expired", message: "Fell behind." })),
+      );
+
+      // No read until the watch is back: the backoff, then one read each on `synchronized`.
+      const reopened = TestClock.adjust("1 second").pipe(Effect.andThen(Queue.take(watches)));
+      const second = yield* Effect.raceFirst(reopened, nextReads(1));
+      if (Array.isArray(second)) return expect.fail(`read ${second} while the watch was down`);
+      expect(second.openedAt - first.openedAt).toBe(1000);
+      expect(yield* nextReads(2)).toEqual(["decisions", "tasks"]);
+      yield* Queue.offer(second.notices, decided);
+      expect(yield* nextReads(1)).toEqual(["decisions"]);
     }),
   );
 });

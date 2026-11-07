@@ -68,61 +68,152 @@ const watching = Effect.fn("BoardChangesTest.watching")(function* (
     Effect.forkScoped({ startImmediately: true }),
   );
   assert.deepStrictEqual(yield* Queue.take(items), { kind: "synchronized" });
-  return { items, fiber };
+  // The next item, or the error that ended the watch instead.
+  const next = Effect.raceFirst(
+    Queue.take(items),
+    Fiber.join(fiber).pipe(
+      Effect.flip,
+      Effect.map((error) => reasonOf(error)),
+    ),
+  );
+  return { items, fiber, next };
+});
+
+const changes = (...list: ReadonlyArray<Telescope.BoardChange>): Telescope.BoardWatchItem => ({
+  kind: "changes",
+  changes: list,
 });
 
 it.layer(layer)("Telescope board changes", (it) => {
   it.effect("sends each committed write once, to watchers of its workspace only", () =>
     Effect.gen(function* () {
-      const { board, changes, a, b, agent } = yield* setup;
+      const { board, changes: hub, a, b, agent } = yield* setup;
       const inA = yield* watching(alice.caller, a);
       const inB = yield* watching(alice.caller, b);
-      const next = Queue.take(inA.items);
 
       const task = yield* board.createTask(alice, { workspaceId: a, title: "Ship invites" });
+      const decision = yield* board.createDecision(alice, {
+        workspaceId: b,
+        title: "Postgres",
+        text: "",
+      });
       const notice = (version: number): Telescope.BoardChange => ({
         kind: "task",
         workspaceId: a,
         id: task.id,
         version,
       });
-      assert.deepStrictEqual(yield* next, notice(1));
+      // Each watcher's first item is its own workspace's write, though B's committed in between.
+      assert.deepStrictEqual(yield* inA.next, changes(notice(1)));
+      assert.deepStrictEqual(
+        yield* inB.next,
+        changes({ kind: "decision", workspaceId: b, id: decision.id, version: 1 }),
+      );
       const input = { workspaceId: a, taskId: task.id, baseVersion: 1 };
       yield* board.updateTask(agent, { ...input, set: { status: "in_progress" } });
-      assert.deepStrictEqual(yield* next, notice(2));
+      assert.deepStrictEqual(yield* inA.next, changes(notice(2)));
 
-      // A write that changes nothing, and one that rolls back, send nothing.
+      // A write that changes nothing, and ones that roll back, send nothing.
       yield* board.updateTask(alice, { ...input, baseVersion: 2, set: { status: "in_progress" } });
       const sql = yield* SqlClient.SqlClient;
-      const rolledBack = changes.publish(notice(9)).pipe(Effect.andThen(Effect.fail("rollback")));
-      assert.strictEqual(yield* Effect.flip(sql.withTransaction(rolledBack)), "rollback");
+      const rollback = <A>(write: Effect.Effect<A>) =>
+        Effect.flip(sql.withTransaction(write.pipe(Effect.andThen(Effect.fail("rollback")))));
+      assert.strictEqual(yield* rollback(hub.publish(notice(9))), "rollback");
+      assert.strictEqual(yield* rollback(hub.batch(hub.publish(notice(9)))), "rollback");
       yield* board.acquireLease(agent, { workspaceId: a, taskId: task.id });
-      assert.deepStrictEqual(yield* next, notice(3));
+      assert.deepStrictEqual(yield* inA.next, changes(notice(3)));
       yield* TestClock.adjust("16 minutes");
       yield* board.listTasks(alice, { workspaceId: a });
-      assert.deepStrictEqual(yield* next, notice(4));
+      yield* board.listTasks(alice, { workspaceId: a });
+      assert.deepStrictEqual(yield* inA.next, changes(notice(4)));
+      // The expiry went out exactly once: the next item is the next write's.
+      const after = yield* board.createTask(alice, { workspaceId: a, title: "After expiry" });
+      assert.deepStrictEqual(
+        yield* inA.next,
+        changes({ kind: "task", workspaceId: a, id: after.id, version: 1 }),
+      );
+      // Taking over an expired lease commits the task twice in one write: one notice, the newest.
+      yield* board.acquireLease(agent, { workspaceId: a, taskId: task.id });
+      assert.deepStrictEqual(yield* inA.next, changes(notice(5)));
+      yield* TestClock.adjust("16 minutes");
+      yield* board.acquireLease(agent, { workspaceId: a, taskId: task.id });
+      assert.deepStrictEqual(yield* inA.next, changes(notice(7)));
+    }),
+  );
 
-      // B's watcher saw none of A's writes: the first notice it gets is B's own.
-      const decision = yield* board.createDecision(alice, {
-        workspaceId: b,
+  it.effect("sends one item for a decide that retires a proposal and its target", () =>
+    Effect.gen(function* () {
+      const { board, a } = yield* setup;
+      const create = (input: Omit<typeof Telescope.DecisionCreateInput.Type, "workspaceId">) =>
+        board.createDecision(alice, { workspaceId: a, ...input });
+      const first = yield* create({ title: "Postgres", text: "" });
+      const proposal = yield* create({
+        title: "SQLite",
+        text: "",
+        status: "proposed",
+        supersedes: first.id,
+      });
+      const watch = yield* watching(alice.caller, a);
+
+      const decided = yield* create({ title: "SQLite", text: "", supersedes: proposal.id });
+      const notice = (id: Telescope.DecisionId, version: number): Telescope.BoardChange => ({
+        kind: "decision",
+        workspaceId: a,
+        id,
+        version,
+      });
+      assert.deepStrictEqual(
+        yield* watch.next,
+        changes(notice(proposal.id, 2), notice(first.id, 2), notice(decided.id, 1)),
+      );
+      const later = yield* create({ title: "Later", text: "" });
+      assert.deepStrictEqual(yield* watch.next, changes(notice(later.id, 1)));
+    }),
+  );
+
+  it.effect("queues a watcher one entry per write, and ends its watch when it falls behind", () =>
+    Effect.gen(function* () {
+      const { board, changes: hub, a } = yield* setup;
+      const first = yield* board.createDecision(alice, {
+        workspaceId: a,
         title: "Postgres",
         text: "",
       });
-      assert.deepStrictEqual(yield* Queue.take(inB.items), {
-        kind: "decision",
-        workspaceId: b,
-        id: decision.id,
-        version: 1,
+      const proposal = yield* board.createDecision(alice, {
+        workspaceId: a,
+        title: "SQLite",
+        text: "",
+        status: "proposed",
+        supersedes: first.id,
       });
+      const pull = yield* Stream.toPull(hub.watch(alice.caller, { workspaceId: a }));
+      assert.deepStrictEqual(yield* pull, [{ kind: "synchronized" }]);
+      // A decide commits three items in one write, so it takes one of the backlog's places.
+      yield* board.createDecision(alice, {
+        workspaceId: a,
+        title: "SQLite",
+        text: "",
+        supersedes: proposal.id,
+      });
+      for (let index = 1; index <= BoardChanges.WATCH_BACKLOG; index++)
+        yield* board.createTask(alice, { workspaceId: a, title: `Task ${index}` });
+      const [queued] = yield* pull;
+      assert.strictEqual(
+        queued?.kind === "changes" && queued.changes.length,
+        BoardChanges.WATCH_BACKLOG + 2,
+      );
+      // It stays ended, though its backlog has room again.
+      yield* board.createTask(alice, { workspaceId: a, title: "Once drained" });
+      assert.strictEqual(reasonOf(yield* Effect.flip(pull)), "expired");
     }),
   );
 
   it.effect("refuses a watch to anyone who is not a member", () =>
     Effect.gen(function* () {
-      const { changes, a } = yield* setup;
-      const denied = yield* changes
+      const { changes: hub, a } = yield* setup;
+      const denied = yield* hub
         .watch(session("mallory"), { workspaceId: a })
-        .pipe(Stream.runDrain, Effect.flip);
+        .pipe(Stream.runHead, Effect.flip);
       assert.strictEqual(reasonOf(denied), "forbidden");
     }),
   );
@@ -137,9 +228,7 @@ it.layer(layer)("Telescope board changes", (it) => {
 
       yield* workspaces.revoke(alice.caller, { workspaceId: a, subjectId: bobId });
       yield* board.createTask(alice, { workspaceId: a, title: "After Bob left" });
-      const ended = yield* Fiber.join(watch.fiber).pipe(Effect.flip);
-      assert.strictEqual(reasonOf(ended), "forbidden");
-      assert.strictEqual(yield* Queue.size(watch.items), 0);
+      assert.strictEqual(yield* watch.next, "forbidden");
     }),
   );
 });

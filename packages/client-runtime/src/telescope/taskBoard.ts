@@ -1,5 +1,7 @@
 import { EnvironmentId, Telescope } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import { AsyncResult, Atom, type AtomRegistry } from "effect/reactivity";
@@ -140,28 +142,55 @@ export function decideFailureText(error: unknown): string | null {
   return isWorkspaceConflict(error) ? "这条提议已经有人决定了，列表已刷新。" : null;
 }
 
-/** The notices one board watch has seen, counted by the reads each one makes stale. */
+/**
+ * What one board watch has seen, counted by the reads each item makes stale. `live` once it has
+ * synchronized; `epoch` moves when it comes back after a failure, so every read re-reads once.
+ */
 interface BoardNotices {
+  readonly live: boolean;
+  readonly epoch: number;
   readonly tasks: number;
   readonly decisions: number;
   readonly byTask: Readonly<Record<string, number>>;
 }
-const NO_NOTICES: BoardNotices = { tasks: 0, decisions: 0, byTask: {} };
+const NO_NOTICES: BoardNotices = { live: false, epoch: 0, tasks: 0, decisions: 0, byTask: {} };
+const RESYNCHRONIZED = { kind: "resynchronized" } as const;
 
-function countNotice(seen: BoardNotices, item: Telescope.BoardWatchItem): BoardNotices {
+function countNotice(
+  seen: BoardNotices,
+  item: Telescope.BoardWatchItem | typeof RESYNCHRONIZED,
+): BoardNotices {
   switch (item.kind) {
     case "synchronized":
-      return seen;
-    case "decision":
-      return { ...seen, decisions: seen.decisions + 1 };
-    case "task":
+      return seen.live ? seen : { ...seen, live: true };
+    case "resynchronized":
+      return { ...seen, live: true, epoch: seen.epoch + 1 };
+    case "changes": {
+      const byTask = { ...seen.byTask };
+      for (const { kind, id } of item.changes)
+        if (kind === "task") byTask[id] = (byTask[id] ?? 0) + 1;
+      const has = (kind: Telescope.BoardChange["kind"]) =>
+        item.changes.some((change) => change.kind === kind) ? 1 : 0;
       return {
         ...seen,
-        tasks: seen.tasks + 1,
-        byTask: { ...seen.byTask, [item.id]: (seen.byTask[item.id] ?? 0) + 1 },
+        tasks: seen.tasks + has("task"),
+        decisions: seen.decisions + has("decision"),
+        byTask,
       };
+    }
   }
 }
+
+/** A refused member's watch stays failed; anything else opens it again after 1 s, up to 30 s. */
+const WATCH_RETRY = Schedule.min([
+  Schedule.exponential("1 second"),
+  Schedule.spaced("30 seconds"),
+]).pipe(
+  Schedule.while(
+    ({ input }) =>
+      !(isWorkspaceError(input) && (input.reason === "forbidden" || input.reason === "not_found")),
+  ),
+);
 
 interface BoardTarget {
   readonly environmentId: EnvironmentId;
@@ -178,8 +207,19 @@ export function createTelescopeBoardAtoms<R, E>(
   // query already re-reads on a new session, which covers notices missed while disconnected.
   const watch = Atom.family((key: string) => {
     const [environmentId, workspaceId]: [string, string] = JSON.parse(key);
-    const watched = subscribe(WS_METHODS.boardWatch, {
-      workspaceId: Telescope.WorkspaceId.make(workspaceId),
+    const watched = Stream.suspend(() => {
+      let failed = false;
+      return subscribe(WS_METHODS.boardWatch, {
+        workspaceId: Telescope.WorkspaceId.make(workspaceId),
+      }).pipe(
+        Stream.tapError(() => Effect.sync(() => (failed = true))),
+        Stream.retry(WATCH_RETRY),
+        Stream.map((item) => {
+          if (item.kind !== "synchronized" || !failed) return item;
+          failed = false;
+          return RESYNCHRONIZED;
+        }),
+      );
     });
     return runtime
       .atom(
@@ -189,14 +229,16 @@ export function createTelescopeBoardAtoms<R, E>(
       )
       .pipe(Atom.withLabel(`telescope:board:watch:${key}`));
   });
+  const watchOf = (environmentId: EnvironmentId, workspaceId: Telescope.WorkspaceId) =>
+    watch(JSON.stringify([environmentId, workspaceId]));
   /** A board read re-reads when its own count moves, and once more if the watch fails. */
   const noticesFor = (target: BoardTarget, count: (seen: BoardNotices) => number) => {
-    const seen = watch(JSON.stringify([target.environmentId, target.input.workspaceId]));
+    const seen = watchOf(target.environmentId, target.input.workspaceId);
     return Atom.make((get) => {
       const result = get(seen);
-      return result._tag === "Failure"
-        ? -1
-        : count(AsyncResult.getOrElse(result, () => NO_NOTICES));
+      if (result._tag === "Failure") return -1;
+      const notices = AsyncResult.getOrElse(result, () => NO_NOTICES);
+      return notices.epoch + count(notices);
     });
   };
   const tasks = createEnvironmentRpcQueryAtomFamily(runtime, {
@@ -215,12 +257,18 @@ export function createTelescopeBoardAtoms<R, E>(
     refreshTrigger: (target) => noticesFor(target, (seen) => seen.decisions),
   });
 
-  // A merged or conflicting write changes the board as well, so every write refreshes on settle.
+  // A committed write comes back as a notice on a live watch, so only a refused write, or one
+  // without a live watch to echo it, re-reads here. Peeking the node never opens a watch.
   const refreshBoard = (
     { environmentId, input: { workspaceId, taskId } }: BoardTarget,
     registry: AtomRegistry.AtomRegistry,
+    exit: Exit.Exit<unknown, unknown>,
   ) =>
     Effect.sync(() => {
+      const seen = watchOf(environmentId, workspaceId);
+      const watched = registry.getNodes().has(seen) ? registry.get(seen) : undefined;
+      const live = watched !== undefined && AsyncResult.isSuccess(watched) && watched.value.live;
+      if (Exit.isSuccess(exit) && live) return;
       registry.refresh(tasks({ environmentId, input: { workspaceId } }));
       registry.refresh(decisions({ environmentId, input: { workspaceId } }));
       if (taskId !== undefined)
