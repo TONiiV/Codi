@@ -9,6 +9,7 @@ import {
 } from "../../themePalette";
 import { stackedThreadToast, toastManager } from "../ui/toast";
 import { useThemeEditorStore } from "./themeEditorStore";
+import { themeModeWord } from "./ThemePreviewCircles";
 import { useTranslation } from "react-i18next";
 
 const ThemeEditorPanel = lazy(() =>
@@ -50,7 +51,9 @@ export function ThemeEditorHost() {
         stackedThreadToast({
           type: "success",
           title: t("settings.text.labelUpdated", { label: savedTheme.label }),
-          description: t("settings.text.itsMergedappearancePaletteWasAdded", { mergedAppearance }),
+          description: t("settings.text.itsMergedappearancePaletteWasAdded", {
+            mergedAppearance: themeModeWord(mergedAppearance, t),
+          }),
         }),
       );
       return true;

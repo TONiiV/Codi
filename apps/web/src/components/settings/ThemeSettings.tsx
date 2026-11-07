@@ -925,14 +925,20 @@ export function ThemeLibrary({
       <ThemeImportDialog
         onImportedMany={(importedThemes, { updated }) => {
           if (updated) refreshTheme();
-          const verb = updated ? "updated" : "added";
           toastManager.add(
             stackedThreadToast({
               type: "success",
               title:
                 importedThemes.length === 1
-                  ? `${importedThemes[0]!.label} ${verb}`
-                  : t("settings.text.lengthThemesVerb", { length: importedThemes.length, verb }),
+                  ? t(updated ? "settings.text.labelUpdated" : "settings.text.labelAdded", {
+                      label: importedThemes[0]!.label,
+                    })
+                  : t(
+                      updated
+                        ? "settings.text.lengthThemesUpdated"
+                        : "settings.text.lengthThemesAdded",
+                      { length: importedThemes.length },
+                    ),
               description: importedThemes
                 .map((imported) => imported.label)
                 .join(t("settings.parallelA.listSeparator")),
