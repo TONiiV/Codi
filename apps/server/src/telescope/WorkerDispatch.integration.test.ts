@@ -101,11 +101,9 @@ const makeHarness = Effect.gen(function* () {
   }>();
   const started = yield* Queue.unbounded<ProviderAdapter.ProviderAdapterV2TurnInput>();
   const finished = yield* Queue.unbounded<Telescope.AgentRun>();
-  const interrupts =
-    yield* Queue.unbounded<ThreadManagementService.ThreadManagementInterruptInput>();
   const route = yield* Ref.make(byAgentDefault);
-  // Runs after each delegation start and run finish, and before each send.
-  type Step = "started" | "finished" | "send";
+  // Runs after each delegation start and run finish, and before each thread create and send.
+  type Step = "started" | "finished" | "create" | "send";
   const hook = yield* Ref.make<(step: Step) => Effect.Effect<void>>(() => Effect.void);
   const runHook = (step: Step) => Effect.flatMap(Ref.get(hook), (run) => run(step));
   // Thread creates, sends and interrupt results, in order.
@@ -262,19 +260,19 @@ const makeHarness = Effect.gen(function* () {
     Effect.map(ThreadManagementService.ThreadManagementService, (service) => ({
       ...service,
       dispatch: (command) =>
-        (command.type === "thread.create" ? record("create", command.threadId) : Effect.void).pipe(
-          Effect.andThen(service.dispatch(command)),
-        ),
+        (command.type === "thread.create"
+          ? runHook("create").pipe(Effect.andThen(record("create", command.threadId)))
+          : Effect.void
+        ).pipe(Effect.andThen(service.dispatch(command))),
       sendToThread: (input) =>
         runHook("send").pipe(
           Effect.andThen(record("send", input.threadId)),
           Effect.andThen(service.sendToThread(input)),
         ),
       interruptThread: (input) =>
-        Queue.offer(interrupts, input).pipe(
-          Effect.andThen(service.interruptThread(input)),
-          Effect.tap((result) => record(result.type, input.threadId)),
-        ),
+        service
+          .interruptThread(input)
+          .pipe(Effect.tap((result) => record(result.type, input.threadId))),
     })),
   );
   const routing = Layer.mock(RoutingService.RoutingService)({ resolve: () => Ref.get(route) });
@@ -302,7 +300,7 @@ const makeHarness = Effect.gen(function* () {
     ),
     Layer.provideMerge(Layer.merge(telescope, orchestration)),
   );
-  return { runtime, db, sessions, started, finished, interrupts, route, hook, log, complete };
+  return { runtime, db, sessions, started, finished, route, hook, log, complete };
 });
 type Harness = Effect.Success<typeof makeHarness>;
 
@@ -426,10 +424,27 @@ it.effect(
       Effect.gen(function* () {
         const seeded = yield* seed;
         const { delegation, call } = yield* chiefWorking(harness, seeded);
+        const delegations = yield* DelegationService.DelegationService;
+        const db = yield* TelescopeDb.TelescopeDb;
+        const runsAtCreate = yield* Ref.make<ReadonlyArray<number>>([]);
+        yield* Ref.set(harness.hook, (step) =>
+          step === "create"
+            ? delegations.listForAgent(seeded.workspaceId, seeded.chief).pipe(
+                Effect.flatMap((rows) =>
+                  db.openRunsOnThread(rows.find((row) => row.hop === "worker")!.threadId!),
+                ),
+                Effect.flatMap((open) =>
+                  Ref.update(runsAtCreate, (seen) => [...seen, open.length]),
+                ),
+                Effect.orDie,
+              )
+            : Effect.void,
+        );
         const opened = (yield* call("dispatch_worker", {
           delegationId: delegation.id,
           brief,
         })) as Opened & { readonly link: string };
+        assert.deepStrictEqual(yield* Ref.get(runsAtCreate), [1]);
         assert.include(opened.link, opened.threadId);
         const atSession = yield* Queue.take(harness.sessions);
         assert.equal(atSession.threadId, opened.threadId);
@@ -680,8 +695,12 @@ it.effect("cancel interrupts the Worker turn and keeps the thread", () =>
           [opened.delegationId, "CANCELED"],
         ],
       );
-      const interrupt = yield* Queue.take(harness.interrupts);
-      assert.deepInclude(interrupt, { threadId: opened.threadId, projectId: gripper });
+      assert.deepStrictEqual(
+        (yield* Ref.get(harness.log))
+          .filter((entry) => entry.endsWith(opened.threadId))
+          .map((entry) => entry.split(":")[0]),
+        ["create", "send", "interrupt_requested"],
+      );
       const shell = yield* (yield* ThreadManagementService.ThreadManagementService).getThreadShell(
         opened.threadId,
       );

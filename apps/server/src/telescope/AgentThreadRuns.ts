@@ -77,7 +77,7 @@ export const makeHandler = Effect.gen(function* () {
   const serving = new Map<ThreadId, string>();
 
   // A Worker thread is no agent's own; its run serves its Worker task, which wakes the Chief once.
-  const wakeChief = Effect.fnUntraced(function* (done: Telescope.AgentRun) {
+  const wakeChief = Effect.fn("AgentThreadRuns.wakeChief")(function* (done: Telescope.AgentRun) {
     const [memberId] = done.onBehalfOf;
     if (memberId === undefined) return;
     for (const delegationId of done.inputSnapshot.delegationIds ?? []) {
@@ -135,7 +135,7 @@ export const makeHandler = Effect.gen(function* () {
           );
     // A Worker is live while its run is open or its settled wake has not served a turn: queued, or
     // running for a turn other than this one (AgentRuntime's message id for a wake's turn).
-    const live = Effect.fnUntraced(function* (taskId: Telescope.DelegationId) {
+    const live = Effect.fn("AgentThreadRuns.live")(function* (taskId: Telescope.DelegationId) {
       const hops = workers.filter((worker) => worker.parentId === taskId);
       if (hops.length === 0) return false;
       for (const { threadId } of hops)
