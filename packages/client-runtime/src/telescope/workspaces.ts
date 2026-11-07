@@ -191,6 +191,8 @@ export function createTelescopeWorkspaceAtoms<R, E>(
     list,
     get,
     members,
+    bindingSummary,
+    switchTo,
     storedWorkspaceIdAtom,
     currentWorkspaceAtom,
     allBindingsAtom,
