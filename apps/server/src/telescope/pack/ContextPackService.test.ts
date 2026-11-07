@@ -450,6 +450,8 @@ describe("ContextPackService", () => {
         {
           "outside-secret.md": "PRIVATE_KEY_MATERIAL\n",
           "project/CLAUDE.md": "Rules\n@../outside-secret.md\n",
+          // `@~/` names the user's home, never the project, so a project pack keeps it as text.
+          "project/RULES.md": "Project RULES.\n",
           "project/.cursor/mcp.json": '{"mcpServers":{"db":{"command":"db-mcp"}}}',
           "project/.claude/skills/review/SKILL.md": "Claude review.\n",
           "project/.agents/skills/review/SKILL.md": "Codex review.\n",
@@ -484,11 +486,15 @@ describe("ContextPackService", () => {
       const fs = yield* FileSystem.FileSystem;
       yield* fs.writeFileString(
         dir.at("project/CLAUDE.md"),
-        `Rules\n@../outside-secret.md\n@${dir.at("outside-secret.md")}\n`,
+        `Rules\n@../outside-secret.md\n@~/RULES.md\n@${dir.at("outside-secret.md")}\n`,
       );
       yield* service.export(dir.at("project"), dir.at("pack"));
       const instructions = yield* dir.read("pack/instructions.md");
-      expect(instructions.startsWith("Rules\n@../outside-secret.md\n")).toBe(true);
+      expect(instructions.split("\n").slice(0, 3)).toEqual([
+        "Rules",
+        "@../outside-secret.md",
+        "@~/RULES.md",
+      ]);
       expect(instructions).not.toContain(dir.root);
       expect(instructions).not.toContain("PRIVATE_KEY_MATERIAL");
       expect(yield* dir.isLink("pack/skills/lint")).toBe(false);
