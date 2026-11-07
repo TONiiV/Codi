@@ -4,12 +4,14 @@ import { Tool, Toolkit } from "effect/ai";
 
 import * as ThreadManagementService from "../../../orchestration-v2/ThreadManagementService.ts";
 import * as MemoryService from "../../../telescope/MemoryService.ts";
+import * as ToolGateway from "../../../telescope/ToolGateway.ts";
 import * as McpInvocationContext from "../../McpInvocationContext.ts";
 
 const dependencies = [
   McpInvocationContext.McpInvocationContext,
   ThreadManagementService.ThreadManagementService,
   MemoryService.MemoryService,
+  ToolGateway.ToolGateway,
 ];
 
 // Tool names avoid dots: provider tool-name patterns reject them.

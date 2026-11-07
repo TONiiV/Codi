@@ -265,7 +265,7 @@ it.effect("works the board as the run's agent through every board tool", () =>
     yield* (yield* SqlClient.SqlClient)`DROP TABLE telescope_tasks`;
     assert.deepInclude(yield* call("ticket_list", {}), {
       code: "orchestration_error",
-      message: "The Telescope board is unavailable.",
+      message: "Telescope is unavailable.",
     });
   }).pipe(Effect.provide(layer)),
 );
