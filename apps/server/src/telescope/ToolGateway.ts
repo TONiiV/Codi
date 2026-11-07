@@ -234,6 +234,14 @@ const make = Effect.gen(function* () {
       (row) => chain.has(row.agent_id) && row.state !== "running",
     );
     const grant = yield* grants.effectiveGrant(workspaceId, { agentId, onBehalfOf });
+    // A tool that needs no power still needs the run's member to be active.
+    const granted =
+      power === null
+        ? (yield* db.count(workspaceId, "members", {
+            subject_id: onBehalfOf[0],
+            revoked_at: null,
+          })) > 0
+        : grant.powers[power];
     const levelIds: Readonly<Record<Telescope.Budget["scope"], string | undefined>> = {
       company: workspaceId,
       project: grant.projectId,
@@ -255,7 +263,7 @@ const make = Effect.gen(function* () {
       ? new ToolGatewayDenied({ reason: refuse, tool })
       : stopped
         ? new ToolGatewayDenied({ reason: "stopped", tool })
-        : power !== null && !grant.powers[power]
+        : !granted
           ? new ToolGatewayDenied({ reason: "forbidden", tool })
           : // An agent without a project still holds dispatchWorkers, to pass down the chain.
             tool === "dispatch_worker" && grant.projectId === undefined

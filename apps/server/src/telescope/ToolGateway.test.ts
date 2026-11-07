@@ -289,6 +289,7 @@ it.layer(layer)("Telescope tool gateway", (it) => {
       yield* call("open_ticket");
       yield* workspaces.revoke(as.ann, { workspaceId, subjectId: beaId });
       assert.strictEqual(yield* denial("open_ticket"), "forbidden");
+      assert.strictEqual(yield* denial("memory_search"), "forbidden");
       const outcomes = (yield* audit).map((entry) => [entry.tool, entry.power, entry.outcome]);
       assert.deepStrictEqual(outcomes, [
         ["open_ticket", "openTickets", "allowed"],
@@ -296,6 +297,7 @@ it.layer(layer)("Telescope tool gateway", (it) => {
         ["memory_search", undefined, "allowed"],
         ["open_ticket", "openTickets", "allowed"],
         ["open_ticket", "openTickets", "denied"],
+        ["memory_search", undefined, "denied"],
       ]);
     }),
   );
