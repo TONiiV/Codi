@@ -100,17 +100,18 @@ it.layer(layer)("TelescopeDb", (it) => {
           SELECT memory_id, workspace_id FROM telescope_memories_fts
           WHERE telescope_memories_fts MATCH ${needle}
         `;
-      yield* db.insert(wsA, "memories", {
-        memory_id: "m1",
+      const memory = (memory_id: string, text: string) => ({
+        memory_id,
         agent_id: "agent",
         scope: "agent",
         layer: "semantic",
         level: "fact",
         kind: "fact",
-        text: "prefers tabs",
+        text,
         source_json: "{}",
         valid_from: "2026-11-06T00:00:00.000Z",
       });
+      yield* db.insert(wsA, "memories", memory("m1", "prefers tabs"));
       assert.deepStrictEqual(yield* indexed("tabs"), [{ memory_id: "m1", workspace_id: "ws-a" }]);
 
       yield* db.update(wsA, "memories", { text: "prefers spaces" }, { memory_id: "m1" });
@@ -119,6 +120,14 @@ it.layer(layer)("TelescopeDb", (it) => {
 
       yield* db.remove(wsA, "memories", { memory_id: "m1" });
       assert.deepStrictEqual(yield* indexed("spaces"), []);
+
+      yield* db.insert(wsA, "memories", memory("m2", "likes trains"));
+      yield* db.insert(wsA, "memories", memory("m3", "likes trains"));
+      yield* db.insert(wsB, "memories", memory("m4", "likes trains"));
+      yield* db.removeAllMemories(wsA);
+      assert.deepStrictEqual(yield* indexed("trains"), [{ memory_id: "m4", workspace_id: "ws-b" }]);
+      yield* db.remove(wsB, "memories", { memory_id: "m4" });
+      assert.deepStrictEqual(yield* indexed("trains"), []);
     }),
   );
 });

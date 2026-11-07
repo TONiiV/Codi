@@ -97,6 +97,10 @@ export class TelescopeDb extends Context.Service<
       decodeRows: RowsDecoder<A, R>,
       options: { readonly where: Row; readonly validAt: string | undefined },
     ) => Effect.Effect<A, PersistenceSqlError | PersistenceDecodeError, R>;
+    /** Deletes every memory of the workspace with its search index rows. */
+    readonly removeAllMemories: (
+      workspaceId: Telescope.WorkspaceId,
+    ) => Effect.Effect<void, PersistenceSqlError>;
     /** Adds one to `uses` in SQL, so concurrent searches do not overwrite each other's counts. */
     readonly markMemoriesRetrieved: (
       workspaceId: Telescope.WorkspaceId,
@@ -287,6 +291,26 @@ const make = Effect.gen(function* () {
       Effect.mapError(toPersistenceDecodeError("TelescopeDb.searchMemories")),
     );
   });
+  // The index's delete trigger scans the whole index once per memory row, so it is set aside
+  // while the workspace's index rows go in one scan; the savepoint keeps it from being missing.
+  const removeAllMemories = Effect.fn("TelescopeDb.removeAllMemories")(function* (
+    workspaceId: Telescope.WorkspaceId,
+  ) {
+    yield* sql
+      .withTransaction(
+        Effect.gen(function* () {
+          const [trigger] = yield* sql<{ readonly sql: string }>`SELECT sql FROM sqlite_master
+            WHERE type = 'trigger' AND name = 'telescope_memories_fts_delete'`;
+          if (trigger !== undefined) {
+            yield* sql`DROP TRIGGER telescope_memories_fts_delete`;
+            yield* sql`DELETE FROM telescope_memories_fts WHERE workspace_id = ${workspaceId}`;
+          }
+          yield* sql`DELETE FROM telescope_memories WHERE workspace_id = ${workspaceId}`;
+          if (trigger !== undefined) yield* sql.unsafe(trigger.sql);
+        }),
+      )
+      .pipe(Effect.mapError(toPersistenceSqlError("TelescopeDb.removeAllMemories")));
+  });
   const markMemoriesRetrieved = Effect.fn("TelescopeDb.markMemoriesRetrieved")(function* (
     workspaceId: Telescope.WorkspaceId,
     memoryIds: ReadonlyArray<string>,
@@ -380,6 +404,7 @@ const make = Effect.gen(function* () {
     update,
     remove,
     searchMemories,
+    removeAllMemories,
     markMemoriesRetrieved,
     latestRunForThread,
     workspaceIdsOf,

@@ -47,6 +47,12 @@ import {
   WorkspaceScopedInput,
 } from "./workspace.ts";
 import {
+  WorkspaceBusyError,
+  WorkspaceDeleteInput,
+  WorkspaceDeleteManifest,
+  WorkspaceExportResult,
+} from "./workspaceData.ts";
+import {
   CommitListInput,
   CommitListResult,
   DecisionCreateInput,
@@ -83,6 +89,8 @@ export const WS_METHODS = {
   workspaceCreate: "telescope.workspace.create",
   workspaceList: "telescope.workspace.list",
   workspaceGet: "telescope.workspace.get",
+  workspaceExport: "telescope.workspace.export",
+  workspaceDelete: "telescope.workspace.delete",
   memberInvite: "telescope.member.invite",
   memberLinkCode: "telescope.member.linkCode",
   memberAccept: "telescope.member.accept",
@@ -137,6 +145,12 @@ export const WorkspaceRpcs = [
   make(WS_METHODS.workspaceCreate, WorkspaceCreateInput, Workspace),
   make(WS_METHODS.workspaceList, WorkspaceListInput, WorkspaceListResult),
   make(WS_METHODS.workspaceGet, WorkspaceScopedInput, WorkspaceGetResult),
+  make(WS_METHODS.workspaceExport, WorkspaceScopedInput, WorkspaceExportResult),
+  Rpc.make(WS_METHODS.workspaceDelete, {
+    payload: WorkspaceDeleteInput,
+    success: WorkspaceDeleteManifest,
+    error: Schema.Union([WorkspaceError, WorkspaceBusyError, EnvironmentAuthorizationError]),
+  }),
   make(WS_METHODS.memberInvite, MemberInviteInput, Invitation),
   make(WS_METHODS.memberLinkCode, MemberLinkCodeInput, Invitation),
   make(WS_METHODS.memberAccept, MemberAcceptInput, Member),

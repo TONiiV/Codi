@@ -92,6 +92,42 @@ it.layer(layer)("telescope CLI", (it) => {
     }),
   );
 
+  it.effect("org export writes the bundle and org delete writes the manifest it returns", () =>
+    Effect.gen(function* () {
+      const { t3, baseDir } = yield* makeHome;
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const org = yield* t3("org", "init", "--name", "Acme", "--kind", "enterprise");
+      const out = path.join(baseDir, "export", "acme");
+      yield* t3("org", "export", org, "--out", out);
+      assert.deepEqual((yield* fs.readDirectory(out)).toSorted(), [
+        "README.md",
+        "decisions.md",
+        "memory.md",
+        "runs.md",
+        "tasks.md",
+        "workspace.json",
+      ]);
+      assert.match(yield* fs.readFileString(path.join(out, "README.md")), /^# Acme\n/);
+
+      const file = path.join(baseDir, "manifest.json");
+      assert.match(
+        yield* t3("org", "delete", org, "--confirm", "Acme", "--manifest", file),
+        /^Deleted Acme \(.+\)\.\nTABLE\s+ROWS\n/,
+      );
+      const manifest = yield* fs
+        .readFileString(file)
+        .pipe(Effect.flatMap(decodeJson(Telescope.WorkspaceDeleteManifest)));
+      assert.deepEqual(manifest.tables.find(({ table }) => table === "telescope_workspaces")?.ids, [
+        org,
+      ]);
+      const { workspaces } = yield* t3("org", "list", "--json").pipe(
+        Effect.flatMap(decodeJson(Telescope.WorkspaceListResult)),
+      );
+      assert.deepEqual(workspaces, []);
+    }),
+  );
+
   it.effect("member invite prints a code, member list and revoke manage members", () =>
     Effect.gen(function* () {
       const { t3, join } = yield* makeHome;

@@ -73,6 +73,8 @@ export const CLIENT_GUARDED_RPC_SCOPES = {
   // A link lets every agent here reach the other environment: Settings' bar.
   [WS_METHODS.peerLinksAnswerRequest]: AuthAccessWriteScope,
   // Workspace roles are checked by the service; this scope is the environment's ceiling.
+  [TELESCOPE_WS_METHODS.workspaceExport]: AuthTelescopeAdminScope,
+  [TELESCOPE_WS_METHODS.workspaceDelete]: AuthTelescopeAdminScope,
   [TELESCOPE_WS_METHODS.memberInvite]: AuthTelescopeAdminScope,
   [TELESCOPE_WS_METHODS.memberLinkCode]: AuthTelescopeAdminScope,
   [TELESCOPE_WS_METHODS.memberSetRole]: AuthTelescopeAdminScope,
