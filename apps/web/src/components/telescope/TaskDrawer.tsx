@@ -53,6 +53,39 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
 
 const time = (at: string) => new Date(at).toLocaleString();
 
+export function LeaseField({
+  lease,
+  holder,
+  query,
+}: {
+  lease: Telescope.Lease | undefined;
+  holder: string | undefined;
+  query: { data: unknown; error: string | null; refresh: () => void };
+}) {
+  return (
+    <Field label="租约">
+      {lease && holder ? (
+        <p>
+          {holder} 在做{" "}
+          <span className="text-muted-foreground">
+            · 从 {time(lease.acquiredAt)} 起 · {time(lease.expiresAt)} 到期
+          </span>
+        </p>
+      ) : query.data !== null ? (
+        <p className="text-muted-foreground">空闲</p>
+      ) : query.error !== null ? null : (
+        <Skeleton className="h-5 w-48" />
+      )}
+      {query.error === null ? null : (
+        <ErrorNote
+          text={query.data === null ? "没有读到租约" : "没有读到最新的租约"}
+          onRetry={query.refresh}
+        />
+      )}
+    </Field>
+  );
+}
+
 const SIDE_CHAT_BLOCKED = {
   sideChat: "关联的对话本身就是 side chat，不能再从它开 side chat。",
   subagent: "关联的对话是 subagent 对话，不能从它开 side chat。",
@@ -64,6 +97,7 @@ const SIDE_CHAT_BLOCKED = {
 
 const SIDE_CHAT_FAILED: Record<SideChatFailureStage, string> = {
   fork: "服务器没有开出 side chat，请稍后再试。",
+  refused: "服务器不允许从关联的对话开 side chat，它可能已归档，或是 subagent、side chat。",
   sync: "side chat 没有同步到这台设备，请再试一次。",
   send: "第一条消息没有发出去，请再试一次。",
 };
@@ -181,11 +215,10 @@ function TaskDetail({ target, taskId }: { target: BoardTarget; taskId: Telescope
   const { dataUpdatedAt, refresh: refreshLease } = leaseQuery;
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- a lease lapses on the server's clock with no notice, so re-read it then
   useEffect(() => {
-    const delay = leaseRecheckDelay(lease, Date.now());
+    const delay = leaseRecheckDelay(lease, Date.now(), dataUpdatedAt);
     if (delay === null) return;
     const handle = window.setTimeout(refreshLease, delay);
     return () => window.clearTimeout(handle);
-    // oxlint-disable-next-line react/exhaustive-effect-dependencies -- An unchanged re-read keeps the same lease object; its time still restarts the timer.
   }, [lease, dataUpdatedAt, refreshLease]);
   const names = useBoardNames(target);
   const task = query.data;
@@ -219,22 +252,7 @@ function TaskDetail({ target, taskId }: { target: BoardTarget; taskId: Telescope
         </SheetDescription>
       </SheetHeader>
       <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-6 pb-6 text-sm">
-        <Field label="租约">
-          {lease && holder ? (
-            <p>
-              {holder} 在做{" "}
-              <span className="text-muted-foreground">
-                · 从 {time(lease.acquiredAt)} 起 · {time(lease.expiresAt)} 到期
-              </span>
-            </p>
-          ) : leaseQuery.data !== null ? (
-            <p className="text-muted-foreground">空闲</p>
-          ) : leaseQuery.error !== null ? (
-            <ErrorNote text="没有读到租约" onRetry={leaseQuery.refresh} />
-          ) : (
-            <Skeleton className="h-5 w-48" />
-          )}
-        </Field>
+        <LeaseField lease={lease} holder={holder} query={leaseQuery} />
         <Field label="关联">
           {task.forgeIssue ? (
             <Button

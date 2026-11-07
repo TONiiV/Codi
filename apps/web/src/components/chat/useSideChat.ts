@@ -6,6 +6,7 @@ import {
   isAtomCommandInterrupted,
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
+import * as Predicate from "effect/Predicate";
 import { useRef } from "react";
 
 import { newMessageId, newThreadId } from "~/lib/utils";
@@ -16,8 +17,11 @@ import { threadEnvironment } from "../../state/threads";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { useOrchestrationCommand } from "../../state/use-orchestration-command";
 
-/** Where a start failed: the fork, the side chat reaching this client, or its first message. */
-export type SideChatFailureStage = "fork" | "sync" | "send";
+/**
+ * Where a start failed: the fork (or the server refused it), the side chat reaching this
+ * client, or its first message.
+ */
+export type SideChatFailureStage = "fork" | "refused" | "sync" | "send";
 
 /**
  * Starts side chats from `threadRef`, or offers none when it is null. `open` forks the
@@ -41,7 +45,11 @@ export function useSideChat(input: {
   ) => {
     if (isAtomCommandInterrupted(failure)) return;
     const error = squashAtomCommandFailure(failure);
-    input.onError(error instanceof Error ? error.message : fallback, stage);
+    const refused =
+      stage === "fork" &&
+      (Predicate.isTagged(error, "OrchestrationV2DispatchCommandError") ||
+        Predicate.isTagged(error, "EnvironmentAuthorizationError"));
+    input.onError(error instanceof Error ? error.message : fallback, refused ? "refused" : stage);
   };
   const start = async (threadRef: ScopedThreadRef, prompt: string | undefined) => {
     const targetThreadId = newThreadId();

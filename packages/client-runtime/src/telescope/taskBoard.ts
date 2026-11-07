@@ -91,11 +91,19 @@ export function decisionOptionsLocked(state: {
 
 /**
  * When to read a lease again. A lease lapses on the server only when a board read runs, and a
- * heartbeat moves `expiresAt` without a notice, so the watch tells neither. The floor stops a
- * client clock ahead of the server's from re-reading in a loop.
+ * heartbeat moves `expiresAt` without a notice, so the watch tells neither. A lease read at
+ * `readAt` already past its expiry means this clock runs ahead by at least that much, so the
+ * wait backs off by it; no wait is shorter than the floor or longer than the lease's own span.
  */
-export function leaseRecheckDelay(lease: Telescope.Lease | undefined, now: number): number | null {
-  return lease === undefined ? null : Math.max(Date.parse(lease.expiresAt) - now, 5_000);
+export function leaseRecheckDelay(
+  lease: Telescope.Lease | undefined,
+  now: number,
+  readAt: number,
+): number | null {
+  if (lease === undefined) return null;
+  const expiresAt = Date.parse(lease.expiresAt);
+  const span = Math.max(expiresAt - Date.parse(lease.heartbeatAt), 5_000);
+  return Math.min(Math.max(expiresAt - now, readAt - expiresAt, 5_000), span);
 }
 
 /** Pins the write to the version the user saw, so a concurrent change is merged, not lost. */

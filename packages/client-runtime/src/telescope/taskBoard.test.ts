@@ -198,14 +198,14 @@ describe("task writes", () => {
 
 describe("leaseRecheckDelay", () => {
   const now = Date.parse("2026-11-01T00:00:00.000Z");
-  const lease = (expiresAt: string): Telescope.Lease => ({
+  const lease = (expiresAt: string, heartbeatAt = "2026-10-31T23:50:00.000Z"): Telescope.Lease => ({
     id: Telescope.LeaseId.make("l1"),
     workspaceId,
     taskId: Telescope.TaskId.make("t1"),
     holderAgentId: Telescope.AgentId.make("a1"),
     holderSubjectId: Telescope.SubjectId.make("s1"),
-    acquiredAt: "2026-10-31T23:59:00.000Z",
-    heartbeatAt: "2026-10-31T23:59:00.000Z",
+    acquiredAt: "2026-10-31T22:45:00.000Z",
+    heartbeatAt,
     expiresAt,
   });
   it.each([
@@ -213,7 +213,8 @@ describe("leaseRecheckDelay", () => {
     { name: "at its expiry", lease: lease("2026-11-01T00:01:30.000Z"), delay: 90_000 },
     {
       name: "a lapse the server has not seen yet",
-      lease: lease("2026-10-31T23:00:00.000Z"),
+      lease: lease("2026-10-31T23:00:00.000Z", "2026-10-31T22:45:00.000Z"),
+      readAt: Date.parse("2026-10-31T22:50:00.000Z"),
       delay: 5_000,
     },
     {
@@ -221,8 +222,18 @@ describe("leaseRecheckDelay", () => {
       lease: lease("2026-11-01T00:00:01.000Z"),
       delay: 5_000,
     },
-  ])("$name", ({ lease, delay }) => {
-    expect(leaseRecheckDelay(lease, now)).toBe(delay);
+    {
+      name: "a client clock 30 days behind, no longer than the lease's span",
+      lease: lease("2026-12-01T00:15:00.000Z", "2026-12-01T00:00:00.000Z"),
+      delay: 15 * 60_000,
+    },
+    {
+      name: "a client clock ahead, as long as the server kept it past this clock's expiry",
+      lease: lease("2026-10-31T23:55:00.000Z", "2026-10-31T23:40:00.000Z"),
+      delay: 5 * 60_000,
+    },
+  ])("$name", ({ lease, readAt = now, delay }) => {
+    expect(leaseRecheckDelay(lease, now, readAt)).toBe(delay);
   });
 });
 
@@ -373,7 +384,8 @@ describe("board watch", () => {
 
   it.effect("refreshes only the reads a notice names, and each read once after a reconnect", () =>
     Effect.gen(function* () {
-      const { board, registry, nextWatch, nextReads, reconnect } = yield* connectedBoard();
+      const { board, registry, nextWatch, nextReads, readsBefore, reconnect } =
+        yield* connectedBoard();
       registry.mount(board.tasks(at({ workspaceId })));
       registry.mount(board.task(at({ workspaceId, taskId: t1 })));
       registry.mount(board.task(at({ workspaceId, taskId: t2 })));
@@ -397,6 +409,9 @@ describe("board watch", () => {
       const rewatch = yield* nextWatch;
       yield* Queue.offer(rewatch, changes(taskAt(t2, 3)));
       expect(yield* nextReads(2)).toEqual(["task:t2", "tasks"]);
+      const marker = board.agents(at({ workspaceId }));
+      registry.mount(marker);
+      expect(yield* readsBefore("agents")).toEqual([]);
     }),
   );
 
