@@ -647,6 +647,7 @@
       "primaryEnvironment": "Primary environment",
       "moreActionsForThisMachine": "More actions for this machine",
       "labelServer": "{{label}} server",
+      "server": "server",
       "retryUpdate": "Retry update",
       "updateToClientversion": "Update to {{clientVersion}}",
       "authorizedClients": "Authorized clients",

@@ -1241,7 +1241,7 @@ function ConnectionsSettingsContent({
                       serverLabel={
                         primaryEnvironment
                           ? t("settings.text.labelServer", { label: primaryEnvironment.label })
-                          : "server"
+                          : t("settings.text.server")
                       }
                       selfUpdate={resolveServerSelfUpdateCapability(primaryServerConfig)}
                       installation={

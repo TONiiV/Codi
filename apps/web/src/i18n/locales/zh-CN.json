@@ -647,6 +647,7 @@
       "primaryEnvironment": "主环境",
       "moreActionsForThisMachine": "这台机器的更多操作",
       "labelServer": "{{label}} 服务器",
+      "server": "服务器",
       "retryUpdate": "重试更新",
       "updateToClientversion": "更新到 {{clientVersion}}",
       "authorizedClients": "已授权的客户端",
