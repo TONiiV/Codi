@@ -593,6 +593,19 @@ it.effect("INPUT_REQUIRED opens one proposed decision with the agent's options",
       },
     });
     assert.deepStrictEqual(yield* wakes({ agent_id: pa }), []);
+
+    const again = delegations.report(actor(chief), {
+      delegationId: asked.id,
+      state: "INPUT_REQUIRED",
+      report: done,
+      question: "用哪种电机,再问一次",
+      options: ["C 电机"],
+    });
+    assert.strictEqual(yield* failure(again), "conflict");
+    assert.deepStrictEqual(
+      (yield* decisions).map((decision) => decision.id),
+      [proposal?.id],
+    );
   }).pipe(Effect.provide(layer)),
 );
 

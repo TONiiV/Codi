@@ -606,6 +606,36 @@ it.effect("a Chief turn that ends without a report fails its delegation as unrep
   ),
 );
 
+it.effect("an answer wake gives the Chief a turn on its task back in WORKING", () =>
+  withHarness({ mcp: true }, (harness) =>
+    Effect.gen(function* () {
+      const seeded = yield* seed;
+      const delegations = yield* DelegationService.DelegationService;
+      const wakes = yield* WakeQueueService.WakeQueueService;
+      const delegation = yield* delegations.delegate(seeded.actor, {
+        toAgentId: seeded.chief,
+        brief,
+      });
+      yield* wakes.finish((yield* wakes.take).wake, "done");
+      yield* delegations.start({ workspaceId: seeded.workspaceId, delegationId: delegation.id });
+      yield* wakes.enqueue(seeded.workspaceId, {
+        reason: "dispatch",
+        priority: 2,
+        agentId: seeded.chief,
+        subjectId: seeded.member,
+        coalesceKey: `delegation:${delegation.id}:answer`,
+        payload: { kind: "answer", delegationId: delegation.id },
+      });
+      const runner = yield* runWake(yield* wakes.take);
+      const outcome = yield* Effect.raceFirst(
+        Fiber.await(runner).pipe(Effect.as("ended without a turn")),
+        Queue.take(harness.started).pipe(Effect.map((turn) => turn.message.text)),
+      );
+      assert.include(outcome, `Answer on task ${delegation.id}`);
+    }),
+  ),
+);
+
 it.effect.each([
   { who: "Chief", agent: "chief" },
   { who: "delegating PA", agent: "pa" },
