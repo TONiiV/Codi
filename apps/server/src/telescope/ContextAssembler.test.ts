@@ -47,7 +47,7 @@ const session = (name: string): WorkspaceService.SessionCaller => ({
   sessionId: AuthSessionId.make(`session-${name}`),
   subject: "one-time-token",
 });
-const alice = session("alice");
+const alice = { ...session("alice"), subject: "desktop-bootstrap" };
 const bob = session("bob");
 const at = "1970-01-01T00:00:00.000Z";
 const agentRow = (id: string, owner: string) => ({

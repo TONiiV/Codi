@@ -330,12 +330,15 @@ const make = Effect.gen(function* () {
         const mine = rows.map(toAgent);
         const at = yield* now;
         const created: Array<Telescope.Agent> = [];
-        if (!mine.some((agent) => agent.kind === "chief_of_staff"))
+        const ownsMachine = WorkspaceService.runsHere(owner);
+        if (ownsMachine && !mine.some((agent) => agent.kind === "chief_of_staff"))
           created.push(yield* newAgent(workspaceId, owner, "chief_of_staff", "Chief of Staff", at));
         const covered = new Set(
           mine.flatMap((agent) => (agent.kind === "chief_agent" ? [agent.projectId] : [])),
         );
-        const uncovered = [...new Set(bound)].filter((projectId) => !covered.has(projectId));
+        const uncovered = ownsMachine
+          ? [...new Set(bound)].filter((projectId) => !covered.has(projectId))
+          : [];
         const titles = uncovered.length === 0 ? new Map() : yield* projectTitles(uncovered);
         for (const projectId of uncovered) {
           const name = `${titles.get(projectId) ?? projectId} Chief Agent`;
@@ -376,6 +379,8 @@ const make = Effect.gen(function* () {
     { workspaceId, name, ...extra }: In<"telescope.agent.createCustom">,
   ) {
     const { self } = yield* workspaces.getForWrite(caller, { workspaceId });
+    if (!WorkspaceService.runsHere(self.subjectId))
+      return yield* fail("forbidden", "Your agents run on your own machine, not this one.");
     const bound = yield* boundProjectIds(caller, workspaceId);
     if (extra.projectId !== undefined && !bound.includes(extra.projectId))
       return yield* fail("not_found", "That project is not bound to this workspace.");
