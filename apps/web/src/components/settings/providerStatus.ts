@@ -3,6 +3,10 @@ import type {
   ServerProviderVersionAdvisory,
   ServerProviderCompatibilityAdvisory,
 } from "@t3tools/contracts";
+import type {
+  EnvironmentConnectionPhase,
+  EnvironmentConnectionPresentation,
+} from "@t3tools/client-runtime/connection";
 import type { TFunction } from "i18next";
 
 import { englishT } from "~/i18n/englishT";
@@ -189,4 +193,26 @@ export function getProviderVersionAdvisoryPresentation(
     emphasis: "normal" as const,
     targetVersion: null,
   };
+}
+
+const CONNECTION_PHASE_KEYS = {
+  available: "settings.text.connectionAvailable",
+  offline: "settings.text.connectionOffline",
+  connecting: "settings.text.connectionConnecting",
+  reconnecting: "settings.text.connectionReconnecting",
+  connected: "settings.text.connectionConnected",
+  unsupported: "settings.text.connectionUnsupported",
+  error: "settings.text.connectionFailed",
+} as const satisfies Record<EnvironmentConnectionPhase, string>;
+
+/** client-runtime's `connectionStatusTitle`, translated; mobile shares that helper in English. */
+export function connectionStatusTitleText(
+  connection: EnvironmentConnectionPresentation,
+  t: TFunction = englishT,
+): string {
+  return t(
+    connection.phase === "reconnecting" && connection.error
+      ? "settings.text.connectionReconnectingFailed"
+      : CONNECTION_PHASE_KEYS[connection.phase],
+  );
 }
