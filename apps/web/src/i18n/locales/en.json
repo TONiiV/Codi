@@ -61,6 +61,7 @@
       "browser": "Browser",
       "devices": "Devices",
       "scheduled-tasks": "Scheduled tasks",
+      "telescope": "Telescope",
       "source-control": "Source control",
       "worktrees": "Worktrees",
       "connections": "Environments",
