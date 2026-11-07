@@ -15,7 +15,10 @@ Codi uses the agents you already have: Claude Code, Codex, Cursor, Grok Build, O
 ## Start
 
 ```bash
-npx t3@latest
+curl -fsSL https://vite.plus | bash   # Windows: irm https://vite.plus/ps1 | iex
+git clone https://github.com/TONiiV/Codi
+cd Codi && vp i && vp run build
+vp run start
 ```
 
 ## Docs
