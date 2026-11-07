@@ -1,4 +1,10 @@
-import { ArrowLeftIcon, ArrowRightIcon, ChartNoAxesColumnIcon, SettingsIcon } from "lucide-react";
+import {
+  ArrowLeftIcon,
+  ArrowRightIcon,
+  ChartNoAxesColumnIcon,
+  SettingsIcon,
+  TelescopeIcon,
+} from "lucide-react";
 import type { ReactNode } from "react";
 import { memo } from "react";
 import { Link, useLocation, useNavigate } from "@tanstack/react-router";
@@ -34,7 +40,6 @@ import {
 } from "../ui/sidebar";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { readPullRequestListPreferences } from "../pullRequest/pullRequestListPreferences";
-import { TelescopeGlyph } from "../telescope/ModeGlyphs";
 import { useTelescopeView } from "../telescope/telescopeViews";
 import {
   isSidebarUtilityPage,
@@ -288,7 +293,7 @@ const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
           {/* The Telescope capsule is hidden on phones, so the Code sheet carries the way in. */}
           {isMobile && !onTelescope ? (
             <SidebarUtilityItem
-              icon={<TelescopeGlyph />}
+              icon={<TelescopeIcon />}
               label="Telescope"
               onClick={handleTelescopeClick}
             />

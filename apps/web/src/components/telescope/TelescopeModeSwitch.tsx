@@ -13,9 +13,14 @@ export function TelescopeModeSwitch() {
   const navigateToAppMode = useNavigateToAppMode();
   const onTelescope = useTelescopeView() !== null;
   const Current = onTelescope ? TelescopeGlyph : MicroscopeGlyph;
-  // The resting icon remounts on every switch; it plays only after one, not on first load.
-  const [firstMode, setFirstMode] = useState<boolean | null>(onTelescope);
-  if (firstMode !== null && firstMode !== onTelescope) setFirstMode(null);
+  // The resting icon remounts on every switch and plays only for one made outside the open
+  // capsule; after a click here it is hidden, and on first load nothing switched.
+  const [resting, setResting] = useState({ onTelescope, play: false });
+  const [switchedHere, setSwitchedHere] = useState(false);
+  if (resting.onTelescope !== onTelescope) {
+    setResting({ onTelescope, play: !switchedHere });
+    setSwitchedHere(false);
+  }
   const modes = [
     {
       id: "telescope",
@@ -45,7 +50,7 @@ export function TelescopeModeSwitch() {
         )}
       >
         <Current
-          data-glyph-play={firstMode === null ? "" : undefined}
+          data-glyph-play={resting.play ? "" : undefined}
           className="absolute size-3.5 text-background group-hover/mode:opacity-0 group-has-[:focus-visible]/mode:opacity-0"
         />
         <div className="pointer-events-none grid h-8 w-70 shrink-0 grid-cols-2 gap-1 opacity-0 group-hover/mode:pointer-events-auto group-hover/mode:opacity-100 group-has-[:focus-visible]/mode:pointer-events-auto group-has-[:focus-visible]/mode:opacity-100">
@@ -55,7 +60,14 @@ export function TelescopeModeSwitch() {
               type="button"
               data-glyph-trigger=""
               aria-pressed={mode.active}
-              onClick={mode.active ? undefined : mode.go}
+              onClick={
+                mode.active
+                  ? undefined
+                  : () => {
+                      setSwitchedHere(true);
+                      mode.go();
+                    }
+              }
               className={cn(
                 "flex items-center justify-center gap-2 rounded-lg text-sm font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
                 mode.active

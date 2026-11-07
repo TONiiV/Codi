@@ -2,47 +2,45 @@ import { useId, type SVGProps } from "react";
 
 import { cn } from "../../lib/utils";
 
-// The `mode-glyph-run` parts play once while the nearest [data-glyph-trigger] is hovered or
-// focused, or once on mount inside [data-glyph-play]; at rest nothing animates.
+// lucide's telescope and microscope (lucide-react 0.564.0), split into parts that can move.
+const LUCIDE_SVG = {
+  viewBox: "0 0 24 24",
+  fill: "none",
+  stroke: "currentColor",
+  strokeWidth: 2,
+  strokeLinecap: "round",
+  strokeLinejoin: "round",
+  "aria-hidden": true,
+} as const;
+const GLYPH_CLASS = "lucide pointer-events-none overflow-visible";
 
 export function TelescopeGlyph({ className, ...props }: SVGProps<SVGSVGElement>) {
   const id = useId();
   return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="currentColor"
-      aria-hidden="true"
-      className={cn("overflow-visible", className)}
-      {...props}
-    >
-      <g transform="rotate(-20 10 12.5)">
-        <g className="origin-[10px_12.5px] transform-view mode-glyph-run:animate-telescope-sweep">
-          <path d="M1.6 11.6h1.6v1.8H1.6z" />
-          <path d="m3.2 11.2 15.4-1.1v4.8l-15.4-1.1z" />
-          <path d="M18.6 9.6h2.9v5.8h-2.9z" />
-          <path d="M6.8 9.4h4v1.1h-4z" />
-          <g className="origin-[21.5px_12.5px] opacity-0 transform-view mode-glyph-run:animate-telescope-flare">
-            <radialGradient id={id}>
-              <stop offset="0.15" stopColor="currentColor" className="text-zinc-25" />
-              <stop offset="0.4" stopColor="currentColor" stopOpacity={0.35} />
-              <stop offset="1" stopOpacity={0} />
-            </radialGradient>
-            <circle cx="21.5" cy="12.5" r="12" fill={`url(#${id})`} />
-            <g className="fill-zinc-25 stroke-muted-foreground/50" strokeWidth={0.3}>
-              <ellipse cx="21.5" cy="12.5" rx="16" ry="0.6" transform="rotate(36 21.5 12.5)" />
-              <circle cx="21.5" cy="12.5" r="1.4" />
-            </g>
-          </g>
+    <svg {...LUCIDE_SVG} className={cn(GLYPH_CLASS, className)} {...props}>
+      <g className="origin-[12px_13px] transform-view mode-glyph-run:animate-telescope-sweep">
+        <g
+          fill="currentColor"
+          stroke="none"
+          className="origin-[21px_7px] text-zinc-25 opacity-0 transform-view mode-glyph-run:animate-telescope-flare"
+        >
+          <radialGradient id={id}>
+            <stop offset="0.15" stopColor="currentColor" />
+            <stop offset="0.4" stopColor="currentColor" stopOpacity={0.35} />
+            <stop offset="1" stopColor="currentColor" stopOpacity={0} />
+          </radialGradient>
+          <circle cx="21" cy="7" r="12" fill={`url(#${id})`} />
+          <ellipse cx="21" cy="7" rx="16" ry="0.6" transform="rotate(20 21 7)" />
+          <circle cx="21" cy="7" r="1.4" />
         </g>
+        <path d="m10.065 12.493-6.18 1.318a.934.934 0 0 1-1.108-.702l-.537-2.15a1.07 1.07 0 0 1 .691-1.265l13.504-4.44" />
+        <path d="m13.56 11.747 4.332-.924" />
+        <path d="M16.485 5.94a2 2 0 0 1 1.455-2.425l1.09-.272a1 1 0 0 1 1.212.727l1.515 6.06a1 1 0 0 1-.727 1.213l-1.09.272a2 2 0 0 1-2.425-1.455z" />
+        <path d="m6.158 8.633 1.114 4.456" />
       </g>
-      <path d="M9.1 13.4h1.8v2.2H9.1z" />
-      <path
-        d="M10 15.2 5.3 22M10 15.2l4.7 6.8M10 15.2V22"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth={1.3}
-        strokeLinecap="round"
-      />
+      <path d="m16 21-3.105-6.21" />
+      <path d="m8 21 3.105-6.21" />
+      <circle cx="12" cy="13" r="2" />
     </svg>
   );
 }
@@ -67,31 +65,22 @@ const TOKENS = ROWS.flatMap(([start = 0, ...widths], row) =>
 export function MicroscopeGlyph({ className, ...props }: SVGProps<SVGSVGElement>) {
   const id = useId();
   return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="currentColor"
-      aria-hidden="true"
-      className={cn("overflow-visible", className)}
-      {...props}
-    >
+    <svg {...LUCIDE_SVG} className={cn(GLYPH_CLASS, className)} {...props}>
       <g className="mode-glyph-run:animate-microscope-hide">
+        <path d="M6 18h8" />
+        <path d="M3 22h18" />
+        <path d="M14 22a7 7 0 1 0 0-14h-1" />
         <g className="mode-glyph-run:animate-microscope-tube">
-          <path d="M7.9 1.8h3.2v1.6H7.9z" />
-          <path d="M8.4 3.4h2.2V10H8.4z" />
-          <path d="M8.9 10h1.2v2.2H8.9z" />
+          <path d="M9 14h2" />
+          <path d="M9 12a2 2 0 0 1-2-2V6h6v4a2 2 0 0 1-2 2Z" />
+          <path d="M12 6V3a1 1 0 0 0-1-1H9a1 1 0 0 0-1 1v3" />
         </g>
-        <path d="M10.6 6.6H13v1.6h-2.4z" />
-        <path
-          d="M15.2 20.2v-6.4c0-2.6-1-4.6-2.6-5.8"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth={1.9}
-          strokeLinecap="round"
-        />
-        <path d="M5.5 15.6h9.5v1.1H5.5z" />
-        <rect x="5" y="20" width="14" height="2" rx="1" />
       </g>
-      <g className="origin-[12px_12.5px] opacity-0 transform-view mode-glyph-run:animate-microscope-lens">
+      <g
+        fill="currentColor"
+        stroke="none"
+        className="origin-[12px_12.5px] opacity-0 transform-view mode-glyph-run:animate-microscope-lens"
+      >
         <clipPath id={`${id}-clip`}>
           <circle cx="12" cy="12.5" r="16" />
         </clipPath>
