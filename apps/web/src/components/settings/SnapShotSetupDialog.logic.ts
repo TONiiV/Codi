@@ -1,4 +1,6 @@
 import type { DesktopSnapShotState } from "@t3tools/contracts";
+import type { TFunction } from "i18next";
+import { englishT } from "~/i18n/englishT";
 
 export type CaptureSetupStep = "access" | "shortcut";
 
@@ -49,7 +51,10 @@ export function captureSetupMacPermissionsReady(
   return permissions.screenRecording && (!includeAccessibility || permissions.accessibility);
 }
 
-export function captureSetupCheckMessage(state: DesktopSnapShotState): string {
+export function captureSetupCheckMessage(
+  state: DesktopSnapShotState,
+  t: TFunction = englishT,
+): string {
   const backend = captureSetupBackend(state);
   const gnome = backend === "gnome";
   if (
@@ -58,13 +63,13 @@ export function captureSetupCheckMessage(state: DesktopSnapShotState): string {
     (backend === "kde" && state.kdeHelper?.status === "error") ||
     (backend === "hyprland" && state.hyprlandHelper?.status === "error")
   )
-    return "Still unable to check access. See Advanced for help.";
-  if (captureSetupBackend(state) === "picker") return "Ready. You'll choose a window each time.";
+    return t("settings.text.stillUnableToCheckAccessSee");
+  if (captureSetupBackend(state) === "picker") return t("settings.text.readyYouLlChooseAWindow");
   if (gnome && state.gnomeExtension?.status === "restart-required")
-    return "Still waiting for you to sign out and back in.";
+    return t("settings.text.stillWaitingForYouToSign");
   return captureSetupAccessReady(state)
-    ? "Ready. Continue to choose your shortcut."
-    : "Not ready yet. Finish the step above.";
+    ? t("settings.text.readyContinueToChooseYourShortcut")
+    : t("settings.text.notReadyYetFinishTheStep");
 }
 
 export function captureSetupShortcutReady(state: DesktopSnapShotState, unsaved: boolean): boolean {
