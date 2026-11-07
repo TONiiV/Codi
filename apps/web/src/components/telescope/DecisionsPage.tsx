@@ -1,5 +1,6 @@
 import {
   DECISION_STATUSES,
+  decideFailureText,
   decideInput,
   decisionOptionsLocked,
   sortDecisions,
@@ -141,7 +142,7 @@ function DecisionsBody({ target }: { target: BoardTarget }) {
     telescopeBoard.decisions({ environmentId: target.environmentId, input }),
   );
   const names = useBoardNames(target);
-  const decide = useBoardCommand(telescopeBoard.createDecision);
+  const decide = useBoardCommand(telescopeBoard.createDecision, decideFailureText);
   const hash = useLocation({ select: (location) => location.hash.replace(/^#/, "") });
   const [choice, setChoice] = useState<Choice | null>(null);
   const [confirming, setConfirming] = useState(false);

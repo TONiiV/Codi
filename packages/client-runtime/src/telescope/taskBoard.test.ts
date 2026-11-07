@@ -3,6 +3,7 @@ import { describe, expect, it } from "vite-plus/test";
 
 import {
   DECISION_STATUSES,
+  decideFailureText,
   decideInput,
   decisionOptionsLocked,
   isStaleTaskVersion,
@@ -159,5 +160,17 @@ describe("task writes", () => {
     expect(isStaleTaskVersion(stale)).toBe(true);
     expect(isStaleTaskVersion(new Error("boom"))).toBe(false);
     expect(isStaleTaskVersion(null)).toBe(false);
+  });
+
+  it.each([
+    ["conflict", "这条提议已经有人决定了，列表已刷新。"],
+    ["not_found", null],
+    ["forbidden", null],
+  ] as const)("gives a decide refused with %s its Chinese copy or none", (reason, text) => {
+    const error = new Telescope.WorkspaceError({
+      reason,
+      message: "That decision has already been superseded.",
+    });
+    expect(decideFailureText(error)).toBe(text);
   });
 });

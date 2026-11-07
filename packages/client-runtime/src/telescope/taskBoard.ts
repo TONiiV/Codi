@@ -1,5 +1,6 @@
 import { type EnvironmentId, Telescope } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
 import type { Atom, AtomRegistry } from "effect/reactivity";
 
 import type { EnvironmentRegistry } from "../connection/registry.ts";
@@ -115,6 +116,15 @@ export function isStaleTaskVersion(error: unknown): boolean {
     "_tag" in error &&
     error._tag === "TelescopeStaleTaskVersionError"
   );
+}
+
+const isWorkspaceError = Schema.is(Telescope.WorkspaceError);
+
+/** Chinese copy when someone else decided the proposal first; the server's own text is English. */
+export function decideFailureText(error: unknown): string | null {
+  return isWorkspaceError(error) && error.reason === "conflict"
+    ? "这条提议已经有人决定了，列表已刷新。"
+    : null;
 }
 
 interface BoardTarget {

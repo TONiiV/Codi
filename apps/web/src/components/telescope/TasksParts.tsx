@@ -127,13 +127,21 @@ export function useTaskWrite({ environmentId }: BoardTarget) {
 }
 
 /** Other writes: a refusal surfaces the server's reason instead of failing quietly. */
-export function useBoardCommand<W, A, E>(command: AtomCommand<W, A, E>) {
+export function useBoardCommand<W, A, E>(
+  command: AtomCommand<W, A, E>,
+  explain: (error: unknown) => string | null = () => null,
+) {
   const run = useAtomCommand(command, { reportFailure: false });
   return async (value: W) => {
     const result = await run(value);
     if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
-      const description = errorText(squashAtomCommandFailure(result));
-      toastManager.add({ type: "error", title: "没有完成", description });
+      const error = squashAtomCommandFailure(result);
+      const known = explain(error);
+      toastManager.add(
+        known === null
+          ? { type: "error", title: "没有完成", description: errorText(error) }
+          : { type: "warning", title: "没有完成", description: known },
+      );
     }
     return result._tag === "Success";
   };
