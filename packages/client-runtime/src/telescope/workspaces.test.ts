@@ -1,10 +1,14 @@
 import { EnvironmentId, ProjectId, Telescope } from "@t3tools/contracts";
+import * as Cause from "effect/Cause";
+import { AsyncResult } from "effect/reactivity";
 import { describe, expect, it } from "vite-plus/test";
 
 import {
   boundWorkspaceIds,
+  failureText,
   hiddenOutsideWorkspace,
   resolveCurrentWorkspace,
+  WORKSPACE_ERROR_TEXT,
   workspacesToLeave,
 } from "./workspaces.ts";
 
@@ -65,5 +69,41 @@ describe("telescope project visibility", () => {
     const own = [workspace("a"), workspace("b")];
     expect(workspacesToLeave(both, b, own)).toEqual([a]);
     expect(workspacesToLeave(both, null, own)).toEqual([a, b]);
+  });
+});
+
+describe("telescope command failure text", () => {
+  const refused = (reason: Telescope.WorkspaceError["reason"]) =>
+    AsyncResult.failure(
+      Cause.fail(new Telescope.WorkspaceError({ reason, message: "server text in English" })),
+    );
+  const join = { ...WORKSPACE_ERROR_TEXT, not_found: "邀请码无效。" };
+
+  it.each([
+    ["success", AsyncResult.success({}), undefined, null],
+    ["forbidden", refused("forbidden"), undefined, "你没有权限做这件事。"],
+    ["conflict", refused("conflict"), undefined, "和当前状态冲突，请刷新后再试。"],
+    ["invalid", refused("invalid"), undefined, "请求内容无效，请检查后重试。"],
+    ["not_found with custom copy", refused("not_found"), join, "邀请码无效。"],
+    [
+      "dropped connection",
+      AsyncResult.failure(Cause.interrupt(115)),
+      undefined,
+      "连接已断开，请检查连接后重试。",
+    ],
+    [
+      "defect",
+      AsyncResult.failure(Cause.die(new Error("socket closed"))),
+      undefined,
+      "请求失败，请检查连接后再试。",
+    ],
+    [
+      "unknown typed error",
+      AsyncResult.failure(Cause.fail({ _tag: "Other" })),
+      undefined,
+      "请求失败，请检查连接后再试。",
+    ],
+  ] as const)("%s", (_name, result, text, expected) => {
+    expect(failureText(result, text)).toBe(expected);
   });
 });

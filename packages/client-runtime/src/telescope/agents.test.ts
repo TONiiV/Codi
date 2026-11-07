@@ -18,7 +18,12 @@ import { AVAILABLE_CONNECTION_STATE, BearerConnectionTarget } from "../connectio
 import { EnvironmentRegistry } from "../connection/registry.ts";
 import { EnvironmentSupervisor } from "../connection/supervisor.ts";
 import type { RpcSession } from "../rpc/session.ts";
-import { cappedPowers, createTelescopeAgentAtoms, ownerCanMergePRs } from "./agents.ts";
+import {
+  cappedPowers,
+  createTelescopeAgentAtoms,
+  ownerCanMergePRs,
+  selectableExposures,
+} from "./agents.ts";
 import { createTelescopeWorkspaceAtoms } from "./workspaces.ts";
 
 vi.mock("../state/session.ts", () => ({
@@ -50,6 +55,18 @@ const ALL_POWERS: Telescope.StandingPowers = {
   answerMembers: true,
   mergePRs: true,
 };
+
+describe("telescope agent exposure", () => {
+  it.each([
+    ["hidden", "enterprise", ["hidden", "visible"]],
+    ["visible", "enterprise", ["hidden", "visible", "contactable"]],
+    ["contactable", "enterprise", ["hidden", "visible", "contactable", "dispatchable"]],
+    ["dispatchable", "enterprise", ["hidden", "visible", "contactable", "dispatchable"]],
+    ["contactable", "personal", ["hidden", "visible", "contactable"]],
+  ] as const)("from %s in a %s workspace opens one step up", (saved, kind, expected) => {
+    expect([...selectableExposures(saved, kind)]).toEqual(expected);
+  });
+});
 
 describe("telescope standing power cap", () => {
   it.each([
