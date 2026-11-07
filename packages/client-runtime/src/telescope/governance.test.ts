@@ -156,13 +156,20 @@ describe("telescope governance atoms", () => {
   const env = EnvironmentId.make("local");
   const setup = Effect.fn(function* () {
     let budgets: ReadonlyArray<Telescope.Budget> = [];
-    const get = vi.fn(() => Effect.sync(() => ({ budgets, killSwitches: [] })));
+    let killSwitches: ReadonlyArray<Telescope.KillSwitch> = [];
+    const get = vi.fn(() => Effect.sync(() => ({ budgets, killSwitches })));
     const client = {
       [Telescope.WS_METHODS.governanceGet]: get,
       [Telescope.WS_METHODS.budgetSet]: (input: typeof Telescope.BudgetSetInput.Type) =>
         Effect.sync(() => {
           const saved = budget({ ...input, scope: input.scope });
           budgets = [saved];
+          return saved;
+        }),
+      [Telescope.WS_METHODS.killSwitchSet]: (input: typeof Telescope.KillSwitchSetInput.Type) =>
+        Effect.sync(() => {
+          const saved = { ...input, by: "owner", at: "2026-11-07T00:00:00.000Z" };
+          killSwitches = [saved];
           return saved;
         }),
     };
@@ -181,7 +188,7 @@ describe("telescope governance atoms", () => {
           Stream.provideService(stream, EnvironmentSupervisor, supervisor),
       } as EnvironmentRegistry["Service"]),
     );
-    const governance = createTelescopeGovernanceAtoms(runtime);
+    const governance = createTelescopeGovernanceAtoms(runtime, () => Atom.make(null));
     const registry = AtomRegistry.make();
     yield* Effect.addFinalizer(() => Effect.sync(() => registry.dispose()));
     registry.mount(sessions(env));
@@ -205,7 +212,7 @@ describe("telescope governance atoms", () => {
     return { governance, registry, get, read };
   });
 
-  it.effect("re-read the budgets after an admin sets a limit", () =>
+  it.effect("re-read the budgets and kill switches after an admin changes them", () =>
     Effect.gen(function* () {
       const { governance, registry, get, read } = yield* setup();
       expect(yield* read).toEqual({ budgets: [], killSwitches: [] });
@@ -216,6 +223,11 @@ describe("telescope governance atoms", () => {
       expect(result._tag).toBe("Success");
       expect((yield* read).budgets).toMatchObject([{ scope: "company", limitCalls: 5 }]);
       expect(get).toHaveBeenCalledTimes(2);
+      const stop = { workspaceId, agentId, state: "paused" as const };
+      yield* Effect.promise(() =>
+        governance.setKillSwitch.run(registry, { environmentId: env, input: stop }),
+      );
+      expect((yield* read).killSwitches).toMatchObject([stop]);
     }),
   );
 });

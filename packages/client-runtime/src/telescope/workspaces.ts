@@ -1,5 +1,7 @@
 import { type EnvironmentId, type ProjectId, Telescope } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import { AsyncResult, Atom, type AtomRegistry } from "effect/reactivity";
 
@@ -26,6 +28,27 @@ export const WORKSPACE_ERROR_TEXT: WorkspaceErrorText = {
 };
 
 const isWorkspaceError = Schema.is(Telescope.WorkspaceError);
+
+interface InWorkspace {
+  readonly environmentId: EnvironmentId;
+  readonly input: { readonly workspaceId: Telescope.WorkspaceId };
+}
+
+/** After a change refused for permission, re-reads the caller's role so admin controls go away. */
+export const rereadRoleWhenForbidden =
+  (workspaceGet: (target: InWorkspace) => Atom.Atom<unknown>) =>
+  (
+    { environmentId, input }: InWorkspace,
+    registry: AtomRegistry.AtomRegistry,
+    exit: Exit.Exit<unknown, unknown>,
+  ) =>
+    Effect.sync(() => {
+      const error = Option.getOrUndefined(Exit.findErrorOption(exit));
+      if (isWorkspaceError(error) && error.reason === "forbidden")
+        registry.refresh(
+          workspaceGet({ environmentId, input: { workspaceId: input.workspaceId } }),
+        );
+    });
 
 /** Null on success; otherwise Chinese copy for the server's reason or the lost connection. */
 export function failureText(
@@ -228,6 +251,8 @@ export function createTelescopeWorkspaceAtoms<R, E>(
       registry.set(bindingsRevisionAtom, registry.get(bindingsRevisionAtom) + 1);
     });
 
+  const rereadRole = rereadRoleWhenForbidden(get);
+
   return {
     list,
     get,
@@ -261,16 +286,19 @@ export function createTelescopeWorkspaceAtoms<R, E>(
       label: "telescope:member:set-role",
       tag: WS_METHODS.memberSetRole,
       onSuccess: refreshMembers,
+      onSettled: rereadRole,
     }),
     revoke: createEnvironmentRpcCommand(runtime, {
       label: "telescope:member:revoke",
       tag: WS_METHODS.memberRevoke,
       onSuccess: refreshMembers,
+      onSettled: rereadRole,
     }),
     restore: createEnvironmentRpcCommand(runtime, {
       label: "telescope:member:restore",
       tag: WS_METHODS.memberRestore,
       onSuccess: refreshMembers,
+      onSettled: rereadRole,
     }),
     bind: createEnvironmentRpcCommand(runtime, {
       label: "telescope:project:bind",

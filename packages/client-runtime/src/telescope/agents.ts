@@ -10,7 +10,7 @@ import {
   createEnvironmentRpcQueryAtomFamily,
   squashAtomCommandFailure,
 } from "../state/runtime.ts";
-import { failureText } from "./workspaces.ts";
+import { failureText, rereadRoleWhenForbidden } from "./workspaces.ts";
 
 const { WS_METHODS } = Telescope;
 const EXPOSURES = Telescope.AgentExposure.literals;
@@ -76,6 +76,7 @@ export function openThreadFailureText(result: AtomCommandResult<unknown, unknown
 export function createTelescopeAgentAtoms<R, E>(
   runtime: Atom.AtomRuntime<EnvironmentRegistry | R, E>,
   bindingsRevision: Atom.Atom<number>,
+  workspaceGet: Parameters<typeof rereadRoleWhenForbidden>[0],
 ) {
   // The server creates a project's Chief Agent inside listMine, so a bind must re-read it.
   const listMine = createEnvironmentRpcQueryAtomFamily(runtime, {
@@ -145,6 +146,7 @@ export function createTelescopeAgentAtoms<R, E>(
       label: "telescope:agent:update-company",
       tag: WS_METHODS.agentUpdateCompany,
       onSuccess: (target, registry, agent) => refreshAgent(target, registry, agent),
+      onSettled: rereadRoleWhenForbidden(workspaceGet),
     }),
   };
 }

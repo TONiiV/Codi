@@ -7,6 +7,7 @@ import { telescope } from "./telescopeState";
 export const telescopeAgents = createTelescopeAgentAtoms(
   connectionAtomRuntime,
   telescope.bindingsRevisionAtom,
+  telescope.get,
 );
 
 export const KIND_LABEL: Record<Telescope.AgentKind, string> = {

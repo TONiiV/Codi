@@ -617,11 +617,14 @@ export function SettingsPageContainer({
   className,
   width = "readable",
   searchTargetFallbacks,
+  searchTargetReady = true,
 }: {
   children: ReactNode;
   className?: string;
   width?: WorkspacePageWidth;
   searchTargetFallbacks?: Readonly<Record<string, string | undefined>>;
+  /** False holds a search target back while the rows above it are still loading. */
+  searchTargetReady?: boolean;
 }) {
   const navigate = useNavigate();
   const hash = useLocation({ select: (location) => location.hash });
@@ -641,7 +644,11 @@ export function SettingsPageContainer({
 
   return (
     <SettingsSearchTargetProvider
-      targetId={targetId === null ? null : (searchTargetFallbacks?.[targetId] ?? targetId)}
+      targetId={
+        !searchTargetReady || targetId === null
+          ? null
+          : (searchTargetFallbacks?.[targetId] ?? targetId)
+      }
       highlightTarget={highlightTarget}
       onTargetHandled={clearTargetHash}
     >
