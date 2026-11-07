@@ -1,6 +1,15 @@
 import * as Schema from "effect/Schema";
 
-import { AgentId, DelegationId, Strings, Text, Timestamp, WorkspaceId } from "./common.ts";
+import { ThreadId } from "../baseSchemas.ts";
+import {
+  AgentId,
+  DecisionId,
+  DelegationId,
+  Strings,
+  Text,
+  Timestamp,
+  WorkspaceId,
+} from "./common.ts";
 
 /** A2A task states, in-process only; no A2A HTTP transport. */
 export const A2ATaskState = Schema.Literals([
@@ -55,6 +64,10 @@ export const DelegationReport = Schema.Struct({
   needsFrom: Schema.optionalKey(Text),
 });
 
+/** A Worker hop names its Chief as both ends: the Worker is the Chief's thread, not an agent. */
+export const DelegationHop = Schema.Literals(["agent", "worker"]);
+export type DelegationHop = typeof DelegationHop.Type;
+
 /**
  * An A2A task between two agents; `id` is the A2A task id. `brief` and `report` are the typed
  * payloads of the first message down and the final message up in `messages`.
@@ -66,6 +79,11 @@ export const Delegation = Schema.Struct({
   workspaceId: WorkspaceId,
   fromAgentId: AgentId,
   toAgentId: AgentId,
+  hop: DelegationHop,
+  /** The thread working the task: the to-agent's resident thread, or the Worker thread. */
+  threadId: Schema.optionalKey(ThreadId),
+  /** The open 「需要你定」 decision while the task waits on a member. */
+  decisionId: Schema.optionalKey(DecisionId),
   state: A2ATaskState,
   brief: DelegationBrief,
   report: Schema.optionalKey(DelegationReport),

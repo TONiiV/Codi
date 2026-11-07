@@ -69,6 +69,7 @@ describe("V2 preview upgrade", () => {
         [88, "TelescopeDecisionConflict"],
         [89, "TelescopeGrants"],
         [90, "TelescopeBudgetCalls"],
+        [92, "TelescopeDelegationThreads"],
       ]);
       assert.deepStrictEqual(yield* runMigrations(), []);
       assert.deepStrictEqual(yield* sql`SELECT * FROM orchestration_v2_legacy_imports`, imports);
@@ -181,6 +182,7 @@ describe("V2 preview upgrade", () => {
         [88, "TelescopeDecisionConflict"],
         [89, "TelescopeGrants"],
         [90, "TelescopeBudgetCalls"],
+        [92, "TelescopeDelegationThreads"],
       ]);
     }).pipe(Effect.provide(NodeSqliteClient.layer({ filename: ":memory:" }))),
   );

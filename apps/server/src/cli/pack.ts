@@ -5,17 +5,32 @@ import { Argument, Command, Flag } from "effect/cli";
 import * as ContextPackService from "../telescope/pack/ContextPackService.ts";
 import { HARNESSES } from "../telescope/pack/Pack.ts";
 
+const home = Flag.Boolean("home").pipe(
+  Flag.withDescription(
+    "Treat the directory as a home directory: use the user-level files each harness reads there.",
+  ),
+  Flag.withDefault(false),
+);
+const scopeOf = (isHome: boolean) => (isHome ? "home" : "project");
+
 const exportCommand = Command.make("export", {
   projectDir: Argument.String("projectDir").pipe(
-    Argument.withDescription("Project whose agent context to export."),
+    Argument.withDescription(
+      "Project whose agent context to export, or a home directory with --home.",
+    ),
   ),
   out: Flag.String("out").pipe(Flag.withDescription("Directory to write the pack to.")),
+  home,
 }).pipe(
   Command.withDescription("Export instructions, skills, and MCP servers as a context pack."),
   Command.withHandler(
-    Effect.fn("cli.pack.export")(function* ({ projectDir, out }) {
+    Effect.fn("cli.pack.export")(function* ({ projectDir, out, home }) {
       const service = yield* ContextPackService.ContextPackService;
-      const { instructions, skills, servers } = yield* service.export(projectDir, out);
+      const { instructions, skills, servers } = yield* service.export(
+        projectDir,
+        out,
+        scopeOf(home),
+      );
       yield* Console.log(
         `Exported ${instructions ? "instructions, " : ""}${skills} skills and ${servers} MCP servers from ${projectDir} to ${out}.`,
       );
@@ -26,7 +41,9 @@ const exportCommand = Command.make("export", {
 const importCommand = Command.make("import", {
   packDir: Argument.String("packDir").pipe(Argument.withDescription("Context pack directory.")),
   projectDir: Argument.String("projectDir").pipe(
-    Argument.withDescription("Project to write the harness files into."),
+    Argument.withDescription(
+      "Project to write the harness files into, or a home directory with --home.",
+    ),
   ),
   harness: Flag.Literals("harness", HARNESSES).pipe(
     Flag.withDescription("Harness whose native files to write."),
@@ -37,12 +54,13 @@ const importCommand = Command.make("import", {
     ),
     Flag.withDefault(false),
   ),
+  home,
 }).pipe(
   Command.withDescription("Write a context pack as a harness's native files."),
   Command.withHandler(
-    Effect.fn("cli.pack.import")(function* ({ packDir, projectDir, harness, merge }) {
+    Effect.fn("cli.pack.import")(function* ({ packDir, projectDir, harness, merge, home }) {
       const service = yield* ContextPackService.ContextPackService;
-      yield* service.import(packDir, projectDir, harness, merge);
+      yield* service.import(packDir, projectDir, harness, merge, scopeOf(home));
       yield* Console.log(`Imported ${packDir} into ${projectDir} for ${harness}.`);
     }),
   ),
