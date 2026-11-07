@@ -16,23 +16,27 @@ import * as TestClock from "effect/testing/TestClock";
 
 import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
 import * as ProjectStore from "../orchestration-v2/ProjectStore.ts";
+import * as ThreadManagementService from "../orchestration-v2/ThreadManagementService.ts";
 import * as AuthSessions from "../persistence/AuthSessions.ts";
 import { runMigrations } from "../persistence/Migrations.ts";
 import * as SqlitePersistence from "../persistence/Sqlite.ts";
+import { ServerSettingsService } from "../serverSettings.ts";
 import * as AgentService from "./AgentService.ts";
 import * as DelegationService from "./DelegationService.ts";
 import * as GrantService from "./GrantService.ts";
 import * as MemoryService from "./MemoryService.ts";
+import * as RoutingService from "./RoutingService.ts";
 import * as RunRecordService from "./RunRecordService.ts";
 import * as TaskBoardService from "./TaskBoardService.ts";
 import * as TelescopeDb from "./TelescopeDb.ts";
+import * as WorkerDispatch from "./WorkerDispatch.ts";
 import * as WorkspaceService from "./WorkspaceService.ts";
 
 const database = Layer.effectDiscard(runMigrations()).pipe(
   Layer.provideMerge(SqlitePersistence.layerMemory),
 );
 const LOCAL_ENVIRONMENT = EnvironmentId.make("env-local");
-const layer = Layer.mergeAll(
+const services = Layer.mergeAll(
   WorkspaceService.layer,
   TelescopeDb.layer,
   AuthSessions.layer,
@@ -49,6 +53,16 @@ const layer = Layer.mergeAll(
     Layer.succeed(ServerEnvironment.ServerEnvironmentIdentity, {
       getEnvironmentId: Effect.succeed(LOCAL_ENVIRONMENT),
     }),
+  ),
+);
+const layer = WorkerDispatch.layer.pipe(
+  Layer.provideMerge(services),
+  Layer.provide(
+    Layer.mergeAll(
+      Layer.mock(RoutingService.RoutingService)({}),
+      Layer.mock(ThreadManagementService.ThreadManagementService)({}),
+      Layer.mock(ServerSettingsService)({}),
+    ),
   ),
 );
 
@@ -507,7 +521,7 @@ it.layer(layer)("WorkspaceService", (it) => {
         const agents = yield* AgentService.AgentService;
         const memory = yield* MemoryService.MemoryService;
         const runs = yield* RunRecordService.RunRecordService;
-        const delegations = yield* DelegationService.DelegationService;
+        const workers = yield* WorkerDispatch.WorkerDispatch;
         const grants = yield* GrantService.GrantService;
         const db = yield* TelescopeDb.TelescopeDb;
         const [owner, v] = [desktop("owner"), session("viewer")];
@@ -579,7 +593,7 @@ it.layer(layer)("WorkspaceService", (it) => {
           ],
           [
             "delegation.cancel",
-            delegations.cancelForMember(v, {
+            workers.cancelForMember(v, {
               workspaceId,
               delegationId: Telescope.DelegationId.make("d-1"),
             }),

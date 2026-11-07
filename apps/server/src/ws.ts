@@ -143,6 +143,7 @@ import * as TelescopeAttribution from "./telescope/AttributionService.ts";
 import * as TelescopeRouting from "./telescope/RoutingService.ts";
 import * as TelescopeDelegations from "./telescope/DelegationService.ts";
 import * as TelescopeInviteLink from "./telescope/InviteLink.ts";
+import * as TelescopeWorkers from "./telescope/WorkerDispatch.ts";
 import * as SecretRequests from "./secrets/SecretRequests.ts";
 import * as GuestShareService from "./guest/GuestShareService.ts";
 import {
@@ -1491,6 +1492,7 @@ export const layerWsRpc = (
       const telescopeAttribution = yield* TelescopeAttribution.AttributionService;
       const telescopeRouting = yield* TelescopeRouting.RoutingService;
       const telescopeDelegations = yield* TelescopeDelegations.DelegationService;
+      const telescopeWorkers = yield* TelescopeWorkers.WorkerDispatch;
       const caller = currentSession;
       const board = yield* TelescopeBoard.TaskBoardService;
       const boardChanges = yield* TelescopeBoardChanges.BoardChanges;
@@ -2520,7 +2522,7 @@ export const layerWsRpc = (
         [Telescope.WS_METHODS.delegationGet]: (input) =>
           telescopeStorage(telescopeDelegations.getForMember(caller, input)),
         [Telescope.WS_METHODS.delegationCancel]: (input) =>
-          telescopeStorage(telescopeDelegations.cancelForMember(caller, input)),
+          telescopeStorage(telescopeWorkers.cancelForMember(caller, input)),
         [WS_METHODS.guestShareCreate]: (input) =>
           Effect.annotateCurrentSpan({ "orchestration_v2.thread_id": input.threadId }).pipe(
             Effect.andThen(guestShares.create(input)),
@@ -3691,6 +3693,7 @@ export const layer = Layer.unwrap(
     const telescopeBoardChanges = yield* TelescopeBoardChanges.BoardChanges;
     const telescopeData = yield* TelescopeWorkspaceData.WorkspaceDataService;
     const telescopeDelegations = yield* TelescopeDelegations.DelegationService;
+    const telescopeWorkers = yield* TelescopeWorkers.WorkerDispatch;
     const sql = yield* SqlClient.SqlClient;
     return HttpRouter.add(
       "GET",
@@ -3807,6 +3810,7 @@ export const layer = Layer.unwrap(
                   Layer.succeed(TelescopeMemory.MemoryService, telescopeMemory),
                   Layer.succeed(TelescopeRouting.RoutingService, telescopeRouting),
                   Layer.succeed(TelescopeDelegations.DelegationService, telescopeDelegations),
+                  Layer.succeed(TelescopeWorkers.WorkerDispatch, telescopeWorkers),
                 ),
               ),
               Layer.provide(

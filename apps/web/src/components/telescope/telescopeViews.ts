@@ -3,7 +3,6 @@ import { useLocation } from "@tanstack/react-router";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import {
-  GitBranchIcon,
   LayoutDashboardIcon,
   ListChecksIcon,
   MessagesSquareIcon,
@@ -38,14 +37,6 @@ export const TELESCOPE_VIEWS = [
       "这个工作区还没有任务。任务由你或你的 agents 创建，所有成员实时看到同一块板。",
   },
   {
-    id: "decisions",
-    label: "决定",
-    icon: GitBranchIcon,
-    emptyTitle: "还没有决定",
-    emptyDescription:
-      "这个工作区还没有记下决定。你或 agents 拍板的事会连同理由记在这里，所有成员都查得到。",
-  },
-  {
     id: "dashboard",
     label: "Dashboard",
     icon: LayoutDashboardIcon,
@@ -61,12 +52,13 @@ function parseTelescopeView(raw: unknown): TelescopeView {
   return TELESCOPE_VIEWS.find((view) => view.id === raw)?.id ?? "chats";
 }
 
-export type TasksLayout = "table" | "board";
+const TASKS_LAYOUTS = ["table", "board", "decisions"] as const;
+export type TasksLayout = (typeof TASKS_LAYOUTS)[number];
 
-/** The tasks layout rides along every Telescope URL, so switching views keeps it. */
+/** The tasks tab rides along every Telescope URL, so switching views keeps it. */
 type TelescopeSearch = {
   readonly view: TelescopeView;
-  readonly layout?: "board";
+  readonly layout?: Exclude<TasksLayout, "table">;
   /** The task whose detail drawer is open. */
   readonly task?: Telescope.TaskId;
   /** The agent whose chat is open in 对话. */
@@ -84,17 +76,18 @@ export function telescopeSearch(
 ): TelescopeSearch {
   return {
     view,
-    ...(layout === "board" ? { layout } : {}),
+    ...(layout === "table" ? {} : { layout }),
     ...(task === undefined ? {} : { task }),
     ...(agent === undefined ? {} : { agent }),
   };
 }
 
 export function parseTelescopeSearch(raw: Record<string, unknown>): TelescopeSearch {
-  const layout = raw.layout === "board" ? "board" : "table";
+  // 决定 was its own view before it became a tab of 任务; old links still land on it.
+  const legacyDecisions = raw.view === "decisions";
   return telescopeSearch(
-    parseTelescopeView(raw.view),
-    layout,
+    legacyDecisions ? "tasks" : parseTelescopeView(raw.view),
+    legacyDecisions ? "decisions" : (TASKS_LAYOUTS.find((id) => id === raw.layout) ?? "table"),
     Option.getOrUndefined(decodeTaskId(raw.task)),
     Option.getOrUndefined(decodeAgentId(raw.agent)),
   );

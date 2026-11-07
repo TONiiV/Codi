@@ -7,7 +7,7 @@ import {
 import { describe, expect, it } from "vite-plus/test";
 
 import { Route as TelescopeRoute } from "../../routes/_chat.telescope";
-import { telescopeSearchAt } from "./telescopeViews";
+import { parseTelescopeSearch, telescopeSearch, telescopeSearchAt } from "./telescopeViews";
 
 function matchedSearch(url: string) {
   const root = createRootRoute();
@@ -33,6 +33,18 @@ describe("telescope view", () => {
     });
     expect(telescopeSearchAt("/telescope", { view: "tasks", layout: "grid" }, null)).toEqual({
       view: "tasks",
+    });
+    expect(matchedSearch("/telescope?view=decisions")).toEqual({
+      view: "tasks",
+      layout: "decisions",
+    });
+    expect(matchedSearch("/telescope?view=tasks&layout=decisions")).toEqual({
+      view: "tasks",
+      layout: "decisions",
+    });
+    expect(parseTelescopeSearch(telescopeSearch("tasks", "decisions"))).toEqual({
+      view: "tasks",
+      layout: "decisions",
     });
     expect(matchedSearch("/telescope?view=tasks&layout=board&task=t-1")).toEqual({
       view: "tasks",

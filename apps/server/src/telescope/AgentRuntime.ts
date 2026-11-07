@@ -206,14 +206,16 @@ const make = Effect.gen(function* () {
         workspaceId: wake.workspaceId,
         delegationId: payload.delegationId,
       });
-      // An answer serves a task back in WORKING; a cancel since then drops it.
-      const live = payload.kind === "answer" ? "WORKING" : "SUBMITTED";
+      // An answer or a Worker's turn end serves a task in WORKING; a cancel since then drops it.
+      const live = payload.kind === "answer" || payload.kind === "worker" ? "WORKING" : "SUBMITTED";
       if (payload.kind === "report" || delegation.state === live)
         items.push({ kind: payload.kind, delegation });
     }
     if (items.length === 0) return;
     const held = items.flatMap((item) =>
-      item.kind === "delegation" || item.kind === "answer" ? [item.delegation] : [],
+      item.kind === "delegation" || item.kind === "worker" || item.kind === "answer"
+        ? [item.delegation]
+        : [],
     );
     const via = held[0] === undefined ? [] : [held[0].fromAgentId];
     const abandonHeld = (blockedOn: string) =>
