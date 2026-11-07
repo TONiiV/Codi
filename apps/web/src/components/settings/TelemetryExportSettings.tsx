@@ -216,7 +216,9 @@ function TelemetryExportForm() {
               <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-1.5">
                   {status && <ConnectionStatusDot dotClassName={status.dot} />}
-                  <Label htmlFor={key}>{t("settings.text.labelEndpoint", { label })}</Label>
+                  <Label htmlFor={key}>
+                    {t("settings.text.labelEndpoint", { label: t(label) })}
+                  </Label>
                 </div>
                 {status && <span className="text-xs text-muted-foreground">{status.label}</span>}
               </div>
