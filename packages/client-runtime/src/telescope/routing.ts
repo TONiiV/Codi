@@ -73,6 +73,12 @@ export function taskTypeProblem(text: string): string | null {
   return value.length > TASK_TYPE_MAX ? `任务类型最多 ${TASK_TYPE_MAX} 个字符。` : null;
 }
 
+/** Whether a 试一下 reply asked about the inputs on screen; surrounding spaces ask the same. */
+export const answersPreview = (
+  asked: { readonly agentId: Telescope.AgentId; readonly taskType: string },
+  current: { readonly agentId: Telescope.AgentId | undefined; readonly taskType: string },
+) => asked.agentId === current.agentId && asked.taskType.trim() === current.taskType.trim();
+
 export interface RoutingRuleDraft {
   readonly projectId: ProjectId | null;
   /** Blank means any task type. */
@@ -105,6 +111,7 @@ export function createTelescopeRoutingAtoms<R, E>(
     label: "telescope:routing:list",
     tag: WS_METHODS.routingList,
   });
+  /** Also after a refusal: a rule another admin deleted must leave the list. */
   const refresh = (
     {
       environmentId,
@@ -120,12 +127,12 @@ export function createTelescopeRoutingAtoms<R, E>(
     set: createEnvironmentRpcCommand(runtime, {
       label: "telescope:routing:set",
       tag: WS_METHODS.routingSet,
-      onSuccess: refresh,
+      onSettled: refresh,
     }),
     remove: createEnvironmentRpcCommand(runtime, {
       label: "telescope:routing:delete",
       tag: WS_METHODS.routingDelete,
-      onSuccess: refresh,
+      onSettled: refresh,
     }),
     resolve: createEnvironmentRpcCommand(runtime, {
       label: "telescope:routing:resolve",

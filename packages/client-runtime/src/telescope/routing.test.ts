@@ -2,6 +2,7 @@ import { ProjectId, ProviderInstanceId, Telescope } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
 import {
+  answersPreview,
   groupRoutingRules,
   parseRoutingRuleDraft,
   ROUTING_SKIP_REASON_TEXT,
@@ -84,6 +85,20 @@ describe("taskTypeProblem", () => {
     ["t".repeat(65), "任务类型最多 64 个字符。"],
   ] as const)("%j", (text, expected) => {
     expect(taskTypeProblem(text)).toBe(expected);
+  });
+});
+
+describe("answersPreview", () => {
+  const agent = Telescope.AgentId.make("agent");
+  const asked = { agentId: agent, taskType: "review" };
+  it.each([
+    ["the same inputs", { agentId: agent, taskType: "review" }, true],
+    ["surrounding spaces ask the same", { agentId: agent, taskType: " review " }, true],
+    ["another task type", { agentId: agent, taskType: "deploy" }, false],
+    ["another agent", { agentId: Telescope.AgentId.make("other"), taskType: "review" }, false],
+    ["no agent", { agentId: undefined, taskType: "review" }, false],
+  ] as const)("%s", (_name, current, expected) => {
+    expect(answersPreview(asked, current)).toBe(expected);
   });
 });
 
