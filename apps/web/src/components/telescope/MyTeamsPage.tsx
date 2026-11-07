@@ -13,7 +13,13 @@ import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "..
 import { Spinner } from "../ui/spinner";
 import { Toggle, ToggleGroup } from "../ui/toggle-group";
 import { AgentSettingsDialog, CreateCustomAgentDialog } from "./MyTeamsAgentDialog";
-import { EXPOSURE_LABEL, KIND_LABEL, powerSummary, telescopeAgents } from "./myTeamsShared";
+import {
+  agentDisplayName,
+  EXPOSURE_LABEL,
+  KIND_LABEL,
+  powerSummary,
+  telescopeAgents,
+} from "./myTeamsShared";
 import { telescope, useTelescopeWorkspaces } from "./telescopeState";
 
 type Tab = "mine" | "company" | "skills";
@@ -75,12 +81,13 @@ function AgentRow({
   powers: Telescope.StandingPowers;
   action: ReactNode;
 }) {
+  const name = agentDisplayName(agent);
   return (
     <li className="flex items-start gap-3 px-4 py-3">
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-baseline gap-x-2">
-          <span className="font-medium">{agent.name}</span>
-          {agent.name === KIND_LABEL[agent.kind] ? null : (
+          <span className="font-medium">{name}</span>
+          {name === KIND_LABEL[agent.kind] ? null : (
             <span className="text-xs text-muted-foreground">{KIND_LABEL[agent.kind]}</span>
           )}
         </div>
