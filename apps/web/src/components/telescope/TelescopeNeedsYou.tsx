@@ -62,6 +62,19 @@ function DelegationMeta(props: { environmentId: EnvironmentId; delegation: Deleg
   );
 }
 
+/** The viewer's open 需要你定 questions, oldest first, and the decisions board that holds them. */
+export function useNeedsYou(environmentId: EnvironmentId, workspaceId: Telescope.WorkspaceId) {
+  const listed = (state: Telescope.A2ATaskState) =>
+    telescopeDelegations.list({ environmentId, input: { workspaceId, state, limit: 200 } });
+  const board = useEnvironmentQuery(
+    telescopeBoard.decisions({ environmentId, input: { workspaceId } }),
+  );
+  const asking = useEnvironmentQuery(listed("INPUT_REQUIRED"));
+  const approving = useEnvironmentQuery(listed("AUTH_REQUIRED"));
+  const questions = [...(asking.data?.delegations ?? []), ...(approving.data?.delegations ?? [])];
+  return { board, items: needsYou(questions, board.data?.decisions ?? []) };
+}
+
 /**
  * Top of a conversation: the open 需要你定 questions of the viewer's delegations, decided in place,
  * then the selected agent's open delegations with their Worker threads and 取消.
@@ -79,9 +92,7 @@ export function TelescopeNeedsYou({
   const scoped = { environmentId, input: { workspaceId } };
   const listed = (input: Omit<typeof Telescope.DelegationListInput.Type, "workspaceId">) =>
     telescopeDelegations.list({ environmentId, input: { workspaceId, ...input } });
-  const board = useEnvironmentQuery(telescopeBoard.decisions(scoped));
-  const asking = useEnvironmentQuery(listed({ state: "INPUT_REQUIRED", limit: 200 }));
-  const approving = useEnvironmentQuery(listed({ state: "AUTH_REQUIRED", limit: 200 }));
+  const { board, items } = useNeedsYou(environmentId, workspaceId);
   // Only the viewer's own agents have delegations it can list.
   const personal = agent.ownerSubjectId !== null;
   const ofAgent = useEnvironmentQuery(personal ? listed({ agentId: agent.id }) : null);
@@ -98,8 +109,6 @@ export function TelescopeNeedsYou({
 
   const names = new Map(mine.map((each) => [each.id, agentDisplayName(each)]));
   const nameOf = (id: Telescope.AgentId) => names.get(id) ?? "其他 agent";
-  const questions = [...(asking.data?.delegations ?? []), ...(approving.data?.delegations ?? [])];
-  const items = needsYou(questions, board.data?.decisions ?? []);
   const open = (ofAgent.data?.delegations ?? []).filter((each) => isDelegationOpen(each.state));
   const confirmCancel = async (delegationId: Telescope.DelegationId) => {
     setArmed(null);

@@ -21,12 +21,13 @@ import { MyTeamsPage } from "./MyTeamsPage";
 import { TaskDrawer } from "./TaskDrawer";
 import { TelescopeAccountFooter } from "./TelescopeAccount";
 import { TelescopeChatList } from "./TelescopeChatList";
-import { TelescopeChatPage } from "./TelescopeChatPage";
+import { TelescopeChatCrumb, TelescopeChatPage } from "./TelescopeChatPage";
 import { TelescopeDashboard } from "./TelescopeDashboard";
 import {
   TELESCOPE_VIEWS,
   telescopeViewEntry,
   type TelescopeView,
+  useChatAgentId,
   useTasksLayout,
 } from "./telescopeViews";
 
@@ -163,6 +164,7 @@ export function TelescopePage({
   background?: boolean;
   children?: ReactNode;
 }) {
+  const chatAgentId = useChatAgentId();
   return (
     <SidebarInset className="h-dvh min-h-0 overflow-hidden overscroll-y-none" inert={background}>
       <WorkspacePageHeader
@@ -175,9 +177,10 @@ export function TelescopePage({
             <span>Telescope</span>
           </WorkspaceBreadcrumbItem>
           <WorkspaceBreadcrumbSeparator />
-          <WorkspaceBreadcrumbItem current>
+          <WorkspaceBreadcrumbItem current={view !== "chats" || chatAgentId === null}>
             <h1>{telescopeViewEntry(view).label}</h1>
           </WorkspaceBreadcrumbItem>
+          {view === "chats" ? <TelescopeChatCrumb /> : null}
         </WorkspaceBreadcrumb>
       </WorkspacePageHeader>
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">

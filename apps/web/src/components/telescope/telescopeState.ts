@@ -1,4 +1,5 @@
 import { useAtomValue } from "@effect/atom-react";
+import { createTelescopeGovernanceAtoms } from "@t3tools/client-runtime/telescope/governance";
 import { createTelescopeBoardAtoms } from "@t3tools/client-runtime/telescope/taskBoard";
 import { createTelescopeWorkspaceAtoms } from "@t3tools/client-runtime/telescope/workspaces";
 import { Telescope } from "@t3tools/contracts";
@@ -28,6 +29,8 @@ export const telescope = createTelescopeWorkspaceAtoms(connectionAtomRuntime, {
 });
 
 export const telescopeBoard = createTelescopeBoardAtoms(connectionAtomRuntime);
+
+export const telescopeGovernance = createTelescopeGovernanceAtoms(connectionAtomRuntime);
 
 export const WORKSPACE_KIND_LABEL = { enterprise: "企业", personal: "个人" } as const;
 

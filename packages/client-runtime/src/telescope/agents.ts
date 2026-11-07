@@ -10,6 +10,8 @@ import {
   createEnvironmentRpcQueryAtomFamily,
   squashAtomCommandFailure,
 } from "../state/runtime.ts";
+import { type EnvironmentThreadShell, threadRuntimeIsActive } from "../state/models.ts";
+import type { DelegationSummary } from "./delegations.ts";
 import { failureText } from "./workspaces.ts";
 
 const { WS_METHODS } = Telescope;
@@ -59,6 +61,32 @@ export function cappedPowers(
 /** Only the owner starts an agent's chat; the server checks it again. */
 export function offersOpenThread(agent: Telescope.Agent, self: Telescope.Member): boolean {
   return agent.ownerSubjectId === self.subjectId && self.revokedAt === undefined;
+}
+
+export type AgentActivity = "idle" | "working" | "waiting" | "blocked";
+
+/**
+ * What an agent is doing, read from its resident thread, the 需要你定 questions it asked, and its
+ * kill switch (only admins can read those). A stop outranks a question, which outranks its run.
+ */
+export function agentActivity(
+  agentId: Telescope.AgentId,
+  thread: Pick<
+    EnvironmentThreadShell,
+    "runtime" | "hasPendingApprovals" | "hasPendingUserInput"
+  > | null,
+  questions: ReadonlyArray<{ readonly delegation: Pick<DelegationSummary, "toAgentId"> }>,
+  killSwitches: ReadonlyArray<Pick<Telescope.KillSwitch, "agentId" | "state">>,
+): AgentActivity {
+  if (killSwitches.some((row) => row.agentId === agentId && row.state !== "running"))
+    return "blocked";
+  if (
+    thread?.hasPendingApprovals === true ||
+    thread?.hasPendingUserInput === true ||
+    questions.some((question) => question.delegation.toAgentId === agentId)
+  )
+    return "waiting";
+  return threadRuntimeIsActive(thread?.runtime) ? "working" : "idle";
 }
 
 const MODEL_REFUSALS: ReadonlyArray<string> = Object.values(Telescope.AGENT_MODEL_REFUSALS);

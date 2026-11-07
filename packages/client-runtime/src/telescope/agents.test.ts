@@ -2,6 +2,7 @@ import {
   AuthTelescopeAdminScope,
   EnvironmentId,
   ProjectId,
+  ProviderInstanceId,
   Telescope,
   type AuthSessionState,
 } from "@t3tools/contracts";
@@ -19,7 +20,9 @@ import { AVAILABLE_CONNECTION_STATE, BearerConnectionTarget } from "../connectio
 import { EnvironmentRegistry } from "../connection/registry.ts";
 import { EnvironmentSupervisor } from "../connection/supervisor.ts";
 import type { RpcSession } from "../rpc/session.ts";
+import type { ThreadRuntimeSummary } from "../state/models.ts";
 import {
+  agentActivity,
   cappedPowers,
   createTelescopeAgentAtoms,
   offersOpenThread,
@@ -198,6 +201,88 @@ describe("telescope agent chat", () => {
       expect(text).toContain(says);
     },
   );
+});
+
+describe("telescope agent activity", () => {
+  const me = Telescope.AgentId.make("pa");
+  const other = Telescope.AgentId.make("hr");
+  const thread = (status: ThreadRuntimeSummary["status"] | null, asks = {}) => ({
+    runtime:
+      status === null
+        ? null
+        : {
+            status,
+            activeRunId: null,
+            providerInstanceId: ProviderInstanceId.make("devReplay"),
+            providerName: null,
+            lastError: null,
+            updatedAt: "2026-11-07T00:00:00.000Z",
+          },
+    hasPendingApprovals: false,
+    hasPendingUserInput: false,
+    ...asks,
+  });
+  const stop = (agentId: Telescope.AgentId, state: Telescope.KillSwitch["state"]) => ({
+    agentId,
+    state,
+  });
+  const asked = (toAgentId: Telescope.AgentId) => ({ delegation: { toAgentId } });
+
+  it.each([
+    { when: "it has no resident thread yet", thread: null, expected: "idle" },
+    { when: "its thread is idle", thread: thread("idle"), expected: "idle" },
+    { when: "its last run completed", thread: thread("completed"), expected: "idle" },
+    { when: "a run is starting", thread: thread("starting"), expected: "working" },
+    { when: "a run is open", thread: thread("running"), expected: "working" },
+    {
+      when: "its run waits on an approval",
+      thread: thread("running", { hasPendingApprovals: true }),
+      expected: "waiting",
+    },
+    {
+      when: "its thread asks the member",
+      thread: thread("idle", { hasPendingUserInput: true }),
+      expected: "waiting",
+    },
+    {
+      when: "it asked a 需要你定 question",
+      thread: thread("running"),
+      questions: [asked(me)],
+      expected: "waiting",
+    },
+    {
+      when: "another agent asked",
+      thread: thread("idle"),
+      questions: [asked(other)],
+      expected: "idle",
+    },
+    {
+      when: "its kill switch is paused",
+      thread: thread("idle"),
+      killSwitches: [stop(me, "paused")],
+      expected: "blocked",
+    },
+    {
+      when: "it was terminated mid-run with a question open",
+      thread: thread("running", { hasPendingUserInput: true }),
+      killSwitches: [stop(me, "terminated")],
+      expected: "blocked",
+    },
+    {
+      when: "it was resumed",
+      thread: thread("running"),
+      killSwitches: [stop(me, "running")],
+      expected: "working",
+    },
+    {
+      when: "another agent is stopped",
+      thread: thread("idle"),
+      killSwitches: [stop(other, "paused")],
+      expected: "idle",
+    },
+  ])("is $expected when $when", ({ thread, questions = [], killSwitches = [], expected }) => {
+    expect(agentActivity(me, thread, questions, killSwitches)).toBe(expected);
+  });
 });
 
 describe("telescope agent queries", () => {

@@ -8,6 +8,13 @@
       "noticeFile": "apps/web/src/components/files/office/LICENSE.opencode"
     },
     {
+      "name": "bloub",
+      "bundles": ["web"],
+      "license": "MIT",
+      "sourceUrl": "https://github.com/jeremy-prt/bloub",
+      "noticeFile": "apps/web/src/vendor/bloub/LICENSE"
+    },
+    {
       "bundles": ["desktop", "web"],
       "license": "MIT",
       "name": "Ionic keyboard assist",

@@ -2,7 +2,6 @@ import { useAtomValue } from "@effect/atom-react";
 import {
   budgetOf,
   budgetUsageText,
-  createTelescopeGovernanceAtoms,
   type GovernanceRow,
   governanceRows,
   killSwitchState,
@@ -42,9 +41,13 @@ import {
   WORKSPACE_ROLE_LABEL,
 } from "./TelescopeAccountDialogs";
 import { ProjectRulesSection } from "./TelescopeProjectRules";
-import { telescope, useTelescopeWorkspaces, WORKSPACE_KIND_LABEL } from "./telescopeState";
+import {
+  telescope,
+  telescopeGovernance as governance,
+  useTelescopeWorkspaces,
+  WORKSPACE_KIND_LABEL,
+} from "./telescopeState";
 
-const governance = createTelescopeGovernanceAtoms(connectionAtomRuntime);
 const routing = Routing.createTelescopeRoutingAtoms(connectionAtomRuntime);
 const ALL_PROJECTS = "all";
 

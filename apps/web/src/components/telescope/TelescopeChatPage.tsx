@@ -22,6 +22,12 @@ import {
   EmptyTitle,
 } from "../ui/empty";
 import { Spinner } from "../ui/spinner";
+import {
+  WorkspaceBreadcrumbItem,
+  WorkspaceBreadcrumbSeparator,
+  WorkspaceBreadcrumbText,
+} from "../WorkspaceBreadcrumb";
+import { AgentAvatar } from "./AgentAvatar";
 import { agentDisplayName, telescopeAgents } from "./myTeamsShared";
 import { ErrorNote } from "./TelescopeAccountDialogs";
 import { TelescopeNeedsYou } from "./TelescopeNeedsYou";
@@ -123,15 +129,13 @@ function AgentChat({
   );
 }
 
-function WorkspaceChat({
-  environmentId,
-  workspace,
-  agentId,
-}: {
+interface ChatScope {
   environmentId: EnvironmentId;
   workspace: Telescope.Workspace;
   agentId: Telescope.AgentId;
-}) {
+}
+
+function useChatAgent({ environmentId, workspace, agentId }: ChatScope) {
   const scoped = { environmentId, input: { workspaceId: workspace.id } };
   const enterprise = workspace.kind === "enterprise";
   const mine = useEnvironmentQuery(telescopeAgents.listMine(scoped));
@@ -142,6 +146,15 @@ function WorkspaceChat({
     company.data?.agents.find(
       (candidate) => candidate.id === agentId && candidate.ownerSubjectId === null,
     );
+  const loading =
+    (mine.data === null && mine.error === null) ||
+    (enterprise && company.data === null && company.error === null);
+  return { agent, loading };
+}
+
+function WorkspaceChat(props: ChatScope) {
+  const { environmentId, workspace } = props;
+  const { agent, loading } = useChatAgent(props);
   if (agent !== undefined)
     return (
       <div key={agent.id} className="flex min-h-0 flex-1 flex-col">
@@ -149,10 +162,34 @@ function WorkspaceChat({
         <AgentChat environmentId={environmentId} workspace={workspace} agent={agent} />
       </div>
     );
-  const loading =
-    (mine.data === null && mine.error === null) ||
-    (enterprise && company.data === null && company.error === null);
   return loading ? <Loading /> : PICK_A_CHAT;
+}
+
+function AgentCrumb(props: ChatScope) {
+  const { agent } = useChatAgent(props);
+  if (agent === undefined) return null;
+  return (
+    <>
+      <WorkspaceBreadcrumbSeparator />
+      <WorkspaceBreadcrumbItem current className="gap-2">
+        <AgentAvatar
+          environmentId={props.environmentId}
+          workspace={props.workspace}
+          agent={agent}
+          size="sm"
+        />
+        <WorkspaceBreadcrumbText>{agentDisplayName(agent)}</WorkspaceBreadcrumbText>
+      </WorkspaceBreadcrumbItem>
+    </>
+  );
+}
+
+/** The selected agent after 对话 in the page header. */
+export function TelescopeChatCrumb() {
+  const { environmentId, current } = useTelescopeWorkspaces();
+  const agentId = useChatAgentId();
+  if (environmentId === null || current === null || agentId === null) return null;
+  return <AgentCrumb environmentId={environmentId} workspace={current} agentId={agentId} />;
 }
 
 /** The 对话 main pane: the selected agent's resident thread in the real ChatView. */

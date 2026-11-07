@@ -13,6 +13,7 @@ import { Button } from "../ui/button";
 import { CollapsibleSectionHeader } from "../ui/collapsible-section-header";
 import { SidebarMenu, SidebarMenuButton, SidebarMenuItem, useSidebar } from "../ui/sidebar";
 import { Spinner } from "../ui/spinner";
+import { AgentAvatar } from "./AgentAvatar";
 import { agentDisplayName, KIND_LABEL, telescopeAgents } from "./myTeamsShared";
 import { telescope, useTelescopeWorkspaces } from "./telescopeState";
 import { telescopeSearch, useIsChatAgentSelected, useTasksLayout } from "./telescopeViews";
@@ -24,28 +25,14 @@ const FOLDED_KEY = "t3code:telescope:folded-chat-groups:v1";
 const FoldedGroups = Schema.Array(ChatGroupId);
 const NONE_FOLDED: ReadonlyArray<ChatGroupId> = [];
 
-/** Chief Agents are named "<project> Chief Agent"; only the project part tells them apart. */
-function initials(agent: Telescope.Agent): string {
-  const name = agentDisplayName(agent);
-  const own = agent.kind === "chief_agent" ? name.replace(/\s+Chief Agent$/, "") : name;
-  const words = own.split(/[\s_-]+/).filter(Boolean);
-  const [only] = words;
-  // One Latin word keeps two letters ("IT"); one CJK character already names the agent.
-  const picks =
-    words.length > 1
-      ? [words[0], words.at(-1)].map((word) => [...(word ?? "")][0] ?? "")
-      : only !== undefined && /^[A-Za-z]/.test(only)
-        ? [only.slice(0, 2)]
-        : [[...(only ?? "")][0] ?? ""];
-  return picks.join("").toUpperCase() || "?";
-}
-
 function ChatRow({
   environmentId,
+  workspace,
   agent,
   onSelect,
 }: {
   environmentId: EnvironmentId;
+  workspace: Telescope.Workspace;
   agent: Telescope.Agent;
   onSelect: (agentId: Telescope.AgentId) => void;
 }) {
@@ -65,12 +52,7 @@ function ChatRow({
         aria-current={active ? "page" : undefined}
         onClick={() => onSelect(agent.id)}
       >
-        <span
-          aria-hidden
-          className="inline-flex size-8 shrink-0 items-center justify-center rounded-full border border-sidebar-border bg-sidebar-control-surface text-xs font-medium text-sidebar-foreground"
-        >
-          {initials(agent)}
-        </span>
+        <AgentAvatar environmentId={environmentId} workspace={workspace} agent={agent} />
         <span className="flex min-w-0 flex-1 flex-col leading-tight">
           <span className="truncate text-sidebar-foreground">{name}</span>
           {name === role ? null : <span className="truncate text-xs font-normal">{role}</span>}
@@ -177,7 +159,13 @@ function ChatGroups({
   };
   const rows = (agents: ReadonlyArray<Telescope.Agent>) =>
     agents.map((agent) => (
-      <ChatRow key={agent.id} environmentId={environmentId} agent={agent} onSelect={select} />
+      <ChatRow
+        key={agent.id}
+        environmentId={environmentId}
+        workspace={workspace}
+        agent={agent}
+        onSelect={select}
+      />
     ));
 
   return (
