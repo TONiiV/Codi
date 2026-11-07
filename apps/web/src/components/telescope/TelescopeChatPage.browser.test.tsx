@@ -96,4 +96,21 @@ describe("TelescopeChatPage", () => {
     await userEvent.keyboard("{Enter}");
     await expect.element(screen.getByRole("button", { name: "我的 Agents" })).toHaveFocus();
   });
+
+  it("leaves focus out of the agent list when a pointer opens it", async () => {
+    setup(null);
+    await page.viewport(1280, 800);
+    await using screen = await render(
+      <SidebarProvider defaultOpen={false}>
+        <Sidebar collapsible="icon">
+          <AgentList />
+        </Sidebar>
+        <TelescopeChatPage />
+      </SidebarProvider>,
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "打开 agent 列表" }));
+    await expect.element(screen.getByRole("button", { name: "我的 Agents" })).toBeVisible();
+    expect(document.activeElement).toBe(document.body);
+  });
 });
