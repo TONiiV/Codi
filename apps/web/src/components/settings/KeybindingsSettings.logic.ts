@@ -413,9 +413,7 @@ export function commandLabel(command: KeybindingCommand, t: TFunction = englishT
       name: titleCaseCommandSegment(raw.slice("script.".length, -".run".length)),
     });
   }
-  return t(`settings.keybindingCommands.${raw.replaceAll(".", "_")}`, {
-    defaultValue: raw.split(".").map(titleCaseCommandSegment).join(": "),
-  });
+  return t(`settings.keybindingCommands.${raw.replaceAll(".", "_")}`);
 }
 
 function titleCaseCommandSegment(segment: string): string {

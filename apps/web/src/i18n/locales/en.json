@@ -969,6 +969,7 @@
       "usage_cost": "Usage: Cost",
       "usage_tokens": "Usage: Tokens",
       "usage_limits": "Usage: Limits",
+      "usage_flow": "Usage: Flow",
       "usage_period_day": "Usage: Period: Past 24h",
       "usage_period_week": "Usage: Period: 7 days",
       "usage_period_month": "Usage: Period: 30 days",

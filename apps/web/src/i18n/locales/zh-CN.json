@@ -969,6 +969,7 @@
       "usage_cost": "用量：费用",
       "usage_tokens": "用量：令牌",
       "usage_limits": "用量：限额",
+      "usage_flow": "用量：流向",
       "usage_period_day": "用量：周期：过去 24 小时",
       "usage_period_week": "用量：周期：7 天",
       "usage_period_month": "用量：周期：30 天",
