@@ -15,7 +15,7 @@ import * as SqlClient from "effect/sql/SqlClient";
 import { ServerConfig } from "../config.ts";
 import type { PersistenceDecodeError, PersistenceSqlError } from "../persistence/Errors.ts";
 import * as AgentService from "./AgentService.ts";
-import * as ContextAssembler from "./ContextAssembler.ts";
+import * as RunRecordService from "./RunRecordService.ts";
 import * as TelescopeDb from "./TelescopeDb.ts";
 import * as WorkspaceService from "./WorkspaceService.ts";
 
@@ -380,7 +380,7 @@ const make = Effect.gen(function* () {
     // After the commit, so a file that stays never keeps the rows; the manifest lists it instead.
     const runIds = deleted.tables.find(({ table }) => table === "telescope_runs")?.ids ?? [];
     const outcomes = yield* Effect.forEach(runIds, (runId) => {
-      const file = ContextAssembler.contextFile(path, stateDir, runId);
+      const file = RunRecordService.contextFile(path, stateDir, runId);
       const relative = path.relative(stateDir, file);
       return fs.exists(file).pipe(
         Effect.flatMap((exists) =>

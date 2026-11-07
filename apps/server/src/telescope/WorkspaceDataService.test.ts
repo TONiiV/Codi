@@ -16,7 +16,7 @@ import { ServerConfig } from "../config.ts";
 import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
 import { runMigrations } from "../persistence/Migrations.ts";
 import * as SqlitePersistence from "../persistence/Sqlite.ts";
-import * as ContextAssembler from "./ContextAssembler.ts";
+import * as RunRecordService from "./RunRecordService.ts";
 import * as TelescopeDb from "./TelescopeDb.ts";
 import * as WorkspaceDataService from "./WorkspaceDataService.ts";
 import * as WorkspaceService from "./WorkspaceService.ts";
@@ -399,7 +399,7 @@ it.layer(layer)("WorkspaceDataService", (it) => {
         "run_id delete-alpha",
         "run_id delete-bravo",
         "stuck-run",
-      ].map((runId) => ContextAssembler.contextFile(path, stateDir, runId)) as [
+      ].map((runId) => RunRecordService.contextFile(path, stateDir, runId)) as [
         string,
         string,
         string,
