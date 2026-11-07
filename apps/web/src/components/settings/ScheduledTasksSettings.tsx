@@ -22,6 +22,7 @@ import type {
   ScheduledTaskThreadMode,
   ScheduledTaskUpsertInput,
   ScheduledTaskWebhookDeliverySummary,
+  ScheduledTaskWebhookFilterOp,
   ThreadId,
 } from "@t3tools/contracts";
 import {
@@ -52,6 +53,7 @@ import { providerInstanceEntriesFor } from "../../providerInstances";
 import { usePrimaryCloudLinkState } from "../../cloud/cloudLinkState";
 import { requestConfirmDialog } from "../../confirmDialog";
 import { webhookAddress } from "@t3tools/client-runtime/webhook-address";
+import { isLocalLoopbackHost } from "@t3tools/shared/hostClassification";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useCopyToClipboard } from "../../hooks/useCopyToClipboard";
 import { useNowMinute } from "../../hooks/useNowMinute";
@@ -201,6 +203,14 @@ const EMPTY_DRAFT: DraftState = {
   savedFilters: [],
 };
 
+const WEBHOOK_FILTER_OP_LABEL_KEYS = {
+  equals: "settings.text.webhookFilterOpEquals",
+  notEquals: "settings.text.webhookFilterOpNotEquals",
+  in: "settings.text.webhookFilterOpIn",
+  startsWith: "settings.text.webhookFilterOpStartsWith",
+  exists: "settings.text.webhookFilterOpExists",
+} as const satisfies Record<ScheduledTaskWebhookFilterOp, string>;
+
 function WebhookFiltersField({
   filters,
   onChange,
@@ -209,6 +219,9 @@ function WebhookFiltersField({
   onChange: (filters: ReadonlyArray<WebhookFilterDraft>) => void;
 }) {
   const { t } = useTranslation();
+  const opLabels = Object.fromEntries(
+    WEBHOOK_FILTER_OPS.map((option) => [option.op, t(WEBHOOK_FILTER_OP_LABEL_KEYS[option.op])]),
+  );
   const update = (index: number, patch: Partial<WebhookFilterDraft>) =>
     onChange(filters.map((filter, at) => (at === index ? { ...filter, ...patch } : filter)));
   return (
@@ -239,7 +252,7 @@ function WebhookFiltersField({
           <div className="flex items-center gap-2">
             <div className="grid min-w-0 flex-1 grid-cols-1">
               <Input
-                aria-label={`Filter ${index + 1} path`}
+                aria-label={t("settings.text.filterNumberPath", { number: index + 1 })}
                 placeholder="body.action"
                 value={filter.path}
                 onChange={(event) => update(index, { path: event.target.value })}
@@ -248,7 +261,7 @@ function WebhookFiltersField({
             <Button
               variant="ghost"
               size="icon-sm"
-              aria-label={`Remove filter ${index + 1}`}
+              aria-label={t("settings.text.removeFilterNumber", { number: index + 1 })}
               onClick={() => onChange(removeWebhookFilterDraft(filters, filter.id))}
             >
               <Trash2Icon />
@@ -257,22 +270,24 @@ function WebhookFiltersField({
           <div className="flex items-center gap-2">
             <Select
               value={filter.op}
+              items={opLabels}
               onValueChange={(op) => {
                 const known = WEBHOOK_FILTER_OPS.find((option) => option.op === op);
                 if (known) update(index, { op: known.op });
               }}
             >
               <div className="grid w-44 shrink-0 grid-cols-1">
-                <SelectTrigger size="sm" aria-label={`Filter ${index + 1} test`}>
-                  <SelectValue>
-                    {WEBHOOK_FILTER_OPS.find((option) => option.op === filter.op)?.label}
-                  </SelectValue>
+                <SelectTrigger
+                  size="sm"
+                  aria-label={t("settings.text.filterNumberTest", { number: index + 1 })}
+                >
+                  <SelectValue />
                 </SelectTrigger>
               </div>
               <SelectPopup>
                 {WEBHOOK_FILTER_OPS.map((option) => (
                   <SelectItem key={option.op} value={option.op}>
-                    {option.label}
+                    {opLabels[option.op]}
                   </SelectItem>
                 ))}
               </SelectPopup>
@@ -280,8 +295,8 @@ function WebhookFiltersField({
             {filter.op === "exists" ? null : (
               <div className="grid min-w-0 flex-1 grid-cols-1">
                 <Input
-                  aria-label={`Filter ${index + 1} value`}
-                  placeholder={filter.op === "in" ? t("settings.text.openedReopened") : "opened"}
+                  aria-label={t("settings.text.filterNumberValue", { number: index + 1 })}
+                  placeholder={filter.op === "in" ? "opened, reopened" : "opened"}
                   value={filter.value}
                   onChange={(event) => update(index, { value: event.target.value })}
                 />
@@ -1137,7 +1152,7 @@ function WebhookEndpointField({
   const httpBaseUrl = useEnvironmentHttpBaseUrl(environmentId);
   const { copyToClipboard, isCopied } = useCopyToClipboard({ target: "webhook URL" });
   const rotate = useAtomCommand(serverEnvironment.rotateScheduledTaskWebhookToken, {
-    label: t("settings.text.scheduledTaskRotateWebhookToken"),
+    label: "scheduled task rotate webhook token",
   });
   const [rotating, setRotating] = useState(false);
   const endpoint = task?.webhook;
@@ -1149,6 +1164,15 @@ function WebhookEndpointField({
     );
   }
   const { address: url, copyable, note } = webhookAddress(endpoint, httpBaseUrl);
+  // Same branches as webhookAddress, whose English note mobile keeps showing.
+  const noteKey =
+    note === null
+      ? null
+      : httpBaseUrl === null
+        ? "settings.text.webhookNoteLinkConnect"
+        : isLocalLoopbackHost(new URL(url).hostname)
+          ? "settings.text.webhookNoteLoopbackOnly"
+          : "settings.text.webhookNoteReachable";
   const rotateUrl = async () => {
     const confirmed =
       (await requestConfirmDialog(t("settings.text.rotateThisWebhookUrlTheCurrent"), {
@@ -1194,10 +1218,10 @@ function WebhookEndpointField({
           disabled={rotating || !canRotate}
           onClick={() => void rotateUrl()}
         >
-          {t("settings.text.rotate")}
+          {t("settings.text.rotateWebhookUrl")}
         </Button>
       </div>
-      {note !== null ? <p className="text-xs text-muted-foreground">{note}</p> : null}
+      {noteKey !== null ? <p className="text-xs text-muted-foreground">{t(noteKey)}</p> : null}
       {endpoint.url !== null ? <WebhookDeliveryMode environmentId={environmentId} /> : null}
     </div>
   );
@@ -1364,7 +1388,7 @@ function ScheduledTaskEditorForm({
     serverEnvironment.upsertScheduledTask.permissionAtom(environmentId),
   );
   const upsertTask = useAtomCommand(serverEnvironment.upsertScheduledTask, {
-    label: t("settings.text.scheduledTaskUpsert"),
+    label: "scheduled task upsert",
   });
   const webhookDenial = managedCapabilityDenial(useManagedPolicy(environmentId), "webhookTasks");
   const [draft, setDraft] = useState<DraftState>(() =>
@@ -2003,7 +2027,7 @@ function ScheduledTaskEditorForm({
                           <SelectValue>{draft.signatureEncoding}</SelectValue>
                         </SelectTrigger>
                         <SelectPopup>
-                          <SelectItem value="hex">{t("settings.text.hex")}</SelectItem>
+                          <SelectItem value="hex">hex</SelectItem>
                           <SelectItem value="base64">base64</SelectItem>
                         </SelectPopup>
                       </Select>
