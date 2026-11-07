@@ -21,6 +21,7 @@ import { EnvironmentSupervisor } from "../connection/supervisor.ts";
 import type { RpcSession } from "../rpc/session.ts";
 import {
   cappedPowers,
+  copilotAgents,
   createTelescopeAgentAtoms,
   offersOpenThread,
   openThreadFailureText,
@@ -161,6 +162,71 @@ describe("telescope agent chat", () => {
       expect(offersOpenThread(agent, self)).toBe(offered);
     },
   );
+
+  const chief = (id: string): Telescope.Agent => ({
+    ...assistant,
+    id: Telescope.AgentId.make(id),
+    kind: "chief_agent",
+    name: `${id} Chief Agent`,
+  });
+  const custom: Telescope.Agent = { ...chief("mine"), kind: "custom" };
+  const pa = assistant.id;
+  it.each([
+    {
+      case: "nothing stored",
+      stored: null,
+      mainPane: null,
+      choices: [pa, "app", "docs"],
+      shown: pa,
+    },
+    {
+      case: "a stored Chief",
+      stored: "docs",
+      mainPane: null,
+      choices: [pa, "app", "docs"],
+      shown: "docs",
+    },
+    {
+      case: "a stored agent gone from the list",
+      stored: "gone",
+      mainPane: null,
+      choices: [pa, "app", "docs"],
+      shown: pa,
+    },
+    {
+      case: "a stored custom agent",
+      stored: "mine",
+      mainPane: null,
+      choices: [pa, "app", "docs"],
+      shown: pa,
+    },
+    {
+      case: "the stored agent in the main pane",
+      stored: "app",
+      mainPane: "app",
+      choices: [pa, "docs"],
+      shown: pa,
+    },
+    {
+      case: "the assistant in the main pane",
+      stored: null,
+      mainPane: pa,
+      choices: ["app", "docs"],
+      shown: "app",
+    },
+  ])("the Copilot panel shows the right agent: $case", ({ stored, mainPane, choices, shown }) => {
+    const result = copilotAgents(
+      [assistant, chief("app"), custom, chief("docs")],
+      stored === null ? null : Telescope.AgentId.make(stored),
+      mainPane === null ? null : Telescope.AgentId.make(mainPane),
+    );
+    expect(result.choices.map((agent) => agent.id)).toEqual(choices);
+    expect(result.shown?.id).toBe(shown);
+  });
+
+  it("the Copilot panel shows nothing when the member has no agents here", () => {
+    expect(copilotAgents([custom], null, null)).toEqual({ choices: [], shown: null });
+  });
 
   it.each([
     { cause: "no model", message: Telescope.AGENT_MODEL_REFUSALS.no_model, shown: false },

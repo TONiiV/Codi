@@ -55,7 +55,7 @@ function Loading() {
 }
 
 /** The agent's resident thread once the shell lists it; a deleted or archived one starts over. */
-function AgentChat({
+export function AgentChat({
   environmentId,
   workspace,
   agent,
