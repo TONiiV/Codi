@@ -61,6 +61,7 @@ const encodeWorkspaceJson = Schema.encodeSync(
       exportedAt: Schema.String,
       workspace: Telescope.Workspace,
       withheldMemories: Schema.Number,
+      withheldAgents: Schema.Number,
       tables: Schema.Record(Schema.String, Schema.Array(Row)),
     }),
     { space: 2 },
@@ -160,7 +161,7 @@ const readme = (
   workspace: Telescope.Workspace,
   exportedAt: string,
   tables: ReadonlyArray<readonly [string, ReadonlyArray<Row>]>,
-  withheld: number,
+  withheld: { readonly memories: number; readonly agents: number },
 ) =>
   [
     `# ${workspace.name}`,
@@ -178,7 +179,8 @@ const readme = (
     "",
     "Left out:",
     "- Invitation codes: an unused one still lets someone join.",
-    `- ${withheld} memories the exporting member cannot read: another member's private ones, or ones about another member.`,
+    `- ${withheld.memories} memories the exporting member cannot read: another member's private ones, or ones about another member.`,
+    `- ${withheld.agents} agents other members keep hidden, because the app shows a hidden agent only to its owner.`,
     ...Object.entries(NOT_EXPORTED).map(([table, reason]) => `- \`${table}\`: ${reason}.`),
     "",
   ].join("\n");
@@ -191,7 +193,7 @@ type Failure = Telescope.WorkspaceError | PersistenceSqlError | PersistenceDecod
 export class WorkspaceDataService extends Context.Service<
   WorkspaceDataService,
   {
-    /** Leaves out invitation codes and the memories the caller could not read in search. */
+    /** Leaves out invitation codes, and memories and agents the caller cannot see in the app. */
     readonly export: (
       caller: WorkspaceService.Caller,
       input: typeof Telescope.WorkspaceScopedInput.Type,
@@ -238,16 +240,27 @@ const make = Effect.gen(function* () {
         (memory.level !== "private" || owners.get(memory.agent_id) === self.subjectId) &&
         (memory.scope !== "person" || memory.about_subject_id === self.subjectId),
     );
-    const withheld = of("memories").length - memories.length;
+    // `AgentService.get`'s rule: another member's hidden agent stays hidden, from admins too.
+    const agents = of("agents").filter(
+      (agent) =>
+        agent.owner_subject_id === null ||
+        agent.owner_subject_id === self.subjectId ||
+        agent.exposure !== "hidden",
+    );
+    const withheld = {
+      memories: of("memories").length - memories.length,
+      agents: of("agents").length - agents.length,
+    };
     const invitations = of("invitations").map((row) => Struct.omit(row, ["code"]));
-    rows.set("memories", memories).set("invitations", invitations);
+    rows.set("memories", memories).set("invitations", invitations).set("agents", agents);
     const exportedAt = yield* now;
     const tables = TABLES.map((table) => [`telescope_${table}`, of(table)] as const);
     const json = encodeWorkspaceJson({
       formatVersion: 1,
       exportedAt,
       workspace,
-      withheldMemories: withheld,
+      withheldMemories: withheld.memories,
+      withheldAgents: withheld.agents,
       tables: Object.fromEntries(tables),
     });
     return {

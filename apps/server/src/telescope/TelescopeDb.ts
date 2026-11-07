@@ -215,10 +215,22 @@ const make = Effect.gen(function* () {
     table: TelescopeTable,
     row: Row,
   ) {
-    yield* checkColumns(`TelescopeDb.insert.${table}`, row, "repository");
-    yield* sql`INSERT INTO ${tableName(table)} ${sql.insert({ ...row, workspace_id: workspaceId })}`.pipe(
-      Effect.mapError(toPersistenceSqlError(`TelescopeDb.insert.${table}`)),
+    const operation = `TelescopeDb.insert.${table}`;
+    yield* checkColumns(operation, row, "repository");
+    const values = { ...row, workspace_id: workspaceId };
+    // In the same statement, so a write that checked membership before its workspace was
+    // deleted adds nothing after the deletion.
+    const exists =
+      table === "workspaces"
+        ? sql``
+        : sql` WHERE EXISTS (SELECT 1 FROM telescope_workspaces WHERE workspace_id = ${workspaceId})`;
+    const inserted = yield* sql`INSERT INTO ${tableName(table)}
+      (${sql.csv(Object.keys(values).map((column) => sql`${sql(column)}`))})
+      SELECT ${sql.csv(Object.values(values).map((value) => sql`${value}`))}${exists} RETURNING 1`.pipe(
+      Effect.mapError(toPersistenceSqlError(operation)),
     );
+    if (inserted.length === 0)
+      return yield* new PersistenceSqlError({ operation, detail: "The workspace does not exist" });
   });
   const update = Effect.fn("TelescopeDb.update")(function* (
     workspaceId: Telescope.WorkspaceId,

@@ -11,6 +11,7 @@ import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import * as TestConsole from "effect/testing/TestConsole";
 import { Command } from "effect/cli";
+import * as CliError from "effect/cli/CliError";
 
 import { cli } from "../binCli.ts";
 import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
@@ -92,7 +93,7 @@ it.layer(layer)("telescope CLI", (it) => {
     }),
   );
 
-  it.effect("org export writes the bundle and org delete writes the manifest it returns", () =>
+  it.effect("org export and org delete write their files and never overwrite a user's", () =>
     Effect.gen(function* () {
       const { t3, baseDir } = yield* makeHome;
       const fs = yield* FileSystem.FileSystem;
@@ -109,8 +110,28 @@ it.layer(layer)("telescope CLI", (it) => {
         "workspace.json",
       ]);
       assert.match(yield* fs.readFileString(path.join(out, "README.md")), /^# Acme\n/);
+      const project = path.join(baseDir, "project");
+      yield* fs.makeDirectory(project);
+      yield* fs.writeFileString(path.join(project, "README.md"), "# Project\n");
+      assert.include(
+        yield* failureOf(t3("org", "export", org, "--out", project)),
+        `${project} is not empty.`,
+      );
+      assert.strictEqual(yield* fs.readFileString(path.join(project, "README.md")), "# Project\n");
 
       const file = path.join(baseDir, "manifest.json");
+      yield* fs.writeFileString(file, "an earlier manifest\n");
+      assert.include(
+        yield* failureOf(t3("org", "delete", org, "--confirm", "acme", "--manifest", file)),
+        "does not match",
+      );
+      assert.strictEqual(yield* fs.readFileString(file), "an earlier manifest\n");
+      const unwritable = path.join(baseDir, "missing", "manifest.json");
+      const fileError = yield* Effect.flip(
+        t3("org", "delete", org, "--confirm", "Acme", "--manifest", unwritable),
+      );
+      assert.instanceOf(fileError, CliError.UserError);
+      assert.include(fileError.message, unwritable);
       assert.match(
         yield* t3("org", "delete", org, "--confirm", "Acme", "--manifest", file),
         /^Deleted Acme \(.+\)\.\nTABLE\s+ROWS\n/,

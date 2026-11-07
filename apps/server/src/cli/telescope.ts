@@ -65,10 +65,13 @@ type Failure =
   | Telescope.WorkspaceBusyError
   | PersistenceSqlError
   | PersistenceDecodeError
-  | PlatformError;
+  | PlatformError
+  | CliError.UserError;
 
 const render = <A>(json: boolean, result: A, human: (result: A) => string) =>
   json ? JSON.stringify(result, null, 2) : human(result);
+const userError = (error: Error) =>
+  Effect.fail(new CliError.UserError({ cause: error, userMessage: error.message }));
 
 /** Opens this T3 home's database, runs one service call as the owner, and prints its result. */
 const runAsOwner = Effect.fn("cli.telescope.runAsOwner")(function* <A>(
@@ -85,10 +88,9 @@ const runAsOwner = Effect.fn("cli.telescope.runAsOwner")(function* <A>(
   const result = yield* WorkspaceService.WorkspaceService.pipe(
     Effect.flatMap(run),
     Effect.catchTags({
-      TelescopeWorkspaceError: (error) =>
-        Effect.fail(new CliError.UserError({ cause: error, userMessage: error.message })),
-      TelescopeWorkspaceBusyError: (error) =>
-        Effect.fail(new CliError.UserError({ cause: error, userMessage: error.message })),
+      TelescopeWorkspaceError: userError,
+      TelescopeWorkspaceBusyError: userError,
+      PlatformError: userError,
     }),
     Effect.provide(
       Layer.merge(WorkspaceService.layer, WorkspaceDataService.layer).pipe(
@@ -179,7 +181,9 @@ const workspaceArgument = Argument.String("workspace").pipe(
 const orgExportCommand = Command.make("export", {
   ...common,
   workspace: workspaceArgument,
-  out: Flag.String("out").pipe(Flag.withDescription("Directory to write the export into.")),
+  out: Flag.String("out").pipe(
+    Flag.withDescription("A new or empty directory to write the export into."),
+  ),
 }).pipe(
   Command.withDescription("Export a workspace's data as JSON and Markdown files."),
   Command.withHandler((flags) =>
@@ -187,10 +191,15 @@ const orgExportCommand = Command.make("export", {
       flags,
       () =>
         Effect.gen(function* () {
-          const data = yield* WorkspaceDataService.WorkspaceDataService;
-          const { files } = yield* data.export(OWNER, { workspaceId: flags.workspace });
           const fs = yield* FileSystem.FileSystem;
           const path = yield* Path.Path;
+          if ((yield* fs.exists(flags.out)) && (yield* fs.readDirectory(flags.out)).length > 0)
+            return yield* new CliError.UserError({
+              cause: flags.out,
+              userMessage: `${flags.out} is not empty. Export into a new or empty directory.`,
+            });
+          const data = yield* WorkspaceDataService.WorkspaceDataService;
+          const { files } = yield* data.export(OWNER, { workspaceId: flags.workspace });
           yield* fs.makeDirectory(flags.out, { recursive: true });
           for (const file of files)
             yield* fs.writeFileString(path.join(flags.out, file.path), file.text);
@@ -225,8 +234,9 @@ const orgDeleteCommand = Command.make("delete", {
         Effect.gen(function* () {
           const fs = yield* FileSystem.FileSystem;
           const file = Option.getOrUndefined(flags.manifest);
-          // The manifest is the only record of the deletion, so its path is proven writable first.
-          if (file !== undefined) yield* fs.writeFileString(file, "");
+          // The manifest is the only record of the deletion, so its path is proven writable first,
+          // by appending nothing: a refused deletion leaves an earlier manifest there intact.
+          if (file !== undefined) yield* fs.writeFileString(file, "", { flag: "a" });
           const data = yield* WorkspaceDataService.WorkspaceDataService;
           const manifest = yield* data.delete(OWNER, {
             workspaceId: flags.workspace,

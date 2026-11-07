@@ -9,17 +9,33 @@ import { runMigrations } from "../persistence/Migrations.ts";
 import * as SqlitePersistence from "../persistence/Sqlite.ts";
 import * as TelescopeDb from "./TelescopeDb.ts";
 
+const wsA = Telescope.WorkspaceId.make("ws-a");
+const wsB = Telescope.WorkspaceId.make("ws-b");
+const wsC = Telescope.WorkspaceId.make("ws-c");
+const workspace = (workspace_id: string) => ({
+  workspace_id,
+  kind: "personal",
+  name: workspace_id,
+  created_at: "2026-11-06T00:00:00.000Z",
+  created_by: "owner",
+});
 const layer = TelescopeDb.layer.pipe(
   Layer.provideMerge(
-    Layer.effectDiscard(runMigrations()).pipe(Layer.provideMerge(SqlitePersistence.layerMemory)),
+    Layer.effectDiscard(
+      runMigrations().pipe(
+        Effect.andThen(
+          SqlClient.SqlClient.use(
+            (sql) =>
+              sql`INSERT INTO telescope_workspaces ${sql.insert([workspace(wsA), workspace(wsB), workspace(wsC)])}`,
+          ),
+        ),
+      ),
+    ).pipe(Layer.provideMerge(SqlitePersistence.layerMemory)),
   ),
 );
 
 const MemberName = Schema.Struct({ workspace_id: Schema.String, display_name: Schema.String });
 const decodeNames = Schema.decodeUnknownEffect(Schema.Array(MemberName));
-const wsA = Telescope.WorkspaceId.make("ws-a");
-const wsB = Telescope.WorkspaceId.make("ws-b");
-const wsC = Telescope.WorkspaceId.make("ws-c");
 const member = (name: string) => ({
   subject_id: name,
   display_name: name,

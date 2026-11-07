@@ -10,6 +10,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Queue from "effect/Queue";
 import * as Schema from "effect/Schema";
+import * as SqlClient from "effect/sql/SqlClient";
 import * as TestClock from "effect/testing/TestClock";
 
 import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
@@ -19,9 +20,23 @@ import * as TelescopeDb from "./TelescopeDb.ts";
 import * as WakeQueue from "./WakeQueueService.ts";
 import * as WorkspaceService from "./WorkspaceService.ts";
 
-const database = Layer.effectDiscard(runMigrations()).pipe(
-  Layer.provideMerge(SqlitePersistence.layerMemory),
-);
+const ws = Telescope.WorkspaceId.make("ws-a");
+const database = Layer.effectDiscard(
+  runMigrations().pipe(
+    Effect.andThen(
+      SqlClient.SqlClient.use(
+        (sql) =>
+          sql`INSERT INTO telescope_workspaces ${sql.insert({
+            workspace_id: ws,
+            kind: "personal",
+            name: "A",
+            created_at: "2026-01-01T00:00:00.000Z",
+            created_by: "owner",
+          })}`,
+      ),
+    ),
+  ),
+).pipe(Layer.provideMerge(SqlitePersistence.layerMemory));
 const layer = Layer.mergeAll(WakeQueue.layer, TelescopeDb.layer, WorkspaceService.layer).pipe(
   Layer.provideMerge(Layer.merge(database, NodeCrypto.layer)),
   Layer.provide(
@@ -33,7 +48,6 @@ const layer = Layer.mergeAll(WakeQueue.layer, TelescopeDb.layer, WorkspaceServic
 const worker = (run: (wakeRun: WakeQueue.WakeRun) => Effect.Effect<void>) =>
   Layer.build(WakeQueue.layerWorker.pipe(Layer.provide(Layer.succeed(WakeQueue.WakeRunner, run))));
 
-const ws = Telescope.WorkspaceId.make("ws-a");
 const session = (name: string): WorkspaceService.Caller => ({
   sessionId: AuthSessionId.make(`session-${name}`),
   subject: "one-time-token",

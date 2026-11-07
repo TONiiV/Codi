@@ -1,7 +1,10 @@
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import { assert, it } from "@effect/vitest";
 import { AuthSessionId, EnvironmentId } from "@t3tools/contracts";
+import * as SecureRandom from "effect/crypto/SecureRandom";
+import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 import * as SqlClient from "effect/sql/SqlClient";
@@ -16,18 +19,16 @@ import * as WorkspaceService from "./WorkspaceService.ts";
 const database = Layer.effectDiscard(runMigrations()).pipe(
   Layer.provideMerge(SqlitePersistence.layerMemory),
 );
-const layer = Layer.mergeAll(
-  WorkspaceDataService.layer,
-  WorkspaceService.layer,
-  TelescopeDb.layer,
-).pipe(
-  Layer.provideMerge(Layer.merge(database, NodeCrypto.layer)),
-  Layer.provide(
-    Layer.succeed(ServerEnvironment.ServerEnvironmentIdentity, {
-      getEnvironmentId: Effect.succeed(EnvironmentId.make("env-local")),
-    }),
-  ),
-);
+const services = (random: Layer.Layer<SecureRandom.SecureRandom>) =>
+  Layer.mergeAll(WorkspaceDataService.layer, WorkspaceService.layer, TelescopeDb.layer).pipe(
+    Layer.provideMerge(Layer.merge(database, random)),
+    Layer.provide(
+      Layer.succeed(ServerEnvironment.ServerEnvironmentIdentity, {
+        getEnvironmentId: Effect.succeed(EnvironmentId.make("env-local")),
+      }),
+    ),
+  );
+const layer = services(NodeCrypto.layer);
 
 const session = (name: string): WorkspaceService.Caller => ({
   sessionId: AuthSessionId.make(`session-${name}`),
@@ -42,6 +43,7 @@ const decodeBundle = Schema.decodeUnknownEffect(
   Schema.fromJsonString(
     Schema.Struct({
       withheldMemories: Schema.Number,
+      withheldAgents: Schema.Number,
       tables: Schema.Record(
         Schema.String,
         Schema.Array(Schema.Record(Schema.String, Schema.Unknown)),
@@ -169,7 +171,7 @@ it.layer(layer)("WorkspaceDataService", (it) => {
     }),
   );
 
-  it.effect("leaves out invitation codes and memories the exporting member cannot search", () =>
+  it.effect("leaves out invitation codes, and memories and agents the exporter cannot see", () =>
     Effect.gen(function* () {
       const service = yield* WorkspaceService.WorkspaceService;
       const data = yield* WorkspaceDataService.WorkspaceDataService;
@@ -179,20 +181,23 @@ it.layer(layer)("WorkspaceDataService", (it) => {
         name: "Private",
         displayName: "Alice",
       });
-      const used = yield* service.invite(alice, { workspaceId, role: "member" });
+      const used = yield* service.invite(alice, { workspaceId, role: "admin" });
       const { subjectId: bobId } = yield* service.accept(bob, {
         code: used.code,
         displayName: "Bob",
       });
       const unused = yield* service.invite(alice, { workspaceId, role: "member" });
       const aliceId = (yield* service.get(alice, { workspaceId })).self.subjectId;
-      for (const [agent, owner] of [
-        ["agent-alice", aliceId],
-        ["agent-bob", bobId],
+      for (const [agent, owner, exposure] of [
+        ["agent-alice", aliceId, "hidden"],
+        ["agent-bob", bobId, "hidden"],
+        ["agent-shared", bobId, "visible"],
+        ["agent-company", null, "hidden"],
       ] as const) {
         yield* seed(workspaceId, "telescope_agents", agent, {
           agent_id: agent,
           owner_subject_id: owner,
+          exposure,
         });
       }
       for (const [id, agent, level, about] of [
@@ -217,6 +222,16 @@ it.layer(layer)("WorkspaceDataService", (it) => {
         ["own-private", "about-alice"],
       );
       assert.strictEqual(bundle.withheldMemories, 2);
+      const agentIds = (tables: typeof bundle.tables) =>
+        tables.telescope_agents?.map((row) => row.agent_id);
+      assert.deepStrictEqual(agentIds(bundle.tables), [
+        "agent-alice",
+        "agent-shared",
+        "agent-company",
+      ]);
+      assert.strictEqual(bundle.withheldAgents, 1);
+      const readme = files.find((file) => file.path === "README.md")?.text;
+      assert.include(readme, "\n- 1 agents other members keep hidden, because");
       assert.deepStrictEqual(
         bundle.tables.telescope_invitations?.map((row) => "code" in row),
         [false, false],
@@ -225,7 +240,10 @@ it.layer(layer)("WorkspaceDataService", (it) => {
         assert.notInclude(file.text, used.code);
         assert.notInclude(file.text, unused.code);
         assert.notInclude(file.text, "bob-private");
+        assert.notInclude(file.text, "name agent-bob");
       }
+      const bobs = yield* bundleOf((yield* data.export(bob, { workspaceId })).files);
+      assert.deepStrictEqual(agentIds(bobs.tables), ["agent-bob", "agent-shared", "agent-company"]);
     }),
   );
 
@@ -326,3 +344,47 @@ it.layer(layer)("WorkspaceDataService", (it) => {
     }),
   );
 });
+
+it.effect("adds no rows to a workspace deleted between a write's member check and its insert", () =>
+  Effect.gen(function* () {
+    const paused = yield* Deferred.make<void>();
+    const resume = yield* Deferred.make<void>();
+    // Only invitation codes draw random bytes, after invite's member check and before its insert.
+    const gated = Layer.effect(
+      SecureRandom.SecureRandom,
+      SecureRandom.SecureRandom.use((random) =>
+        Effect.succeed({
+          ...random,
+          randomBytes: (size: number) =>
+            Deferred.succeed(paused, undefined).pipe(
+              Effect.andThen(Deferred.await(resume)),
+              Effect.andThen(random.randomBytes(size)),
+            ),
+        }),
+      ),
+    ).pipe(Layer.provide(NodeCrypto.layer));
+    yield* Effect.gen(function* () {
+      const db = yield* TelescopeDb.TelescopeDb;
+      const service = yield* WorkspaceService.WorkspaceService;
+      const data = yield* WorkspaceDataService.WorkspaceDataService;
+      const alice = session("late-alice");
+      const { id: workspaceId } = yield* service.create(alice, {
+        kind: "enterprise",
+        name: "Late",
+        displayName: "Alice",
+      });
+      const invite = yield* Effect.forkChild(
+        service.invite(alice, { workspaceId, role: "member" }),
+      );
+      yield* Deferred.await(paused);
+      yield* data.delete(alice, { workspaceId, confirmName: "Late" });
+      yield* Deferred.succeed(resume, undefined);
+      assert.strictEqual((yield* Effect.flip(Fiber.join(invite)))._tag, "PersistenceSqlError");
+      const at = "2026-11-07T00:00:00.000Z";
+      const task = { item_id: "late", kind: "task", title: "Late", status: "todo" };
+      const late = db.insert(workspaceId, "tasks", { ...task, created_at: at, updated_at: at });
+      assert.strictEqual((yield* Effect.flip(late))._tag, "PersistenceSqlError");
+      assert.isTrue((yield* rowCounts(workspaceId)).every(([, count]) => count === 0));
+    }).pipe(Effect.provide(services(gated)));
+  }),
+);
