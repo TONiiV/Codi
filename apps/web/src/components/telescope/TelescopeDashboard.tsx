@@ -130,7 +130,7 @@ function SummaryView({ summary }: { summary: Telescope.DashboardSummary }) {
                     <NeedsYouBadge task={task} />
                   </span>
                 </TableCell>
-                <TableCell className="whitespace-normal">
+                <TableCell className="whitespace-normal wrap-anywhere">
                   {task.holder ? (
                     <span>
                       {task.holder.name}
