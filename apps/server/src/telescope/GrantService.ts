@@ -27,6 +27,11 @@ const decodeRules = Schema.decodeUnknownEffect(
   Schema.Array(Schema.Struct({ powers_json: PowersJson })),
 );
 const encodePowers = Schema.encodeSync(PowersJson);
+const RoutingJson = Schema.fromJsonString(Telescope.RoutingAllowlist);
+const decodeRouting = Schema.decodeUnknownEffect(
+  Schema.Array(Schema.Struct({ routing_json: Schema.NullOr(RoutingJson) })),
+);
+const encodeRouting = Schema.encodeSync(RoutingJson);
 const AuditRow = Schema.Struct({
   audit_id: Telescope.AuditEntryId,
   workspace_id: Telescope.WorkspaceId,
@@ -95,6 +100,8 @@ export interface ProjectRuleInput {
   readonly workspaceId: Telescope.WorkspaceId;
   readonly projectId: ProjectId;
   readonly powers: Telescope.StandingPowers;
+  /** The harnesses and models routing may choose here; `null` allows any. */
+  readonly routing: Telescope.RoutingAllowlist | null;
 }
 export interface AuditInput {
   readonly runId?: Telescope.AgentRunId;
@@ -145,6 +152,10 @@ export class GrantService extends Context.Service<
     readonly auditList: Method<"telescope.grant.audit.list">;
     /** Admins cap the powers any agent holds in a bound project. */
     readonly setProjectRule: (caller: Caller, input: ProjectRuleInput) => Out<void>;
+    readonly routingAllowlist: (
+      workspaceId: Telescope.WorkspaceId,
+      projectId: ProjectId,
+    ) => Out<Telescope.RoutingAllowlist | undefined>;
   }
 >()("t3/telescope/GrantService") {}
 
@@ -322,6 +333,7 @@ const make = Effect.gen(function* () {
     const row = {
       project_id: projectId,
       powers_json: encodePowers(input.powers),
+      routing_json: input.routing === null ? null : encodeRouting(input.routing),
       updated_by: self.subjectId,
       updated_at: yield* now,
     };
@@ -332,6 +344,15 @@ const make = Effect.gen(function* () {
     );
   });
 
+  const routingAllowlist = Effect.fn("GrantService.routingAllowlist")(function* (
+    workspaceId: Telescope.WorkspaceId,
+    projectId: ProjectId,
+  ) {
+    const where = { project_id: projectId };
+    const [rule] = yield* db.select(workspaceId, "project_rules", decodeRouting, where);
+    return rule?.routing_json ?? undefined;
+  });
+
   return GrantService.of({
     effectiveGrant,
     explain,
@@ -339,6 +360,7 @@ const make = Effect.gen(function* () {
     audit,
     auditList,
     setProjectRule,
+    routingAllowlist,
   });
 });
 
