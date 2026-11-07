@@ -71,18 +71,22 @@ const CANCEL_ERROR_TEXT = {
 export const cancelFailureText = (result: AtomCommandResult<unknown, unknown>) =>
   failureText(result, CANCEL_ERROR_TEXT);
 
-type DecisionsQuery = (target: {
+interface WorkspaceTarget {
   readonly environmentId: EnvironmentId;
   readonly input: { readonly workspaceId: Telescope.WorkspaceId };
-}) => Atom.Atom<AsyncResult.AsyncResult<typeof Telescope.DecisionListResult.Type, unknown>>;
+}
+type DecisionsQuery = (
+  target: WorkspaceTarget,
+) => Atom.Atom<AsyncResult.AsyncResult<typeof Telescope.DecisionListResult.Type, unknown>>;
 
 export function createTelescopeDelegationAtoms<R, E>(
   runtime: Atom.AtomRuntime<EnvironmentRegistry | R, E>,
   decisions: DecisionsQuery,
+  delegationNotices: (target: WorkspaceTarget) => Atom.Atom<number>,
 ) {
   const cancels = Atom.make(0).pipe(Atom.keepAlive);
-  // Delegations have no notices of their own. A question or an answer is a decision write, so a
-  // changed decision list, or a cancel from here, re-reads them; the first list does not.
+  // A delegation notice, a changed decision list (a question or an answer), or a cancel from here
+  // re-reads them; the first decision list does not.
   const signal = Atom.family((key: string) => {
     const [environmentId, workspaceId]: [EnvironmentId, Telescope.WorkspaceId] = JSON.parse(key);
     const board = decisions({ environmentId, input: { workspaceId } });
@@ -92,7 +96,8 @@ export function createTelescopeDelegationAtoms<R, E>(
       const moved = previous?.list !== undefined && previous.list !== list;
       return { list, reads: (previous?.reads ?? 0) + (moved ? 1 : 0) };
     });
-    return Atom.make((get) => get(seen).reads + get(cancels));
+    const notices = delegationNotices({ environmentId, input: { workspaceId } });
+    return Atom.make((get) => get(seen).reads + get(cancels) + get(notices));
   });
   const list = createEnvironmentRpcQueryAtomFamily(runtime, {
     label: "telescope:delegation:list",

@@ -144,19 +144,9 @@ function WorkspaceChat({
     );
   if (agent !== undefined)
     return (
-      <div className="flex min-h-0 flex-1 flex-col">
-        <TelescopeNeedsYou
-          key={agent.id}
-          environmentId={environmentId}
-          workspace={workspace}
-          agent={agent}
-        />
-        <AgentChat
-          key={agent.id}
-          environmentId={environmentId}
-          workspace={workspace}
-          agent={agent}
-        />
+      <div key={agent.id} className="flex min-h-0 flex-1 flex-col">
+        <TelescopeNeedsYou environmentId={environmentId} workspace={workspace} agent={agent} />
+        <AgentChat environmentId={environmentId} workspace={workspace} agent={agent} />
       </div>
     );
   const loading =

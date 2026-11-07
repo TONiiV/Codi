@@ -8,6 +8,7 @@ import * as Queue from "effect/Queue";
 import * as Ref from "effect/Ref";
 import * as Schema from "effect/Schema";
 import * as SqlClient from "effect/sql/SqlClient";
+import * as Stream from "effect/Stream";
 
 import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
 import { runMigrations } from "../persistence/Migrations.ts";
@@ -460,6 +461,46 @@ it.effect("cancel cascades to descendants and reports CANCELED up one level", ()
     );
     assert.deepStrictEqual(yield* wakes({ coalesce_key: `delegation:${sent.id}:report` }), []);
   }).pipe(Effect.provide(layer)),
+);
+
+it.effect(
+  "each committed delegation write sends one delegation notice, none when it rolls back",
+  () =>
+    Effect.gen(function* () {
+      const delegations = yield* setup;
+      const sql = yield* SqlClient.SqlClient;
+      const heard = yield* (yield* BoardChanges.BoardChanges).changes;
+      // The sentinel task written last ends the listen.
+      const collected = yield* heard.pipe(
+        Stream.takeUntil((change) => change.kind === "task"),
+        Stream.runCollect,
+        Effect.forkScoped({ startImmediately: true }),
+      );
+      const task = yield* delegations.delegate(actor(pa), { toAgentId: chief, brief });
+      const ref = { workspaceId: ws, delegationId: task.id };
+      yield* delegations.start(ref);
+      const rolledBack = sql.withTransaction(
+        delegations.cancel(ann, task.id).pipe(Effect.andThen(Effect.fail("rollback"))),
+      );
+      assert.strictEqual(yield* Effect.flip(rolledBack), "rollback");
+      assert.strictEqual((yield* delegations.get(ref)).state, "WORKING");
+      yield* delegations.cancel(ann, task.id);
+      const sentinel = yield* TaskBoardService.TaskBoardService.use((board) =>
+        board.createTask({ caller: session("ann") }, { workspaceId: ws, title: "sentinel" }),
+      );
+      const notice = (version: number): Telescope.BoardChange => ({
+        kind: "delegation",
+        workspaceId: ws,
+        id: task.id,
+        version,
+      });
+      assert.deepStrictEqual(Array.from(yield* Fiber.join(collected)), [
+        notice(1),
+        notice(2),
+        notice(3),
+        { kind: "task", workspaceId: ws, id: sentinel.id, version: 1 },
+      ]);
+    }).pipe(Effect.scoped, Effect.provide(layer)),
 );
 
 it.effect("another workspace's delegation is not found", () =>

@@ -177,7 +177,7 @@ const make = Effect.gen(function* () {
    */
   const recordCommit = Effect.fn("TaskBoardService.recordCommit")(function* (
     author: Committer,
-    item: Pick<Telescope.BoardChange, "kind" | "workspaceId" | "id">,
+    item: Pick<Telescope.Task | Telescope.Decision, "kind" | "workspaceId" | "id">,
     baseVersion: number,
     changedFields: Record<string, Schema.Json>,
     at: string,

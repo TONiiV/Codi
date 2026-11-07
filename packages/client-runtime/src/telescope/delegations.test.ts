@@ -156,7 +156,7 @@ describe("telescope needs-you", () => {
 
 describe("telescope delegation queries", () => {
   it.effect(
-    "re-read when the decision list changes and after a cancel, not on its first answer",
+    "re-read on a delegation notice, when the decision list changes and after a cancel, not on its first answer",
     () =>
       Effect.gen(function* () {
         const env = EnvironmentId.make("local");
@@ -187,7 +187,12 @@ describe("telescope delegation queries", () => {
         const board = Atom.make<
           AsyncResult.AsyncResult<typeof Telescope.DecisionListResult.Type, unknown>
         >(AsyncResult.initial());
-        const delegations = createTelescopeDelegationAtoms(runtime, () => board);
+        const notices = Atom.make(0);
+        const delegations = createTelescopeDelegationAtoms(
+          runtime,
+          () => board,
+          () => notices,
+        );
         const registry = AtomRegistry.make();
         yield* Effect.addFinalizer(() => Effect.sync(() => registry.dispose()));
         registry.mount(sessions(env));
@@ -228,6 +233,10 @@ describe("telescope delegation queries", () => {
         expect(canceled._tag).toBe("Success");
         yield* read();
         expect(list).toHaveBeenCalledTimes(3);
+
+        registry.set(notices, 1);
+        yield* read();
+        expect(list).toHaveBeenCalledTimes(4);
       }),
   );
 });

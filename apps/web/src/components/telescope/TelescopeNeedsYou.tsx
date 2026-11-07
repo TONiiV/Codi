@@ -26,6 +26,7 @@ import { telescope, telescopeBoard } from "./telescopeState";
 const telescopeDelegations = createTelescopeDelegationAtoms(
   connectionAtomRuntime,
   telescopeBoard.decisions,
+  telescopeBoard.delegationNotices,
 );
 
 const STATE = {
@@ -85,6 +86,8 @@ export function TelescopeNeedsYou({
   // Only the viewer's own agents have delegations it can list.
   const personal = agent.ownerSubjectId !== null;
   const ofAgent = useEnvironmentQuery(personal ? listed({ agentId: agent.id }) : null);
+  // Until the first read lands, an empty list would claim there are none.
+  const showOwn = personal && (ofAgent.data !== null || ofAgent.error !== null);
   const mine = useEnvironmentQuery(telescopeAgents.listMine(scoped)).data?.agents ?? [];
   const self = useEnvironmentQuery(telescope.get(scoped)).data?.self;
   const mayCancel = useAtomValue(telescopeDelegations.cancel.permissionAtom(environmentId));
@@ -107,7 +110,7 @@ export function TelescopeNeedsYou({
     setCanceling(false);
     setCancelError(cancelFailureText(result));
   };
-  if (items.length === 0 && !personal) return null;
+  if (items.length === 0 && !showOwn) return null;
 
   return (
     <div className="flex max-h-[45%] shrink-0 flex-col gap-4 overflow-y-auto border-b px-4 py-3 text-sm">
@@ -137,7 +140,7 @@ export function TelescopeNeedsYou({
           </ul>
         </section>
       )}
-      {personal ? (
+      {showOwn ? (
         <section aria-label="委派" className="flex flex-col gap-2">
           <h2 className="text-xs font-medium text-muted-foreground">委派 · {open.length}</h2>
           {cancelError === null ? null : <ErrorNote text={cancelError} />}
