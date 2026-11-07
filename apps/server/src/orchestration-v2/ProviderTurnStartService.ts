@@ -1582,15 +1582,14 @@ export const layer: Layer.Layer<
         (legacyInputRunIds.size > 0 &&
           sameNativeThread &&
           !acceptedAttempts.some((source) => source.nativeThreadId !== undefined));
-      const preamble =
-        goalCommand || isCompactionCommandMessage(message)
-          ? ""
-          : yield* turnPreamble.forTurn({
-              threadId: projection.thread.id,
-              messageId: message.id,
-              modelSelection: run.modelSelection,
-              freshConversation: !nativeThreadHasTurns,
-            });
+      const preamble = TurnPreamble.opensWithCommand(userText)
+        ? ""
+        : yield* turnPreamble.forTurn({
+            threadId: projection.thread.id,
+            messageId: message.id,
+            modelSelection: run.modelSelection,
+            freshConversation: !nativeThreadHasTurns,
+          });
       const startWithHandoffs = Effect.fn("ProviderTurnStartService.startWithHandoffs")(
         function* (turnInput: Parameters<typeof session.startTurn>[0], compact = false) {
           const delivery = yield* deliverContextHandoffs({

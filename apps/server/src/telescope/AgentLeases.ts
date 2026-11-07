@@ -25,7 +25,13 @@ export const layer = Layer.effectDiscard(
     const board = yield* TaskBoardService.TaskBoardService;
     const renew = Effect.fn("AgentLeases.renew")(function* () {
       for (const workspaceId of yield* db.allWorkspaceIds) {
-        const open = yield* db.select(workspaceId, "runs", decodeOpenRuns, { finished_at: null });
+        const open = yield* db.select(
+          workspaceId,
+          "runs",
+          decodeOpenRuns,
+          { finished_at: null },
+          { columns: ["agent_id", "on_behalf_of_json"] },
+        );
         if (open.length === 0) continue;
         const serves = yield* servesRun(db, workspaceId);
         const running = open.flatMap((run) =>

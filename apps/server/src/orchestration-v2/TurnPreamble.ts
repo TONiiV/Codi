@@ -1,4 +1,5 @@
 import type { MessageId, ModelSelection, ThreadId } from "@t3tools/contracts";
+import { SKILL_MENTION_PATTERN } from "@t3tools/shared/composerInlineTokens";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -11,6 +12,10 @@ export interface TurnPreambleInput {
   readonly freshConversation: boolean;
 }
 type Contributor = (input: TurnPreambleInput) => Effect.Effect<string>;
+
+// Providers parse a `/command`, or Grok a skill mention, only at the start of the prompt.
+const LEADING_COMMAND = new RegExp(`^\\s*(?:/|${SKILL_MENTION_PATTERN.source})`, "u");
+export const opensWithCommand = (text: string) => LEADING_COMMAND.test(text);
 
 /**
  * Text a server module puts before a turn's prompt, as inline context every provider receives.

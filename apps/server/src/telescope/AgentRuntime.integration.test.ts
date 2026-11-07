@@ -1065,9 +1065,23 @@ it.effect("a run's manifest lists the pinned memory and its own open tasks", () 
 );
 
 it.effect.each([
-  { stopped: false, runs: "runs with the role text and a manifest" },
-  { stopped: true, runs: "of a stopped agent runs without its role or a context (D48)" },
-])("a member's message on a resident thread $runs", ({ stopped }) =>
+  { typed: "样机哪天交付？", stopped: false, runs: "runs with the role text and a manifest" },
+  {
+    typed: "样机哪天交付？",
+    stopped: true,
+    runs: "of a stopped agent runs without its role or a context (D48)",
+  },
+  {
+    typed: " /review src/gripper",
+    stopped: false,
+    runs: "opening with a command reaches the provider first, without the preamble",
+  },
+  {
+    typed: "$deploy ship it",
+    stopped: false,
+    runs: "opening with a skill mention reaches the provider first, without the preamble",
+  },
+])("a member's message on a resident thread $runs", ({ typed, stopped }) =>
   withHarness({ mcp: true }, (harness) =>
     Effect.gen(function* () {
       const seeded = yield* seed;
@@ -1102,12 +1116,11 @@ it.effect.each([
         createdBy: "user",
         creationSource: "web",
       });
-      yield* memberTypes(threadId, "样机哪天交付？");
+      yield* memberTypes(threadId, typed);
       const turn = yield* Queue.take(harness.started);
-      assert.include(turn.message.text, "样机哪天交付？");
-      if (stopped) {
-        assert.notInclude(turn.message.text, "personal assistant");
-        assert.notInclude(turn.message.text, "Your context for this turn");
+      assert.include(turn.message.text, typed);
+      if (stopped || typed !== "样机哪天交付？") {
+        assert.strictEqual(turn.message.text, typed);
         return;
       }
       assert.include(turn.message.text, "personal assistant");

@@ -51,7 +51,7 @@ const decodeMembers = Schema.decodeUnknownEffect(
 type Failure = Telescope.WorkspaceError | PersistenceSqlError | PersistenceDecodeError;
 
 /** D48: the agents a kill switch has stopped in this workspace. */
-const stoppedAgents = Effect.fn("AgentRuntime.stoppedAgents")(function* (
+const stoppedAgents = Effect.fn("AgentRuntime.stopped")(function* (
   db: TelescopeDb.TelescopeDb["Service"],
   workspaceId: Telescope.WorkspaceId,
 ) {

@@ -67,8 +67,8 @@ export const makeHandler = Effect.gen(function* () {
   const serving = new Map<ThreadId, string>();
 
   // A failed Codi run, such as a queued one Codi refused to start (D118), says why it failed.
-  const failureOf = (run: OrchestrationV2Run) =>
-    projections
+  const failureOf = Effect.fn("AgentThreadRuns.failureOf")(function* (run: OrchestrationV2Run) {
+    const message = yield* projections
       .getThreadRecords(run.threadId, ["turnItems"], {
         turnItemRunIds: [run.id],
         turnItemTypes: ["error"],
@@ -78,8 +78,9 @@ export const makeHandler = Effect.gen(function* () {
           turnItems.flatMap((item) => (item.type === "error" ? [item.failure.message] : [])).at(-1),
         ),
         Effect.orElseSucceed(() => undefined),
-        Effect.map((message) => message ?? UNREPORTED),
       );
+    return message ?? UNREPORTED;
+  });
 
   // Untraced: runs for every orchestration event; only agent threads reach the traced services.
   const handle = Effect.fnUntraced(function* (event: OrchestrationV2DomainEvent) {
