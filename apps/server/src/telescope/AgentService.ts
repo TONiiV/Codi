@@ -54,12 +54,31 @@ const canMergePRs = (ownership: Ownership, owner: string, projectId: ProjectId |
   ownership.roles.get(owner) === "admin" ||
   (projectId !== undefined && ownership.leads.get(projectId) === owner);
 
+/** Who is still an active member, and which projects are still bound. */
+interface Reach {
+  readonly roles: { has(subjectId: string): boolean };
+  readonly leads: { has(projectId: string): boolean };
+}
+/** The fields of an agent, or of its stored row, that its visibility depends on. */
+interface Seen {
+  readonly ownerSubjectId: string | null;
+  readonly kind: string;
+  readonly projectId?: string | undefined;
+  readonly exposure: string;
+}
+
 /** Agents of former members, and Chief Agents of unbound projects, are out of reach. */
-const reachable = (ownership: Ownership, agent: Telescope.Agent) =>
+const reachable = (reach: Reach, agent: Seen) =>
   agent.ownerSubjectId === null ||
-  (ownership.roles.has(agent.ownerSubjectId) &&
+  (reach.roles.has(agent.ownerSubjectId) &&
     (agent.kind !== "chief_agent" ||
-      (agent.projectId !== undefined && ownership.leads.has(agent.projectId))));
+      (agent.projectId !== undefined && reach.leads.has(agent.projectId))));
+
+/** `telescope.agent.get`'s rule, which the workspace export applies too. */
+export const visibleTo = (viewer: string, reach: Reach, agent: Seen) =>
+  agent.ownerSubjectId === null ||
+  agent.ownerSubjectId === viewer ||
+  (agent.exposure !== "hidden" && reachable(reach, agent));
 
 const NO_POWERS: Telescope.StandingPowers = {
   openTickets: false,
@@ -341,11 +360,7 @@ const make = Effect.gen(function* () {
     const agent = yield* findAgent(input.workspaceId, input.agentId);
     if (agent === undefined) return yield* notFound();
     const ownership = yield* ownershipOf(input.workspaceId);
-    const visible =
-      agent.ownerSubjectId === null ||
-      agent.ownerSubjectId === self.subjectId ||
-      (agent.exposure !== "hidden" && reachable(ownership, agent));
-    if (!visible) return yield* notFound();
+    if (!visibleTo(self.subjectId, ownership, agent)) return yield* notFound();
     const powers = effectivePowers(ownership, agent);
     return { agent, effectivePowers: powers, card: agentCard(agent, powers) };
   });

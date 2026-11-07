@@ -27,7 +27,7 @@ import {
 } from "./config.ts";
 
 // Whoever can run the CLI owns this T3 home, so it acts as the environment owner.
-const OWNER: WorkspaceService.Caller = {
+const OWNER: WorkspaceService.SessionCaller = {
   sessionId: AuthSessionId.make("cli"),
   subject: INTERNAL_ADMINISTRATIVE_BOOTSTRAP_SUBJECT,
 };
@@ -199,7 +199,11 @@ const orgExportCommand = Command.make("export", {
               userMessage: `${flags.out} is not empty. Export into a new or empty directory.`,
             });
           const data = yield* WorkspaceDataService.WorkspaceDataService;
-          const { files } = yield* data.export(OWNER, { workspaceId: flags.workspace });
+          const { files } = yield* data.export(
+            OWNER,
+            { workspaceId: flags.workspace },
+            { maxBytes: Number.POSITIVE_INFINITY },
+          );
           yield* fs.makeDirectory(flags.out, { recursive: true });
           for (const file of files)
             yield* fs.writeFileString(path.join(flags.out, file.path), file.text);
@@ -235,13 +239,16 @@ const orgDeleteCommand = Command.make("delete", {
           const fs = yield* FileSystem.FileSystem;
           const file = Option.getOrUndefined(flags.manifest);
           // The manifest is the only record of the deletion, so its path is proven writable first,
-          // by appending nothing: a refused deletion leaves an earlier manifest there intact.
+          // by appending nothing. A refused deletion leaves an earlier manifest there intact, and
+          // removes the empty file it created.
+          const created = file !== undefined && !(yield* fs.exists(file));
           if (file !== undefined) yield* fs.writeFileString(file, "", { flag: "a" });
           const data = yield* WorkspaceDataService.WorkspaceDataService;
-          const manifest = yield* data.delete(OWNER, {
-            workspaceId: flags.workspace,
-            confirmName: flags.confirm,
-          });
+          const manifest = yield* data
+            .delete(OWNER, { workspaceId: flags.workspace, confirmName: flags.confirm })
+            .pipe(
+              Effect.onError(() => (created ? fs.remove(file).pipe(Effect.ignore) : Effect.void)),
+            );
           if (file !== undefined) yield* fs.writeFileString(file, `${encodeManifest(manifest)}\n`);
           return manifest;
         }),
@@ -252,6 +259,13 @@ const orgDeleteCommand = Command.make("delete", {
             ["TABLE", "ROWS"],
             manifest.tables.map((row) => [row.table, String(row.count)]),
           ),
+          `Removed ${manifest.contextFiles.length} run context files.`,
+          ...(manifest.contextFilesLeft.length === 0
+            ? []
+            : [
+                "Left behind under the server's state directory; remove them by hand:",
+                ...manifest.contextFilesLeft.map((file) => `- [ ] ${file.path} (${file.reason})`),
+              ]),
         ].join("\n"),
     ),
   ),
