@@ -89,7 +89,14 @@ type Out<A> = Effect.Effect<
 type Brief = typeof Telescope.DelegationBrief.Type;
 type Part = typeof Telescope.A2APart.Type;
 /** The states the to-agent reports; WORKING and CANCELED are reached through other methods. */
-type ReportState = Exclude<State, "SUBMITTED" | "WORKING" | "CANCELED">;
+const REPORT_STATES = [
+  "INPUT_REQUIRED",
+  "AUTH_REQUIRED",
+  "COMPLETED",
+  "FAILED",
+  "REJECTED",
+] as const satisfies ReadonlyArray<State>;
+type ReportState = (typeof REPORT_STATES)[number];
 
 /** An agent's run acting for a member; `onBehalfOf` is the run's chain, outermost first. */
 export interface Actor {
@@ -274,6 +281,8 @@ const make = Effect.gen(function* () {
     actor: Actor,
     input: { readonly toAgentId: Telescope.AgentId; readonly brief: Brief },
   ) {
+    if (input.toAgentId === actor.agentId)
+      return yield* fail("forbidden", "An agent does not delegate to itself.");
     const target = yield* agent(actor.workspaceId, input.toAgentId);
     if (target?.owner_subject_id !== actor.memberId || target.kind !== "chief_agent")
       return yield* notFound("Agent");
@@ -337,6 +346,8 @@ const make = Effect.gen(function* () {
     actor: Actor,
     input: ReportInput,
   ) {
+    if (!REPORT_STATES.includes(input.state))
+      return yield* fail("forbidden", "A report does not cancel or restart a delegation.");
     const row = yield* load({ workspaceId: actor.workspaceId, delegationId: input.delegationId });
     if (row.to_agent_id !== actor.agentId)
       return yield* fail("forbidden", "Only the agent a task was delegated to reports on it.");

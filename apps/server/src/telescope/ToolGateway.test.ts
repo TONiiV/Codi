@@ -253,7 +253,7 @@ it.layer(layer)("Telescope tool gateway", (it) => {
           pa.id,
           "dispatch_worker",
           "denied",
-          "Only a project's agent opens Worker threads. Delegate to its Chief Agent instead.",
+          "Only a project's agent opens Worker threads. Hand the work to its Chief Agent with `delegate`.",
         ],
       );
       yield* gateway.call(paThread, "open_ticket", {}, () => Effect.void);

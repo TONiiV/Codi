@@ -171,14 +171,14 @@ it.effect("a PA run calling create_threads is denied by the gateway and opens no
       _tag: "OrchestratorMcpFailure",
       code: "capability_denied",
       message:
-        "Only a project's agent opens Worker threads. Delegate to its Chief Agent instead. Do not retry; tell your member.",
+        "Only a project's agent opens Worker threads. Hand the work to its Chief Agent with `delegate`. Do not retry; tell your member.",
     });
     assert.deepStrictEqual(opened, []);
     assert.deepStrictEqual(yield* audit, [
       [
         "dispatch_worker",
         "denied",
-        "Only a project's agent opens Worker threads. Delegate to its Chief Agent instead.",
+        "Only a project's agent opens Worker threads. Hand the work to its Chief Agent with `delegate`.",
       ],
     ]);
   }).pipe(Effect.provide(layer(opened)));

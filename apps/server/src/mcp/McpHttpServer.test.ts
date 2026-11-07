@@ -38,6 +38,7 @@ import * as Sqlite from "../persistence/Sqlite.ts";
 import * as ManagedPolicy from "../policy/ManagedPolicy.ts";
 import { runMigrations } from "../persistence/Migrations.ts";
 import * as AgentService from "../telescope/AgentService.ts";
+import * as DelegationService from "../telescope/DelegationService.ts";
 import * as MemoryService from "../telescope/MemoryService.ts";
 import * as TaskBoardService from "../telescope/TaskBoardService.ts";
 import * as TelescopeDb from "../telescope/TelescopeDb.ts";
@@ -1366,6 +1367,7 @@ it.effect("lists memory and Telescope tools only to threads with an open Telesco
         ToolGateway.layer,
         TaskBoardService.layer,
         AgentService.layer,
+        DelegationService.layer,
       ).pipe(
         Layer.provideMerge(Layer.merge(database, NodeCrypto.layer)),
         Layer.provide(

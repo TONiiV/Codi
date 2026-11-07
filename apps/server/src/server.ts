@@ -85,6 +85,7 @@ import * as TelescopeWorkspaceData from "./telescope/WorkspaceDataService.ts";
 import * as TelescopeBoard from "./telescope/TaskBoardService.ts";
 import * as TelescopeBoardChanges from "./telescope/BoardChanges.ts";
 import * as TelescopeAgents from "./telescope/AgentService.ts";
+import * as TelescopeDelegations from "./telescope/DelegationService.ts";
 import * as TelescopeRuns from "./telescope/RunRecordService.ts";
 import * as TelescopeGrants from "./telescope/GrantService.ts";
 import * as TelescopeToolGateway from "./telescope/ToolGateway.ts";
@@ -830,6 +831,7 @@ const layerMakeRoutes = Layer.mergeAll(
       TelescopeGrants.layer,
       TelescopeMemory.layer,
       TelescopeToolGateway.layer,
+      TelescopeDelegations.layer,
       TelescopeAttribution.layer,
       TelescopeWorkspaceData.layer,
     ),

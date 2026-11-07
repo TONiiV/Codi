@@ -18,12 +18,14 @@ import * as ServerEnvironment from "../../../environment/ServerEnvironment.ts";
 import { runMigrations } from "../../../persistence/Migrations.ts";
 import * as SqlitePersistence from "../../../persistence/Sqlite.ts";
 import * as AgentService from "../../../telescope/AgentService.ts";
+import * as DelegationService from "../../../telescope/DelegationService.ts";
 import * as GrantService from "../../../telescope/GrantService.ts";
 import type * as MemoryService from "../../../telescope/MemoryService.ts";
 import * as RunRecordService from "../../../telescope/RunRecordService.ts";
 import * as TaskBoardService from "../../../telescope/TaskBoardService.ts";
 import * as TelescopeDb from "../../../telescope/TelescopeDb.ts";
 import * as ToolGateway from "../../../telescope/ToolGateway.ts";
+import * as WakeQueueService from "../../../telescope/WakeQueueService.ts";
 import * as WorkspaceService from "../../../telescope/WorkspaceService.ts";
 import * as McpInvocationContext from "../../McpInvocationContext.ts";
 import * as McpToolAccess from "../../McpToolAccess.ts";
@@ -37,6 +39,8 @@ const services = Layer.mergeAll(
   RunRecordService.layer,
   AgentService.layer,
   TaskBoardService.layer,
+  DelegationService.layer,
+  WakeQueueService.layer,
   WorkspaceService.layer,
   TelescopeDb.layer,
 ).pipe(
@@ -69,6 +73,47 @@ const snapshot = {
   contextManifest: [],
 };
 type Tools = (typeof TelescopeToolkit)["tools"];
+const brief = {
+  goal: "修好夹爪固件的超时 bug",
+  constraints: ["不改硬件接口"],
+  acceptance: ["回归测试通过"],
+  goalChain: ["夹爪项目"],
+};
+const done = { result: "已修复，见 Worker 线程", decisions: [] };
+
+/** Starts a run of `agentId` on its own thread and returns a caller of that thread's tools. */
+const runOn = Effect.fn(function* (
+  workspaceId: Telescope.WorkspaceId,
+  agentId: Telescope.AgentId,
+  via?: ReadonlyArray<Telescope.AgentId>,
+) {
+  const threadId = ThreadId.make(`thread-${agentId}`);
+  yield* (yield* RunRecordService.RunRecordService).start(ann, workspaceId, {
+    agentId,
+    threadId,
+    inputSnapshot: snapshot,
+    ...(via === undefined ? {} : { via }),
+  });
+  const toolkit = yield* TelescopeToolkit;
+  return <Name extends keyof Tools & string>(name: Name, params: Tool.Parameters<Tools[Name]>) =>
+    toolkit.handle(name, params).pipe(
+      Stream.unwrap,
+      Stream.runCollect,
+      Effect.map((out) => out.at(-1)?.result),
+      Effect.provideService(McpInvocationContext.McpInvocationContext, {
+        environmentId: EnvironmentId.make("env-local"),
+        requestNamespace: `provider:${threadId}`,
+        thread: {
+          threadId,
+          providerSessionId: `provider:${threadId}`,
+          providerInstanceId: ProviderInstanceId.make("codex"),
+        },
+        client: undefined,
+        capabilities: new Set(["orchestration" as const]),
+        issuedAt: 0,
+      }),
+    );
+});
 
 /** Ann's workspace with a run of her chief of staff on its own thread. */
 const setup = Effect.gen(function* () {
@@ -81,34 +126,7 @@ const setup = Effect.gen(function* () {
   const { agents } = yield* (yield* AgentService.AgentService).listMine(ann, { workspaceId });
   const chief = agents.find((agent) => agent.kind === "chief_of_staff");
   assert.isDefined(chief);
-  const threadId = ThreadId.make(`thread-${workspaceId}`);
-  yield* (yield* RunRecordService.RunRecordService).start(ann, workspaceId, {
-    agentId: chief.id,
-    threadId,
-    inputSnapshot: snapshot,
-  });
-  const toolkit = yield* TelescopeToolkit;
-  const call = <Name extends keyof Tools & string>(
-    name: Name,
-    params: Tool.Parameters<Tools[Name]>,
-  ) =>
-    toolkit.handle(name, params).pipe(
-      Stream.unwrap,
-      Stream.runCollect,
-      Effect.map((out) => out.at(-1)?.result),
-      Effect.provideService(McpInvocationContext.McpInvocationContext, {
-        environmentId: EnvironmentId.make("env-local"),
-        requestNamespace: "provider:telescope",
-        thread: {
-          threadId,
-          providerSessionId: "provider:telescope",
-          providerInstanceId: ProviderInstanceId.make("codex"),
-        },
-        client: undefined,
-        capabilities: new Set(["orchestration" as const]),
-        issuedAt: 0,
-      }),
-    );
+  const call = yield* runOn(workspaceId, chief.id);
   return { workspaceId, chief, call, db: yield* TelescopeDb.TelescopeDb };
 });
 
@@ -119,6 +137,7 @@ const everyTool = (
 ) => {
   const taskId = Telescope.TaskId.make(ids.taskId);
   const leaseId = Telescope.LeaseId.make(ids.leaseId);
+  const delegationId = Telescope.DelegationId.make("delegation-1");
   return Effect.all([
     call("ticket_list", {}),
     call("ticket_get", { taskId }),
@@ -130,6 +149,10 @@ const everyTool = (
     call("decision_list", {}),
     call("decision_record", { title: "Ship Friday", text: "Agreed with Bob." }),
     call("agent_list", {}),
+    call("delegate", { toAgentId: Telescope.AgentId.make("agent-1"), brief }),
+    call("delegation_list", {}),
+    call("delegation_report", { delegationId, state: "COMPLETED", report: done }),
+    call("delegation_cancel", { delegationId }),
   ]);
 };
 const TOOL_COUNT = Object.keys(TelescopeToolkit.tools).length;
@@ -144,7 +167,7 @@ const deniedWith = (results: ReadonlyArray<unknown>, message: string) => {
     });
 };
 
-it.effect("works the board as the run's agent through every Telescope tool", () =>
+it.effect("works the board as the run's agent through every board tool", () =>
   Effect.gen(function* () {
     const { workspaceId, chief, call } = yield* setup;
     const opened = yield* call("open_ticket", { title: "Ship the sample", goalChain: ["Q4"] });
@@ -237,7 +260,7 @@ it.effect("works the board as the run's agent through every Telescope tool", () 
       entries.map((entry) => entry.outcome).toSorted(),
       Array.from({ length: entries.length }, () => "allowed"),
     );
-    assert.strictEqual(entries.length, TOOL_COUNT + 4, "every call is audited");
+    assert.strictEqual(entries.length, 14, "every call is audited");
 
     yield* (yield* SqlClient.SqlClient)`DROP TABLE telescope_tasks`;
     assert.deepInclude(yield* call("ticket_list", {}), {
@@ -247,16 +270,26 @@ it.effect("works the board as the run's agent through every Telescope tool", () 
   }).pipe(Effect.provide(layer)),
 );
 
-it.effect("refuses every tool when the agent's grant lacks openTickets", () =>
+it.effect("refuses every tool when the agent's grant lacks the tool's power", () =>
   Effect.gen(function* () {
     const { workspaceId, chief, call, db } = yield* setup;
-    const powers = { ...chief.standingPowers, openTickets: false };
-    yield* db.update(
-      workspaceId,
-      "agents",
-      { standing_powers_json: JSON.stringify(powers) },
-      { agent_id: chief.id },
-    );
+    const grant = (powers: Partial<Telescope.StandingPowers>) =>
+      db.update(
+        workspaceId,
+        "agents",
+        { standing_powers_json: JSON.stringify({ ...chief.standingPowers, ...powers }) },
+        { agent_id: chief.id },
+      );
+    yield* grant({ dispatchWorkers: false });
+    const delegationId = Telescope.DelegationId.make("delegation-1");
+    for (const result of [
+      yield* call("delegate", { toAgentId: chief.id, brief }),
+      yield* call("delegation_cancel", { delegationId }),
+    ])
+      assert.deepInclude(result, {
+        message: "The agent's grant does not allow this tool. Do not retry; tell your member.",
+      });
+    yield* grant({ openTickets: false, dispatchWorkers: false });
     deniedWith(
       yield* everyTool(call, { taskId: "task-1", leaseId: "lease-1" }),
       "The agent's grant does not allow this tool.",
@@ -330,6 +363,194 @@ it.effect("never reaches another workspace's board", () =>
     const { agents } = (yield* call("agent_list", {})) as typeof Telescope.AgentListResult.Type;
     const visible = new Set(agents.map((agent) => agent.id));
     assert.isFalse(foreignAgents.some((agent) => visible.has(agent.id)));
+  }).pipe(Effect.provide(layer)),
+);
+
+/** Ann's PA and her Chief Agent of `web`, each with a run; the Chief's run acts through the PA. */
+const chain = Effect.gen(function* () {
+  const { workspaceId, chief: pa, call, db } = yield* setup;
+  yield* (yield* WorkspaceService.WorkspaceService).bind(ann, {
+    workspaceId,
+    environmentId: EnvironmentId.make("env-elsewhere"),
+    projectId: ProjectId.make("project-web"),
+  });
+  const { agents } = yield* (yield* AgentService.AgentService).listMine(ann, { workspaceId });
+  const chief = agents.find((agent) => agent.kind === "chief_agent");
+  assert.isDefined(chief);
+  const delegations = yield* DelegationService.DelegationService;
+  const get = (delegationId: Telescope.DelegationId) =>
+    delegations.get({ workspaceId, delegationId }).pipe(Effect.map((row) => row.state));
+  return {
+    workspaceId,
+    db,
+    pa: { id: pa.id, call },
+    chief: { id: chief.id, call: yield* runOn(workspaceId, chief.id, [pa.id]) },
+    delegations,
+    get,
+    queue: yield* WakeQueueService.WakeQueueService,
+  };
+});
+const refused = (message: string) =>
+  ({ _tag: "OrchestratorMcpFailure", code: "capability_denied", message }) as const;
+
+it.effect("delegate from the PA creates a delegation for its own Chief and a wake", () =>
+  Effect.gen(function* () {
+    const { workspaceId, pa, chief, delegations, queue } = yield* chain;
+    const sent = (yield* pa.call("delegate", {
+      toAgentId: chief.id,
+      brief,
+    })) as Telescope.Delegation;
+    assert.deepInclude(sent, {
+      workspaceId,
+      fromAgentId: pa.id,
+      toAgentId: chief.id,
+      hop: "agent",
+      state: "SUBMITTED",
+      brief,
+    });
+    assert.notProperty(sent, "messages");
+    const dispatch = yield* queue.take;
+    assert.deepInclude(dispatch.wake, {
+      reason: "dispatch",
+      agentId: chief.id,
+      coalesceKey: `delegation:${sent.id}`,
+    });
+    assert.deepStrictEqual(dispatch.payloads, [{ kind: "delegation", delegationId: sent.id }]);
+    yield* queue.finish(dispatch.wake, "done");
+
+    const ids = (result: unknown) =>
+      (result as { readonly delegations: ReadonlyArray<Telescope.Delegation> }).delegations.map(
+        (row) => row.id,
+      );
+    assert.deepStrictEqual(ids(yield* pa.call("delegation_list", {})), [sent.id]);
+    assert.deepStrictEqual(ids(yield* chief.call("delegation_list", {})), [sent.id]);
+
+    yield* delegations.start({ workspaceId, delegationId: sent.id });
+    assert.deepInclude(
+      yield* chief.call("delegation_report", {
+        delegationId: sent.id,
+        state: "COMPLETED",
+        report: done,
+      }),
+      { state: "COMPLETED", report: done },
+    );
+    const report = yield* queue.take;
+    assert.deepInclude(report.wake, {
+      agentId: pa.id,
+      coalesceKey: `delegation:${sent.id}:report`,
+    });
+
+    const unwanted = (yield* pa.call("delegate", {
+      toAgentId: chief.id,
+      brief,
+    })) as Telescope.Delegation;
+    assert.deepStrictEqual(yield* pa.call("delegation_cancel", { delegationId: unwanted.id }), {
+      canceled: [unwanted.id],
+    });
+    const { entries } = yield* (yield* GrantService.GrantService).auditList(ann, { workspaceId });
+    assert.deepStrictEqual(entries.map((entry) => [entry.tool, entry.outcome]).toSorted(), [
+      ["delegate", "allowed"],
+      ["delegate", "allowed"],
+      ["delegation_cancel", "allowed"],
+      ["delegation_list", "allowed"],
+      ["delegation_list", "allowed"],
+      ["delegation_report", "allowed"],
+    ]);
+  }).pipe(Effect.provide(layer)),
+);
+
+it.effect("delegate to another member's agent is not found", () =>
+  Effect.gen(function* () {
+    const { workspaceId, db, pa, chief, queue } = yield* chain;
+    const agent = (id: string, owner: string | null, kind: Telescope.AgentKind) =>
+      db.insert(workspaceId, "agents", {
+        agent_id: id,
+        owner_subject_id: owner,
+        kind,
+        project_id: "project-web",
+        name: id,
+        model_selection_json: null,
+        standing_powers_json: "{}",
+        exposure: "visible",
+        sync_with_board: 1,
+        dispatch_mode: "start",
+        channels_json: "[]",
+        created_at: "2026-11-07T00:00:00.000Z",
+        updated_at: "2026-11-07T00:00:00.000Z",
+      });
+    yield* agent("bea-chief", "bea", "chief_agent");
+    yield* agent("company-it", null, "department");
+    for (const toAgentId of ["bea-chief", "company-it", "agent-missing"])
+      assert.deepInclude(
+        yield* pa.call("delegate", { toAgentId: Telescope.AgentId.make(toAgentId), brief }),
+        { code: "invalid_request", message: "Agent not found." },
+      );
+    assert.deepInclude(
+      yield* chief.call("delegate", { toAgentId: chief.id, brief }),
+      refused("An agent does not delegate to itself."),
+    );
+    assert.isUndefined(yield* queue.dequeue);
+    assert.deepStrictEqual(yield* pa.call("delegation_list", {}), { delegations: [] });
+  }).pipe(Effect.provide(layer)),
+);
+
+it.effect("delegation_report by the from-agent is refused", () =>
+  Effect.gen(function* () {
+    const { workspaceId, pa, chief, delegations, get } = yield* chain;
+    const sent = (yield* pa.call("delegate", {
+      toAgentId: chief.id,
+      brief,
+    })) as Telescope.Delegation;
+    yield* delegations.start({ workspaceId, delegationId: sent.id });
+    assert.deepInclude(
+      yield* pa.call("delegation_report", {
+        delegationId: sent.id,
+        state: "COMPLETED",
+        report: done,
+      }),
+      refused("Only the agent a task was delegated to reports on it."),
+    );
+    assert.strictEqual(yield* get(sent.id), "WORKING");
+  }).pipe(Effect.provide(layer)),
+);
+
+it.effect("a stopped Chief's delegation_report is refused (kill switch along the chain)", () =>
+  Effect.gen(function* () {
+    const { workspaceId, pa, chief, delegations, get } = yield* chain;
+    const sent = (yield* pa.call("delegate", {
+      toAgentId: chief.id,
+      brief,
+    })) as Telescope.Delegation;
+    yield* delegations.start({ workspaceId, delegationId: sent.id });
+    const gateway = yield* ToolGateway.ToolGateway;
+    const stopped = refused("An admin stopped this agent. Do not retry; tell your member.");
+    const reportDone = chief.call("delegation_report", {
+      delegationId: sent.id,
+      state: "COMPLETED",
+      report: done,
+    });
+    for (const agentId of [chief.id, pa.id]) {
+      yield* gateway.setKillSwitch(ann, { workspaceId, agentId, state: "paused" });
+      assert.deepInclude(yield* reportDone, stopped);
+      assert.strictEqual(yield* get(sent.id), "WORKING");
+      yield* gateway.setKillSwitch(ann, { workspaceId, agentId, state: "running" });
+    }
+    assert.deepInclude(yield* reportDone, { state: "COMPLETED" });
+  }).pipe(Effect.provide(layer)),
+);
+
+it.effect("delegation_cancel from the to-agent is refused", () =>
+  Effect.gen(function* () {
+    const { pa, chief, get } = yield* chain;
+    const sent = (yield* pa.call("delegate", {
+      toAgentId: chief.id,
+      brief,
+    })) as Telescope.Delegation;
+    assert.deepInclude(
+      yield* chief.call("delegation_cancel", { delegationId: sent.id }),
+      refused("Only the agent that sent a task cancels it."),
+    );
+    assert.strictEqual(yield* get(sent.id), "SUBMITTED");
   }).pipe(Effect.provide(layer)),
 );
 

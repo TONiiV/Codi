@@ -28,6 +28,10 @@ const TOOL_POWERS: Readonly<Record<Telescope.GatewayTool, Telescope.GrantPower>>
   decision_list: "openTickets",
   decision_record: "openTickets",
   agent_list: "openTickets",
+  delegate: "dispatchWorkers",
+  delegation_list: "openTickets",
+  delegation_report: "openTickets",
+  delegation_cancel: "dispatchWorkers",
 };
 const SECRET_KEY = /token|secret|password|passphrase|api.?key|authorization|cookie|credential/i;
 
@@ -114,7 +118,8 @@ const DENIED_MESSAGES = {
   stopped: "An admin stopped this agent.",
   forbidden: "The agent's grant does not allow this tool.",
   budget: "A Telescope budget is used up.",
-  project_only: "Only a project's agent opens Worker threads. Delegate to its Chief Agent instead.",
+  project_only:
+    "Only a project's agent opens Worker threads. Hand the work to its Chief Agent with `delegate`.",
 } as const;
 
 export class ToolGatewayDenied extends Schema.TaggedError<ToolGatewayDenied>()(

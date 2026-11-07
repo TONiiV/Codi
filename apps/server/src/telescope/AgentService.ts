@@ -122,6 +122,10 @@ const DEFAULT_POWERS: Telescope.StandingPowers = {
   answerMembers: true,
   mergePRs: false,
 };
+// D65: the delegation chain works out of the box; project_only keeps the PA from Workers.
+const CHAIN_KINDS: ReadonlySet<Telescope.AgentKind> = new Set(["chief_of_staff", "chief_agent"]);
+const defaultPowers = (kind: Telescope.AgentKind): Telescope.StandingPowers =>
+  CHAIN_KINDS.has(kind) ? { ...DEFAULT_POWERS, dispatchWorkers: true } : DEFAULT_POWERS;
 const COMPANY_MAIN_NAME = "主代理";
 const DEPARTMENT_NAMES = ["人事", "财务", "法务", "IT", "行政"];
 const KIND_ORDER = Telescope.AgentKind.literals;
@@ -232,7 +236,7 @@ const make = Effect.gen(function* () {
         kind,
         ...extra,
         name,
-        standingPowers: DEFAULT_POWERS,
+        standingPowers: defaultPowers(kind),
         exposure: "hidden",
         syncWithBoard: kind === "chief_agent",
         dispatchMode: "inbox",

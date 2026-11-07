@@ -185,12 +185,21 @@ it.effect("delegate opens a new context id and one dispatch wake", () =>
       },
     ]);
 
-    for (const toAgentId of [beaChief, pa, Telescope.AgentId.make("missing")]) {
+    const missing = Telescope.AgentId.make("missing");
+    for (const [by, toAgentId] of [
+      [pa, beaChief],
+      [chief, pa],
+      [pa, missing],
+    ] as const) {
       assert.strictEqual(
-        yield* failure(delegations.delegate(actor(pa), { toAgentId, brief })),
+        yield* failure(delegations.delegate(actor(by), { toAgentId, brief })),
         "not_found",
       );
     }
+    assert.strictEqual(
+      yield* failure(delegations.delegate(actor(chief), { toAgentId: chief, brief })),
+      "forbidden",
+    );
     assert.lengthOf(yield* wakes(), 2);
     assert.lengthOf(yield* delegations.listForAgent(ws, pa), 2);
   }).pipe(Effect.provide(layer)),
@@ -210,6 +219,13 @@ it.effect("only the to-agent reports, from a state that allows the move", () =>
     assert.strictEqual(yield* failure(delegations.start(ref)), "conflict");
     assert.strictEqual(yield* failure(report(pa, "COMPLETED")), "forbidden");
     assert.strictEqual(yield* failure(report(chief, "REJECTED")), "conflict");
+    const cancelled = delegations.report(actor(chief), {
+      delegationId: task.id,
+      // @ts-expect-error a report cannot cancel; the runtime refuses it too
+      state: "CANCELED",
+      report: done,
+    });
+    assert.strictEqual(yield* failure(cancelled), "forbidden");
 
     const silent = yield* delegations.report(actor(chief), {
       delegationId: task.id,
