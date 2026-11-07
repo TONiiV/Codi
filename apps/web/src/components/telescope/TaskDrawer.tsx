@@ -1,6 +1,11 @@
 import { scopeThreadRef } from "@t3tools/client-runtime/environment";
 import { reportsInOrder } from "@t3tools/client-runtime/telescope/taskBoard";
-import type { EnvironmentId, Telescope, ThreadId } from "@t3tools/contracts";
+import {
+  AuthOrchestrationOperateScope,
+  type EnvironmentId,
+  type Telescope,
+  type ThreadId,
+} from "@t3tools/contracts";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { ExternalLinkIcon, MessageSquarePlusIcon } from "lucide-react";
 import { type ReactNode, useState } from "react";
@@ -8,6 +13,7 @@ import { type ReactNode, useState } from "react";
 import { useThreadShell } from "../../state/entities";
 import { useEnvironment } from "../../state/environments";
 import { useEnvironmentQuery } from "../../state/query";
+import { useEnvironmentScope } from "../../state/session";
 import { buildThreadRouteParams } from "../../threadRoutes";
 import { sideChatSourceBlock } from "../ChatView.logic";
 import { useSideChat } from "../chat/useSideChat";
@@ -48,7 +54,9 @@ const time = (at: string) => new Date(at).toLocaleString();
 const SIDE_CHAT_BLOCKED = {
   sideChat: "关联的对话本身就是 side chat，不能再从它开 side chat。",
   subagent: "关联的对话是 subagent 对话，不能从它开 side chat。",
+  loading: "side chat 还没准备好，稍后再试。",
   unsupported: "这个环境的 Codi 服务器还不支持 side chat，更新后才能用。",
+  forbidden: "你在这个环境里没有操作对话的权限。",
 } as const;
 
 function ThreadLink({
@@ -83,8 +91,9 @@ function SideChatButton({
   const [pending, setPending] = useState(false);
   const threadRef =
     task.threadId === undefined ? null : scopeThreadRef(environmentId, task.threadId);
-  const sideChats = useEnvironment(environmentId)?.serverConfig?.environment.capabilities.sideChats;
-  const block = sideChatSourceBlock(useThreadShell(threadRef), sideChats);
+  const capabilities = useEnvironment(environmentId)?.serverConfig?.environment.capabilities;
+  const canOperate = useEnvironmentScope(environmentId, AuthOrchestrationOperateScope);
+  const block = sideChatSourceBlock(useThreadShell(threadRef), capabilities ?? null, canOperate);
   const hint =
     threadRef === null
       ? "这条任务还没有关联对话，关联后才能在 side chat 里聊它。"

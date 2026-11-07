@@ -2786,9 +2786,10 @@ export default function ChatView(props: ChatViewProps) {
   // Older servers would fork a listed thread.
   const sideChatBlock = sideChatSourceBlock(
     activeThread ?? null,
-    serverConfig?.environment.capabilities.sideChats,
+    serverConfig?.environment.capabilities ?? null,
+    canOperateThread,
   );
-  const sideChatsOffered = !embedded && canOperateThread && sideChatBlock === null;
+  const sideChatsOffered = !embedded && sideChatBlock === null;
   const sideChat = useSideChat({
     threadRef: sideChatsOffered && isServerThread ? activeThreadRef : null,
     onError: (message) => {
@@ -2806,7 +2807,7 @@ export default function ChatView(props: ChatViewProps) {
       ? "Side chats cannot start side chats."
       : sideChatBlock === "subagent"
         ? "Subagent threads cannot start side chats."
-        : serverConfig === null
+        : sideChatBlock === "loading"
           ? "Side chats are not ready yet. Try again in a moment."
           : sideChatBlock === "unsupported"
             ? "Update this environment's Codi server to use side chats."

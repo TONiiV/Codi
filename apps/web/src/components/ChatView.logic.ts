@@ -28,6 +28,7 @@ import {
   type ChatFileAttachment,
   type CommandId,
   type EnvironmentId,
+  type ExecutionEnvironmentCapabilities,
   isProviderDriverKind,
   ProjectId,
   type MessageId,
@@ -1623,11 +1624,15 @@ export function deriveAvailableRevertTurnCounts(projection: ThreadStructure | nu
   return available;
 }
 
-/** Why `thread` cannot start side chats: they do not nest, start from subagents, or run on older servers. */
+/**
+ * Why `thread` cannot start side chats: they do not nest or start from subagents, the server
+ * config is loading (null) or too old, or the viewer cannot change threads.
+ */
 export function sideChatSourceBlock(
   thread: Pick<EnvironmentThreadShell, "lineage" | "delegatedFrom"> | null,
-  sideChatsCapability: boolean | undefined,
-): "sideChat" | "subagent" | "unsupported" | null {
+  capabilities: Pick<ExecutionEnvironmentCapabilities, "sideChats"> | null,
+  canOperate: boolean,
+): "sideChat" | "subagent" | "loading" | "unsupported" | "forbidden" | null {
   if (thread?.lineage.sideChat === true) return "sideChat";
   // A delegated task is a remote thread's subagent.
   if (
@@ -1635,5 +1640,8 @@ export function sideChatSourceBlock(
     (thread?.delegatedFrom ?? null) !== null
   )
     return "subagent";
-  return sideChatsCapability === true ? null : "unsupported";
+  if (capabilities === null) return "loading";
+  if (capabilities.sideChats !== true) return "unsupported";
+  // Checked last so read-only viewers still see the thread's or server's own reason.
+  return canOperate ? null : "forbidden";
 }
