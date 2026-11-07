@@ -667,10 +667,12 @@ const make = Effect.gen(function* () {
     agentIds: ReadonlyArray<Telescope.AgentId>,
   ) {
     const time = yield* DateTime.now;
+    const at = DateTime.formatIso(time);
     yield* transact(
       Effect.gen(function* () {
         for (const lease of yield* db.select(workspaceId, "leases", decodeLeases))
-          if (agentIds.includes(lease.holderAgentId)) yield* renew(lease, time);
+          if (agentIds.includes(lease.holderAgentId) && !isExpired(lease, at))
+            yield* renew(lease, time);
       }),
     );
   });

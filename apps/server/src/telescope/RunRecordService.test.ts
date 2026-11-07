@@ -5,7 +5,9 @@ import { assert, it } from "@effect/vitest";
 import * as NodeFS from "node:fs";
 import { AuthSessionId, EnvironmentId, Telescope, ThreadId } from "@t3tools/contracts";
 import * as DateTime from "effect/DateTime";
+import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
@@ -308,6 +310,35 @@ it.layer(layer)("Telescope run records", (it) => {
       }
       assert.deepStrictEqual(providers, ["anthropic", undefined]);
     }),
+  );
+
+  it.effect(
+    "startFor gives callers for the same Codi run one run, and another Codi run its own",
+    () =>
+      Effect.gen(function* () {
+        const { runs, workspaceId, aliceId } = yield* setup;
+        const sql = yield* SqlClient.SqlClient;
+        // The writer is held, so the three callers queue on it and their statements interleave.
+        const gate = yield* Deferred.make<void>();
+        const writer = yield* Effect.forkChild(sql.withTransaction(Deferred.await(gate)), {
+          startImmediately: true,
+        });
+        const startFor = (codiMessageId: string) =>
+          Effect.forkChild(
+            runs.startFor(workspaceId, aliceId, {
+              agentId,
+              threadId,
+              inputSnapshot: { ...snapshot([]), codiMessageId },
+            }),
+            { startImmediately: true },
+          );
+        const callers = [yield* startFor("m-1"), yield* startFor("m-1"), yield* startFor("m-2")];
+        yield* Deferred.succeed(gate, undefined);
+        yield* Fiber.join(writer);
+        const [first, second, other] = yield* Fiber.joinAll(callers);
+        assert.strictEqual(first?.id, second?.id);
+        assert.notStrictEqual(first?.id, other?.id);
+      }),
   );
 
   it.effect("rejects non-members on reads and as the member a run acts for", () =>

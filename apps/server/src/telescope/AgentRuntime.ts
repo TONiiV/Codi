@@ -41,6 +41,15 @@ const decodeStops = Schema.decodeUnknownEffect(
   Schema.Array(Schema.Struct({ agent_id: Telescope.AgentId, state: Schema.String })),
 );
 
+/** D48: the agents a kill switch has stopped in this workspace. */
+export const stoppedAgents = Effect.fn("AgentRuntime.stoppedAgents")(function* (
+  db: TelescopeDb.TelescopeDb["Service"],
+  workspaceId: Telescope.WorkspaceId,
+) {
+  const rows = yield* db.select(workspaceId, "kill_switches", decodeStops);
+  return new Set<string>(rows.flatMap((row) => (row.state === "running" ? [] : [row.agent_id])));
+});
+
 /** Runs each wake as a turn on its agent's resident thread (plan 2.3: run before session). */
 const make = Effect.gen(function* () {
   const db = yield* TelescopeDb.TelescopeDb;
@@ -53,13 +62,8 @@ const make = Effect.gen(function* () {
   const settings = yield* ServerSettingsService;
   const random = yield* SecureRandom.SecureRandom;
 
-  const stopped = Effect.fn("AgentRuntime.stopped")(function* (
-    workspaceId: Telescope.WorkspaceId,
-    chain: ReadonlyArray<string>,
-  ) {
-    const rows = yield* db.select(workspaceId, "kill_switches", decodeStops);
-    return rows.some((row) => chain.includes(row.agent_id) && row.state !== "running");
-  });
+  const stopped = (workspaceId: Telescope.WorkspaceId, chain: ReadonlyArray<string>) =>
+    stoppedAgents(db, workspaceId).pipe(Effect.map((ids) => chain.some((id) => ids.has(id))));
 
   const prepare = Effect.fn("AgentRuntime.prepare")(function* (agent: Telescope.Agent) {
     const selection = agent.modelSelection ?? (yield* settings.getSettings).defaultModelSelection;

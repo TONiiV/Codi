@@ -897,28 +897,42 @@ const waitBehindMemberTurn = (harness: Harness, seeded: Seeded) =>
     return { delegation, release };
   });
 
-it.effect("a wake whose agent is stopped while it waits for the thread starts no run (D48)", () =>
-  withHarness({ mcp: true }, (harness) =>
-    Effect.gen(function* () {
-      const seeded = yield* seed;
-      const db = yield* TelescopeDb.TelescopeDb;
-      const delegations = yield* DelegationService.DelegationService;
-      const { delegation, release } = yield* waitBehindMemberTurn(harness, seeded);
-      yield* db.insert(seeded.workspaceId, "kill_switches", {
-        agent_id: seeded.chief,
-        state: "stopped",
-        by_subject_id: seeded.member,
-        at: "2026-11-07T00:00:00.000Z",
-      });
-      assert.equal(yield* release, "ended without a turn");
-      const failed = yield* delegations.get({
-        workspaceId: seeded.workspaceId,
-        delegationId: delegation.id,
-      });
-      assert.equal(failed.report?.blockedOn, "agent stopped");
-      assert.equal(yield* db.count(seeded.workspaceId, "runs"), 2);
-    }),
-  ),
+it.effect(
+  "a wake whose agent is stopped while it waits for the thread starts no run, and its leases lapse (D48)",
+  () =>
+    withHarness({ mcp: true }, (harness) =>
+      Effect.gen(function* () {
+        const seeded = yield* seed;
+        const db = yield* TelescopeDb.TelescopeDb;
+        const board = yield* TaskBoardService.TaskBoardService;
+        const delegations = yield* DelegationService.DelegationService;
+        const { delegation, release } = yield* waitBehindMemberTurn(harness, seeded);
+        const { workspaceId } = seeded;
+        const task = yield* board.createTask(
+          { caller: alice },
+          { workspaceId, title: "电机选型", ownerAgentId: seeded.chief },
+        );
+        const read = { workspaceId, taskId: task.id };
+        const chief = { caller: alice, authorId: seeded.chief, onBehalfOf: [seeded.member] };
+        yield* board.acquireLease(chief, read);
+        yield* db.insert(seeded.workspaceId, "kill_switches", {
+          agent_id: seeded.chief,
+          state: "stopped",
+          by_subject_id: seeded.member,
+          at: "2026-11-07T00:00:00.000Z",
+        });
+        // The member's turn keeps the Chief's run open, but a stopped agent's leases lapse.
+        yield* TestClock.adjust("40 minutes");
+        assert.deepStrictEqual(yield* board.getLease({ caller: alice }, read), {});
+        assert.equal(yield* release, "ended without a turn");
+        const failed = yield* delegations.get({
+          workspaceId: seeded.workspaceId,
+          delegationId: delegation.id,
+        });
+        assert.equal(failed.report?.blockedOn, "agent stopped");
+        assert.equal(yield* db.count(seeded.workspaceId, "runs"), 2);
+      }),
+    ),
 );
 
 it.effect("a wake whose delegation is cancelled while it waits for the thread starts no run", () =>
@@ -1034,19 +1048,30 @@ it.effect("a run's manifest lists the pinned memory and its own open tasks", () 
   ),
 );
 
-it.effect("a member's message on a resident thread runs with the role text and a manifest", () =>
+it.effect.each([
+  { stopped: false, runs: "runs with the role text and a manifest" },
+  { stopped: true, runs: "of a stopped agent runs without its role or a context (D48)" },
+])("a member's message on a resident thread $runs", ({ stopped }) =>
   withHarness({ mcp: true }, (harness) =>
     Effect.gen(function* () {
       const seeded = yield* seed;
+      const db = yield* TelescopeDb.TelescopeDb;
       const { pinned } = yield* seedContext(seeded);
       // A resident thread opened with no turn, as the chat page opens one before the first message.
       const threadId = ThreadId.make("thread-pa-resident");
-      yield* (yield* TelescopeDb.TelescopeDb).update(
+      yield* db.update(
         seeded.workspaceId,
         "agents",
         { resident_thread_id: threadId },
         { agent_id: seeded.pa },
       );
+      if (stopped)
+        yield* db.insert(seeded.workspaceId, "kill_switches", {
+          agent_id: seeded.pa,
+          state: "terminated",
+          by_subject_id: seeded.member,
+          at: "2026-11-07T00:00:00.000Z",
+        });
       yield* (yield* Orchestrator.OrchestratorV2).dispatch({
         type: "thread.create",
         commandId: CommandId.make("open-resident"),
@@ -1063,8 +1088,13 @@ it.effect("a member's message on a resident thread runs with the role text and a
       });
       yield* memberTypes(threadId, "样机哪天交付？");
       const turn = yield* Queue.take(harness.started);
-      assert.include(turn.message.text, "personal assistant");
       assert.include(turn.message.text, "样机哪天交付？");
+      if (stopped) {
+        assert.notInclude(turn.message.text, "personal assistant");
+        assert.notInclude(turn.message.text, "Your context for this turn");
+        return;
+      }
+      assert.include(turn.message.text, "personal assistant");
       assert.include(yield* contextFileOf(turn.message.text), pinned.text);
       yield* harness.complete(turn, 1);
       const run = yield* Queue.take(harness.finished);
@@ -1078,9 +1108,9 @@ it.effect("a member's message on a resident thread runs with the role text and a
 );
 
 it.effect(
-  "a lease held across a long turn is renewed on TestClock and released when the run ends",
+  "a lease held across a long turn is renewed on TestClock and stays lapsed after the run ends",
   () =>
-    withHarness({ mcp: true }, (harness) =>
+    withHarness({ mcp: true, holdSend: true }, (harness) =>
       Effect.gen(function* () {
         const seeded = yield* seed;
         const board = yield* TaskBoardService.TaskBoardService;
@@ -1089,6 +1119,8 @@ it.effect(
         const pa = { caller: alice, authorId: seeded.pa, onBehalfOf: [seeded.member] };
         const lease = yield* board.acquireLease(pa, read);
         const runner = yield* runWake(yield* messageWake(seeded, "去催样机"));
+        yield* Queue.take(harness.sending);
+        yield* Queue.offer(harness.sendPermits, undefined);
         const turn = yield* Queue.take(harness.started);
         yield* TestClock.adjust("40 minutes");
         const held = yield* board.getLease({ caller: alice }, read);
@@ -1098,6 +1130,10 @@ it.effect(
         yield* Fiber.join(runner);
         yield* Queue.take(harness.finished);
         yield* TestClock.adjust("16 minutes");
+        // The lapsed lease is still a row (expiry runs on reads), and the agent's next run opens.
+        yield* runWake(yield* messageWake(seeded, "再催一次"));
+        yield* Queue.take(harness.sending);
+        yield* TestClock.adjust("1 minute");
         assert.deepStrictEqual(yield* board.getLease({ caller: alice }, read), {});
       }),
     ),
