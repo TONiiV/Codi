@@ -246,7 +246,7 @@ const make = Effect.gen(function* () {
     caller: WorkspaceService.Caller,
     input: typeof Telescope.DelegationCancelInput.Type,
   ) {
-    const { self } = yield* workspaces.get(caller, { workspaceId: input.workspaceId });
+    const { self } = yield* workspaces.getForWrite(caller, { workspaceId: input.workspaceId });
     const member = { workspaceId: input.workspaceId, memberId: self.subjectId };
     const cancelled = yield* cancel(member, input.delegationId);
     return { canceled: cancelled.map((row) => row.id) };

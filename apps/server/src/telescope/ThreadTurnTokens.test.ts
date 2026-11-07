@@ -20,6 +20,7 @@ import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
 
 import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
+import * as ProjectionStore from "../orchestration-v2/ProjectionStore.ts";
 import * as Orchestrator from "../orchestration-v2/Orchestrator.ts";
 import { runMigrations } from "../persistence/Migrations.ts";
 import * as SqlitePersistence from "../persistence/Sqlite.ts";
@@ -38,6 +39,7 @@ const layer = Layer.mergeAll(
   WorkspaceService.layer,
   TelescopeDb.layer,
   DelegationService.layer,
+  Layer.mock(ProjectionStore.ProjectionStoreV2)({}),
   WakeQueueService.layer,
 ).pipe(
   Layer.provideMerge(Layer.merge(database, NodeCrypto.layer)),

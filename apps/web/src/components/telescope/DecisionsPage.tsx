@@ -50,6 +50,29 @@ function readableText(text: string) {
   }
 }
 
+/** A proposal's options; choosing one goes through `useDecide`'s confirm step. */
+export function DecisionOptions(props: {
+  decision: Telescope.Decision;
+  busy: boolean;
+  onChoose: (option: DecisionOption) => void;
+}) {
+  return props.decision.options?.length ? (
+    <span className="flex flex-wrap gap-2 pt-1">
+      {props.decision.options.map((option) => (
+        <Button
+          key={option.id}
+          size="xs"
+          variant="outline"
+          disabled={props.busy}
+          onClick={() => props.onChoose(option)}
+        >
+          {option.label}
+        </Button>
+      ))}
+    </span>
+  ) : null;
+}
+
 function DecisionItem(props: {
   decision: Telescope.Decision;
   author: string;
@@ -81,20 +104,8 @@ function DecisionItem(props: {
           {readableText(decision.text)}
         </p>
       ) : null}
-      {props.onChoose && decision.options?.length ? (
-        <span className="flex flex-wrap gap-2 pt-1">
-          {decision.options.map((option) => (
-            <Button
-              key={option.id}
-              size="xs"
-              variant="outline"
-              disabled={props.busy}
-              onClick={() => props.onChoose?.(option)}
-            >
-              {option.label}
-            </Button>
-          ))}
-        </span>
+      {props.onChoose ? (
+        <DecisionOptions decision={decision} busy={props.busy} onChoose={props.onChoose} />
       ) : null}
     </li>
   );
@@ -130,14 +141,12 @@ function ConfirmDecision(props: {
   );
 }
 
-export function DecisionsBody({ target, actions }: { target: BoardTarget; actions: ReactNode }) {
-  const input = { workspaceId: target.workspaceId };
-  const query = useEnvironmentQuery(
-    telescopeBoard.decisions({ environmentId: target.environmentId, input }),
-  );
-  const names = useBoardNames(target);
+/** Choose, confirm, then decide; the options stay off until the list read after it lands (D47). */
+export function useDecide(
+  target: BoardTarget,
+  query: { readonly isPending: boolean; readonly dataUpdatedAt: number },
+) {
   const decide = useBoardCommand(telescopeBoard.createDecision, decideFailureText);
-  const hash = useLocation({ select: (location) => location.hash.replace(/^#/, "") });
   const [choice, setChoice] = useState<Choice | null>(null);
   const [confirming, setConfirming] = useState(false);
   const [sentAt, setSentAt] = useState<number | null>(null);
@@ -146,13 +155,36 @@ export function DecisionsBody({ target, actions }: { target: BoardTarget; action
     isPending: query.isPending,
     dataUpdatedAt: query.dataUpdatedAt,
   });
-  const decisions = sortDecisions(query.data?.decisions ?? []);
   const confirm = async ({ proposal, option }: Choice) => {
     setConfirming(false);
     setSentAt(Date.now());
     const input = decideInput(proposal, option.id);
     if (!(await decide({ environmentId: target.environmentId, input }))) setSentAt(null);
   };
+  const choose = (proposal: Telescope.Decision, option: DecisionOption) => {
+    setChoice({ proposal, option });
+    setConfirming(true);
+  };
+  const dialog = (
+    <ConfirmDecision
+      open={confirming}
+      choice={choice}
+      onCancel={() => setConfirming(false)}
+      onConfirm={(next) => void confirm(next)}
+    />
+  );
+  return { busy, choose, dialog };
+}
+
+export function DecisionsBody({ target, actions }: { target: BoardTarget; actions: ReactNode }) {
+  const input = { workspaceId: target.workspaceId };
+  const query = useEnvironmentQuery(
+    telescopeBoard.decisions({ environmentId: target.environmentId, input }),
+  );
+  const names = useBoardNames(target);
+  const hash = useLocation({ select: (location) => location.hash.replace(/^#/, "") });
+  const { busy, choose, dialog } = useDecide(target, query);
+  const decisions = sortDecisions(query.data?.decisions ?? []);
   return (
     <BoardFrame query={query} actions={actions}>
       {decisions.length === 0 ? (
@@ -185,14 +217,7 @@ export function DecisionsBody({ target, actions }: { target: BoardTarget; action
                       author={names(decision.decidedBy ?? decision.authorId) ?? "其他成员"}
                       highlighted={decision.id === hash}
                       busy={busy}
-                      onChoose={
-                        status === "proposed"
-                          ? (option) => {
-                              setChoice({ proposal: decision, option });
-                              setConfirming(true);
-                            }
-                          : null
-                      }
+                      onChoose={status === "proposed" ? (option) => choose(decision, option) : null}
                     />
                   ))}
                 </ul>
@@ -201,12 +226,7 @@ export function DecisionsBody({ target, actions }: { target: BoardTarget; action
           })}
         </div>
       )}
-      <ConfirmDecision
-        open={confirming}
-        choice={choice}
-        onCancel={() => setConfirming(false)}
-        onConfirm={(next) => void confirm(next)}
-      />
+      {dialog}
     </BoardFrame>
   );
 }

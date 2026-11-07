@@ -34,6 +34,7 @@ export const WORKSPACE_ROLE_LABEL = {
   department_lead: "部门负责人",
   project_lead: "项目负责人",
   member: "成员",
+  viewer: "只读",
 } as const;
 
 const KIND_HINT = {

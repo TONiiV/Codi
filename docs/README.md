@@ -24,6 +24,7 @@
 - [Guest links](./user/guest-links.md)
 - [T3 Connect troubleshooting](./user/t3-connect-troubleshooting.md)
 - [Outside agents (MCP)](./user/outside-agents.md)
+- [Delegation in Telescope](./user/telescope-delegation.md)
 - [Running in the background](./user/background-service.md)
 - [Updating Codi](./user/updating.md)
 - [Triage an issue](./user/triage.md)

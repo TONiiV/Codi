@@ -163,6 +163,7 @@ interface BoardNotices {
   readonly epoch: number;
   readonly tasks: number;
   readonly decisions: number;
+  readonly delegations: number;
   readonly byTask: Readonly<Record<string, number>>;
 }
 const NO_NOTICES: BoardNotices = {
@@ -171,6 +172,7 @@ const NO_NOTICES: BoardNotices = {
   epoch: 0,
   tasks: 0,
   decisions: 0,
+  delegations: 0,
   byTask: {},
 };
 /** The watch failed and waits to be opened again. */
@@ -196,6 +198,7 @@ function countNotice(
         ...seen,
         tasks: seen.tasks + has("task"),
         decisions: seen.decisions + has("decision"),
+        delegations: seen.delegations + has("delegation"),
         byTask,
       };
     }
@@ -323,6 +326,8 @@ export function createTelescopeBoardAtoms<R, E>(
     tasks,
     task,
     decisions,
+    /** Moves once per write that changed a delegation of the workspace. */
+    delegationNotices: (target: BoardTarget) => noticesFor(target, (seen) => seen.delegations),
     // A lease is taken, released, or lapsed by a commit to its task's `leaseId`.
     lease: createEnvironmentRpcQueryAtomFamily(runtime, {
       label: "telescope:lease:get",

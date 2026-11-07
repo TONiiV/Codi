@@ -255,6 +255,10 @@
       "types": "./src/telescope/projectRules.ts",
       "default": "./src/telescope/projectRules.ts"
     },
+    "./telescope/delegations": {
+      "types": "./src/telescope/delegations.ts",
+      "default": "./src/telescope/delegations.ts"
+    },
     "./state/environmentHttpAuth": {
       "types": "./src/state/environmentHttpAuth.ts",
       "default": "./src/state/environmentHttpAuth.ts"

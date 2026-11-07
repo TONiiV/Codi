@@ -91,13 +91,16 @@ const ALL_POWERS: Telescope.StandingPowers = {
   answerMembers: true,
   mergePRs: true,
 };
-// Every role holds the everyday powers; merging needs admin or the project's lead (D25).
-const rolePowers = (role: Telescope.WorkspaceRole, isLead: boolean): Telescope.StandingPowers => ({
-  openTickets: true,
-  dispatchWorkers: true,
-  answerMembers: true,
-  mergePRs: role === "admin" || isLead,
-});
+// Every writing role holds the everyday powers; merging needs admin or the project's lead (D25).
+const rolePowers = (role: Telescope.WorkspaceRole, isLead: boolean): Telescope.StandingPowers =>
+  WorkspaceService.isReadOnly(role)
+    ? NO_POWERS
+    : {
+        openTickets: true,
+        dispatchWorkers: true,
+        answerMembers: true,
+        mergePRs: role === "admin" || isLead,
+      };
 
 interface GrantLayer {
   readonly layer: Telescope.GrantLayer;
