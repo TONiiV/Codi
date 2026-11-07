@@ -1,3 +1,7 @@
+import type { TFunction } from "i18next";
+
+import { englishT } from "~/i18n/englishT";
+
 export type WizardNavigation =
   | { readonly kind: "navigate"; readonly step: number }
   | { readonly kind: "blocked"; readonly step: number; readonly error: string };
@@ -5,9 +9,26 @@ export type WizardNavigation =
 const IDENTITY_STEP = 1;
 const ACP_REGISTRY_IDENTITY_STEP = 1;
 
-export const ADD_PROVIDER_WIZARD_STEPS = ["Provider", "Identity", "Config"] as const;
-export const ACP_REGISTRY_WIZARD_STEPS = ["Provider", "Identity", "Sign in"] as const;
-export const LOCAL_ACP_WIZARD_STEPS = ["Provider", "Identity"] as const;
+// Entries are i18n keys; the wizard renders their translations.
+export const ADD_PROVIDER_WIZARD_STEPS = [
+  "settings.parallelProviders.stepProvider",
+  "settings.parallelProviders.stepIdentity",
+  "settings.parallelProviders.stepConfig",
+] as const;
+export const ACP_REGISTRY_WIZARD_STEPS = [
+  "settings.parallelProviders.stepProvider",
+  "settings.parallelProviders.stepIdentity",
+  "settings.parallelProviders.stepSignIn",
+] as const;
+export const LOCAL_ACP_WIZARD_STEPS = [
+  "settings.parallelProviders.stepProvider",
+  "settings.parallelProviders.stepIdentity",
+] as const;
+
+/** The Local ACP default label is shown translated, but the saved instance id derives from English. */
+export function instanceIdSourceLabel(label: string, t: TFunction): string {
+  return label === t("settings.text.localAcp") ? englishT("settings.text.localAcp") : label;
+}
 
 export interface ProviderIdentityDraft {
   readonly label: string;
