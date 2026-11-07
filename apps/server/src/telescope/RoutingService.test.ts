@@ -16,6 +16,7 @@ import { runMigrations } from "../persistence/Migrations.ts";
 import type { PersistenceDecodeError, PersistenceSqlError } from "../persistence/Errors.ts";
 import * as SqlitePersistence from "../persistence/Sqlite.ts";
 import * as ProviderInstanceRegistry from "../provider/ProviderInstanceRegistry.ts";
+import * as ServerSettings from "../serverSettings.ts";
 import * as AgentService from "./AgentService.ts";
 import * as GrantService from "./GrantService.ts";
 import * as RoutingService from "./RoutingService.ts";
@@ -205,6 +206,11 @@ const layer = Layer.mergeAll(
     }),
   ),
   Layer.provide(
+    ServerSettings.ServerSettingsService.layerTest({
+      projectSettingsOverrides: { [api]: { providerInstances: { [codex]: { enabled: false } } } },
+    }),
+  ),
+  Layer.provide(
     Layer.mock(ProviderInstanceRegistry.ProviderInstanceRegistry)({
       listInstances: Effect.succeed([
         { instanceId: codex, enabled: true },
@@ -316,6 +322,26 @@ it.layer(layer)("Telescope routing rules", (it) => {
     }),
   );
 
+  it.effect("an agent run cannot change routing rules", () =>
+    Effect.gen(function* () {
+      const { workspaceId, workspaces, routing } = yield* setup;
+      const { self } = yield* workspaces.get(as.ann, { workspaceId });
+      const run = {
+        runId: Telescope.AgentRunId.make("run-admin"),
+        workspaceId,
+        memberId: self.subjectId,
+      };
+      const input = { workspaceId, taskType: "bugfix", harness: codex, model: "big", priority: 0 };
+      assert.strictEqual(yield* reasonOf(routing.set(run, input)), "forbidden");
+      const created = yield* routing.set(as.ann, input);
+      assert.strictEqual(
+        yield* reasonOf(routing.remove(run, { workspaceId, id: created.id })),
+        "forbidden",
+      );
+      assert.deepStrictEqual((yield* routing.list(run, { workspaceId })).rules, [created]);
+    }),
+  );
+
   it.effect("resolves within the project rule's allowlist and the providers enabled here", () =>
     Effect.gen(function* () {
       const { workspaceId, routing } = yield* setup;
@@ -329,11 +355,11 @@ it.layer(layer)("Telescope routing rules", (it) => {
       const db = yield* TelescopeDb.TelescopeDb;
       const ruleB = Telescope.RoutingRuleId.make("rule-b");
       const ruleA = Telescope.RoutingRuleId.make("rule-a");
-      const seed = (ruleId: Telescope.RoutingRuleId, createdAt: string) =>
+      const seed = (ruleId: Telescope.RoutingRuleId, createdAt: string, taskType = "docs") =>
         db.insert(workspaceId, "routing_rules", {
           rule_id: ruleId,
           project_id: null,
-          task_type: "docs",
+          task_type: taskType,
           harness: codex,
           model: "small",
           priority: 0,
@@ -341,14 +367,30 @@ it.layer(layer)("Telescope routing rules", (it) => {
         });
       yield* seed(ruleB, "2026-11-07T00:00:00.000Z");
       yield* seed(ruleA, "2026-11-07T00:00:01.000Z");
+      const ruleD = Telescope.RoutingRuleId.make("rule-d");
+      const ruleC = Telescope.RoutingRuleId.make("rule-c");
+      yield* seed(ruleD, "2026-11-07T00:00:02.000Z", "review");
+      yield* seed(ruleC, "2026-11-07T00:00:02.000Z", "review");
       assert.deepStrictEqual(
         (yield* routing.list(as.bea, { workspaceId })).rules.map((rule) => rule.id),
-        [ruleB, ruleA],
-        "equal rules tie in creation order, not by id",
+        [ruleB, ruleA, ruleD, ruleC],
+        "equal rules tie in creation order, not by id, within one millisecond too",
       );
       assert.strictEqual(
         (yield* routing.resolve(workspaceId, { agentId: staff.id, taskType: "docs" })).ruleId,
         ruleB,
+      );
+      assert.deepStrictEqual(
+        (yield* routing.resolve(workspaceId, {
+          agentId: staff.id,
+          projectId: api,
+          taskType: "docs",
+        })).skipped,
+        [
+          { ruleId: ruleB, reason: "harness_unavailable" },
+          { ruleId: ruleA, reason: "harness_unavailable" },
+        ],
+        "a harness the project turns off is skipped",
       );
       const sonnet = { instanceId: claude, model: "sonnet" };
       yield* agents.update(as.bea, { workspaceId, agentId: chief.id, modelSelection: sonnet });

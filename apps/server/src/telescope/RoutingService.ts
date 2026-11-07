@@ -9,6 +9,7 @@ import * as Schema from "effect/Schema";
 
 import type { PersistenceDecodeError, PersistenceSqlError } from "../persistence/Errors.ts";
 import * as ProviderInstanceRegistry from "../provider/ProviderInstanceRegistry.ts";
+import * as ServerSettings from "../serverSettings.ts";
 import * as AgentService from "./AgentService.ts";
 import * as GrantService from "./GrantService.ts";
 import * as TelescopeDb from "./TelescopeDb.ts";
@@ -40,7 +41,7 @@ export interface RoutingContext {
   readonly taskType: string;
   readonly agentDefault: ModelSelection | undefined;
   readonly allowlist: Telescope.RoutingAllowlist | undefined;
-  /** Provider instances configured and enabled on this server. */
+  /** Provider instances configured here and enabled for the project. */
   readonly configured: ReadonlySet<ProviderInstanceId>;
 }
 
@@ -147,13 +148,14 @@ const make = Effect.gen(function* () {
   const agents = yield* AgentService.AgentService;
   const grants = yield* GrantService.GrantService;
   const providers = yield* ProviderInstanceRegistry.ProviderInstanceRegistry;
+  const serverSettings = yield* ServerSettings.ServerSettingsService;
   const random = yield* SecureRandom.SecureRandom;
   const now = DateTime.now.pipe(Effect.map(DateTime.formatIso));
 
   const rulesOf = (workspaceId: Telescope.WorkspaceId) =>
     db
       .select(workspaceId, "routing_rules", decodeRules, undefined, {
-        orderBy: ["created_at", "rule_id"],
+        orderBy: ["created_at", "rowid"],
       })
       .pipe(Effect.map((rows) => rows.map(toRule)));
 
@@ -162,7 +164,8 @@ const make = Effect.gen(function* () {
     workspaceId: Telescope.WorkspaceId,
   ) {
     const { self } = yield* workspaces.get(caller, { workspaceId });
-    if (self.role !== "admin") return yield* fail("forbidden", "Only admins change routing rules.");
+    if (self.role !== "admin" || "runId" in caller)
+      return yield* fail("forbidden", "Only admins change routing rules.");
   });
 
   const list: Method<"telescope.routing.list"> = Effect.fn("RoutingService.list")(function* (
@@ -230,13 +233,23 @@ const make = Effect.gen(function* () {
     const allowlist =
       projectId === undefined ? undefined : yield* grants.routingAllowlist(workspaceId, projectId);
     const instances = yield* providers.listInstances;
+    const overrides =
+      projectId === undefined
+        ? undefined
+        : (yield* serverSettings.getSettings.pipe(Effect.orDie)).projectSettingsOverrides[projectId]
+            ?.providerInstances;
     return resolveRoute(yield* rulesOf(workspaceId), {
       projectId,
       taskType,
       agentDefault: agent.modelSelection,
       allowlist,
       configured: new Set(
-        instances.flatMap((instance) => (instance.enabled ? [instance.instanceId] : [])),
+        instances.flatMap((instance) =>
+          // The project's own setting wins, as the Worker launch decides it.
+          (overrides?.[instance.instanceId]?.enabled ?? instance.enabled)
+            ? [instance.instanceId]
+            : [],
+        ),
       ),
     });
   });

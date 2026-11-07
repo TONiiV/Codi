@@ -43,7 +43,7 @@ export const RoutingResolveInput = Schema.Struct({
   taskType: TaskType,
 });
 
-/** `harness_unavailable`: not configured, or disabled, on this server. */
+/** `harness_unavailable`: not configured on this server, or disabled on it or for the project. */
 export const RoutingSkipReason = Schema.Literals([
   "harness_not_allowed",
   "model_not_allowed",
