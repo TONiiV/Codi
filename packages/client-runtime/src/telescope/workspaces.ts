@@ -58,6 +58,16 @@ export function isEnvironmentOwner(member: Telescope.Member): boolean {
   return member.subjectId === Telescope.OWNER_MEMBER_ID;
 }
 
+/** Whether `self` may change the role of, revoke or restore `member`; the server stays authoritative. */
+export function canManageMember(self: Telescope.Member | null, member: Telescope.Member): boolean {
+  return (
+    self?.role === "admin" &&
+    self.revokedAt === undefined &&
+    member.subjectId !== self.subjectId &&
+    !isEnvironmentOwner(member)
+  );
+}
+
 interface ProjectRef {
   readonly environmentId: EnvironmentId;
   readonly projectId: ProjectId;
@@ -247,6 +257,11 @@ export function createTelescopeWorkspaceAtoms<R, E>(
     revoke: createEnvironmentRpcCommand(runtime, {
       label: "telescope:member:revoke",
       tag: WS_METHODS.memberRevoke,
+      onSuccess: refreshMembers,
+    }),
+    restore: createEnvironmentRpcCommand(runtime, {
+      label: "telescope:member:restore",
+      tag: WS_METHODS.memberRestore,
       onSuccess: refreshMembers,
     }),
     bind: createEnvironmentRpcCommand(runtime, {

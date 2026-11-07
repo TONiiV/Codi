@@ -10,6 +10,7 @@ import { EnvironmentRegistry } from "../connection/registry.ts";
 import {
   createTelescopeWorkspaceAtoms,
   boundWorkspaceIds,
+  canManageMember,
   dashboardListCounts,
   failureText,
   hiddenOutsideWorkspace,
@@ -75,6 +76,46 @@ describe("telescope project visibility", () => {
     const own = [workspace("a"), workspace("b")];
     expect(workspacesToLeave(both, b, own)).toEqual([a]);
     expect(workspacesToLeave(both, null, own)).toEqual([a, b]);
+  });
+});
+
+describe("telescope member management", () => {
+  const member = (
+    subjectId: string,
+    role: Telescope.WorkspaceRole,
+    revokedAt?: string,
+  ): Telescope.Member => ({
+    workspaceId: Telescope.WorkspaceId.make("a"),
+    subjectId,
+    displayName: subjectId,
+    role,
+    joinedAt: "2026-11-06T00:00:00.000Z",
+    ...(revokedAt === undefined ? {} : { revokedAt }),
+  });
+  const admin = member("admin", "admin");
+  const gone = "2026-11-07T00:00:00.000Z";
+
+  it.each([
+    ["an admin manages a member", admin, member("pm", "member"), true],
+    ["an admin manages another admin", admin, member("other", "admin"), true],
+    ["an admin restores a revoked member", admin, member("pm", "member", gone), true],
+    [
+      "nobody manages the environment owner",
+      admin,
+      member(Telescope.OWNER_MEMBER_ID, "admin"),
+      false,
+    ],
+    ["an admin does not manage themselves", admin, admin, false],
+    [
+      "a project lead manages nobody",
+      member("lead", "project_lead"),
+      member("pm", "member"),
+      false,
+    ],
+    ["a revoked admin manages nobody", member("x", "admin", gone), member("pm", "member"), false],
+    ["an unknown caller manages nobody", null, member("pm", "member"), false],
+  ] as const)("%s", (_name, self, target, expected) => {
+    expect(canManageMember(self, target)).toBe(expected);
   });
 });
 
