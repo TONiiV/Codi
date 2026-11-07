@@ -1,7 +1,7 @@
 import { Telescope } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
-import { reviewQueue, reviewUpdateInput } from "./telescopeBoard";
+import { describeFailure, reviewQueue, reviewUpdateInput } from "./telescopeBoard";
 
 const workspaceId = Telescope.WorkspaceId.make("w1");
 
@@ -41,5 +41,26 @@ describe("review actions", () => {
     expect(
       reviewUpdateInput(task("t1", "in_review", "2026-11-04T00:00:00.000Z", 7), "done"),
     ).toEqual({ workspaceId, taskId: "t1", baseVersion: 7, set: { status: "done" } });
+  });
+});
+
+describe("describeFailure", () => {
+  it("refreshes on a stale task version or a conflict, not on other errors", () => {
+    const stale = new Telescope.StaleTaskVersionError({
+      taskId: Telescope.TaskId.make("t1"),
+      baseVersion: 7,
+      currentVersion: 8,
+    });
+    expect(describeFailure(stale)).toMatchObject({ refresh: true, title: "任务已更新" });
+    const conflict = new Telescope.WorkspaceError({ reason: "conflict", message: "superseded" });
+    expect(describeFailure(conflict)).toMatchObject({ refresh: true, title: "内容已更新" });
+    expect(
+      describeFailure(new Telescope.WorkspaceError({ reason: "forbidden", message: "nope" })),
+    ).toEqual({ refresh: false, title: "操作没有完成", message: "nope" });
+    expect(describeFailure(new Error("boom"))).toEqual({
+      refresh: false,
+      title: "操作没有完成",
+      message: "boom",
+    });
   });
 });
