@@ -2295,6 +2295,8 @@
       "clientCount_other": "{{count}} 个客户端",
       "pairingLinkCount_one": "{{count}} 个配对链接",
       "pairingLinkCount_other": "{{count}} 个配对链接",
+      "hopFailed": "失败",
+      "hopNotChecked": "未检查",
       "devicesOnSameNetwork": "同一网络上的设备",
       "devicesOnPrivateNetwork": "你私有网络上的设备",
       "reachableFromAnywhere": "可从任何位置访问",
