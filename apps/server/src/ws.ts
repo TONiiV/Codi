@@ -137,6 +137,7 @@ import * as TelescopeAgents from "./telescope/AgentService.ts";
 import * as TelescopeWakeQueue from "./telescope/WakeQueueService.ts";
 import * as TelescopeMemory from "./telescope/MemoryService.ts";
 import * as TelescopeAttribution from "./telescope/AttributionService.ts";
+import * as TelescopeRouting from "./telescope/RoutingService.ts";
 import * as SecretRequests from "./secrets/SecretRequests.ts";
 import * as GuestShareService from "./guest/GuestShareService.ts";
 import {
@@ -1481,6 +1482,7 @@ export const layerWsRpc = (
       const telescopeGateway = yield* TelescopeToolGateway.ToolGateway;
       const telescopeMemory = yield* TelescopeMemory.MemoryService;
       const telescopeAttribution = yield* TelescopeAttribution.AttributionService;
+      const telescopeRouting = yield* TelescopeRouting.RoutingService;
       const caller = currentSession;
       const board = yield* TelescopeBoard.TaskBoardService;
       const tokenSaver = yield* TelescopeTokenSaver.TokenSaverService;
@@ -2479,6 +2481,14 @@ export const layerWsRpc = (
           telescopeStorage(telescopeMemory.pin({ session: caller }, input)),
         [Telescope.WS_METHODS.dashboardSummary]: (input) =>
           telescopeStorage(telescopeAttribution.summary(caller, input)),
+        [Telescope.WS_METHODS.routingList]: (input) =>
+          telescopeStorage(telescopeRouting.list(caller, input)),
+        [Telescope.WS_METHODS.routingSet]: (input) =>
+          telescopeStorage(telescopeRouting.set(caller, input)),
+        [Telescope.WS_METHODS.routingDelete]: (input) =>
+          telescopeStorage(telescopeRouting.remove(caller, input)),
+        [Telescope.WS_METHODS.routingResolve]: (input) =>
+          telescopeStorage(telescopeRouting.resolveFor(caller, input)),
         [WS_METHODS.guestShareCreate]: (input) =>
           Effect.annotateCurrentSpan({ "orchestration_v2.thread_id": input.threadId }).pipe(
             Effect.andThen(guestShares.create(input)),
@@ -3644,6 +3654,7 @@ export const layer = Layer.unwrap(
     const telescopeGateway = yield* TelescopeToolGateway.ToolGateway;
     const telescopeMemory = yield* TelescopeMemory.MemoryService;
     const telescopeAttribution = yield* TelescopeAttribution.AttributionService;
+    const telescopeRouting = yield* TelescopeRouting.RoutingService;
     const sql = yield* SqlClient.SqlClient;
     return HttpRouter.add(
       "GET",
@@ -3751,6 +3762,7 @@ export const layer = Layer.unwrap(
                   Layer.succeed(TelescopeGrants.GrantService, telescopeGrants),
                   Layer.succeed(TelescopeToolGateway.ToolGateway, telescopeGateway),
                   Layer.succeed(TelescopeMemory.MemoryService, telescopeMemory),
+                  Layer.succeed(TelescopeRouting.RoutingService, telescopeRouting),
                 ),
               ),
               Layer.provide(

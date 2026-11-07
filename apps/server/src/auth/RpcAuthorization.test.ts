@@ -84,6 +84,8 @@ describe("RPC authorization scopes", () => {
       Telescope.WS_METHODS.memoryWrite,
       Telescope.WS_METHODS.memoryPin,
       Telescope.WS_METHODS.dashboardSummary,
+      Telescope.WS_METHODS.routingList,
+      Telescope.WS_METHODS.routingResolve,
     ]) {
       expect(requiredScopeForRpcMethod(method)).toBe(AuthTelescopeMemberScope);
     }
@@ -100,6 +102,8 @@ describe("RPC authorization scopes", () => {
       Telescope.WS_METHODS.budgetSet,
       Telescope.WS_METHODS.killSwitchSet,
       Telescope.WS_METHODS.governanceGet,
+      Telescope.WS_METHODS.routingSet,
+      Telescope.WS_METHODS.routingDelete,
     ]) {
       expect(requiredScopeForRpcMethod(method)).toBe(AuthTelescopeAdminScope);
     }

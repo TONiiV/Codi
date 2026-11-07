@@ -9,6 +9,7 @@ import {
   AgentGetResult,
   AgentListResult,
   AgentUpdateInput,
+  RoutingRule,
 } from "./agent.ts";
 import {
   MemoryPinInput,
@@ -78,6 +79,13 @@ import {
   GrantExplainResult,
 } from "./grant.ts";
 import { DashboardSummary } from "./dashboard.ts";
+import {
+  RoutingResolution,
+  RoutingResolveInput,
+  RoutingRuleDeleteInput,
+  RoutingRuleListResult,
+  RoutingRuleSetInput,
+} from "./routing.ts";
 
 export const WS_METHODS = {
   workspaceCreate: "telescope.workspace.create",
@@ -124,6 +132,10 @@ export const WS_METHODS = {
   memoryWrite: "telescope.memory.write",
   memoryPin: "telescope.memory.pin",
   dashboardSummary: "telescope.dashboard.summary",
+  routingList: "telescope.routing.list",
+  routingSet: "telescope.routing.set",
+  routingDelete: "telescope.routing.delete",
+  routingResolve: "telescope.routing.resolve",
 } as const;
 
 const error = Schema.Union([WorkspaceError, EnvironmentAuthorizationError]);
@@ -212,4 +224,11 @@ export const MemoryRpcs = [
 
 export const DashboardRpcs = [
   make(WS_METHODS.dashboardSummary, WorkspaceScopedInput, DashboardSummary),
+] as const;
+
+export const RoutingRpcs = [
+  make(WS_METHODS.routingList, WorkspaceScopedInput, RoutingRuleListResult),
+  make(WS_METHODS.routingSet, RoutingRuleSetInput, RoutingRule),
+  make(WS_METHODS.routingDelete, RoutingRuleDeleteInput, Schema.Struct({})),
+  make(WS_METHODS.routingResolve, RoutingResolveInput, RoutingResolution),
 ] as const;
