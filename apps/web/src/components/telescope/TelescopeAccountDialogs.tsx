@@ -70,7 +70,7 @@ export function ErrorNote({ text, onRetry }: { text: string; onRetry?: () => voi
   );
 }
 
-function FormDialog({
+export function FormDialog({
   title,
   description,
   submitLabel,
@@ -123,7 +123,7 @@ function FormDialog({
   );
 }
 
-function TextField(props: {
+export function TextField(props: {
   label: string;
   value: string;
   onChange: (value: string) => void;

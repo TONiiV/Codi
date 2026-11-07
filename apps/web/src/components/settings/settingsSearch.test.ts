@@ -203,6 +203,8 @@ describe("searchSettings", () => {
       ["telescope members", "telescope-members"],
       ["预算与急停", "telescope-governance"],
       ["kill switch", "telescope-governance"],
+      ["路由规则", "telescope-routing"],
+      ["routing rules", "telescope-routing"],
     ] as const) {
       expect(searchSettings(title)[0]?.id, title).toBe(id);
     }

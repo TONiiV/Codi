@@ -15,6 +15,7 @@ import {
   AuthSettingsWriteScope,
   AuthSourceControlWriteScope,
   AuthTelescopeAdminScope,
+  AuthTelescopeMemberScope,
   Telescope,
   ThreadId,
   EnvironmentId,
@@ -197,6 +198,27 @@ describe("command permissions", () => {
           expect(registry.get(permissions.permissionAtom(other))).toBe(false);
           const denied = yield* permissions.authorize(registry, other).pipe(Effect.flip);
           expect(denied._tag).toBe("EnvironmentAuthorizationError");
+        }),
+      ),
+  );
+  it.effect.each([Telescope.WS_METHODS.routingSet, Telescope.WS_METHODS.routingDelete])(
+    "offers %s to telescope admins, not members",
+    (method) =>
+      Effect.scoped(
+        Effect.gen(function* () {
+          const registry = yield* setup;
+          const permissions = createCommandPermissions(runtime, method);
+          const scoped = (
+            scope: typeof AuthTelescopeAdminScope | typeof AuthTelescopeMemberScope,
+          ) => AsyncResult.success({ ...grant(true), scopes: [scope], permissions: [scope] });
+          registry.set(sessions(env), scoped(AuthTelescopeMemberScope));
+          expect(registry.get(permissions.permissionAtom(env))).toBe(false);
+          expect((yield* permissions.authorize(registry, env).pipe(Effect.flip))._tag).toBe(
+            "EnvironmentAuthorizationError",
+          );
+          registry.set(sessions(env), scoped(AuthTelescopeAdminScope));
+          expect(registry.get(permissions.permissionAtom(env))).toBe(true);
+          yield* permissions.authorize(registry, env);
         }),
       ),
   );
