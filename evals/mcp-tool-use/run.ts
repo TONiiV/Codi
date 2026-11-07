@@ -193,9 +193,15 @@ const McpToolUseExpect = Schema.Struct({
   order: Schema.optional(Schema.Array(Schema.String)),
   minCalls: Schema.optional(Schema.Record(Schema.String, Schema.Number)),
   maxCalls: Schema.optional(Schema.Record(Schema.String, Schema.Number)),
-  /** At most `max` calls match each entry, as `calls` entries match. */
+  /** At most `max` calls match each entry, as `calls` entries match, and none of its `except`. */
   maxMatchingCalls: Schema.optional(
-    Schema.Array(Schema.Struct({ ...McpToolUseCall.fields, max: Schema.Number })),
+    Schema.Array(
+      Schema.Struct({
+        ...McpToolUseCall.fields,
+        max: Schema.Number,
+        except: Schema.optional(Schema.Array(McpToolUseCall)),
+      }),
+    ),
   ),
   /**
    * One `args`-style value per new top-level thread the agent asks for, by `t3_thread_launch` or a
@@ -1763,8 +1769,10 @@ export const gradeSample = (expect: McpToolUseCase["expect"], run: SampleRun, pa
     add(`minCalls ${t} >= ${n}`, count(t) >= n);
   for (const [t, n] of Object.entries(expect.maxCalls ?? {}))
     add(`maxCalls ${t} <= ${n}`, count(t) <= n);
-  for (const { max, ...call } of expect.maxMatchingCalls ?? [])
-    add(`maxMatchingCalls ${label(call)} <= ${max}`, matching(call).length <= max);
+  for (const { max, except = [], ...call } of expect.maxMatchingCalls ?? []) {
+    const counted = matching(call).filter((c) => !except.some((e) => matching(e).includes(c)));
+    add(`maxMatchingCalls ${label(call)} <= ${max}`, counted.length <= max);
+  }
   if (expect.newThreads !== undefined) {
     const requests = newThreadRequests(calls);
     add(
