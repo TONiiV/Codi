@@ -263,6 +263,14 @@ it.layer(layer)("Telescope task board", (it) => {
         ["stray", "superseded"],
       ]);
       assert.deepStrictEqual(yield* statuses(b), [["B", "decided"]]);
+      const decided = yield* board.listCommits(alice, { workspaceId: a, taskId: proposal.id });
+      assert.deepStrictEqual(
+        decided.commits.map((c) => [c.baseVersion, c.changedFields.status]),
+        [
+          [0, "proposed"],
+          [1, "superseded"],
+        ],
+      );
     }),
   );
 
