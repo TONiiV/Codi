@@ -4,11 +4,14 @@ import * as Context from "effect/Context";
 import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import * as Struct from "effect/Struct";
 import * as SqlClient from "effect/sql/SqlClient";
 
+import { ServerConfig } from "../config.ts";
 import type { PersistenceDecodeError, PersistenceSqlError } from "../persistence/Errors.ts";
 import * as Scheduler from "../scheduling/Scheduler.ts";
 import { ServerSettingsService } from "../serverSettings.ts";
@@ -16,6 +19,10 @@ import * as TelescopeDb from "./TelescopeDb.ts";
 import * as WorkspaceService from "./WorkspaceService.ts";
 
 const DEFAULT_LIST_LIMIT = 50;
+
+/** Where a run's context file is written; deleting its workspace or retention removes it. */
+export const contextFile = (path: Path.Path, stateDir: string, runId: string) =>
+  path.join(stateDir, "telescope", "context", `${runId}.md`);
 
 const RunRow = Schema.Struct({
   run_id: Telescope.AgentRunId,
@@ -174,7 +181,10 @@ export class RunRecordService extends Context.Service<
       caller: Caller,
       run: RunRef,
     ) => Out<typeof Telescope.RunMemorySourcesResult.Type>;
-    readonly pruneBefore: (cutoff: DateTime.Utc) => Effect.Effect<void, PersistenceSqlError>;
+    /** Drops runs finished before `cutoff` and returns their ids. */
+    readonly pruneBefore: (
+      cutoff: DateTime.Utc,
+    ) => Effect.Effect<ReadonlyArray<Telescope.AgentRunId>, PersistenceSqlError>;
   }
 >()("t3/telescope/RunRecordService") {}
 
@@ -469,12 +479,30 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 export const makeRetentionPass = Effect.gen(function* () {
   const runs = yield* RunRecordService;
   const settings = yield* ServerSettingsService;
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const { stateDir } = yield* ServerConfig;
   let nextCheckMs = 0;
   return Effect.gen(function* () {
     const now = yield* Clock.currentTimeMillis;
     if (now < nextCheckMs) return;
     const { runRetentionDays } = (yield* settings.getSettings).telescope;
-    yield* runs.pruneBefore(DateTime.makeUnsafe(now - runRetentionDays * DAY_MS));
+    const dropped = yield* runs.pruneBefore(DateTime.makeUnsafe(now - runRetentionDays * DAY_MS));
+    // After the commit, so a file that stays never keeps its run.
+    yield* Effect.forEach(
+      dropped,
+      (runId) => {
+        const file = contextFile(path, stateDir, runId);
+        return fs
+          .remove(file, { force: true })
+          .pipe(
+            Effect.catch((error) =>
+              Effect.logWarning("Telescope run context file left", { file, error: error.message }),
+            ),
+          );
+      },
+      { discard: true },
+    );
     nextCheckMs = now + DAY_MS;
   });
 });

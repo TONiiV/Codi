@@ -130,7 +130,9 @@ export class TelescopeDb extends Context.Service<
       PersistenceSqlError
     >;
     /** Retention: drops every workspace's runs that finished before `cutoff`, with their calls. */
-    readonly pruneRunsBefore: (cutoff: string) => Effect.Effect<void, PersistenceSqlError>;
+    readonly pruneRunsBefore: (
+      cutoff: string,
+    ) => Effect.Effect<ReadonlyArray<Telescope.AgentRunId>, PersistenceSqlError>;
     /** The wake queue is shared by the whole machine. */
     readonly workspaceIdsWithActiveWakes: Effect.Effect<
       ReadonlyArray<Telescope.WorkspaceId>,
@@ -380,16 +382,18 @@ const make = Effect.gen(function* () {
     }));
   });
   const pruneRunsBefore = Effect.fn("TelescopeDb.pruneRunsBefore")(function* (cutoff: string) {
-    yield* sql
+    const [, dropped] = yield* sql
       .withTransaction(
         Effect.all([
           sql`DELETE FROM telescope_run_calls WHERE run_id IN
           (SELECT run_id FROM telescope_runs
           WHERE finished_at IS NOT NULL AND finished_at < ${cutoff})`,
-          sql`DELETE FROM telescope_runs WHERE finished_at IS NOT NULL AND finished_at < ${cutoff}`,
+          sql<{ readonly run_id: string }>`DELETE FROM telescope_runs
+          WHERE finished_at IS NOT NULL AND finished_at < ${cutoff} RETURNING run_id`,
         ]),
       )
       .pipe(Effect.mapError(toPersistenceSqlError("TelescopeDb.pruneRunsBefore")));
+    return dropped.map((row) => Telescope.AgentRunId.make(row.run_id));
   });
   const workspaceIdsWithActiveWakes = sql<{ readonly workspace_id: string }>`
     SELECT DISTINCT workspace_id FROM telescope_wakes WHERE status IN ('queued', 'running')
