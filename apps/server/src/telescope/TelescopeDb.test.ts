@@ -9,17 +9,33 @@ import { runMigrations } from "../persistence/Migrations.ts";
 import * as SqlitePersistence from "../persistence/Sqlite.ts";
 import * as TelescopeDb from "./TelescopeDb.ts";
 
+const wsA = Telescope.WorkspaceId.make("ws-a");
+const wsB = Telescope.WorkspaceId.make("ws-b");
+const wsC = Telescope.WorkspaceId.make("ws-c");
+const workspace = (workspace_id: string) => ({
+  workspace_id,
+  kind: "personal",
+  name: workspace_id,
+  created_at: "2026-11-06T00:00:00.000Z",
+  created_by: "owner",
+});
 const layer = TelescopeDb.layer.pipe(
   Layer.provideMerge(
-    Layer.effectDiscard(runMigrations()).pipe(Layer.provideMerge(SqlitePersistence.layerMemory)),
+    Layer.effectDiscard(
+      runMigrations().pipe(
+        Effect.andThen(
+          SqlClient.SqlClient.use(
+            (sql) =>
+              sql`INSERT INTO telescope_workspaces ${sql.insert([workspace(wsA), workspace(wsB), workspace(wsC)])}`,
+          ),
+        ),
+      ),
+    ).pipe(Layer.provideMerge(SqlitePersistence.layerMemory)),
   ),
 );
 
 const MemberName = Schema.Struct({ workspace_id: Schema.String, display_name: Schema.String });
 const decodeNames = Schema.decodeUnknownEffect(Schema.Array(MemberName));
-const wsA = Telescope.WorkspaceId.make("ws-a");
-const wsB = Telescope.WorkspaceId.make("ws-b");
-const wsC = Telescope.WorkspaceId.make("ws-c");
 const member = (name: string) => ({
   subject_id: name,
   display_name: name,
@@ -100,17 +116,18 @@ it.layer(layer)("TelescopeDb", (it) => {
           SELECT memory_id, workspace_id FROM telescope_memories_fts
           WHERE telescope_memories_fts MATCH ${needle}
         `;
-      yield* db.insert(wsA, "memories", {
-        memory_id: "m1",
+      const memory = (memory_id: string, text: string) => ({
+        memory_id,
         agent_id: "agent",
         scope: "agent",
         layer: "semantic",
         level: "fact",
         kind: "fact",
-        text: "prefers tabs",
+        text,
         source_json: "{}",
         valid_from: "2026-11-06T00:00:00.000Z",
       });
+      yield* db.insert(wsA, "memories", memory("m1", "prefers tabs"));
       assert.deepStrictEqual(yield* indexed("tabs"), [{ memory_id: "m1", workspace_id: "ws-a" }]);
 
       yield* db.update(wsA, "memories", { text: "prefers spaces" }, { memory_id: "m1" });
@@ -119,6 +136,14 @@ it.layer(layer)("TelescopeDb", (it) => {
 
       yield* db.remove(wsA, "memories", { memory_id: "m1" });
       assert.deepStrictEqual(yield* indexed("spaces"), []);
+
+      yield* db.insert(wsA, "memories", memory("m2", "likes trains"));
+      yield* db.insert(wsA, "memories", memory("m3", "likes trains"));
+      yield* db.insert(wsB, "memories", memory("m4", "likes trains"));
+      yield* db.removeAllMemories(wsA);
+      assert.deepStrictEqual(yield* indexed("trains"), [{ memory_id: "m4", workspace_id: "ws-b" }]);
+      yield* db.remove(wsB, "memories", { memory_id: "m4" });
+      assert.deepStrictEqual(yield* indexed("trains"), []);
     }),
   );
 });

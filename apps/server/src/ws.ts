@@ -127,6 +127,7 @@ import * as DocumentText from "./provider/DocumentText.ts";
 import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
 import * as ScheduledTasks from "./scheduledTasks/ScheduledTaskService.ts";
 import * as TelescopeWorkspaces from "./telescope/WorkspaceService.ts";
+import * as TelescopeWorkspaceData from "./telescope/WorkspaceDataService.ts";
 import * as TelescopeBoard from "./telescope/TaskBoardService.ts";
 import * as TelescopeBoardChanges from "./telescope/BoardChanges.ts";
 import * as TelescopeRuns from "./telescope/RunRecordService.ts";
@@ -1475,6 +1476,7 @@ export const layerWsRpc = (
       const providerSessionManager = yield* ProviderSessionManager.ProviderSessionManagerV2;
       const scheduledTasks = yield* ScheduledTasks.ScheduledTaskService;
       const telescope = yield* TelescopeWorkspaces.WorkspaceService;
+      const telescopeData = yield* TelescopeWorkspaceData.WorkspaceDataService;
       const telescopeAgents = yield* TelescopeAgents.AgentService;
       const telescopeRuns = yield* TelescopeRuns.RunRecordService;
       const telescopeWakes = yield* TelescopeWakeQueue.WakeQueueService;
@@ -2401,6 +2403,10 @@ export const layerWsRpc = (
           telescopeStorage(telescope.list(caller, input)),
         [Telescope.WS_METHODS.workspaceGet]: (input) =>
           telescopeStorage(telescope.get(caller, input)),
+        [Telescope.WS_METHODS.workspaceExport]: (input) =>
+          telescopeStorage(telescopeData.export(caller, input)),
+        [Telescope.WS_METHODS.workspaceDelete]: (input) =>
+          telescopeStorage(telescopeData.delete(caller, input)),
         [Telescope.WS_METHODS.memberInvite]: (input) =>
           telescopeStorage(telescope.invite(caller, input)),
         [Telescope.WS_METHODS.memberLinkCode]: (input) =>
@@ -3652,6 +3658,7 @@ export const layer = Layer.unwrap(
     const telescopeMemory = yield* TelescopeMemory.MemoryService;
     const telescopeAttribution = yield* TelescopeAttribution.AttributionService;
     const telescopeBoardChanges = yield* TelescopeBoardChanges.BoardChanges;
+    const telescopeData = yield* TelescopeWorkspaceData.WorkspaceDataService;
     const sql = yield* SqlClient.SqlClient;
     return HttpRouter.add(
       "GET",
@@ -3753,6 +3760,7 @@ export const layer = Layer.unwrap(
                   Layer.succeed(TelescopeTokenSaver.TokenSaverService, telescopeTokenSaver),
                   Layer.succeed(TelescopeAttribution.AttributionService, telescopeAttribution),
                   Layer.succeed(TelescopeBoardChanges.BoardChanges, telescopeBoardChanges),
+                  Layer.succeed(TelescopeWorkspaceData.WorkspaceDataService, telescopeData),
                 ),
               ),
               Layer.provide(
