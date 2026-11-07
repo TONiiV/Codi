@@ -31,7 +31,7 @@ import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../
 import { Switch } from "../ui/switch";
 import { ThemeLibrary } from "./ThemeSettings";
 import {
-  SettingResetButton,
+  TranslatedSettingResetButton,
   SettingsPageContainer,
   SettingsRow,
   SettingsSection,
@@ -41,13 +41,17 @@ import { AdvancedSettings } from "./AdvancedSettings";
 import { PanelAnimationsPreview } from "./PanelAnimationsPreview";
 import { TypographySection } from "./TypographySettings";
 import { ThreadDetailsItemsRow } from "./ThreadDetailsItemsRow";
+import { useTranslation } from "react-i18next";
 
+const P = "settings.parallelA.";
+
+// i18n keys, resolved with `t` where shown.
 const ENVIRONMENT_IDENTIFICATION_LABELS: Record<EnvironmentIdentificationMode, string> = {
-  artwork: "Artwork",
-  "nightly-artwork": "Nightly artwork",
-  "dev-artwork": "Dev artwork",
-  pill: "Version pill",
-  none: "None",
+  artwork: P + "envArtwork",
+  "nightly-artwork": P + "envNightlyArtwork",
+  "dev-artwork": P + "envDevArtwork",
+  pill: P + "envVersionPill",
+  none: "settings.text.none",
 };
 
 // The default "artwork" follows the running channel, so it is labeled as that channel's art,
@@ -57,39 +61,40 @@ function environmentIdentificationOptions(
 ): ReadonlyArray<readonly [EnvironmentIdentificationMode, string]> {
   if (stageVariant === "dev") {
     return [
-      ["artwork", "Dev artwork"],
-      ["nightly-artwork", "Nightly artwork"],
-      ["pill", "Version pill"],
-      ["none", "None"],
+      ["artwork", P + "envDevArtwork"],
+      ["nightly-artwork", P + "envNightlyArtwork"],
+      ["pill", P + "envVersionPill"],
+      ["none", "settings.text.none"],
     ];
   }
   if (stageVariant === "nightly") {
     return [
-      ["artwork", "Nightly artwork"],
-      ["dev-artwork", "Dev artwork"],
-      ["pill", "Version pill"],
-      ["none", "None"],
+      ["artwork", P + "envNightlyArtwork"],
+      ["dev-artwork", P + "envDevArtwork"],
+      ["pill", P + "envVersionPill"],
+      ["none", "settings.text.none"],
     ];
   }
   return [
-    ["artwork", "None"],
-    ["nightly-artwork", "Nightly artwork"],
-    ["dev-artwork", "Dev artwork"],
+    ["artwork", "settings.text.none"],
+    ["nightly-artwork", P + "envNightlyArtwork"],
+    ["dev-artwork", P + "envDevArtwork"],
   ];
 }
 
 const CHAT_WIDTH_LABELS: Record<ChatWidth, string> = {
-  comfortable: "Comfortable",
-  wide: "Wide",
-  full: "Full",
+  comfortable: P + "chatWidthComfortable",
+  wide: "settings.text.wide",
+  full: "settings.text.full",
 };
 
 const EFFORT_DISPLAY_LABELS: Record<EffortDisplay, string> = {
-  label: "Word",
-  bars: "Bars",
+  label: P + "effortDisplayWord",
+  bars: "settings.text.bars",
 };
 
 export function AppearanceSettingsPanel() {
+  const { t } = useTranslation();
   const {
     appearanceMode,
     refreshTheme,
@@ -114,6 +119,7 @@ export function AppearanceSettingsPanel() {
     environmentIdentificationOptionList.find(
       ([value]) => value === settings.environmentIdentificationMode,
     )?.[1] ?? ENVIRONMENT_IDENTIFICATION_LABELS[settings.environmentIdentificationMode];
+  const environmentIdentificationLabelText = t(environmentIdentificationLabel);
   const effectiveEnvironmentIdentificationMode = useEnvironmentIdentificationMode();
   const themeHidesEnvironmentArtwork =
     effectiveEnvironmentIdentificationMode === "pill" &&
@@ -123,11 +129,11 @@ export function AppearanceSettingsPanel() {
     ) !== null;
   const environmentIdentificationDescription = themeHidesEnvironmentArtwork
     ? environmentStageVariant
-      ? "Only built-in themes show artwork, so this theme shows the version pill."
-      : "Only built-in themes show artwork."
+      ? t("settings.text.onlyBuiltInThemesShowArtwork")
+      : t("settings.text.onlyBuiltInThemesShowArtwork2")
     : environmentStageVariant
-      ? "Choose how Dev and Nightly environments are identified."
-      : "Show Dev or Nightly artwork in the sidebar header.";
+      ? t("settings.text.chooseHowDevAndNightlyEnvironments")
+      : t("settings.text.showDevOrNightlyArtworkIn");
   const glassOpacityRatio =
     (settings.glassOpacity - MIN_GLASS_OPACITY) / (MAX_GLASS_OPACITY - MIN_GLASS_OPACITY);
   const glassOpacitySliderStyle = {
@@ -151,8 +157,13 @@ export function AppearanceSettingsPanel() {
 
   return (
     <SettingsPageContainer>
-      <SettingsSection id="appearance" title="Colors & themes" variant="plain" hideTitle>
-        <div id={searchableSetting("theme").id}>
+      <SettingsSection
+        id="appearance"
+        title={t("settings.text.colorsThemes")}
+        variant="plain"
+        hideTitle
+      >
+        <div id={searchableSetting("theme", t).id}>
           <ThemeLibrary
             appearanceMode={appearanceMode}
             customThemes={customThemes}
@@ -169,13 +180,13 @@ export function AppearanceSettingsPanel() {
         </div>
       </SettingsSection>
 
-      <SettingsSection id="appearance-interface" title="Interface">
+      <SettingsSection id="appearance-interface" title={t("settings.text.interface")}>
         <SettingsRow
-          {...searchableSetting("theme-backdrop")}
+          {...searchableSetting("theme-backdrop", t)}
           description={
             themeBackdropEnabled && themeBackdropUnavailable
-              ? "Unavailable: this device could not start WebGL2. Turn it off and on to retry."
-              : "Show a slow fluid backdrop in your theme's canvas and accent colors. Saved on this device only; stays still when reduced motion is on."
+              ? t("settings.text.unavailableThisDeviceCouldNotStart")
+              : t("settings.text.showASlowFluidBackdropIn")
           }
           control={
             <Switch
@@ -184,17 +195,17 @@ export function AppearanceSettingsPanel() {
                 setThemeBackdropUnavailable(false);
                 setThemeBackdropEnabled(Boolean(checked));
               }}
-              aria-label="Animated background"
+              aria-label={t("settings.text.animatedBackground")}
             />
           }
         />
         <SettingsRow
-          {...searchableSetting("setting-appearance-contrast")}
-          description="Adjust the contrast of colors and borders across the interface."
+          {...searchableSetting("setting-appearance-contrast", t)}
+          description={t("settings.text.adjustTheContrastOfColorsAnd")}
           resetAction={
             settings.appearanceContrast !== DEFAULT_UNIFIED_SETTINGS.appearanceContrast ? (
-              <SettingResetButton
-                label="contrast"
+              <TranslatedSettingResetButton
+                label={t("settings.text.contrastReset")}
                 onClick={() =>
                   updateSettings({
                     appearanceContrast: DEFAULT_UNIFIED_SETTINGS.appearanceContrast,
@@ -212,7 +223,7 @@ export function AppearanceSettingsPanel() {
                 {settings.appearanceContrast}%
               </output>
               <input
-                aria-label="Contrast"
+                aria-label={t("settings.text.contrast")}
                 className="settings-slider min-w-0 flex-1"
                 id="appearance-contrast"
                 max={MAX_APPEARANCE_CONTRAST}
@@ -237,12 +248,12 @@ export function AppearanceSettingsPanel() {
         />
 
         <SettingsRow
-          {...searchableSetting("setting-glass-opacity")}
-          description="Higher values make menus, dialogs, and the composer more solid."
+          {...searchableSetting("setting-glass-opacity", t)}
+          description={t("settings.text.higherValuesMakeMenusDialogsAnd")}
           resetAction={
             settings.glassOpacity !== DEFAULT_UNIFIED_SETTINGS.glassOpacity ? (
-              <SettingResetButton
-                label="glass opacity"
+              <TranslatedSettingResetButton
+                label={t("settings.text.glassOpacity")}
                 onClick={() =>
                   updateSettings({ glassOpacity: DEFAULT_UNIFIED_SETTINGS.glassOpacity })
                 }
@@ -258,7 +269,7 @@ export function AppearanceSettingsPanel() {
                 {settings.glassOpacity}%
               </output>
               <input
-                aria-label="Glass opacity"
+                aria-label={t("settings.text.glassOpacity2")}
                 className="settings-slider min-w-0 flex-1"
                 id="glass-opacity"
                 max={MAX_GLASS_OPACITY}
@@ -283,12 +294,12 @@ export function AppearanceSettingsPanel() {
         />
 
         <SettingsRow
-          {...searchableSetting("chat-width")}
-          description="Set how wide messages and the composer can grow on large screens."
+          {...searchableSetting("chat-width", t)}
+          description={t("settings.text.setHowWideMessagesAndThe")}
           resetAction={
             settings.chatWidth !== DEFAULT_UNIFIED_SETTINGS.chatWidth ? (
-              <SettingResetButton
-                label="chat width"
+              <TranslatedSettingResetButton
+                label={t("settings.text.chatWidth")}
                 onClick={() => updateSettings({ chatWidth: DEFAULT_UNIFIED_SETTINGS.chatWidth })}
               />
             ) : null
@@ -302,13 +313,19 @@ export function AppearanceSettingsPanel() {
                     updateSettings({ chatWidth: value });
                 }}
               >
-                <SelectTrigger size="sm" className="w-full min-w-0" aria-label="Chat width">
-                  <SelectValue>{CHAT_WIDTH_LABELS[settings.chatWidth]}</SelectValue>
+                <SelectTrigger
+                  size="sm"
+                  className="w-full min-w-0"
+                  aria-label={t("settings.text.chatWidth2")}
+                >
+                  <SelectValue>{t(CHAT_WIDTH_LABELS[settings.chatWidth])}</SelectValue>
                 </SelectTrigger>
                 <SelectPopup align="end" alignItemWithTrigger={false}>
-                  <SelectItem value="comfortable">Comfortable (default)</SelectItem>
-                  <SelectItem value="wide">Wide</SelectItem>
-                  <SelectItem value="full">Full</SelectItem>
+                  <SelectItem value="comfortable">
+                    {t("settings.text.comfortableDefault")}
+                  </SelectItem>
+                  <SelectItem value="wide">{t("settings.text.wide")}</SelectItem>
+                  <SelectItem value="full">{t("settings.text.full")}</SelectItem>
                 </SelectPopup>
               </Select>
             </div>
@@ -316,12 +333,12 @@ export function AppearanceSettingsPanel() {
         />
         <ThreadDetailsItemsRow />
         <SettingsRow
-          {...searchableSetting("effort-display")}
-          description="Show reasoning effort in the composer as its name, such as High, or as bars."
+          {...searchableSetting("effort-display", t)}
+          description={t("settings.text.showReasoningEffortInTheComposer")}
           resetAction={
             settings.effortDisplay !== DEFAULT_UNIFIED_SETTINGS.effortDisplay ? (
-              <SettingResetButton
-                label="effort display"
+              <TranslatedSettingResetButton
+                label={t("settings.text.effortDisplay")}
                 onClick={() =>
                   updateSettings({ effortDisplay: DEFAULT_UNIFIED_SETTINGS.effortDisplay })
                 }
@@ -337,24 +354,28 @@ export function AppearanceSettingsPanel() {
                     updateSettings({ effortDisplay: value });
                 }}
               >
-                <SelectTrigger size="sm" className="w-full min-w-0" aria-label="Effort display">
-                  <SelectValue>{EFFORT_DISPLAY_LABELS[settings.effortDisplay]}</SelectValue>
+                <SelectTrigger
+                  size="sm"
+                  className="w-full min-w-0"
+                  aria-label={t("settings.text.effortDisplay2")}
+                >
+                  <SelectValue>{t(EFFORT_DISPLAY_LABELS[settings.effortDisplay])}</SelectValue>
                 </SelectTrigger>
                 <SelectPopup align="end" alignItemWithTrigger={false}>
-                  <SelectItem value="label">Word (default)</SelectItem>
-                  <SelectItem value="bars">Bars</SelectItem>
+                  <SelectItem value="label">{t("settings.text.wordDefault")}</SelectItem>
+                  <SelectItem value="bars">{t("settings.text.bars")}</SelectItem>
                 </SelectPopup>
               </Select>
             </div>
           }
         />
         <SettingsRow
-          {...searchableSetting("math-rendering")}
-          description="Typeset LaTeX math, such as $x^2$ or \[x^2\], in messages and Markdown previews. The composer keeps TeX source editable."
+          {...searchableSetting("math-rendering", t)}
+          description={t("settings.text.typesetLatexMathSuchAsX")}
           resetAction={
             settings.mathRenderingEnabled !== DEFAULT_UNIFIED_SETTINGS.mathRenderingEnabled ? (
-              <SettingResetButton
-                label="math rendering"
+              <TranslatedSettingResetButton
+                label={t("settings.text.mathRendering")}
                 onClick={() =>
                   updateSettings({
                     mathRenderingEnabled: DEFAULT_UNIFIED_SETTINGS.mathRenderingEnabled,
@@ -369,22 +390,22 @@ export function AppearanceSettingsPanel() {
               onCheckedChange={(checked) =>
                 updateSettings({ mathRenderingEnabled: Boolean(checked) })
               }
-              aria-label="Render math"
+              aria-label={t("settings.text.renderMath")}
             />
           }
         />
         <AdvancedSettings
           targetIds={[
-            searchableSetting("panel-animations").id,
-            searchableSetting("environment-identification").id,
+            searchableSetting("panel-animations", t).id,
+            searchableSetting("environment-identification", t).id,
             // Environment identification's search result lands on this section.
             "appearance-interface",
-            searchableSetting("composer-context").id,
+            searchableSetting("composer-context", t).id,
           ]}
         >
           <SettingsRow
-            {...searchableSetting("panel-animations")}
-            description="Set how fast panels open and close."
+            {...searchableSetting("panel-animations", t)}
+            description={t("settings.text.setHowFastPanelsOpenAnd")}
             control={
               <div className="grid w-full grid-cols-[5rem_minmax(0,1fr)] items-center gap-3 sm:w-auto sm:grid-cols-[7rem_13rem] sm:gap-4">
                 <PanelAnimationsPreview durationMs={settings.panelAnimationDurationMs} />
@@ -396,7 +417,7 @@ export function AppearanceSettingsPanel() {
                     {settings.panelAnimationDurationMs} ms
                   </output>
                   <input
-                    aria-label="Panel animation duration"
+                    aria-label={t("settings.text.panelAnimationDuration")}
                     className="settings-slider min-w-0 flex-1"
                     id="panel-animation-duration"
                     max={MAX_PANEL_ANIMATION_DURATION_MS}
@@ -422,8 +443,8 @@ export function AppearanceSettingsPanel() {
             resetAction={
               settings.panelAnimationDurationMs !==
               DEFAULT_UNIFIED_SETTINGS.panelAnimationDurationMs ? (
-                <SettingResetButton
-                  label="panel animations"
+                <TranslatedSettingResetButton
+                  label={t("settings.text.panelAnimations")}
                   onClick={() =>
                     updateSettings({
                       panelAnimationDurationMs: DEFAULT_UNIFIED_SETTINGS.panelAnimationDurationMs,
@@ -434,12 +455,12 @@ export function AppearanceSettingsPanel() {
             }
           />
           <SettingsRow
-            {...searchableSetting("environment-identification")}
+            {...searchableSetting("environment-identification", t)}
             description={environmentIdentificationDescription}
             resetAction={
               settings.environmentIdentificationMode !== DEFAULT_ENVIRONMENT_IDENTIFICATION_MODE ? (
-                <SettingResetButton
-                  label="environment identification"
+                <TranslatedSettingResetButton
+                  label={t("settings.text.environmentIdentification")}
                   onClick={() =>
                     updateSettings({
                       environmentIdentificationMode: DEFAULT_ENVIRONMENT_IDENTIFICATION_MODE,
@@ -461,14 +482,14 @@ export function AppearanceSettingsPanel() {
                 <SelectTrigger
                   size="sm"
                   className="w-full sm:w-40"
-                  aria-label="Environment identification"
+                  aria-label={t("settings.text.environmentIdentification2")}
                 >
-                  <SelectValue>{environmentIdentificationLabel}</SelectValue>
+                  <SelectValue>{environmentIdentificationLabelText}</SelectValue>
                 </SelectTrigger>
                 <SelectPopup align="end" alignItemWithTrigger={false}>
                   {environmentIdentificationOptionList.map(([value, label]) => (
                     <SelectItem hideIndicator key={value} value={value}>
-                      {label}
+                      {t(label)}
                     </SelectItem>
                   ))}
                 </SelectPopup>
@@ -476,13 +497,13 @@ export function AppearanceSettingsPanel() {
             }
           />
           <SettingsRow
-            {...searchableSetting("composer-context")}
-            description="Keep branch and worktree controls below the composer after a thread starts."
+            {...searchableSetting("composer-context", t)}
+            description={t("settings.text.keepBranchAndWorktreeControlsBelow")}
             resetAction={
               settings.persistComposerContextStrip !==
               DEFAULT_UNIFIED_SETTINGS.persistComposerContextStrip ? (
-                <SettingResetButton
-                  label="composer context"
+                <TranslatedSettingResetButton
+                  label={t("settings.text.composerContext")}
                   onClick={() =>
                     updateSettings({
                       persistComposerContextStrip:
@@ -498,7 +519,7 @@ export function AppearanceSettingsPanel() {
                 onCheckedChange={(checked) =>
                   updateSettings({ persistComposerContextStrip: Boolean(checked) })
                 }
-                aria-label="Keep composer context visible in active threads"
+                aria-label={t("settings.text.keepComposerContextVisibleInActive")}
               />
             }
           />
