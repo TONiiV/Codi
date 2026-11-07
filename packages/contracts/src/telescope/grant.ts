@@ -35,6 +35,10 @@ export const GatewayTool = Schema.Literals([
   "decision_list",
   "decision_record",
   "agent_list",
+  "delegate",
+  "delegation_list",
+  "delegation_report",
+  "delegation_cancel",
 ]);
 export type GatewayTool = typeof GatewayTool.Type;
 

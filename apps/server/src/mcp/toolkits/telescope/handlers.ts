@@ -1,7 +1,9 @@
 import type { Telescope } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
+import * as Struct from "effect/Struct";
 
 import * as AgentService from "../../../telescope/AgentService.ts";
+import * as DelegationService from "../../../telescope/DelegationService.ts";
 import * as TaskBoardService from "../../../telescope/TaskBoardService.ts";
 import * as ToolGateway from "../../../telescope/ToolGateway.ts";
 import * as McpToolAccess from "../../McpToolAccess.ts";
@@ -25,6 +27,26 @@ const onBoard =
         caller.workspaceId,
       ),
     );
+
+/** Delegations are signed by the run's agent, for the member and chain the run carries. */
+const onDelegations =
+  <A>(
+    use: (
+      delegations: DelegationService.DelegationService["Service"],
+      actor: DelegationService.Actor,
+    ) => Effect.Effect<A, Failure>,
+  ) =>
+  (caller: ToolGateway.ToolCaller) =>
+    Effect.flatMap(DelegationService.DelegationService, (delegations) =>
+      use(delegations, {
+        workspaceId: caller.workspaceId,
+        memberId: caller.memberId,
+        agentId: caller.agentId,
+        onBehalfOf: caller.onBehalfOf,
+        runId: caller.runId,
+      }),
+    );
+const summary = (delegation: Telescope.Delegation) => Struct.omit(delegation, ["messages"]);
 
 const handlers = {
   ticket_list: McpToolAccess.readsAsCaller((input) =>
@@ -98,6 +120,46 @@ const handlers = {
     gated("agent_list", {}, (caller) =>
       Effect.flatMap(AgentService.AgentService, (agents) =>
         agents.listMine(caller, { workspaceId: caller.workspaceId }),
+      ),
+    ),
+  ),
+  delegate: McpToolAccess.actsAsCaller((input) =>
+    gated(
+      "delegate",
+      input,
+      onDelegations((delegations, actor) =>
+        delegations.delegate(actor, input).pipe(Effect.map(summary)),
+      ),
+    ),
+  ),
+  delegation_list: McpToolAccess.readsAsCaller(() =>
+    gated(
+      "delegation_list",
+      {},
+      onDelegations((delegations, actor) =>
+        delegations
+          .listForAgent(actor.workspaceId, actor.agentId)
+          .pipe(Effect.map((rows) => ({ delegations: rows.map(summary) }))),
+      ),
+    ),
+  ),
+  delegation_report: McpToolAccess.actsAsCaller((input) =>
+    gated(
+      "delegation_report",
+      input,
+      onDelegations((delegations, actor) =>
+        delegations.report(actor, input).pipe(Effect.map(summary)),
+      ),
+    ),
+  ),
+  delegation_cancel: McpToolAccess.actsAsCaller((input) =>
+    gated(
+      "delegation_cancel",
+      input,
+      onDelegations((delegations, actor) =>
+        delegations
+          .cancel(actor, input.delegationId)
+          .pipe(Effect.map((rows) => ({ canceled: rows.map((row) => row.id) }))),
       ),
     ),
   ),
