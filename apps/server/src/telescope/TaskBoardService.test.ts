@@ -168,7 +168,7 @@ it.layer(layer)("Telescope task board", (it) => {
         [
           ["Postgres", "superseded", 2, undefined],
           ["SQLite", "decided", 1, first.id],
-          ["pglite", "proposed", 1, first.id],
+          ["pglite", "superseded", 2, first.id],
         ],
       );
       const again = yield* board
@@ -196,8 +196,11 @@ it.layer(layer)("Telescope task board", (it) => {
       );
       const proposed = yield* board.listCommits(alice, { workspaceId: a, taskId: proposal.id });
       assert.deepStrictEqual(
-        proposed.commits.map((c) => c.changedFields),
-        [{ title: "pglite", text: "", status: "proposed", supersedes: first.id }],
+        proposed.commits.map((c) => [c.authorId, c.changedFields]),
+        [
+          [aliceId, { title: "pglite", text: "", status: "proposed", supersedes: first.id }],
+          [aliceId, { status: "superseded" }],
+        ],
       );
     }),
   );
@@ -219,6 +222,16 @@ it.layer(layer)("Telescope task board", (it) => {
         status: "proposed",
         supersedes: old.id,
       });
+      const propose = (title: string, supersedes: Telescope.DecisionId) =>
+        board.createDecision(alice, {
+          workspaceId: a,
+          title,
+          text: "",
+          status: "proposed",
+          supersedes,
+        });
+      yield* propose("pgvector", old.id);
+      yield* propose("WAL", proposal.id);
       yield* decide("SQLite", proposal.id);
 
       const foreign = yield* board.createDecision(alice, { workspaceId: b, title: "B", text: "" });
@@ -242,7 +255,9 @@ it.layer(layer)("Telescope task board", (it) => {
         ["Adopt stray", "decided"],
         ["Postgres", "superseded"],
         ["SQLite", "decided"],
+        ["WAL", "superseded"],
         ["pglite", "superseded"],
+        ["pgvector", "superseded"],
         ["stray", "superseded"],
       ]);
       assert.deepStrictEqual(yield* statuses(b), [["B", "decided"]]);
@@ -597,18 +612,29 @@ it.layer(layer)("Telescope task board", (it) => {
       const settled = yield* update(agent, kept.version, { title: "Agent plan" });
       assert.strictEqual(settled.title, "Agent plan");
 
-      // Deciding a member's counter-proposal retires the marked proposal but leaves the marker.
+      // Deciding a member's counter-proposal settles the marked proposal it replaces.
       const d4 = (yield* update(bob, 1, { title: "Plan E" })).conflict?.decisionId;
       assert.isDefined(d4);
-      const counter = { workspaceId: a, title: "Counter", text: "", supersedes: d4 };
-      const proposed = yield* board.createDecision(alice, { ...counter, status: "proposed" });
-      yield* decide(proposed.id, "Plan F");
-      const retired = yield* current;
-      assert.strictEqual(retired.conflictDecisionId, d4);
-      yield* update(alice, retired.version, { goalChain: ["Q5"] });
-      const reopened = yield* update(agent, retired.version, { goalChain: ["Q6"] });
-      assert.notStrictEqual(reopened.conflict?.decisionId, d4);
-      assert.isDefined(reopened.conflict);
+      const counter = yield* board.createDecision(alice, {
+        workspaceId: a,
+        title: "Counter",
+        text: "",
+        status: "proposed",
+        supersedes: d4,
+        options: [
+          { id: "keep", label: "Keep" },
+          { id: "incoming", label: "Incoming" },
+        ],
+      });
+      const answer = yield* decide(counter.id, "incoming");
+      const adopted = yield* current;
+      assert.deepStrictEqual([adopted.title, adopted.conflictDecisionId], ["Plan E", undefined]);
+      const { commits } = yield* board.listCommits(alice, { workspaceId: a, taskId: task.id });
+      assert.strictEqual(commits.at(-1)?.mergeReason, `settled by decision ${answer.id}`);
+      assert.deepStrictEqual(
+        (yield* decisions).filter((d) => d.status === "proposed"),
+        [],
+      );
     }),
   );
 });

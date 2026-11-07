@@ -500,17 +500,22 @@ const make = Effect.gen(function* () {
           return yield* forMember("A proposal to replace this decision waits for a member.");
       }
       if (status === "decided") {
-        // Deciding a proposal also retires what it proposed to replace: one step, no recursion.
+        // Deciding a proposal also retires what it proposed to replace, and each retired item's
+        // open proposals, which could no longer be decided: one step, no recursion.
         const target =
           old.status === "proposed" && old.supersedes !== undefined
             ? yield* findDecision(workspaceId, old.supersedes)
             : undefined;
         if (target?.status === "superseded")
           return yield* fail("conflict", "That decision has already been superseded.");
-        yield* retire(old);
-        if (target !== undefined) yield* retire(target);
-        if (old.conflict !== undefined)
-          yield* settleConflict(author, old, old.conflict, decision, at);
+        for (const item of target === undefined ? [old] : [old, target]) {
+          yield* retire(item);
+          if (item.conflict !== undefined)
+            yield* settleConflict(author, item, item.conflict, decision, at);
+          const where = { kind: "decision", supersedes: item.id, status: "proposed" };
+          const open = yield* db.select(workspaceId, "tasks", decodeDecisions, where);
+          yield* Effect.forEach(open, retire);
+        }
       }
     }
     yield* db.insert(workspaceId, "tasks", toColumns(decision, "item_id"));
