@@ -1476,6 +1476,7 @@
       "sourceControlProvidersEnvironmentsuffix": "Source control providers{{environmentSuffix}}",
       "createAToken": "Create a token",
       "token": "Token",
+      "labelToken": "{{label}} token",
       "noTokenSavedTheServerUses": "No token saved; the server uses {{tokenEnvVar}} or the {{cliName}} login.",
       "writingReview": "Writing & review",
       "sourceControlWritingStyle": "source control writing style",

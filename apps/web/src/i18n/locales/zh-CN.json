@@ -1476,6 +1476,7 @@
       "sourceControlProvidersEnvironmentsuffix": "源代码管理提供方{{environmentSuffix}}",
       "createAToken": "创建令牌",
       "token": "令牌",
+      "labelToken": "{{label}} 令牌",
       "noTokenSavedTheServerUses": "没有已保存的令牌；服务器使用 {{tokenEnvVar}} 或 {{cliName}} 登录。",
       "writingReview": "撰写与评审",
       "sourceControlWritingStyle": "源代码管理写作风格",
