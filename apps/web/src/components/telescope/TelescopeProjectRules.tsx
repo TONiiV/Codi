@@ -1,8 +1,10 @@
-import { useAtomValue } from "@effect/atom-react";
+import { RegistryContext, useAtomValue } from "@effect/atom-react";
 import * as ProjectRules from "@t3tools/client-runtime/telescope/projectRules";
 import { failureText } from "@t3tools/client-runtime/telescope/workspaces";
-import type { Telescope } from "@t3tools/contracts";
-import { useState, type ReactNode } from "react";
+import type { ProjectId, Telescope } from "@t3tools/contracts";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import { useContext, useState, type ReactNode } from "react";
 
 import { connectionAtomRuntime } from "../../connection/runtime";
 import { useEnvironmentQuery } from "../../state/query";
@@ -15,6 +17,7 @@ import { Label } from "../ui/label";
 import { Textarea } from "../ui/textarea";
 import { POWERS, powerSummary } from "./myTeamsShared";
 import { FormDialog } from "./TelescopeAccountDialogs";
+import { telescope } from "./telescopeState";
 import {
   QueryStatus,
   type RoutingNames,
@@ -23,7 +26,10 @@ import {
   useRoutingNames,
 } from "./TelescopeSettings";
 
-const projectRules = ProjectRules.createTelescopeProjectRuleAtoms(connectionAtomRuntime);
+const projectRules = ProjectRules.createTelescopeProjectRuleAtoms(
+  connectionAtomRuntime,
+  telescope.get,
+);
 
 function CheckRow(props: {
   checked: boolean;
@@ -169,6 +175,18 @@ export function ProjectRulesSection(props: Scoped) {
   const mayEdit = useAtomValue(projectRules.set.permissionAtom(environmentId)) && isAdmin;
   const names = useRoutingNames(environmentId, workspace);
   const [editing, setEditing] = useState<Telescope.ProjectRule | null>(null);
+  const [opening, setOpening] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const registry = useContext(RegistryContext);
+  const edit = async (projectId: ProjectId) => {
+    setOpening(true);
+    setError(null);
+    const target = { environmentId, input: { workspaceId: workspace.id, projectId } };
+    const exit = await Effect.runPromiseExit(projectRules.current(registry, target));
+    setOpening(false);
+    if (Exit.isSuccess(exit)) setEditing(exit.value ?? null);
+    else setError("读取项目规则失败，请检查连接后再试。");
+  };
   const rules = query.data?.rules ?? [];
   return (
     <SettingsSection id="telescope-project-rules" title="项目规则">
@@ -189,7 +207,12 @@ export function ProjectRulesSection(props: Scoped) {
                 <Badge variant="outline">默认</Badge>
               ) : null}
               {mayEdit ? (
-                <Button size="sm" variant="outline" onClick={() => setEditing(rule)}>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={opening}
+                  onClick={() => void edit(rule.projectId)}
+                >
                   修改
                 </Button>
               ) : null}
@@ -206,6 +229,7 @@ export function ProjectRulesSection(props: Scoped) {
           }
         />
       ) : null}
+      {error === null ? null : <StatusRow text={error} failed />}
       {editing === null ? null : (
         <ProjectRuleDialog
           {...props}

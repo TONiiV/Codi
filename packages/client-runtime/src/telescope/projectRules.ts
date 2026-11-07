@@ -1,6 +1,9 @@
 import { type EnvironmentId, type ProviderInstanceId, Telescope } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
-import type { Atom, AtomRegistry } from "effect/reactivity";
+import * as Exit from "effect/Exit";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
+import { type Atom, AtomRegistry } from "effect/reactivity";
 
 import type { EnvironmentRegistry } from "../connection/registry.ts";
 import {
@@ -26,6 +29,13 @@ const ALL_POWERS: Telescope.StandingPowers = {
   answerMembers: true,
   mergePRs: true,
 };
+
+const isWorkspaceError = Schema.is(Telescope.WorkspaceError);
+
+interface InWorkspace {
+  readonly environmentId: EnvironmentId;
+  readonly input: { readonly workspaceId: Telescope.WorkspaceId };
+}
 
 const isEmpty = (list: ReadonlyArray<string> | undefined) =>
   list === undefined || list.length === 0;
@@ -109,6 +119,8 @@ export function parseProjectRuleDraft(draft: ProjectRuleDraft) {
 
 export function createTelescopeProjectRuleAtoms<R, E>(
   runtime: Atom.AtomRuntime<EnvironmentRegistry | R, E>,
+  /** The workspace read that carries the caller's role, re-read when a save is refused for it. */
+  workspaceGet: (target: InWorkspace) => Atom.Atom<unknown>,
 ) {
   const list = createEnvironmentRpcQueryAtomFamily(runtime, {
     label: "telescope:project-rule:list",
@@ -116,20 +128,33 @@ export function createTelescopeProjectRuleAtoms<R, E>(
   });
   return {
     list,
+    /** Re-reads the list, so an editor opened on an old page starts from the server's rule. */
+    current: (
+      registry: AtomRegistry.AtomRegistry,
+      { environmentId, input }: InWorkspace & { input: Pick<Telescope.ProjectRule, "projectId"> },
+    ) => {
+      const rules = list({ environmentId, input: { workspaceId: input.workspaceId } });
+      registry.refresh(rules);
+      return AtomRegistry.getResult(registry, rules, { suspendOnWaiting: true }).pipe(
+        Effect.map((result) => result.rules.find((rule) => rule.projectId === input.projectId)),
+      );
+    },
     /** Also after a refusal: a project another admin unbound must leave the list. */
     set: createEnvironmentRpcCommand(runtime, {
       label: "telescope:project-rule:set",
       tag: WS_METHODS.projectRuleSet,
       onSettled: (
-        {
-          environmentId,
-          input,
-        }: { environmentId: EnvironmentId; input: { workspaceId: Telescope.WorkspaceId } },
+        { environmentId, input }: InWorkspace,
         registry: AtomRegistry.AtomRegistry,
+        exit,
       ) =>
-        Effect.sync(() =>
-          registry.refresh(list({ environmentId, input: { workspaceId: input.workspaceId } })),
-        ),
+        Effect.sync(() => {
+          const target = { environmentId, input: { workspaceId: input.workspaceId } };
+          registry.refresh(list(target));
+          const error = Option.getOrUndefined(Exit.findErrorOption(exit));
+          if (isWorkspaceError(error) && error.reason === "forbidden")
+            registry.refresh(workspaceGet(target));
+        }),
     }),
   };
 }
