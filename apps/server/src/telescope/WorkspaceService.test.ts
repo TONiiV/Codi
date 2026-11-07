@@ -4,13 +4,18 @@ import {
   AuthSessionId,
   AuthStandardClientScopes,
   EnvironmentId,
+  EventId,
   ProjectId,
+  Telescope,
 } from "@t3tools/contracts";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Schema from "effect/Schema";
 import * as TestClock from "effect/testing/TestClock";
 
+import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
+import * as ProjectStore from "../orchestration-v2/ProjectStore.ts";
 import * as AuthSessions from "../persistence/AuthSessions.ts";
 import { runMigrations } from "../persistence/Migrations.ts";
 import * as SqlitePersistence from "../persistence/Sqlite.ts";
@@ -20,20 +25,62 @@ import * as WorkspaceService from "./WorkspaceService.ts";
 const database = Layer.effectDiscard(runMigrations()).pipe(
   Layer.provideMerge(SqlitePersistence.layerMemory),
 );
-const layer = Layer.mergeAll(WorkspaceService.layer, TelescopeDb.layer, AuthSessions.layer).pipe(
+const LOCAL_ENVIRONMENT = EnvironmentId.make("env-local");
+const layer = Layer.mergeAll(
+  WorkspaceService.layer,
+  TelescopeDb.layer,
+  AuthSessions.layer,
+  ProjectStore.layer,
+).pipe(
   Layer.provideMerge(Layer.merge(database, NodeCrypto.layer)),
+  Layer.provide(
+    Layer.succeed(ServerEnvironment.ServerEnvironmentIdentity, {
+      getEnvironmentId: Effect.succeed(LOCAL_ENVIRONMENT),
+    }),
+  ),
 );
 
-const session = (name: string, proofKeyThumbprint?: string): WorkspaceService.Caller => ({
+const session = (name: string, proofKeyThumbprint?: string): WorkspaceService.SessionCaller => ({
   sessionId: AuthSessionId.make(`session-${name}`),
   subject: "one-time-token",
   ...(proofKeyThumbprint === undefined ? {} : { proofKeyThumbprint }),
 });
-const desktop = (name: string): WorkspaceService.Caller => ({
+const desktop = (name: string, subject = "desktop-bootstrap"): WorkspaceService.SessionCaller => ({
   sessionId: AuthSessionId.make(`session-${name}`),
-  subject: "desktop-bootstrap",
+  subject,
 });
 const OWNER = WorkspaceService.OWNER_MEMBER_ID;
+const runOf = (workspaceId: Telescope.WorkspaceId, memberId: string): WorkspaceService.Caller => ({
+  runId: Telescope.AgentRunId.make(`run-${memberId}`),
+  workspaceId,
+  memberId,
+});
+const seedProject = (projectId: ProjectId) =>
+  ProjectStore.ProjectStoreV2.pipe(
+    Effect.flatMap((projects) =>
+      projects.apply({
+        sequence: 1,
+        eventId: EventId.make(`event:${projectId}`),
+        aggregateKind: "project",
+        aggregateId: projectId,
+        occurredAt: "2026-01-01T00:00:00.000Z",
+        commandId: null,
+        causationEventId: null,
+        correlationId: null,
+        metadata: {},
+        type: "project.created",
+        payload: {
+          projectId,
+          title: "Local",
+          workspaceRoot: "/local",
+          defaultModelSelection: null,
+          scripts: [],
+          createdAt: "2026-01-01T00:00:00.000Z",
+          updatedAt: "2026-01-01T00:00:00.000Z",
+        },
+      }),
+    ),
+  );
 const reasonOf = <A, E extends { readonly _tag: string }, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(
     Effect.flip,
@@ -107,6 +154,15 @@ it.layer(layer)("WorkspaceService", (it) => {
         "forbidden",
       );
       assert.strictEqual(yield* reasonOf(service.bind(b, binding)), "forbidden");
+      const local = {
+        workspaceId,
+        environmentId: LOCAL_ENVIRONMENT,
+        projectId: ProjectId.make("local-project"),
+      };
+      assert.strictEqual(yield* reasonOf(service.bind(a, local)), "not_found");
+      yield* seedProject(local.projectId);
+      assert.deepStrictEqual(yield* service.bind(a, local), local);
+      yield* service.unbind(a, local);
       assert.strictEqual(
         yield* reasonOf(service.bind(a, { ...binding, leadSubjectId: "nobody" })),
         "not_found",
@@ -163,7 +219,10 @@ it.layer(layer)("WorkspaceService", (it) => {
       );
 
       yield* service.bind(a, { ...binding, leadSubjectId: bob.subjectId });
+      const bobRun = runOf(workspaceId, bob.subjectId);
+      assert.deepStrictEqual((yield* service.get(bobRun, { workspaceId })).self, bob);
       yield* service.revoke(a, { workspaceId, subjectId: bob.subjectId });
+      assert.strictEqual(yield* reasonOf(service.get(bobRun, { workspaceId })), "forbidden");
       assert.deepStrictEqual((yield* service.bindings(a, { workspaceId })).bindings, [binding]);
       assert.strictEqual(yield* reasonOf(service.members(b, { workspaceId })), "forbidden");
       assert.deepStrictEqual((yield* service.list(b, {})).workspaces, []);
@@ -172,6 +231,25 @@ it.layer(layer)("WorkspaceService", (it) => {
         yield* reasonOf(service.accept(b, { code: fresh.code, displayName: "Bob" })),
         "forbidden",
       );
+
+      const bobKey = { workspaceId, subjectId: bob.subjectId };
+      assert.strictEqual(yield* reasonOf(service.restore(b, bobKey)), "forbidden");
+      assert.deepStrictEqual(yield* service.restore(a, bobKey), bob);
+      assert.deepStrictEqual((yield* service.get(b, { workspaceId })).self, bob);
+      assert.deepStrictEqual(
+        [
+          yield* reasonOf(service.restore(a, bobKey)),
+          yield* reasonOf(service.restore(a, owner)),
+          yield* reasonOf(service.restore(a, { workspaceId, subjectId: "nobody" })),
+        ],
+        ["conflict", "conflict", "not_found"],
+      );
+      const carol = yield* service
+        .invite(a, { workspaceId, role: "member" })
+        .pipe(Effect.flatMap(({ code }) => service.accept(c, { code, displayName: "Carol" })));
+      const carolKey = { workspaceId, subjectId: carol.subjectId };
+      yield* service.revoke(a, carolKey);
+      assert.strictEqual(yield* reasonOf(service.restore(b, carolKey)), "forbidden");
     }),
   );
 
@@ -248,6 +326,15 @@ it.layer(layer)("WorkspaceService", (it) => {
         displayName: "Pat",
       });
       assert.strictEqual(desk.createdBy, OWNER);
+      for (const subject of [
+        "desktop-bootstrap",
+        "administrative-bootstrap",
+        "reusable-dev-token",
+        "reusable-dev-token-child",
+      ]) {
+        const { self } = yield* service.get(desktop(subject, subject), { workspaceId: desk.id });
+        assert.deepStrictEqual([subject, self.subjectId], [subject, OWNER]);
+      }
       assert.deepStrictEqual((yield* service.list(paired, {})).workspaces, [company]);
 
       const listed = (yield* service.list(launch2, {})).workspaces.map((w) => w.id);
@@ -271,6 +358,26 @@ it.layer(layer)("WorkspaceService", (it) => {
         yield* reasonOf(service.accept(launch2, { code: code.code, displayName: "Dev" })),
         "conflict",
       );
+
+      const run = runOf(desk.id, OWNER);
+      assert.strictEqual((yield* service.get(run, { workspaceId: desk.id })).self.subjectId, OWNER);
+      const before = yield* service.list(launch2, {});
+      const companyMembers = yield* service.members(paired, { workspaceId: company.id });
+      assert.deepStrictEqual(
+        [
+          yield* reasonOf(service.get(run, { workspaceId: company.id })),
+          yield* reasonOf(service.invite(run, { workspaceId: desk.id, role: "member" })),
+          yield* reasonOf(service.create(run, { kind: "personal", name: "Run", displayName: "R" })),
+          yield* reasonOf(service.accept(run, { code: code.code, displayName: "Run" })),
+        ],
+        ["forbidden", "forbidden", "forbidden", "forbidden"],
+      );
+      assert.deepStrictEqual(yield* service.list(launch2, {}), before);
+      assert.deepStrictEqual(
+        yield* service.members(paired, { workspaceId: company.id }),
+        companyMembers,
+      );
+      yield* service.accept(session("later"), { code: code.code, displayName: "Later" });
     }),
   );
 
@@ -314,6 +421,13 @@ it.layer(layer)("WorkspaceService", (it) => {
       const [first, second] = [session("browser-1"), session("browser-2")];
       yield* sessions.create(record(first.sessionId));
       const browser = yield* join(first, "Bea");
+      const { id: sideId } = yield* service.create(owner, {
+        kind: "personal",
+        name: "Side",
+        displayName: "Dev",
+      });
+      const sideCode = yield* service.invite(owner, { workspaceId: sideId, role: "member" });
+      const side = yield* service.accept(first, { code: sideCode.code, displayName: "Bea" });
       const replaced = yield* sessions.createReplacingActive({
         session: record(second.sessionId),
         revokedAt: issuedAt,
@@ -321,10 +435,11 @@ it.layer(layer)("WorkspaceService", (it) => {
       });
       assert.deepStrictEqual(replaced, [first.sessionId]);
       assert.deepStrictEqual(
-        (yield* service.list(second, {})).workspaces.map((w) => w.id),
-        [workspaceId],
+        (yield* service.list(second, {})).workspaces.map((w) => w.id).toSorted(),
+        [workspaceId, sideId].toSorted(),
       );
       assert.deepStrictEqual((yield* service.get(second, { workspaceId })).self, browser);
+      assert.deepStrictEqual((yield* service.get(second, { workspaceId: sideId })).self, side);
       assert.strictEqual(yield* reasonOf(service.get(first, { workspaceId })), "forbidden");
 
       const db = yield* TelescopeDb.TelescopeDb;
@@ -333,6 +448,41 @@ it.layer(layer)("WorkspaceService", (it) => {
         yield* reasonOf(db.insert(workspaceId, "member_sessions", link)),
         "PersistenceSqlError",
       );
+
+      // Replacing by subject can fold several linked sessions into one; none is left dangling.
+      const [third, fourth, fifth] = [
+        session("browser-3"),
+        session("browser-4"),
+        session("browser-5"),
+      ];
+      for (const who of [third, fourth]) yield* sessions.create(record(who.sessionId));
+      const others = [yield* join(third, "Xia"), yield* join(fourth, "Yan")];
+      const kept = session("browser-kept");
+      yield* sessions.create({ ...record(kept.sessionId), subject: "other-subject" });
+      const keptMember = yield* join(kept, "Zoe");
+      const folded = yield* sessions.createReplacingActive({
+        session: record(fifth.sessionId),
+        revokedAt: issuedAt,
+      });
+      assert.sameMembers(
+        [...folded],
+        [second, third, fourth].map((who) => who.sessionId),
+      );
+      const self = (yield* service.get(fifth, { workspaceId })).self.subjectId;
+      assert.include(
+        [browser, ...others].map((member) => member.subjectId),
+        self,
+      );
+      assert.deepStrictEqual((yield* service.get(fifth, { workspaceId: sideId })).self, side);
+      assert.deepStrictEqual((yield* service.get(kept, { workspaceId })).self, keptMember);
+      assert.deepStrictEqual((yield* service.get(repaired, { workspaceId })).self, phone);
+      const decodeKeys = Schema.decodeUnknownEffect(
+        Schema.Array(Schema.Struct({ device_key: Schema.String })),
+      );
+      for (const id of [workspaceId, sideId]) {
+        const keys = yield* db.select(id, "member_sessions", decodeKeys);
+        for (const { device_key } of keys) assert.notInclude(folded, device_key);
+      }
     }),
   );
 });

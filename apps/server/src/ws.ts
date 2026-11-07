@@ -127,12 +127,19 @@ import * as DocumentText from "./provider/DocumentText.ts";
 import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
 import * as ScheduledTasks from "./scheduledTasks/ScheduledTaskService.ts";
 import * as TelescopeWorkspaces from "./telescope/WorkspaceService.ts";
+import * as TelescopeWorkspaceData from "./telescope/WorkspaceDataService.ts";
 import * as TelescopeBoard from "./telescope/TaskBoardService.ts";
+import * as TelescopeBoardChanges from "./telescope/BoardChanges.ts";
 import * as TelescopeRuns from "./telescope/RunRecordService.ts";
 import * as TelescopeTokenSaver from "./telescope/tokensaver/TokenSaverService.ts";
+import * as TelescopeGrants from "./telescope/GrantService.ts";
+import * as TelescopeToolGateway from "./telescope/ToolGateway.ts";
 import { PersistenceDecodeError, PersistenceSqlError } from "./persistence/Errors.ts";
 import * as TelescopeAgents from "./telescope/AgentService.ts";
 import * as TelescopeWakeQueue from "./telescope/WakeQueueService.ts";
+import * as TelescopeMemory from "./telescope/MemoryService.ts";
+import * as TelescopeAttribution from "./telescope/AttributionService.ts";
+import * as TelescopeRouting from "./telescope/RoutingService.ts";
 import * as SecretRequests from "./secrets/SecretRequests.ts";
 import * as GuestShareService from "./guest/GuestShareService.ts";
 import {
@@ -1470,11 +1477,18 @@ export const layerWsRpc = (
       const providerSessionManager = yield* ProviderSessionManager.ProviderSessionManagerV2;
       const scheduledTasks = yield* ScheduledTasks.ScheduledTaskService;
       const telescope = yield* TelescopeWorkspaces.WorkspaceService;
+      const telescopeData = yield* TelescopeWorkspaceData.WorkspaceDataService;
       const telescopeAgents = yield* TelescopeAgents.AgentService;
       const telescopeRuns = yield* TelescopeRuns.RunRecordService;
       const telescopeWakes = yield* TelescopeWakeQueue.WakeQueueService;
+      const telescopeGrants = yield* TelescopeGrants.GrantService;
+      const telescopeGateway = yield* TelescopeToolGateway.ToolGateway;
+      const telescopeMemory = yield* TelescopeMemory.MemoryService;
+      const telescopeAttribution = yield* TelescopeAttribution.AttributionService;
+      const telescopeRouting = yield* TelescopeRouting.RoutingService;
       const caller = currentSession;
       const board = yield* TelescopeBoard.TaskBoardService;
+      const boardChanges = yield* TelescopeBoardChanges.BoardChanges;
       const tokenSaver = yield* TelescopeTokenSaver.TokenSaverService;
       const actor = { caller };
       const secretRequests = yield* SecretRequests.SecretRequests;
@@ -2391,6 +2405,10 @@ export const layerWsRpc = (
           telescopeStorage(telescope.list(caller, input)),
         [Telescope.WS_METHODS.workspaceGet]: (input) =>
           telescopeStorage(telescope.get(caller, input)),
+        [Telescope.WS_METHODS.workspaceExport]: (input) =>
+          telescopeStorage(telescopeData.export(caller, input)),
+        [Telescope.WS_METHODS.workspaceDelete]: (input) =>
+          telescopeStorage(telescopeData.delete(caller, input)),
         [Telescope.WS_METHODS.memberInvite]: (input) =>
           telescopeStorage(telescope.invite(caller, input)),
         [Telescope.WS_METHODS.memberLinkCode]: (input) =>
@@ -2403,6 +2421,8 @@ export const layerWsRpc = (
           telescopeStorage(telescope.setRole(caller, input)),
         [Telescope.WS_METHODS.memberRevoke]: (input) =>
           telescopeStorage(telescope.revoke(caller, input)),
+        [Telescope.WS_METHODS.memberRestore]: (input) =>
+          telescopeStorage(telescope.restore(caller, input)),
         [Telescope.WS_METHODS.projectBind]: (input) =>
           telescopeStorage(telescope.bind(caller, input)),
         [Telescope.WS_METHODS.projectUnbind]: (input) =>
@@ -2423,6 +2443,10 @@ export const layerWsRpc = (
           telescopeStorage(board.listDecisions(actor, input)),
         [Telescope.WS_METHODS.commitList]: (input) =>
           telescopeStorage(board.listCommits(actor, input)),
+        [Telescope.WS_METHODS.boardWatch]: (input) =>
+          boardChanges
+            .watch(caller, input)
+            .pipe(Stream.catch((error) => Stream.fromEffect(telescopeStorage(Effect.fail(error))))),
         [Telescope.WS_METHODS.agentListMine]: (input) =>
           telescopeStorage(telescopeAgents.listMine(caller, input)),
         [Telescope.WS_METHODS.agentGet]: (input) =>
@@ -2447,10 +2471,37 @@ export const layerWsRpc = (
           telescopeStorage(board.heartbeatLease(actor, input)),
         [Telescope.WS_METHODS.leaseRelease]: (input) =>
           telescopeStorage(board.releaseLease(actor, input)),
+        [Telescope.WS_METHODS.leaseGet]: (input) => telescopeStorage(board.getLease(actor, input)),
         [Telescope.WS_METHODS.wakeList]: (input) =>
           telescopeStorage(telescopeWakes.list(caller, input)),
         [Telescope.WS_METHODS.tokenSaverRun]: (input) =>
           telescopeStorage(tokenSaver.runWeekly(actor, input)),
+        [Telescope.WS_METHODS.grantExplain]: (input) =>
+          telescopeStorage(telescopeGrants.explainFor(caller, input)),
+        [Telescope.WS_METHODS.grantAuditList]: (input) =>
+          telescopeStorage(telescopeGrants.auditList(caller, input)),
+        [Telescope.WS_METHODS.budgetSet]: (input) =>
+          telescopeStorage(telescopeGateway.setBudget(caller, input)),
+        [Telescope.WS_METHODS.killSwitchSet]: (input) =>
+          telescopeStorage(telescopeGateway.setKillSwitch(caller, input)),
+        [Telescope.WS_METHODS.governanceGet]: (input) =>
+          telescopeStorage(telescopeGateway.governance(caller, input)),
+        [Telescope.WS_METHODS.memorySearch]: (input) =>
+          telescopeStorage(telescopeMemory.search({ session: caller }, input)),
+        [Telescope.WS_METHODS.memoryWrite]: (input) =>
+          telescopeStorage(telescopeMemory.write({ session: caller }, input)),
+        [Telescope.WS_METHODS.memoryPin]: (input) =>
+          telescopeStorage(telescopeMemory.pin({ session: caller }, input)),
+        [Telescope.WS_METHODS.dashboardSummary]: (input) =>
+          telescopeStorage(telescopeAttribution.summary(caller, input)),
+        [Telescope.WS_METHODS.routingList]: (input) =>
+          telescopeStorage(telescopeRouting.list(caller, input)),
+        [Telescope.WS_METHODS.routingSet]: (input) =>
+          telescopeStorage(telescopeRouting.set(caller, input)),
+        [Telescope.WS_METHODS.routingDelete]: (input) =>
+          telescopeStorage(telescopeRouting.remove(caller, input)),
+        [Telescope.WS_METHODS.routingResolve]: (input) =>
+          telescopeStorage(telescopeRouting.resolveFor(caller, input)),
         [WS_METHODS.guestShareCreate]: (input) =>
           Effect.annotateCurrentSpan({ "orchestration_v2.thread_id": input.threadId }).pipe(
             Effect.andThen(guestShares.create(input)),
@@ -3612,6 +3663,13 @@ export const layer = Layer.unwrap(
     const telescopeRuns = yield* TelescopeRuns.RunRecordService;
     const telescopeWakes = yield* TelescopeWakeQueue.WakeQueueService;
     const telescopeTokenSaver = yield* TelescopeTokenSaver.TokenSaverService;
+    const telescopeGrants = yield* TelescopeGrants.GrantService;
+    const telescopeGateway = yield* TelescopeToolGateway.ToolGateway;
+    const telescopeMemory = yield* TelescopeMemory.MemoryService;
+    const telescopeAttribution = yield* TelescopeAttribution.AttributionService;
+    const telescopeRouting = yield* TelescopeRouting.RoutingService;
+    const telescopeBoardChanges = yield* TelescopeBoardChanges.BoardChanges;
+    const telescopeData = yield* TelescopeWorkspaceData.WorkspaceDataService;
     const sql = yield* SqlClient.SqlClient;
     return HttpRouter.add(
       "GET",
@@ -3709,7 +3767,20 @@ export const layer = Layer.unwrap(
               Layer.provide(Layer.succeed(TelescopeRuns.RunRecordService, telescopeRuns)),
               Layer.provide(Layer.succeed(TelescopeWakeQueue.WakeQueueService, telescopeWakes)),
               Layer.provide(
-                Layer.succeed(TelescopeTokenSaver.TokenSaverService, telescopeTokenSaver),
+                Layer.mergeAll(
+                  Layer.succeed(TelescopeTokenSaver.TokenSaverService, telescopeTokenSaver),
+                  Layer.succeed(TelescopeAttribution.AttributionService, telescopeAttribution),
+                  Layer.succeed(TelescopeBoardChanges.BoardChanges, telescopeBoardChanges),
+                  Layer.succeed(TelescopeWorkspaceData.WorkspaceDataService, telescopeData),
+                ),
+              ),
+              Layer.provide(
+                Layer.mergeAll(
+                  Layer.succeed(TelescopeGrants.GrantService, telescopeGrants),
+                  Layer.succeed(TelescopeToolGateway.ToolGateway, telescopeGateway),
+                  Layer.succeed(TelescopeMemory.MemoryService, telescopeMemory),
+                  Layer.succeed(TelescopeRouting.RoutingService, telescopeRouting),
+                ),
               ),
               Layer.provide(
                 SourceControlDiscovery.layer.pipe(

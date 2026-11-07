@@ -2,7 +2,6 @@ import * as Schema from "effect/Schema";
 
 import {
   AgentId,
-  AuditEntryId,
   Count,
   GrantId,
   OnBehalfOf,
@@ -31,19 +30,6 @@ export const Grant = Schema.Struct({
 });
 export type Grant = typeof Grant.Type;
 
-export const AuditEntry = Schema.Struct({
-  id: AuditEntryId,
-  workspaceId: WorkspaceId,
-  grantId: GrantId,
-  onBehalfOf: OnBehalfOf,
-  tool: Text,
-  argsRedacted: Schema.Json,
-  outcome: Schema.Literals(["allowed", "denied"]),
-  reason: Schema.optionalKey(Schema.String),
-  at: Timestamp,
-});
-export type AuditEntry = typeof AuditEntry.Type;
-
 export const BudgetScope = Schema.Literals(["company", "project", "agent", "person"]);
 
 export const Budget = Schema.Struct({
@@ -52,11 +38,23 @@ export const Budget = Schema.Struct({
   scopeId: Text,
   limitTokens: Schema.optionalKey(Count),
   limitUsd: Schema.optionalKey(Usd),
+  /** Tool calls the gateway lets through at this level; it counts each one it allows. */
+  limitCalls: Schema.optionalKey(Count),
   usedTokens: Count,
   usedUsd: Usd,
+  usedCalls: Count,
   paused: Schema.Boolean,
 });
 export type Budget = typeof Budget.Type;
+
+/** `scopeId` is a project, agent or member id; a company budget always uses the workspace id. */
+export const BudgetSetInput = Schema.Struct({
+  workspaceId: WorkspaceId,
+  scope: BudgetScope,
+  scopeId: Text,
+  /** Absent removes the limit; the count carries on. */
+  limitCalls: Schema.optionalKey(Count),
+});
 
 export const KillSwitch = Schema.Struct({
   workspaceId: WorkspaceId,
@@ -66,3 +64,15 @@ export const KillSwitch = Schema.Struct({
   at: Timestamp,
 });
 export type KillSwitch = typeof KillSwitch.Type;
+
+/** `paused` and `terminated` refuse the agent's next tool call; `running` resumes it. */
+export const KillSwitchSetInput = Schema.Struct({
+  workspaceId: WorkspaceId,
+  agentId: AgentId,
+  state: KillSwitch.fields.state,
+});
+
+export const GovernanceState = Schema.Struct({
+  budgets: Schema.Array(Budget),
+  killSwitches: Schema.Array(KillSwitch),
+});

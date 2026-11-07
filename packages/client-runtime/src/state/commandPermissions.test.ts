@@ -14,6 +14,8 @@ import {
   AuthPreviewOperateScope,
   AuthSettingsWriteScope,
   AuthSourceControlWriteScope,
+  AuthTelescopeAdminScope,
+  Telescope,
   ThreadId,
   EnvironmentId,
   ORCHESTRATION_V2_WS_METHODS,
@@ -30,7 +32,10 @@ import * as Layer from "effect/Layer";
 import { Atom, AtomRegistry, AsyncResult } from "effect/reactivity";
 import { EnvironmentRegistry } from "../connection/registry.ts";
 import { createCommandPermissions } from "./commandPermissions.ts";
-import { createEnvironmentRpcCommand } from "./runtime.ts";
+import {
+  createEnvironmentGuardedRpcQueryAtomFamily,
+  createEnvironmentRpcCommand,
+} from "./runtime.ts";
 import { AVAILABLE_CONNECTION_STATE, BearerConnectionTarget } from "../connection/model.ts";
 import { createPeerLinkEnvironmentAtoms } from "./peerLinks.ts";
 
@@ -564,4 +569,62 @@ it.effect("rejects protected unary and streamed RPCs outside a guarded command",
     expect(streamed._tag).toBe("EnvironmentAuthorizationError");
     expect(writes).toBe(0);
   }),
+);
+
+it.effect(
+  "refuses a guarded read before sending it, and sends it once the session has the scope",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const registry = yield* setup;
+        const get = vi.fn(() => Effect.succeed({ budgets: [], killSwitches: [] }));
+        const client = { [Telescope.WS_METHODS.governanceGet]: get };
+        const supervisor = {
+          target: new BearerConnectionTarget({
+            environmentId: env,
+            label: "Test",
+            connectionId: "t",
+          }),
+          session: yield* SubscriptionRef.make(Option.some({ client } as unknown as RpcSession)),
+          state: yield* SubscriptionRef.make({
+            ...AVAILABLE_CONNECTION_STATE,
+            phase: "connected" as const,
+          }),
+        } as EnvironmentSupervisor["Service"];
+        const connected = Atom.runtime(
+          Layer.succeed(EnvironmentRegistry, {
+            run: (_id, effect) => Effect.provideService(effect, EnvironmentSupervisor, supervisor),
+            followStream: (_id, stream) =>
+              Stream.provideService(stream, EnvironmentSupervisor, supervisor),
+          } as EnvironmentRegistry["Service"]),
+        );
+        const governance = createEnvironmentGuardedRpcQueryAtomFamily(connected, {
+          label: "test.governance",
+          tag: Telescope.WS_METHODS.governanceGet,
+        });
+        const workspaceId = Telescope.WorkspaceId.make("ws");
+        const query = governance.query({ environmentId: env, input: { workspaceId } });
+        const read = AtomRegistry.getResult(registry, query, { suspendOnWaiting: true });
+        registry.set(sessions(env), AsyncResult.success(grant(true)));
+        expect(registry.get(governance.permissionAtom(env))).toBe(false);
+        registry.mount(query);
+        expect(yield* Effect.flip(read)).toMatchObject({
+          _tag: "EnvironmentAuthorizationError",
+          requiredPermission: AuthTelescopeAdminScope,
+        });
+        expect(get).not.toHaveBeenCalled();
+        registry.set(
+          sessions(env),
+          AsyncResult.success({
+            ...grant(false),
+            scopes: [AuthTelescopeAdminScope],
+            permissions: [AuthTelescopeAdminScope],
+          }),
+        );
+        expect(registry.get(governance.permissionAtom(env))).toBe(true);
+        registry.refresh(query);
+        expect(yield* read).toEqual({ budgets: [], killSwitches: [] });
+        expect(get).toHaveBeenCalledExactlyOnceWith({ workspaceId });
+      }),
+    ),
 );

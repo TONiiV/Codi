@@ -1,4 +1,7 @@
+import { Telescope } from "@t3tools/contracts";
 import { useLocation } from "@tanstack/react-router";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
 import {
   GitBranchIcon,
   LayoutDashboardIcon,
@@ -54,8 +57,47 @@ export const TELESCOPE_VIEWS = [
 
 export type TelescopeView = (typeof TELESCOPE_VIEWS)[number]["id"];
 
-export function parseTelescopeView(raw: unknown): TelescopeView {
+function parseTelescopeView(raw: unknown): TelescopeView {
   return TELESCOPE_VIEWS.find((view) => view.id === raw)?.id ?? "chats";
+}
+
+export type TasksLayout = "table" | "board";
+
+/** The tasks layout rides along every Telescope URL, so switching views keeps it. */
+type TelescopeSearch = {
+  readonly view: TelescopeView;
+  readonly layout?: "board";
+  /** The task whose detail drawer is open. */
+  readonly task?: Telescope.TaskId;
+  /** The agent whose chat is open in 对话. */
+  readonly agent?: Telescope.AgentId;
+};
+
+const decodeTaskId = Schema.decodeUnknownOption(Telescope.TaskId);
+const decodeAgentId = Schema.decodeUnknownOption(Telescope.AgentId);
+
+export function telescopeSearch(
+  view: TelescopeView,
+  layout: TasksLayout,
+  task?: Telescope.TaskId,
+  agent?: Telescope.AgentId,
+): TelescopeSearch {
+  return {
+    view,
+    ...(layout === "board" ? { layout } : {}),
+    ...(task === undefined ? {} : { task }),
+    ...(agent === undefined ? {} : { agent }),
+  };
+}
+
+export function parseTelescopeSearch(raw: Record<string, unknown>): TelescopeSearch {
+  const layout = raw.layout === "board" ? "board" : "table";
+  return telescopeSearch(
+    parseTelescopeView(raw.view),
+    layout,
+    Option.getOrUndefined(decodeTaskId(raw.task)),
+    Option.getOrUndefined(decodeAgentId(raw.agent)),
+  );
 }
 
 export function telescopeViewEntry(view: TelescopeView) {
@@ -63,19 +105,19 @@ export function telescopeViewEntry(view: TelescopeView) {
 }
 
 /**
- * The Telescope view on screen: its own route, or the route a Settings or Usage modal was opened
- * from, so the shell stays put behind the modal.
+ * The Telescope search in effect: its own route's, or that of the route a Settings or Usage modal
+ * was opened from, so the shell stays put behind the modal.
  */
-export function telescopeViewAt(
+export function telescopeSearchAt(
   pathname: string,
-  searchView: unknown,
+  search: Record<string, unknown>,
   modalReturnHref: string | null,
-): TelescopeView | null {
-  if (pathname === TELESCOPE_PATH) return parseTelescopeView(searchView);
+): TelescopeSearch | null {
+  if (pathname === TELESCOPE_PATH) return parseTelescopeSearch(search);
   if (!isAppModalPage(pathname) || modalReturnHref === null) return null;
   const opener = new URL(modalReturnHref, "http://codi.local");
   return opener.pathname === TELESCOPE_PATH
-    ? parseTelescopeView(opener.searchParams.get("view"))
+    ? parseTelescopeSearch(Object.fromEntries(opener.searchParams))
     : null;
 }
 
@@ -83,6 +125,29 @@ export function telescopeViewAt(
 export function useTelescopeView(): TelescopeView | null {
   return useLocation({
     select: (location) =>
-      telescopeViewAt(location.pathname, location.search.view, peekAppModalReturnHref()),
+      telescopeSearchAt(location.pathname, location.search, peekAppModalReturnHref())?.view ?? null,
+  });
+}
+
+export function useTasksLayout(): TasksLayout {
+  return useLocation({
+    select: (location) =>
+      telescopeSearchAt(location.pathname, location.search, peekAppModalReturnHref())?.layout ??
+      "table",
+  });
+}
+
+export function useTaskDrawerId(): Telescope.TaskId | null {
+  return useLocation({
+    select: (location) =>
+      telescopeSearchAt(location.pathname, location.search, peekAppModalReturnHref())?.task ?? null,
+  });
+}
+
+export function useChatAgentId(): Telescope.AgentId | null {
+  return useLocation({
+    select: (location) =>
+      telescopeSearchAt(location.pathname, location.search, peekAppModalReturnHref())?.agent ??
+      null,
   });
 }

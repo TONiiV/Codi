@@ -1,10 +1,22 @@
 import { EnvironmentId, ProjectId, Telescope } from "@t3tools/contracts";
-import { describe, expect, it } from "vite-plus/test";
+import * as Cause from "effect/Cause";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { AsyncResult, Atom, AtomRegistry } from "effect/reactivity";
+import { describe, expect, it } from "@effect/vitest";
+import { vi } from "vite-plus/test";
 
+import { EnvironmentRegistry } from "../connection/registry.ts";
 import {
+  createTelescopeWorkspaceAtoms,
   boundWorkspaceIds,
+  canManageMember,
+  dashboardListCounts,
+  failureText,
+  hasNoWorkspace,
   hiddenOutsideWorkspace,
   resolveCurrentWorkspace,
+  WORKSPACE_ERROR_TEXT,
   workspacesToLeave,
 } from "./workspaces.ts";
 
@@ -32,6 +44,15 @@ describe("telescope current workspace", () => {
     expect(resolveCurrentWorkspace(workspaces, Telescope.WorkspaceId.make("gone"))?.id).toBe("a");
     expect(resolveCurrentWorkspace(workspaces, null)?.id).toBe("a");
     expect(resolveCurrentWorkspace([], Telescope.WorkspaceId.make("a"))).toBeNull();
+  });
+
+  it.each([
+    ["without an environment", null, null, true],
+    ["while the list loads or failed", local, null, false],
+    ["with an empty list", local, { workspaces: [] }, true],
+    ["with a workspace", local, { workspaces: [workspace("a")] }, false],
+  ] as const)("knows there is no workspace %s", (_name, environmentId, list, expected) => {
+    expect(hasNoWorkspace(environmentId, list)).toBe(expected);
   });
 });
 
@@ -65,5 +86,154 @@ describe("telescope project visibility", () => {
     const own = [workspace("a"), workspace("b")];
     expect(workspacesToLeave(both, b, own)).toEqual([a]);
     expect(workspacesToLeave(both, null, own)).toEqual([a, b]);
+  });
+});
+
+describe("telescope member management", () => {
+  const member = (
+    subjectId: string,
+    role: Telescope.WorkspaceRole,
+    revokedAt?: string,
+  ): Telescope.Member => ({
+    workspaceId: Telescope.WorkspaceId.make("a"),
+    subjectId,
+    displayName: subjectId,
+    role,
+    joinedAt: "2026-11-06T00:00:00.000Z",
+    ...(revokedAt === undefined ? {} : { revokedAt }),
+  });
+  const admin = member("admin", "admin");
+  const gone = "2026-11-07T00:00:00.000Z";
+
+  it.each([
+    ["an admin manages a member", admin, member("pm", "member"), true],
+    ["an admin manages another admin", admin, member("other", "admin"), true],
+    ["an admin restores a revoked member", admin, member("pm", "member", gone), true],
+    [
+      "nobody manages the environment owner",
+      admin,
+      member(Telescope.OWNER_MEMBER_ID, "admin"),
+      false,
+    ],
+    ["an admin does not manage themselves", admin, admin, false],
+    [
+      "a project lead manages nobody",
+      member("lead", "project_lead"),
+      member("pm", "member"),
+      false,
+    ],
+    ["a revoked admin manages nobody", member("x", "admin", gone), member("pm", "member"), false],
+    ["an unknown caller manages nobody", null, member("pm", "member"), false],
+  ] as const)("%s", (_name, self, target, expected) => {
+    expect(canManageMember(self, target)).toBe(expected);
+  });
+});
+
+describe("telescope command failure text", () => {
+  const refused = (reason: Telescope.WorkspaceError["reason"]) =>
+    AsyncResult.failure(
+      Cause.fail(new Telescope.WorkspaceError({ reason, message: "server text in English" })),
+    );
+  const join = { ...WORKSPACE_ERROR_TEXT, not_found: "邀请码无效。" };
+
+  it.each([
+    ["success", AsyncResult.success({}), undefined, null],
+    ["forbidden", refused("forbidden"), undefined, "你没有权限做这件事。"],
+    ["conflict", refused("conflict"), undefined, "和当前状态冲突，请刷新后再试。"],
+    ["invalid", refused("invalid"), undefined, "请求内容无效，请检查后重试。"],
+    ["not_found with custom copy", refused("not_found"), join, "邀请码无效。"],
+    [
+      "dropped connection",
+      AsyncResult.failure(Cause.interrupt(115)),
+      undefined,
+      "连接已断开，请检查连接后重试。",
+    ],
+    [
+      "defect",
+      AsyncResult.failure(Cause.die(new Error("socket closed"))),
+      undefined,
+      "请求失败，请检查连接后再试。",
+    ],
+    [
+      "unknown typed error",
+      AsyncResult.failure(Cause.fail({ _tag: "Other" })),
+      undefined,
+      "请求失败，请检查连接后再试。",
+    ],
+  ] as const)("%s", (_name, result, text, expected) => {
+    expect(failureText(result, text)).toBe(expected);
+  });
+});
+
+describe("telescope switchTo", () => {
+  it.effect("refreshes the workspace list and binding summary, then remembers the workspace", () =>
+    Effect.gen(function* () {
+      const runtime = Atom.runtime(
+        Layer.succeed(EnvironmentRegistry, {} as EnvironmentRegistry["Service"]),
+      );
+      const atoms = createTelescopeWorkspaceAtoms(runtime, { read: () => null, write: () => {} });
+      const registry = AtomRegistry.make();
+      const refresh = vi.spyOn(registry, "refresh");
+      const target = { environmentId: local, input: {} };
+      yield* atoms.switchTo(target, registry, Telescope.WorkspaceId.make("b"));
+      expect(refresh).toHaveBeenCalledWith(atoms.list(target));
+      expect(refresh).toHaveBeenCalledWith(atoms.bindingSummary(target));
+      expect(registry.get(atoms.storedWorkspaceIdAtom)).toBe("b");
+      registry.dispose();
+    }),
+  );
+});
+
+describe("telescope dashboard counts", () => {
+  const task: Telescope.DashboardTask = {
+    id: Telescope.TaskId.make("task"),
+    title: "task",
+    status: "todo",
+    statusSince: "2026-11-06T00:00:00.000Z",
+  };
+  const run: Telescope.DashboardRun = {
+    id: Telescope.AgentRunId.make("run"),
+    agentId: Telescope.AgentId.make("agent"),
+    agentName: "agent",
+    startedAt: "2026-11-06T00:00:00.000Z",
+    calls: 0,
+    tokens: { input: 0, cachedInput: 0, cacheCreation: 0, output: 0 },
+  };
+  const summary = (
+    openTasks: Telescope.DashboardSummary["openTasks"],
+    tasks: number,
+    openRuns: number,
+    runs: number,
+  ): Telescope.DashboardSummary => ({
+    generatedAt: "2026-11-06T00:00:00.000Z",
+    openTasks,
+    tasks: Array.from({ length: tasks }, () => task),
+    openRuns,
+    runs: Array.from({ length: runs }, () => run),
+    wakes: { queued: 0, running: 0 },
+    pendingDecisions: 0,
+  });
+
+  it.each([
+    {
+      name: "lists hold everything",
+      input: summary({ todo: 1, in_progress: 1, in_review: 0, needs_decision: 1 }, 3, 2, 2),
+      tasks: { total: 3, shown: 3 },
+      runs: { total: 2, shown: 2 },
+    },
+    {
+      name: "capped lists count past the cap",
+      input: summary({ todo: 90, in_progress: 20, in_review: 5, needs_decision: 3 }, 100, 73, 50),
+      tasks: { total: 118, shown: 100 },
+      runs: { total: 73, shown: 50 },
+    },
+    {
+      name: "nothing open",
+      input: summary({ todo: 0, in_progress: 0, in_review: 0, needs_decision: 0 }, 0, 0, 0),
+      tasks: { total: 0, shown: 0 },
+      runs: { total: 0, shown: 0 },
+    },
+  ])("$name", ({ input, tasks, runs }) => {
+    expect(dashboardListCounts(input)).toEqual({ tasks, runs });
   });
 });

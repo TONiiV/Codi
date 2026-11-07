@@ -8,6 +8,7 @@ import type * as Rpc from "effect/rpc/Rpc";
 import * as Schema from "effect/Schema";
 
 import type { PersistenceDecodeError, PersistenceSqlError } from "../persistence/Errors.ts";
+import * as BoardChanges from "./BoardChanges.ts";
 import { mergeStale } from "./TaskMerge.ts";
 import * as TelescopeDb from "./TelescopeDb.ts";
 import * as WorkspaceService from "./WorkspaceService.ts";
@@ -86,11 +87,20 @@ const sameJson = (a: unknown, b: unknown) =>
   JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
 
 const LEASE_TTL = { minutes: 2 };
+// An agent renews only between tool calls, so its lease outlasts a long step (D59).
+const AGENT_LEASE_TTL = { minutes: 15 };
+const leaseExpiry = (time: DateTime.Utc, author: Pick<Actor, "onBehalfOf">) =>
+  DateTime.formatIso(
+    DateTime.add(time, author.onBehalfOf === undefined ? LEASE_TTL : AGENT_LEASE_TTL),
+  );
 const isExpired = (lease: Telescope.Lease, at: string) =>
   Date.parse(lease.expiresAt) <= Date.parse(at);
 
 const fail = (reason: Telescope.WorkspaceError["reason"], message: string) =>
   Effect.fail(new Telescope.WorkspaceError({ reason, message }));
+/** D57: what waits for a member is not an agent's to change. */
+const forMember = (message: string) =>
+  fail("forbidden", `${message} Leave a note or tell your member.`);
 
 /**
  * Who writes. `caller` is the auth session; `WorkspaceService` resolves it to the member it acts
@@ -140,12 +150,14 @@ export class TaskBoardService extends Context.Service<
     readonly acquireLease: Method<"telescope.lease.acquire">;
     readonly heartbeatLease: Method<"telescope.lease.heartbeat">;
     readonly releaseLease: Method<"telescope.lease.release">;
+    readonly getLease: Method<"telescope.lease.get">;
   }
 >()("t3/telescope/TaskBoardService") {}
 
 const make = Effect.gen(function* () {
   const db = yield* TelescopeDb.TelescopeDb;
   const workspaces = yield* WorkspaceService.WorkspaceService;
+  const changes = yield* BoardChanges.BoardChanges;
   const random = yield* SecureRandom.SecureRandom;
   const now = DateTime.now.pipe(Effect.map(DateTime.formatIso));
   const requireMember = (actor: Actor, workspaceId: Telescope.WorkspaceId) =>
@@ -157,10 +169,13 @@ const make = Effect.gen(function* () {
       })),
     );
 
-  /** Appends the commit for one write to a board item, chained to the item's previous commit. */
+  /**
+   * Appends the commit for one write to a board item, chained to the item's previous commit, and
+   * tells watchers once the write commits. Every write to a task or decision passes here.
+   */
   const recordCommit = Effect.fn("TaskBoardService.recordCommit")(function* (
     author: Committer,
-    item: { readonly workspaceId: Telescope.WorkspaceId; readonly id: Telescope.BoardItemId },
+    item: Pick<Telescope.BoardChange, "kind" | "workspaceId" | "id">,
     baseVersion: number,
     changedFields: Record<string, Schema.Json>,
     at: string,
@@ -185,6 +200,8 @@ const make = Effect.gen(function* () {
       createdAt: at,
     };
     yield* db.insert(item.workspaceId, "task_commits", toColumns(commit, "commit_id"));
+    const { kind, workspaceId, id } = item;
+    yield* changes.publish({ kind, workspaceId, id, version: baseVersion + 1 });
   });
 
   const findTask = Effect.fn("TaskBoardService.findTask")(function* (
@@ -263,6 +280,18 @@ const make = Effect.gen(function* () {
       if (key === "conflictDecisionId" && input.baseVersion !== current.version) continue;
       if (key in set && !sameJson(set[key], current[key])) mine[key] = set[key] ?? null;
     }
+    if (author.onBehalfOf !== undefined) {
+      // Every open proposal holds its fields, not just the one the marker names.
+      const where = { kind: "decision", status: "proposed" };
+      const proposals = yield* db.select(current.workspaceId, "tasks", decodeDecisions, where);
+      const held = proposals.flatMap(({ conflict }) =>
+        conflict?.taskId === current.id ? Object.keys(conflict.incoming) : [],
+      );
+      if (current.status === "needs_decision") held.push("status");
+      const blocked = held.filter((key) => key in mine);
+      if (blocked.length > 0)
+        return yield* forMember(`A member must decide ${blocked.join(", ")} first.`);
+    }
     const at = yield* now;
     const notes =
       input.note === undefined ? [] : [{ authorId: author.authorId, text: input.note, at }];
@@ -291,6 +320,11 @@ const make = Effect.gen(function* () {
         current.conflictDecisionId === undefined
           ? undefined
           : yield* findDecision(current.workspaceId, current.conflictDecisionId);
+      // An agent may not move the marker off an open proposal: deciding it would do nothing.
+      if (author.onBehalfOf !== undefined && open?.status === "proposed")
+        return yield* forMember(
+          `A member must decide ${Object.keys(open.conflict?.incoming ?? {}).join(", ")} first.`,
+        );
       // A resent stale write reuses the proposal it already opened.
       const reused =
         open?.status === "proposed" && sameJson(open.conflict?.incoming, incoming)
@@ -373,6 +407,8 @@ const make = Effect.gen(function* () {
     input: In<"telescope.task.update">,
   ) {
     const author = yield* requireMember(actor, input.workspaceId);
+    if (actor.onBehalfOf !== undefined && "conflictDecisionId" in (input.set ?? {}))
+      return yield* forMember("Only a member can clear a conflict marker.");
     return yield* db.transaction(
       findTask(input.workspaceId, input.taskId).pipe(
         Effect.flatMap((current) => commitTask(author, input, current)),
@@ -456,18 +492,31 @@ const make = Effect.gen(function* () {
       // Two decisions replacing the same one is a conflict for a person to settle.
       if (old.status === "superseded")
         return yield* fail("conflict", "That decision has already been superseded.");
+      if (author.onBehalfOf !== undefined) {
+        if (old.status === "proposed")
+          return yield* forMember("Only a member settles or replaces a proposal.");
+        const where = { kind: "decision", supersedes: old.id, status: "proposed" };
+        if ((yield* db.count(workspaceId, "tasks", where)) > 0)
+          return yield* forMember("A proposal to replace this decision waits for a member.");
+      }
       if (status === "decided") {
-        // Deciding a proposal also retires what it proposed to replace: one step, no recursion.
+        // Deciding a proposal also retires what it proposed to replace, and every open proposal
+        // that points at a retired item, since it could no longer be decided.
         const target =
           old.status === "proposed" && old.supersedes !== undefined
             ? yield* findDecision(workspaceId, old.supersedes)
             : undefined;
         if (target?.status === "superseded")
           return yield* fail("conflict", "That decision has already been superseded.");
-        yield* retire(old);
-        if (target !== undefined) yield* retire(target);
-        if (old.conflict !== undefined)
-          yield* settleConflict(author, old, old.conflict, decision, at);
+        // Each item is retired before its proposals are read, so the queue ends.
+        const queue = target === undefined ? [old] : [old, target];
+        for (const item of queue) {
+          yield* retire(item);
+          if (item.conflict !== undefined)
+            yield* settleConflict(author, item, item.conflict, decision, at);
+          const where = { kind: "decision", supersedes: item.id, status: "proposed" };
+          queue.push(...(yield* db.select(workspaceId, "tasks", decodeDecisions, where)));
+        }
       }
     }
     yield* db.insert(workspaceId, "tasks", toColumns(decision, "item_id"));
@@ -558,7 +607,7 @@ const make = Effect.gen(function* () {
           holderSubjectId: author.memberId,
           acquiredAt: at,
           heartbeatAt: at,
-          expiresAt: DateTime.formatIso(DateTime.add(time, LEASE_TTL)),
+          expiresAt: leaseExpiry(time, author),
         };
         yield* db.insert(workspaceId, "leases", toColumns(lease, "lease_id"));
         yield* applyCommit(author, task, { leaseId: lease.id }, [], at);
@@ -593,7 +642,9 @@ const make = Effect.gen(function* () {
     return yield* db.transaction(
       Effect.gen(function* () {
         const lease = yield* heldLease(member, input, at);
-        const expiresAt = DateTime.formatIso(DateTime.add(time, LEASE_TTL));
+        // A renewal keeps the holder's span, whoever renews (D59).
+        const milliseconds = Date.parse(lease.expiresAt) - Date.parse(lease.heartbeatAt);
+        const expiresAt = DateTime.formatIso(DateTime.add(time, { milliseconds }));
         const set = { heartbeat_at: at, expires_at: expiresAt };
         yield* db.update(input.workspaceId, "leases", set, { lease_id: lease.id });
         return { ...lease, heartbeatAt: at, expiresAt };
@@ -613,6 +664,17 @@ const make = Effect.gen(function* () {
     return {};
   });
 
+  const getLease = Effect.fn("TaskBoardService.getLease")(function* (
+    actor: Actor,
+    { workspaceId, taskId }: In<"telescope.lease.get">,
+  ) {
+    yield* requireMember(actor, workspaceId);
+    yield* expireLeases(workspaceId);
+    const where = { task_id: taskId };
+    const [lease] = yield* db.select(workspaceId, "leases", decodeLeases, where);
+    return lease === undefined ? {} : { lease };
+  });
+
   return TaskBoardService.of({
     createTask,
     updateTask,
@@ -624,9 +686,10 @@ const make = Effect.gen(function* () {
     acquireLease,
     heartbeatLease,
     releaseLease,
+    getLease,
   });
 });
 
 export const layer = Layer.effect(TaskBoardService, make).pipe(
-  Layer.provide(Layer.merge(TelescopeDb.layer, WorkspaceService.layer)),
+  Layer.provide(Layer.mergeAll(TelescopeDb.layer, WorkspaceService.layer, BoardChanges.layer)),
 );

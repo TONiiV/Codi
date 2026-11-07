@@ -205,6 +205,10 @@ describe("searchSettings", () => {
       ["Native sessions", "providers"],
       ["CODEX_HOME path", "providers"],
       ["Shadow home path", "providers"],
+      ["成员与角色", "telescope-members"],
+      ["telescope members", "telescope-members"],
+      ["预算与急停", "telescope-governance"],
+      ["kill switch", "telescope-governance"],
     ] as const) {
       expect(searchSettings(title)[0]?.id, title).toBe(id);
     }

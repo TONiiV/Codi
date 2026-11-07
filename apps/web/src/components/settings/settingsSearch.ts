@@ -31,6 +31,7 @@ export type SettingsPath =
   | "/settings/browser"
   | "/settings/devices"
   | "/settings/scheduled-tasks"
+  | "/settings/telescope"
   | "/settings/source-control"
   | "/settings/worktrees"
   | "/settings/connections"
@@ -104,6 +105,7 @@ export const SETTINGS_SECTION_LABELS: Readonly<Record<SettingsPath, string>> = {
   "/settings/browser": "Browser",
   "/settings/devices": "Devices",
   "/settings/scheduled-tasks": "Scheduled tasks",
+  "/settings/telescope": "Telescope",
   "/settings/source-control": "Source control",
   "/settings/worktrees": "Worktrees",
   "/settings/connections": "Environments",
@@ -146,6 +148,7 @@ export const SETTINGS_NAV_GROUPS: ReadonlyArray<{
       "/settings/browser",
       "/settings/devices",
       "/settings/scheduled-tasks",
+      "/settings/telescope",
     ],
   },
   {
@@ -1319,6 +1322,28 @@ export const SETTINGS_SEARCH_ITEMS = [
     secretsFeatureOnly: true,
   },
   {
+    id: "telescope-members",
+    title: "成员与角色",
+    to: "/settings/telescope",
+    searchTerms: [
+      "telescope workspace members roles admin revoke remove restore 成员 角色 管理员 移除 吊销 恢复",
+    ],
+  },
+  {
+    id: "telescope-agents",
+    title: "公司 agents",
+    to: "/settings/telescope",
+    searchTerms: ["telescope company agents main department 公司 主代理 职能代理"],
+  },
+  {
+    id: "telescope-governance",
+    title: "预算与急停",
+    to: "/settings/telescope",
+    searchTerms: [
+      "telescope budget limit tool calls usage kill switch stop pause 预算 上限 调用 急停 暂停",
+    ],
+  },
+  {
     id: "archive",
     title: "Archived threads",
     to: "/settings/archived",
@@ -1350,6 +1375,7 @@ const SETTINGS_CATEGORY_SCOPES: Readonly<Record<SettingsPath, SettingsSearchScop
   "/settings/access": "connections",
   "/settings/secrets": null,
   "/settings/scheduled-tasks": null,
+  "/settings/telescope": null,
   "/settings/maintenance": null,
   "/settings/labs": null,
   "/settings/about": null,

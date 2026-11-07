@@ -74,10 +74,17 @@ import * as RpcAuthorization from "./auth/RpcAuthorization.ts";
 import * as PeerLinkRequests from "./peer/PeerLinkRequests.ts";
 import * as TelescopeWorkspaces from "./telescope/WorkspaceService.ts";
 import * as TelescopeBoard from "./telescope/TaskBoardService.ts";
+import * as TelescopeBoardChanges from "./telescope/BoardChanges.ts";
 import * as TelescopeAgents from "./telescope/AgentService.ts";
 import * as TelescopeRuns from "./telescope/RunRecordService.ts";
 import * as TelescopeWakeQueue from "./telescope/WakeQueueService.ts";
 import * as TelescopeTokenSaver from "./telescope/tokensaver/TokenSaverService.ts";
+import * as TelescopeGrants from "./telescope/GrantService.ts";
+import * as TelescopeToolGateway from "./telescope/ToolGateway.ts";
+import * as TelescopeMemory from "./telescope/MemoryService.ts";
+import * as TelescopeAttribution from "./telescope/AttributionService.ts";
+import * as TelescopeRouting from "./telescope/RoutingService.ts";
+import * as TelescopeWorkspaceData from "./telescope/WorkspaceDataService.ts";
 import * as PeerLinks from "./peer/PeerLinks.ts";
 import * as PortScanner from "./preview/PortScanner.ts";
 import * as PreviewManager from "./preview/Manager.ts";
@@ -801,10 +808,17 @@ const layerUnusedConfigRpcServices = Layer.mergeAll(
   Layer.mock(PeerLinkRequests.PeerLinkRequests)({}),
   Layer.mock(TelescopeWorkspaces.WorkspaceService)({}),
   Layer.mock(TelescopeBoard.TaskBoardService)({}),
+  Layer.mock(TelescopeBoardChanges.BoardChanges)({}),
   Layer.mock(TelescopeAgents.AgentService)({}),
   Layer.mock(TelescopeRuns.RunRecordService)({}),
   Layer.mock(TelescopeWakeQueue.WakeQueueService)({}),
   Layer.mock(TelescopeTokenSaver.TokenSaverService)({}),
+  Layer.mock(TelescopeGrants.GrantService)({}),
+  Layer.mock(TelescopeToolGateway.ToolGateway)({}),
+  Layer.mock(TelescopeMemory.MemoryService)({}),
+  Layer.mock(TelescopeAttribution.AttributionService)({}),
+  Layer.mock(TelescopeRouting.RoutingService)({}),
+  Layer.mock(TelescopeWorkspaceData.WorkspaceDataService)({}),
   Layer.mock(PortScanner.PortDiscovery)({ trackAgent: () => () => undefined }),
   Layer.mock(PreviewManager.PreviewManager)({}),
   Layer.mock(ProcessDiagnostics.ProcessDiagnostics)({}),
