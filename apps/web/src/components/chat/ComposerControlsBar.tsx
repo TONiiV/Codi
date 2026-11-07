@@ -266,7 +266,9 @@ export function ComposerControlsBar(props: {
       className="shrink-0"
     >
       <CircleAlertIcon className="size-4" />
-      {providerSetupInstanceId ? "Open provider settings" : "No provider available"}
+      {providerSetupInstanceId
+        ? t("settings.parallelModelPicker.openProviderSettings")
+        : t("settings.parallelModelPicker.noProviderAvailable")}
     </ComposerControl>
   ) : (
     <>

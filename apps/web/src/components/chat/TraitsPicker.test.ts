@@ -11,6 +11,7 @@ void zh.init({ lng: "zh-CN", resources: { "zh-CN": { translation: zhCN } } });
 describe("traitText", () => {
   it.each([
     ["High", "高"],
+    ["Ultra", "极致"],
     ["Extra High Effort", "超高强度"],
     ["Thinking On", "思考 开"],
     ["High Fast · Context Window", "高 快速 · 上下文窗口"],

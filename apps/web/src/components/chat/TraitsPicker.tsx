@@ -105,47 +105,47 @@ type TraitsPersistence =
 // Labels come from provider data, user-typed option labels and client-runtime's " · "-joined
 // trigger text. A segment is translated only when it is a known phrase, or a known phrase plus the
 // On/Off or speed word the trigger appends; anything else passes through untouched.
-const TRAIT_PHRASES: ReadonlySet<string> = new Set([
-  "Reasoning effort",
-  "Service Tier",
-  "Extra High Effort",
-  "Medium Effort",
-  "High Effort",
-  "Low Effort",
-  "Context Window",
-  "Fast Mode",
-  "Extra High",
-  "Ultrathink",
-  "Ultrafast",
-  "Effort",
-  "Reasoning",
-  "Thinking",
-  "Medium",
-  "Minimal",
-  "Normal",
-  "Standard",
-  "Agent",
-  "High",
-  "Low",
-  "Max",
-  "None",
-  "Fast",
-  "Default",
-  "On",
-  "Off",
+const TRAIT_PHRASE_KEYS: ReadonlyMap<string, string> = new Map([
+  ["Reasoning effort", "settings.parallelFinalUI.trait_reasoning_effort"],
+  ["Service Tier", "settings.parallelFinalUI.trait_service_tier"],
+  ["Extra High Effort", "settings.parallelFinalUI.trait_extra_high_effort"],
+  ["Medium Effort", "settings.parallelFinalUI.trait_medium_effort"],
+  ["High Effort", "settings.parallelFinalUI.trait_high_effort"],
+  ["Low Effort", "settings.parallelFinalUI.trait_low_effort"],
+  ["Context Window", "settings.parallelFinalUI.trait_context_window"],
+  ["Fast Mode", "settings.parallelFinalUI.trait_fast_mode"],
+  ["Extra High", "settings.parallelFinalUI.trait_extra_high"],
+  ["Ultrathink", "settings.parallelFinalUI.trait_ultrathink"],
+  ["Ultrafast", "settings.parallelFinalUI.trait_ultrafast"],
+  ["Effort", "settings.parallelFinalUI.trait_effort"],
+  ["Reasoning", "settings.parallelFinalUI.trait_reasoning"],
+  ["Thinking", "settings.parallelFinalUI.trait_thinking"],
+  ["Medium", "settings.parallelFinalUI.trait_medium"],
+  ["Minimal", "settings.parallelFinalUI.trait_minimal"],
+  ["Normal", "settings.parallelFinalUI.trait_normal"],
+  ["Standard", "settings.parallelFinalUI.trait_standard"],
+  ["Agent", "settings.parallelFinalUI.trait_agent"],
+  ["High", "settings.parallelFinalUI.trait_high"],
+  ["Low", "settings.parallelFinalUI.trait_low"],
+  ["Max", "settings.parallelFinalUI.trait_max"],
+  ["Ultra", "settings.parallelFinalUI.trait_ultra"],
+  ["None", "settings.parallelFinalUI.trait_none"],
+  ["Fast", "settings.parallelFinalUI.trait_fast"],
+  ["Default", "settings.parallelFinalUI.trait_default"],
+  ["On", "settings.parallelFinalUI.trait_on"],
+  ["Off", "settings.parallelFinalUI.trait_off"],
 ]);
 const TRAIT_SUFFIXES: ReadonlySet<string> = new Set(["On", "Off", "Fast", "Ultrafast"]);
 
-const traitPhrase = (phrase: string, t: TFunction) =>
-  t(`settings.parallelFinalUI.trait_${phrase.toLowerCase().replaceAll(" ", "_")}`);
-
 function traitSegment(segment: string, t: TFunction): string {
-  if (TRAIT_PHRASES.has(segment)) return traitPhrase(segment, t);
+  const key = TRAIT_PHRASE_KEYS.get(segment);
+  if (key) return t(key);
   const space = segment.lastIndexOf(" ");
-  const head = segment.slice(0, space);
   const tail = segment.slice(space + 1);
-  return space > 0 && TRAIT_SUFFIXES.has(tail) && TRAIT_PHRASES.has(head)
-    ? `${traitPhrase(head, t)} ${traitPhrase(tail, t)}`
+  const headKey = TRAIT_PHRASE_KEYS.get(segment.slice(0, space));
+  const tailKey = TRAIT_PHRASE_KEYS.get(tail);
+  return space > 0 && TRAIT_SUFFIXES.has(tail) && headKey && tailKey
+    ? `${t(headKey)} ${t(tailKey)}`
     : segment;
 }
 
