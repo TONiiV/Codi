@@ -88,6 +88,24 @@ export const CommitListResult = Schema.Struct({ commits: Schema.Array(TaskCommit
 export const LeaseAcquireInput = Schema.Struct({ ...InWorkspace, taskId: TaskId });
 export const LeaseScopedInput = Schema.Struct({ ...InWorkspace, leaseId: LeaseId });
 
+/**
+ * A committed write to one board item, by its new version. It never carries the item: a watcher
+ * re-reads what it shows. A lease change reaches its task this way through the task's `leaseId`.
+ */
+export const BoardChange = Schema.Struct({
+  kind: Schema.Literals(["task", "decision"]),
+  workspaceId: WorkspaceId,
+  id: BoardItemId,
+  version: Count,
+});
+export type BoardChange = typeof BoardChange.Type;
+/** `synchronized` opens every subscription; a write committed before it is not sent. */
+export const BoardWatchItem = Schema.Union([
+  BoardChange,
+  Schema.Struct({ kind: Schema.Literal("synchronized") }),
+]);
+export type BoardWatchItem = typeof BoardWatchItem.Type;
+
 export class StaleTaskVersionError extends Schema.TaggedError<StaleTaskVersionError>()(
   "TelescopeStaleTaskVersionError",
   { taskId: TaskId, baseVersion: Count, currentVersion: Count },

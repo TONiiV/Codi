@@ -1,7 +1,24 @@
-import { Telescope } from "@t3tools/contracts";
-import { describe, expect, it } from "vite-plus/test";
+import { describe, expect, it } from "@effect/vitest";
+import { EnvironmentId, Telescope } from "@t3tools/contracts";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Queue from "effect/Queue";
+import * as Stream from "effect/Stream";
+import * as SubscriptionRef from "effect/SubscriptionRef";
+import { Atom, AtomRegistry } from "effect/reactivity";
 
 import {
+  AVAILABLE_CONNECTION_STATE,
+  type PreparedConnection,
+  PrimaryConnectionTarget,
+  type SupervisorConnectionState,
+} from "../connection/model.ts";
+import * as EnvironmentRegistry from "../connection/registry.ts";
+import * as EnvironmentSupervisor from "../connection/supervisor.ts";
+import type * as RpcSession from "../rpc/session.ts";
+import {
+  createTelescopeBoardAtoms,
   DECISION_STATUSES,
   decideFailureText,
   decideInput,
@@ -173,4 +190,110 @@ describe("task writes", () => {
     });
     expect(decideFailureText(error)).toBe(text);
   });
+});
+
+const ENVIRONMENT = new PrimaryConnectionTarget({
+  environmentId: EnvironmentId.make("board-environment"),
+  label: "Board environment",
+  httpBaseUrl: "https://board.example.test",
+  wsBaseUrl: "wss://board.example.test",
+});
+
+/** Board atoms on a connected fake environment that records each read and hands out each watch. */
+const connectedBoard = Effect.fn("TaskBoardTest.connectedBoard")(function* () {
+  const reads = yield* Queue.unbounded<string>();
+  const watches = yield* Queue.unbounded<Queue.Queue<Telescope.BoardWatchItem>>();
+  const read = <A>(name: string, value: A) => Queue.offer(reads, name).pipe(Effect.as(value));
+  const client = {
+    [Telescope.WS_METHODS.taskList]: () => read("tasks", { tasks: [] }),
+    [Telescope.WS_METHODS.taskGet]: (input: typeof Telescope.TaskGetInput.Type) =>
+      read(`task:${input.taskId}`, task(input.taskId, "todo")),
+    [Telescope.WS_METHODS.decisionList]: () => read("decisions", { decisions: [] }),
+    [Telescope.WS_METHODS.boardWatch]: () =>
+      Stream.unwrap(
+        Effect.gen(function* () {
+          const notices = yield* Queue.unbounded<Telescope.BoardWatchItem>();
+          yield* Queue.offer(watches, notices);
+          return Stream.fromQueue(notices).pipe(
+            Stream.prepend([{ kind: "synchronized" as const }]),
+          );
+        }),
+      ),
+  };
+  const newSession = () => Option.some({ client } as unknown as RpcSession.RpcSession);
+  const session = yield* SubscriptionRef.make(newSession());
+  const connected: SupervisorConnectionState = {
+    ...AVAILABLE_CONNECTION_STATE,
+    desired: true,
+    network: "online",
+    phase: "connected",
+    attempt: 1,
+    generation: 1,
+  };
+  const supervisor = EnvironmentSupervisor.EnvironmentSupervisor.of({
+    target: ENVIRONMENT,
+    state: yield* SubscriptionRef.make(connected),
+    session,
+    prepared: yield* SubscriptionRef.make<Option.Option<PreparedConnection>>(Option.none()),
+    connect: Effect.void,
+    disconnect: Effect.void,
+    retryNow: Effect.void,
+  });
+  const run: EnvironmentRegistry.EnvironmentRegistry["Service"]["run"] = (_environmentId, effect) =>
+    Effect.provideService(effect, EnvironmentSupervisor.EnvironmentSupervisor, supervisor);
+  const followStream: EnvironmentRegistry.EnvironmentRegistry["Service"]["followStream"] = (
+    _environmentId,
+    stream,
+  ) => Stream.provideService(stream, EnvironmentSupervisor.EnvironmentSupervisor, supervisor);
+  const environments = {
+    run,
+    followStream,
+  } as unknown as EnvironmentRegistry.EnvironmentRegistry["Service"];
+  const runtime = Atom.runtime(
+    Layer.succeed(EnvironmentRegistry.EnvironmentRegistry, environments),
+  );
+  const registry = AtomRegistry.make();
+  yield* Effect.addFinalizer(() => Effect.sync(() => registry.dispose()));
+  return {
+    board: createTelescopeBoardAtoms(runtime),
+    registry,
+    /** Each watch subscription's notices, in the order the client subscribes. */
+    watches,
+    /** The next `count` reads, sorted, since reads started together finish in any order. */
+    nextReads: (count: number) =>
+      Effect.replicateEffect(Queue.take(reads), count).pipe(
+        Effect.map((names) => names.toSorted()),
+      ),
+    reconnect: SubscriptionRef.set(session, Option.none()).pipe(
+      Effect.andThen(SubscriptionRef.set(session, newSession())),
+    ),
+  };
+});
+
+describe("board watch", () => {
+  it.effect("refreshes only the reads a notice names, and each read once after a reconnect", () =>
+    Effect.gen(function* () {
+      const { board, registry, watches, nextReads, reconnect } = yield* connectedBoard();
+      const at = <I>(input: I) => ({ environmentId: ENVIRONMENT.environmentId, input });
+      const [t1, t2] = [Telescope.TaskId.make("t1"), Telescope.TaskId.make("t2")];
+      registry.mount(board.tasks(at({ workspaceId })));
+      registry.mount(board.task(at({ workspaceId, taskId: t1 })));
+      registry.mount(board.task(at({ workspaceId, taskId: t2 })));
+      registry.mount(board.decisions(at({ workspaceId })));
+      expect(yield* nextReads(4)).toEqual(["decisions", "task:t1", "task:t2", "tasks"]);
+
+      const watch = yield* Queue.take(watches);
+      yield* Queue.offer(watch, { kind: "task", workspaceId, id: t1, version: 2 });
+      expect(yield* nextReads(2)).toEqual(["task:t1", "tasks"]);
+      const decisionId = Telescope.DecisionId.make("d1");
+      yield* Queue.offer(watch, { kind: "decision", workspaceId, id: decisionId, version: 1 });
+      expect(yield* nextReads(1)).toEqual(["decisions"]);
+
+      yield* reconnect;
+      expect(yield* nextReads(4)).toEqual(["decisions", "task:t1", "task:t2", "tasks"]);
+      const rewatch = yield* Queue.take(watches);
+      yield* Queue.offer(rewatch, { kind: "task", workspaceId, id: t2, version: 2 });
+      expect(yield* nextReads(2)).toEqual(["task:t2", "tasks"]);
+    }),
+  );
 });

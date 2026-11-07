@@ -8,6 +8,7 @@ import type * as Rpc from "effect/rpc/Rpc";
 import * as Schema from "effect/Schema";
 
 import type { PersistenceDecodeError, PersistenceSqlError } from "../persistence/Errors.ts";
+import * as BoardChanges from "./BoardChanges.ts";
 import { mergeStale } from "./TaskMerge.ts";
 import * as TelescopeDb from "./TelescopeDb.ts";
 import * as WorkspaceService from "./WorkspaceService.ts";
@@ -146,6 +147,7 @@ export class TaskBoardService extends Context.Service<
 const make = Effect.gen(function* () {
   const db = yield* TelescopeDb.TelescopeDb;
   const workspaces = yield* WorkspaceService.WorkspaceService;
+  const changes = yield* BoardChanges.BoardChanges;
   const random = yield* SecureRandom.SecureRandom;
   const now = DateTime.now.pipe(Effect.map(DateTime.formatIso));
   const requireMember = (actor: Actor, workspaceId: Telescope.WorkspaceId) =>
@@ -157,10 +159,13 @@ const make = Effect.gen(function* () {
       })),
     );
 
-  /** Appends the commit for one write to a board item, chained to the item's previous commit. */
+  /**
+   * Appends the commit for one write to a board item, chained to the item's previous commit, and
+   * tells watchers once the write commits. Every write to a task or decision passes here.
+   */
   const recordCommit = Effect.fn("TaskBoardService.recordCommit")(function* (
     author: Committer,
-    item: { readonly workspaceId: Telescope.WorkspaceId; readonly id: Telescope.BoardItemId },
+    item: Pick<Telescope.BoardChange, "kind" | "workspaceId" | "id">,
     baseVersion: number,
     changedFields: Record<string, Schema.Json>,
     at: string,
@@ -185,6 +190,8 @@ const make = Effect.gen(function* () {
       createdAt: at,
     };
     yield* db.insert(item.workspaceId, "task_commits", toColumns(commit, "commit_id"));
+    const { kind, workspaceId, id } = item;
+    yield* changes.publish({ kind, workspaceId, id, version: baseVersion + 1 });
   });
 
   const findTask = Effect.fn("TaskBoardService.findTask")(function* (
@@ -628,5 +635,5 @@ const make = Effect.gen(function* () {
 });
 
 export const layer = Layer.effect(TaskBoardService, make).pipe(
-  Layer.provide(Layer.merge(TelescopeDb.layer, WorkspaceService.layer)),
+  Layer.provide(Layer.mergeAll(TelescopeDb.layer, WorkspaceService.layer, BoardChanges.layer)),
 );

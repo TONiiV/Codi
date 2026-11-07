@@ -1,6 +1,10 @@
 import type { Telescope } from "@t3tools/contracts";
 
-import { isStaleTaskVersion } from "@t3tools/client-runtime/telescope/taskBoard";
+import {
+  decideFailureText,
+  isStaleTaskVersion,
+  isWorkspaceConflict,
+} from "@t3tools/client-runtime/telescope/taskBoard";
 
 export { decideInput, sortDecisions } from "@t3tools/client-runtime/telescope/taskBoard";
 
@@ -30,17 +34,6 @@ export function reviewUpdateInput(
   };
 }
 
-function isConflict(error: unknown): boolean {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    "_tag" in error &&
-    error._tag === "TelescopeWorkspaceError" &&
-    "reason" in error &&
-    error.reason === "conflict"
-  );
-}
-
 /** What a failed decision or task command should do: refresh the list it acted on, and say what happened. */
 export function describeFailure(error: unknown): {
   refresh: boolean;
@@ -54,7 +47,7 @@ export function describeFailure(error: unknown): {
       message: "有人刚改过这条任务，列表已刷新，请再看一眼。",
     };
   }
-  if (isConflict(error)) {
+  if (isWorkspaceConflict(error)) {
     return {
       refresh: true,
       title: "内容已更新",
@@ -66,6 +59,14 @@ export function describeFailure(error: unknown): {
     title: "操作没有完成",
     message: error instanceof Error ? error.message : String(error),
   };
+}
+
+/** A proposal someone else decided first reads as it does on web. */
+export function describeDecideFailure(error: unknown) {
+  const text = decideFailureText(error);
+  return text === null
+    ? describeFailure(error)
+    : { refresh: true, title: "没有完成", message: text };
 }
 
 export function formatBoardDate(iso: string): string {
