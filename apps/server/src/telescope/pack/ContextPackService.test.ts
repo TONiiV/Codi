@@ -642,6 +642,19 @@ describe("ContextPackService", () => {
         `Copy what ${root}/.claude/CLAUDE.md links to into ${root}, or remove the link`,
       );
       expect(yield* dir.read("dotfiles/CLAUDE.md")).toBe("my own instructions\n");
+
+      // A home pack can sit inside the home, so a home file linked into it must not be written.
+      yield* (yield* FileSystem.FileSystem).symlink(
+        "../packs/me/instructions.md",
+        dir.at("home/.codex/AGENTS.md"),
+      );
+      const intoPack = yield* Effect.flip(
+        service.import(pack, dir.at("home"), "codex", true, "home"),
+      );
+      expect(intoPack._tag).toBe("ContextPackOverlapError");
+      expect(yield* dir.read("home/packs/me/instructions.md")).toBe(
+        "# Mine\n\nPrefer small diffs.\n",
+      );
     }).pipe(Effect.scoped, Effect.provide(TestLayer)),
   );
 
