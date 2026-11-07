@@ -1,8 +1,14 @@
 import { useNavigate } from "@tanstack/react-router";
-import type { CSSProperties, ReactNode } from "react";
+import { type CSSProperties, type ReactNode, useState } from "react";
 
 import { isElectron } from "../../env";
 import { cn } from "../../lib/utils";
+import {
+  selectThreadRightPanelState,
+  telescopePanelRef,
+  type ThreadRightPanelState,
+  useRightPanelStore,
+} from "../../rightPanelStore";
 import { TELESCOPE_PATH, useNavigateToAppMode } from "../sidebar/mainAppLocation";
 import { SidebarChromeFooter, SidebarChromeHeader } from "../sidebar/SidebarChrome";
 import { Button } from "../ui/button";
@@ -22,8 +28,9 @@ import { TaskDrawer } from "./TaskDrawer";
 import { TelescopeAccountFooter } from "./TelescopeAccount";
 import { TelescopeChatList } from "./TelescopeChatList";
 import { TelescopeChatPage } from "./TelescopeChatPage";
-import { CopilotOpenButton, TelescopeCopilotPanel, useCopilotOpen } from "./TelescopeCopilotPanel";
 import { TelescopeDashboard } from "./TelescopeDashboard";
+import { TelescopePanel } from "./TelescopePanel";
+import { useTelescopeWorkspaces } from "./telescopeState";
 import {
   TELESCOPE_VIEWS,
   telescopeViewEntry,
@@ -153,8 +160,7 @@ const TITLEBAR_INSET = {
 
 /**
  * Telescope's main area: breadcrumb header and a main slot that falls back to the view's empty
- * state, with the Copilot panel beside it on board views. `background` keeps it inert under
- * Settings or Usage.
+ * state. `background` keeps it inert under Settings or Usage.
  */
 export function TelescopePage({
   view,
@@ -165,13 +171,48 @@ export function TelescopePage({
   background?: boolean;
   children?: ReactNode;
 }) {
-  const [copilotOpen, setCopilotOpen] = useCopilotOpen();
-  // Every board view (任务 and its tabs, Dashboard); 对话 already is a chat.
-  const copilot = !background && view !== "chats" && view !== "teams";
+  const { environmentId } = useTelescopeWorkspaces();
+  const panelRef = background || environmentId === null ? null : telescopePanelRef(environmentId);
+  const panel = useRightPanelStore((store) =>
+    selectThreadRightPanelState(store.byThreadKey, panelRef),
+  );
+  const [layoutElement, setLayoutElement] = useState<HTMLDivElement | null>(null);
   return (
     <SidebarInset className="h-dvh min-h-0 overflow-hidden overscroll-y-none" inert={background}>
+      <div ref={setLayoutElement} className="relative flex min-h-0 flex-1 overflow-hidden">
+        <TelescopeMain view={view} background={background} panel={panel}>
+          {children}
+        </TelescopeMain>
+        {panelRef === null ? null : (
+          <TelescopePanel panelRef={panelRef} view={view} layoutElement={layoutElement} />
+        )}
+      </div>
+      {background ? null : <TaskDrawer />}
+    </SidebarInset>
+  );
+}
+
+/** The breadcrumb header over the view; a maximized panel leaves it zero wide. */
+function TelescopeMain({
+  view,
+  background,
+  panel,
+  children,
+}: {
+  view: TelescopeView;
+  background: boolean;
+  panel: ThreadRightPanelState;
+  children?: ReactNode;
+}) {
+  const maximized = panel.isOpen && panel.maximized === true;
+  return (
+    <div
+      className={cn("flex min-h-0 min-w-0 flex-col", maximized ? "w-0 flex-none" : "flex-1")}
+      inert={maximized}
+    >
       <WorkspacePageHeader
         electron={isElectron}
+        reserveNativeControls={isElectron && !panel.isOpen}
         className="md:[[data-sidebar-state=collapsed]_&]:pl-(--telescope-collapsed-left)"
         style={TITLEBAR_INSET}
       >
@@ -184,29 +225,21 @@ export function TelescopePage({
             <h1>{telescopeViewEntry(view).label}</h1>
           </WorkspaceBreadcrumbItem>
         </WorkspaceBreadcrumb>
-        <div className="min-w-0 flex-1" />
-        {copilot && !copilotOpen ? <CopilotOpenButton onOpen={() => setCopilotOpen(true)} /> : null}
       </WorkspacePageHeader>
-      <div className="flex min-h-0 flex-1">
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto">
-          <BackgroundThreadContext value={background}>
-            {children ??
-              (view === "chats" ? (
-                <TelescopeChatPage />
-              ) : view === "teams" ? (
-                <MyTeamsPage />
-              ) : view === "dashboard" ? (
-                <TelescopeDashboard />
-              ) : (
-                <TelescopeEmptyState view={view} />
-              ))}
-          </BackgroundThreadContext>
-        </div>
-        {copilot && copilotOpen ? (
-          <TelescopeCopilotPanel onClose={() => setCopilotOpen(false)} />
-        ) : null}
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+        <BackgroundThreadContext value={background}>
+          {children ??
+            (view === "chats" ? (
+              <TelescopeChatPage />
+            ) : view === "teams" ? (
+              <MyTeamsPage />
+            ) : view === "dashboard" ? (
+              <TelescopeDashboard />
+            ) : (
+              <TelescopeEmptyState view={view} />
+            ))}
+        </BackgroundThreadContext>
       </div>
-      {background ? null : <TaskDrawer />}
-    </SidebarInset>
+    </div>
   );
 }

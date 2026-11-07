@@ -88,6 +88,13 @@ export const PULL_REQUESTS_PANEL_REF = scopeThreadRef(
 
 const isPullRequestsPanelKey = (threadKey: string) => threadKey.endsWith(":pull-requests-panel");
 
+export const TELESCOPE_PANEL_SURFACES: ReadonlyArray<RightPanelKind> = ["preview", "side-chat"];
+
+/** Telescope pages share one panel; its browser tabs belong to no Code thread. */
+export function telescopePanelRef(environmentId: EnvironmentId): ScopedThreadRef {
+  return scopeThreadRef(environmentId, ThreadId.make("telescope-panel"));
+}
+
 export interface ThreadRightPanelState {
   isOpen: boolean;
   activeSurfaceId: string | null;

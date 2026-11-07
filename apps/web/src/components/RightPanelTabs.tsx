@@ -153,6 +153,8 @@ export interface RightPanelTabsProps {
   sideChatAvailable?: boolean;
   /** Overrides the default reason while side chats are available but cannot start. */
   sideChatDisabledReason?: string | null;
+  /** The surfaces this host offers in its launcher and "+" menu; all of them when absent. */
+  surfaceKinds?: ReadonlyArray<RightPanelSurface["kind"]>;
   pullRequestStatusSeeds?: Readonly<Record<string, PullRequestTabStatusSeed>>;
   children: ReactNode;
 }
@@ -333,12 +335,14 @@ function RightPanelEmptyState(props: {
   deviceAvailable: boolean;
   sideChatAvailable: boolean;
   sideChatDisabledReason: string | null;
+  surfaceKinds: ReadonlyArray<RightPanelSurface["kind"]> | undefined;
 }) {
   const [highlight, setHighlight] = useState(-1);
 
   const actions = [
     {
       label: "Browser",
+      kind: "preview",
       icon: Globe2,
       shortcut: "B",
       available: props.browserAvailable,
@@ -347,6 +351,7 @@ function RightPanelEmptyState(props: {
     },
     {
       label: "Terminal",
+      kind: "terminal",
       icon: TerminalSquare,
       shortcut: "T",
       available: props.terminalAvailable,
@@ -355,6 +360,7 @@ function RightPanelEmptyState(props: {
     },
     {
       label: "Files",
+      kind: "files",
       icon: Files,
       shortcut: "F",
       available: props.filesAvailable,
@@ -363,6 +369,7 @@ function RightPanelEmptyState(props: {
     },
     {
       label: "Diff",
+      kind: "diff",
       icon: FileDiff,
       shortcut: "D",
       available: props.diffAvailable,
@@ -371,6 +378,7 @@ function RightPanelEmptyState(props: {
     },
     {
       label: "Pull request",
+      kind: "pull-request",
       icon: PullRequestGlyph.pullRequest,
       shortcut: "P",
       available: props.pullRequestAvailable,
@@ -379,6 +387,7 @@ function RightPanelEmptyState(props: {
     },
     {
       label: "Linked pull requests",
+      kind: "pull-requests",
       icon: PullRequestGlyph.link,
       shortcut: "L",
       available: props.pullRequestsAvailable,
@@ -387,6 +396,7 @@ function RightPanelEmptyState(props: {
     },
     {
       label: "Device",
+      kind: "device",
       description: "Watch an iOS Simulator or Android Emulator.",
       icon: Smartphone,
       shortcut: "M",
@@ -398,6 +408,7 @@ function RightPanelEmptyState(props: {
       ? [
           {
             label: "Side chat",
+            kind: "side-chat",
             description: "Ask a side question while this thread keeps working.",
             icon: MessagesSquare,
             shortcut: "S",
@@ -411,7 +422,10 @@ function RightPanelEmptyState(props: {
 
   type SurfaceAction = (typeof actions)[number];
 
-  const availableActions = actions.filter((action) => action.available);
+  const offered = actions.filter(
+    (action) => props.surfaceKinds?.some((kind) => kind === action.kind) ?? true,
+  );
+  const availableActions = offered.filter((action) => action.available);
   const highlightIndex =
     availableActions.length === 0 ? -1 : Math.min(highlight, availableActions.length - 1);
 
@@ -485,7 +499,7 @@ function RightPanelEmptyState(props: {
       <div className="w-full max-w-xs py-6">
         <h3 className="mb-3 text-center font-medium text-foreground text-sm">Open a surface</h3>
         <div className="flex flex-col gap-0.5">
-          {actions.map((action) =>
+          {offered.map((action) =>
             action.available ? (
               <div
                 key={action.label}
@@ -1093,6 +1107,7 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
   const addSurfaceActions = [
     {
       label: "Browser",
+      kind: "preview",
       icon: Globe2,
       shortcut: "B",
       available: props.browserAvailable,
@@ -1101,6 +1116,7 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
     },
     {
       label: "Terminal",
+      kind: "terminal",
       icon: TerminalSquare,
       shortcut: "T",
       available: props.terminalAvailable,
@@ -1109,6 +1125,7 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
     },
     {
       label: "Files",
+      kind: "files",
       icon: Files,
       shortcut: "F",
       available: props.filesAvailable,
@@ -1117,6 +1134,7 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
     },
     {
       label: "Diff",
+      kind: "diff",
       icon: FileDiff,
       shortcut: "D",
       available: props.diffAvailable,
@@ -1125,6 +1143,7 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
     },
     {
       label: "Pull request",
+      kind: "pull-request",
       icon: PullRequestGlyph.pullRequest,
       shortcut: "P",
       available: props.pullRequestAvailable,
@@ -1133,6 +1152,7 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
     },
     {
       label: "Linked pull requests",
+      kind: "pull-requests",
       icon: PullRequestGlyph.link,
       shortcut: "L",
       available: props.pullRequestsAvailable,
@@ -1141,6 +1161,7 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
     },
     {
       label: "Device",
+      kind: "device",
       icon: Smartphone,
       shortcut: "M",
       available: props.deviceAvailable,
@@ -1151,6 +1172,7 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
       ? [
           {
             label: "Side chat",
+            kind: "side-chat",
             icon: MessagesSquare,
             shortcut: "S",
             available: props.sideChatAvailable === true && !props.sideChatDisabledReason,
@@ -1160,9 +1182,12 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
         ]
       : []),
   ] as const;
+  const offeredAddSurfaceActions = addSurfaceActions.filter(
+    (action) => props.surfaceKinds?.some((kind) => kind === action.kind) ?? true,
+  );
 
   const handleAddSurfaceMenuKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
-    const action = surfaceShortcutActionForKey(addSurfaceActions, event.nativeEvent);
+    const action = surfaceShortcutActionForKey(offeredAddSurfaceActions, event.nativeEvent);
     if (!action) return;
     event.preventDefault();
     event.stopPropagation();
@@ -1411,7 +1436,7 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
                   sideOffset={6}
                   onKeyDownCapture={handleAddSurfaceMenuKeyDown}
                 >
-                  {addSurfaceActions.map((action) => {
+                  {offeredAddSurfaceActions.map((action) => {
                     const Icon = action.icon;
                     if (action.label === "Browser" && action.available) {
                       return (
@@ -1543,6 +1568,7 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
             deviceAvailable={props.deviceAvailable}
             sideChatAvailable={props.sideChatAvailable === true}
             sideChatDisabledReason={props.sideChatDisabledReason ?? null}
+            surfaceKinds={props.surfaceKinds}
           />
         ) : (
           props.children

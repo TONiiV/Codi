@@ -21,12 +21,12 @@ import { EnvironmentSupervisor } from "../connection/supervisor.ts";
 import type { RpcSession } from "../rpc/session.ts";
 import {
   cappedPowers,
-  copilotAgents,
   createTelescopeAgentAtoms,
   offersOpenThread,
   openThreadFailureText,
   ownerCanMergePRs,
   selectableExposures,
+  sideChatAgents,
 } from "./agents.ts";
 import { createTelescopeWorkspaceAtoms } from "./workspaces.ts";
 
@@ -170,53 +170,72 @@ describe("telescope agent chat", () => {
     name: `${id} Chief Agent`,
   });
   const custom: Telescope.Agent = { ...chief("mine"), kind: "custom" };
+  const company: Telescope.Agent = {
+    ...chief("hq"),
+    kind: "company_main",
+    ownerSubjectId: null,
+  };
   const pa = assistant.id;
   it.each([
     {
       case: "nothing stored",
       stored: null,
       mainPane: null,
-      choices: [pa, "app", "docs"],
+      choices: [pa, "app", "docs", "hq"],
       shown: pa,
     },
     {
       case: "a stored Chief",
       stored: "docs",
       mainPane: null,
-      choices: [pa, "app", "docs"],
+      choices: [pa, "app", "docs", "hq"],
       shown: "docs",
+    },
+    {
+      case: "a stored company agent",
+      stored: "hq",
+      mainPane: null,
+      choices: [pa, "app", "docs", "hq"],
+      shown: "hq",
     },
     {
       case: "a stored agent gone from the list",
       stored: "gone",
       mainPane: null,
-      choices: [pa, "app", "docs"],
+      choices: [pa, "app", "docs", "hq"],
       shown: pa,
     },
     {
       case: "a stored custom agent",
       stored: "mine",
       mainPane: null,
-      choices: [pa, "app", "docs"],
+      choices: [pa, "app", "docs", "hq"],
       shown: pa,
     },
     {
       case: "the stored agent in the main pane",
       stored: "app",
       mainPane: "app",
-      choices: [pa, "docs"],
+      choices: [pa, "docs", "hq"],
+      shown: pa,
+    },
+    {
+      case: "the company agent in the main pane",
+      stored: "hq",
+      mainPane: "hq",
+      choices: [pa, "app", "docs"],
       shown: pa,
     },
     {
       case: "the assistant in the main pane",
       stored: null,
       mainPane: pa,
-      choices: ["app", "docs"],
+      choices: ["app", "docs", "hq"],
       shown: "app",
     },
-  ])("the Copilot panel shows the right agent: $case", ({ stored, mainPane, choices, shown }) => {
-    const result = copilotAgents(
-      [assistant, chief("app"), custom, chief("docs")],
+  ])("the side chat shows the right agent: $case", ({ stored, mainPane, choices, shown }) => {
+    const result = sideChatAgents(
+      [assistant, chief("app"), custom, chief("docs"), company],
       stored === null ? null : Telescope.AgentId.make(stored),
       mainPane === null ? null : Telescope.AgentId.make(mainPane),
     );
@@ -224,8 +243,8 @@ describe("telescope agent chat", () => {
     expect(result.shown?.id).toBe(shown);
   });
 
-  it("the Copilot panel shows nothing when the member has no agents here", () => {
-    expect(copilotAgents([custom], null, null)).toEqual({ choices: [], shown: null });
+  it("the side chat shows nothing when the member has no agents here", () => {
+    expect(sideChatAgents([custom], null, null)).toEqual({ choices: [], shown: null });
   });
 
   it.each([

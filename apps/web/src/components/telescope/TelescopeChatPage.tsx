@@ -3,9 +3,11 @@ import { scopeThreadRef } from "@t3tools/client-runtime/environment";
 import { offersOpenThread, openThreadFailureText } from "@t3tools/client-runtime/telescope/agents";
 import type { EnvironmentId, Telescope, ThreadId } from "@t3tools/contracts";
 import { MessagesSquareIcon } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AsyncResult } from "effect/reactivity";
 
+import type { SideChatParentPanel } from "../../lib/sideChatPane";
+import { hostRightPanel, telescopePanelRef } from "../../rightPanelStore";
 import { useQuietThreadShell } from "../../state/entities";
 import { useEnvironmentQuery } from "../../state/query";
 import { useEnvironmentShellStatus } from "../../state/shell";
@@ -55,15 +57,20 @@ function Loading() {
   );
 }
 
+// Never called: `panels={false}` drops the diff and shell links that would use them.
+const PANELLESS: SideChatParentPanel = { openToolDiff: () => {}, runShellCommand: () => {} };
+
 /** The agent's resident thread once the shell lists it; a deleted or archived one starts over. */
 export function AgentChat({
   environmentId,
   workspace,
   agent,
+  sideChat = false,
 }: {
   environmentId: EnvironmentId;
   workspace: Telescope.Workspace;
   agent: Telescope.Agent;
+  sideChat?: boolean;
 }) {
   const [opened, setOpened] = useState<ThreadId | null>(null);
   const [busy, setBusy] = useState(false);
@@ -82,6 +89,14 @@ export function AgentChat({
   );
   const live = isThreadRouteSnapshotAuthoritative(useEnvironmentShellStatus(environmentId));
   const name = agentDisplayName(agent);
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- registers Telescope's panel as the chat's panel host in the panel store
+  useEffect(() => {
+    if (threadId === null) return;
+    return hostRightPanel(
+      scopeThreadRef(environmentId, threadId),
+      telescopePanelRef(environmentId),
+    );
+  }, [environmentId, threadId]);
 
   if (threadId !== null && shell !== null && shell.archivedAt === null && shell.deletedAt == null)
     return (
@@ -90,7 +105,8 @@ export function AgentChat({
         environmentId={environmentId}
         threadId={threadId}
         routeKind="server"
-        reserveTitleBarControlInset={false}
+        panels={false}
+        {...(sideChat ? { embedded: PANELLESS } : { reserveTitleBarControlInset: false })}
       />
     );
   // Not loaded yet, or just opened and the lists have not caught up: the shell lists it soon.
