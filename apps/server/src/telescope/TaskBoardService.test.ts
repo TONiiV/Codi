@@ -592,6 +592,19 @@ it.layer(layer)("Telescope task board", (it) => {
       );
       const settled = yield* update(agent, kept.version, { title: "Agent plan" });
       assert.strictEqual(settled.title, "Agent plan");
+
+      // Deciding a member's counter-proposal retires the marked proposal but leaves the marker.
+      const d4 = (yield* update(bob, 1, { title: "Plan E" })).conflict?.decisionId;
+      assert.isDefined(d4);
+      const counter = { workspaceId: a, title: "Counter", text: "", supersedes: d4 };
+      const proposed = yield* board.createDecision(alice, { ...counter, status: "proposed" });
+      yield* decide(proposed.id, "Plan F");
+      const retired = yield* current;
+      assert.strictEqual(retired.conflictDecisionId, d4);
+      yield* update(alice, retired.version, { goalChain: ["Q5"] });
+      const reopened = yield* update(agent, retired.version, { goalChain: ["Q6"] });
+      assert.notStrictEqual(reopened.conflict?.decisionId, d4);
+      assert.isDefined(reopened.conflict);
     }),
   );
 });
