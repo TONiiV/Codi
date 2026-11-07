@@ -89,11 +89,21 @@ export function decisionOptionsLocked(state: {
   return state.sentAt !== null && (state.isPending || state.dataUpdatedAt <= state.sentAt);
 }
 
-/** Reports oldest first; an offline commit can append an entry older than the last one. */
-export function reportsInOrder(
-  entries: Telescope.Task["freeText"],
-): ReadonlyArray<Telescope.Task["freeText"][number]> {
-  return [...entries].sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
+/**
+ * When to read a lease again. A lease lapses on the server only when a board read runs, and a
+ * heartbeat moves `expiresAt` without a notice, so the watch tells neither. A lease read at
+ * `readAt` already past its expiry means this clock runs ahead by at least that much, so the
+ * wait backs off by it; no wait is shorter than the floor or longer than the lease's own span.
+ */
+export function leaseRecheckDelay(
+  lease: Telescope.Lease | undefined,
+  now: number,
+  readAt: number,
+): number | null {
+  if (lease === undefined) return null;
+  const expiresAt = Date.parse(lease.expiresAt);
+  const span = Math.max(expiresAt - Date.parse(lease.heartbeatAt), 5_000);
+  return Math.min(Math.max(expiresAt - now, readAt - expiresAt, 5_000), span);
 }
 
 /** Pins the write to the version the user saw, so a concurrent change is merged, not lost. */
@@ -257,20 +267,38 @@ export function createTelescopeBoardAtoms<R, E>(
       return notices.epoch + count(notices);
     });
   };
+  const byTask = (
+    target: BoardTarget & { readonly input: { readonly taskId: Telescope.TaskId } },
+  ) => noticesFor(target, (seen) => seen.byTask[target.input.taskId] ?? 0);
+  // A refused watch stays failed, so a read answered again (the member is back) reopens it.
+  const reopenRefusedWatch = (
+    { environmentId, input: { workspaceId } }: BoardTarget,
+    _value: unknown,
+    registry: AtomRegistry.AtomRegistry,
+  ) =>
+    Effect.sync(() => {
+      const seen = watchOf(environmentId, workspaceId);
+      if (!registry.getNodes().has(seen)) return;
+      const watched = registry.get(seen);
+      if (AsyncResult.isFailure(watched) && !watched.waiting) registry.refresh(seen);
+    });
   const tasks = createEnvironmentRpcQueryAtomFamily(runtime, {
     label: "telescope:task:list",
     tag: WS_METHODS.taskList,
     refreshTrigger: (target) => noticesFor(target, (seen) => seen.tasks),
+    onAnswer: reopenRefusedWatch,
   });
   const task = createEnvironmentRpcQueryAtomFamily(runtime, {
     label: "telescope:task:get",
     tag: WS_METHODS.taskGet,
-    refreshTrigger: (target) => noticesFor(target, (seen) => seen.byTask[target.input.taskId] ?? 0),
+    refreshTrigger: byTask,
+    onAnswer: reopenRefusedWatch,
   });
   const decisions = createEnvironmentRpcQueryAtomFamily(runtime, {
     label: "telescope:decision:list",
     tag: WS_METHODS.decisionList,
     refreshTrigger: (target) => noticesFor(target, (seen) => seen.decisions),
+    onAnswer: reopenRefusedWatch,
   });
 
   // A committed write comes back as a notice on a live watch, so only a refused write, or one
@@ -295,9 +323,12 @@ export function createTelescopeBoardAtoms<R, E>(
     tasks,
     task,
     decisions,
+    // A lease is taken, released, or lapsed by a commit to its task's `leaseId`.
     lease: createEnvironmentRpcQueryAtomFamily(runtime, {
       label: "telescope:lease:get",
       tag: WS_METHODS.leaseGet,
+      refreshTrigger: byTask,
+      onAnswer: reopenRefusedWatch,
     }),
     agents: createEnvironmentRpcQueryAtomFamily(runtime, {
       label: "telescope:agent:list-mine",
