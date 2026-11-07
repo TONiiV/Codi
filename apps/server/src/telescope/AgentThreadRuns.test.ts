@@ -23,6 +23,7 @@ import * as AgentThreadRuns from "./AgentThreadRuns.ts";
 import * as DelegationService from "./DelegationService.ts";
 import * as RunRecordService from "./RunRecordService.ts";
 import * as TelescopeDb from "./TelescopeDb.ts";
+import * as WakeQueueService from "./WakeQueueService.ts";
 import * as WorkspaceService from "./WorkspaceService.ts";
 
 const database = Layer.effectDiscard(runMigrations()).pipe(
@@ -33,6 +34,7 @@ const layer = Layer.mergeAll(
   RunRecordService.layer,
   WorkspaceService.layer,
   DelegationService.layer,
+  WakeQueueService.layer,
 ).pipe(
   Layer.provideMerge(Layer.merge(database, NodeCrypto.layer)),
   Layer.provide(

@@ -98,6 +98,7 @@ import * as TelescopeAttribution from "./telescope/AttributionService.ts";
 import * as TelescopeTokenSaver from "./telescope/tokensaver/TokenSaverService.ts";
 import * as TelescopeMemory from "./telescope/MemoryService.ts";
 import * as TelescopeRouting from "./telescope/RoutingService.ts";
+import * as TelescopeWorkers from "./telescope/WorkerDispatch.ts";
 import * as PeerLinks from "./peer/PeerLinks.ts";
 import * as PeerMcpClient from "./peer/PeerMcpClient.ts";
 import * as McpSessionRegistry from "./mcp/McpSessionRegistry.ts";
@@ -685,11 +686,23 @@ const layerRuntimeCoreDependenciesBase = Layer.mergeAll(
   ).pipe(Layer.provide(DelegatedTaskQuestionReactor.layer), Layer.provide(ProjectionStoreV2.layer)),
   TelescopeThreadTurnTokens.layer.pipe(
     Layer.provide(
-      Layer.mergeAll(TelescopeRuns.layer, TelescopeDelegations.layer, TelescopeDb.layer),
+      Layer.mergeAll(
+        TelescopeRuns.layer,
+        TelescopeDelegations.layer,
+        TelescopeWakeQueue.layer,
+        TelescopeDb.layer,
+      ),
     ),
   ),
   TelescopeDelegationAnswers.layer.pipe(
-    Layer.provide(Layer.merge(TelescopeDelegations.layer, TelescopeBoardChanges.layer)),
+    Layer.provide(
+      Layer.mergeAll(
+        TelescopeDelegations.layer,
+        TelescopeBoardChanges.layer,
+        TelescopeRuns.layer,
+        TelescopeDb.layer,
+      ),
+    ),
   ),
   ProviderUsageLimitsIngestion.layer,
   layerProviderInstallationRefresh,
@@ -792,7 +805,7 @@ const layerCommandReadiness = HttpRouter.middleware(
 // Telescope's services as one argument of the layerMakeRoutes pipe: Effect's pipe takes at most 20.
 const provideTelescope = <A, E, R>(layer: Layer.Layer<A, E, R>) =>
   layer.pipe(
-    Layer.provide(TelescopeWakeQueue.layer),
+    Layer.provide(Layer.merge(TelescopeWorkers.layer, TelescopeWakeQueue.layer)),
     Layer.provide(TelescopeWorkspaces.layer),
     // The same notice hub TaskBoardService publishes to, by layer memoization.
     Layer.provide(Layer.merge(TelescopeBoard.layer, TelescopeBoardChanges.layer)),
