@@ -91,14 +91,19 @@ const STALE = {
 } as const;
 
 /** Every task write: pinned to the version on screen, with the server's outcome surfaced. */
-export function useTaskWrite({ environmentId }: BoardTarget) {
+export function useTaskWrite(target: BoardTarget) {
   const navigate = useNavigate();
+  const { environmentId } = target;
+  const names = useBoardNames(target);
   const update = useAtomCommand(telescopeBoard.updateTask, { reportFailure: false });
   return async (task: Telescope.Task, change: Parameters<typeof taskUpdateInput>[1]) => {
     const result = await update({ environmentId, input: taskUpdateInput(task, change) });
     if (result._tag === "Success") {
-      const outcome = taskUpdateOutcome(change.set ?? {}, result.value);
-      const status = TASK_STATUS[result.value.status].label;
+      const outcome = taskUpdateOutcome(result.value);
+      if (outcome.kind === "overwrote") {
+        const who = outcome.authors.map((id) => names(id) ?? "其他成员").join("、");
+        toastManager.add({ type: "info", title: `覆盖了 ${who} 刚才的修改` });
+      }
       if (outcome.kind === "conflict")
         toastManager.add({
           type: "warning",
@@ -108,13 +113,6 @@ export function useTaskWrite({ environmentId }: BoardTarget) {
             children: "去决定",
             onClick: () => void navigate(decisionLink(outcome.decisionId)),
           },
-        });
-      if (outcome.kind === "kept")
-        toastManager.add({
-          ...STALE,
-          description: outcome.fields.includes("status")
-            ? `状态只能往前走，保留了「${status}」。`
-            : "按规则保留了对方的改动。",
         });
       return true;
     }

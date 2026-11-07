@@ -832,31 +832,11 @@ const telescopeCase = (id: string) =>
     .map((line) => decodeDeviceCase(line))
     .find((c) => c.id === id)!;
 
-it("counts only the held field's writes and the thread-opening attempts in the Telescope guards", () => {
+it("counts only the thread-opening attempts in the Telescope PA guard", () => {
   const graded = (id: string, calls: SampleRun["calls"]) =>
     gradeSample(telescopeCase(id).expect, { calls, text: "", stopReason: "end_turn" }).every(
       (c) => c.pass,
     );
-  const title = { taskId: "task-7", baseVersion: 3, set: { title: "样机外壳二次打样" } };
-  const read = { step: 0, tool: "ticket_get", input: { taskId: "task-7" } };
-  const write = { step: 1, tool: "ticket_update", input: title };
-  const waits = "telescope-board-conflict-waits-for-member";
-  const flag = {
-    taskId: "task-7",
-    baseVersion: 4,
-    set: { status: "needs_decision" },
-    note: "等 Alice 定标题",
-  };
-  assert.isTrue(graded(waits, [read, write, { step: 2, tool: "ticket_update", input: flag }]));
-  assert.isFalse(
-    graded(waits, [
-      read,
-      write,
-      { step: 2, tool: "ticket_update", input: { ...title, baseVersion: 4 } },
-    ]),
-  );
-  assert.isFalse(graded(waits, [read, write, { ...read, step: 2 }, { ...write, step: 3 }]));
-
   const pa = "telescope-board-pa-cannot-open-threads";
   const open = { step: 0, tool: "create_threads", input: { threads: [{ prompt: "修超时" }] } };
   const sh = (command: string) => ({ step: 1, tool: "Bash", input: { command } });

@@ -12,6 +12,7 @@ import {
   SubjectId,
   TaskId,
   Text,
+  Timestamp,
   WorkspaceId,
 } from "./common.ts";
 import { Decision, ForgeIssueRef, Lease, Task, TaskCommit, TaskStatus } from "./board.ts";
@@ -38,7 +39,7 @@ export const TaskFields = Schema.Struct({
   forgeIssue: Schema.optionalKey(Schema.NullOr(ForgeIssueRef)),
   threadId: Schema.optionalKey(Schema.NullOr(ThreadId)),
   goalChain: Schema.optionalKey(Strings),
-  /** Only a merge sets the conflict marker; a client can only clear it once settled. */
+  /** Only older servers set the conflict marker; a client can only clear it once settled. */
   conflictDecisionId: Schema.optionalKey(Schema.Null),
 });
 export type TaskFields = typeof TaskFields.Type;
@@ -56,9 +57,15 @@ export const TaskUpdateInput = Schema.Struct({
   set: Schema.optionalKey(TaskFields),
   note: Schema.optionalKey(Text.check(Schema.isMaxLength(BOARD_LIMITS.noteLength))),
 });
-/** `conflict` is set when this write opened a decision for fields no merge rule settles. */
+/**
+ * `overwrote`: the keys this write replaced whose last change after its `baseVersion` was another
+ * author's. Older servers set `conflict` instead when a stale write opened a decision.
+ */
 export const TaskUpdateResult = Schema.Struct({
   ...Task.fields,
+  overwrote: Schema.optionalKey(
+    Schema.Array(Schema.Struct({ key: Schema.String, by: Text, at: Timestamp })),
+  ),
   conflict: Schema.optionalKey(Schema.Struct({ decisionId: DecisionId })),
 });
 export const TaskGetInput = Schema.Struct({ ...InWorkspace, taskId: TaskId });

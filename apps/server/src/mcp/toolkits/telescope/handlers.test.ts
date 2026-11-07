@@ -222,7 +222,7 @@ it.effect("works the board as the run's agent through every board tool", () =>
     const board = yield* TaskBoardService.TaskBoardService;
     const member = { caller: ann };
     const { version } = yield* board.getTask(member, { workspaceId, taskId });
-    yield* board.updateTask(member, {
+    const renamed = yield* board.updateTask(member, {
       workspaceId,
       taskId,
       baseVersion: version,
@@ -233,8 +233,17 @@ it.effect("works the board as the run's agent through every board tool", () =>
       baseVersion: version,
       set: { title: "Agent title" },
     })) as typeof Telescope.TaskUpdateResult.Type;
-    const conflictId = stale.conflict?.decisionId;
-    assert.isDefined(conflictId);
+    const { self } = yield* (yield* WorkspaceService.WorkspaceService).get(ann, { workspaceId });
+    assert.deepStrictEqual(
+      [stale.title, stale.overwrote],
+      ["Agent title", [{ key: "title", by: self.subjectId, at: renamed.updatedAt }]],
+    );
+    const { id: proposalId } = yield* board.createDecision(member, {
+      workspaceId,
+      title: "Rename it back",
+      text: "-",
+      status: "proposed",
+    });
     const memberOnly = {
       code: "capability_denied",
       message: "Only a member settles or replaces a proposal. Leave a note or tell your member.",
@@ -243,7 +252,7 @@ it.effect("works the board as the run's agent through every board tool", () =>
       yield* call("decision_record", {
         title: "Take the agent's title",
         text: "-",
-        supersedes: conflictId,
+        supersedes: proposalId,
         chosen: "incoming",
       }),
       memberOnly,
@@ -253,7 +262,7 @@ it.effect("works the board as the run's agent through every board tool", () =>
         title: "Keep Ann's title",
         text: "Recommend keeping it.",
         status: "proposed",
-        supersedes: conflictId,
+        supersedes: proposalId,
       }),
       memberOnly,
     );
@@ -261,11 +270,11 @@ it.effect("works the board as the run's agent through every board tool", () =>
       workspaceId,
       title: "Keep",
       text: "-",
-      supersedes: conflictId,
+      supersedes: proposalId,
       chosen: "keep",
     });
     const settled = yield* board.getTask(member, { workspaceId, taskId });
-    assert.deepStrictEqual([settled.title, settled.conflictDecisionId], ["Ann v2", undefined]);
+    assert.deepStrictEqual([settled.title, settled.conflictDecisionId], ["Agent title", undefined]);
 
     const { entries } = yield* (yield* GrantService.GrantService).auditList(ann, { workspaceId });
     assert.deepStrictEqual(
