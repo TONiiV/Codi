@@ -230,7 +230,8 @@ it.layer(layer)("Telescope task board", (it) => {
           status: "proposed",
           supersedes,
         });
-      yield* propose("pgvector", old.id);
+      const rival = yield* propose("pgvector", old.id);
+      yield* propose("Neon", rival.id);
       yield* propose("WAL", proposal.id);
       yield* decide("SQLite", proposal.id);
 
@@ -253,6 +254,7 @@ it.layer(layer)("Telescope task board", (it) => {
           );
       assert.deepStrictEqual(yield* statuses(a), [
         ["Adopt stray", "decided"],
+        ["Neon", "superseded"],
         ["Postgres", "superseded"],
         ["SQLite", "decided"],
         ["WAL", "superseded"],
