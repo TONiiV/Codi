@@ -56,6 +56,7 @@ import { EnvironmentToolkit } from "../../apps/server/src/mcp/toolkits/environme
 import { HtmlToolkit } from "../../apps/server/src/mcp/toolkits/html/tools.ts";
 import { MemoryToolkit } from "../../apps/server/src/mcp/toolkits/memory/tools.ts";
 import { TelescopeToolkit } from "../../apps/server/src/mcp/toolkits/telescope/tools.ts";
+import { renderTurn } from "../../apps/server/src/telescope/AgentInstructions.ts";
 import { boardItem, renderContextFile } from "../../apps/server/src/telescope/ContextBudget.ts";
 import { OrchestratorToolkit } from "../../apps/server/src/mcp/toolkits/orchestrator/tools.ts";
 import { PreviewToolkit } from "../../apps/server/src/mcp/toolkits/preview/tools.ts";
@@ -304,6 +305,8 @@ export const McpToolUseCase = Schema.Struct({
     linkedEnvironments: Schema.optional(Schema.Boolean),
     /** The thread belongs to an open Telescope run, so T3 lists its memory and board tools. */
     telescopeRun: Schema.optional(Schema.Boolean),
+    /** The thread is this Telescope agent's resident thread: T3 renders `prompt` as its first wake. */
+    telescopeAgent: Schema.optional(Schema.Literals(["chief_of_staff", "chief_agent"])),
     /** Items of the Telescope context file, rendered by T3 and given before `context`. */
     telescopeContext: Schema.optional(
       Schema.Struct({
@@ -1053,10 +1056,19 @@ export const buildMessages = (sample: Sample) => {
     }
     if (turn.text) push(turn.role, text(turn.text));
   }
+  const agentKind = testCase.setup.telescopeAgent;
   const userText =
-    testCase.promptContext === undefined
-      ? testCase.prompt
-      : projectComposerContextForProvider({ text: testCase.prompt, ...testCase.promptContext });
+    agentKind !== undefined
+      ? renderTurn(
+          { kind: agentKind, name: "Alice's agent" },
+          [{ kind: "message", text: testCase.prompt }],
+          {
+            firstTurn: true,
+          },
+        )
+      : testCase.promptContext === undefined
+        ? testCase.prompt
+        : projectComposerContextForProvider({ text: testCase.prompt, ...testCase.promptContext });
   const prompt =
     sideChatContext === undefined ? userText : withInlineContext(sideChatContext, userText);
   const childPrompt = () => taskPrompt({ task: prompt, role: delegateRole });

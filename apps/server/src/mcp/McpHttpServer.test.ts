@@ -1521,6 +1521,22 @@ it.effect("lists memory and Telescope tools only to threads with an open Telesco
       expect((yield* write(telescopeRun)).error?.message).toContain("not found");
       const ticketList = { name: "ticket_list", arguments: {} };
       expect((yield* telescopeRun("tools/call", ticketList)).error?.message).toContain("not found");
+
+      // A resident thread keeps its list between runs; the gateway still refuses the call.
+      yield* db.update(
+        workspace.id,
+        "agents",
+        { resident_thread_id: "thread-telescope" },
+        { agent_id: "agent-alice" },
+      );
+      expect(yield* listed(telescopeRun)).toEqual([
+        "memory_search",
+        "memory_write",
+        ...Object.keys(TelescopeToolkit.tools),
+      ]);
+      expect(JSON.stringify(yield* telescopeRun("tools/call", ticketList))).toContain(
+        "open Telescope run",
+      );
     }),
   ).pipe(Effect.provide(NodeHttpServer.layerTest)),
 );

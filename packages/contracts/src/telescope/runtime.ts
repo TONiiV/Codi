@@ -6,6 +6,7 @@ import {
   AgentId,
   AgentRunId,
   Count,
+  DelegationId,
   GrantId,
   MemoryId,
   OnBehalfOf,
@@ -100,6 +101,9 @@ export const RunInputSnapshot = Schema.Struct({
   /** Who serves the model, exported as OpenTelemetry `gen_ai.provider.name`; absent when unknown. */
   provider: Schema.optionalKey(Text),
   contextManifest: Schema.Array(Schema.Struct({ kind: ContextManifestKind, id: Text, hash: Text })),
+  /** On an agent thread: the user message of the one Codi run this run serves, and its tasks. */
+  codiMessageId: Schema.optionalKey(Text),
+  delegationIds: Schema.optionalKey(Schema.Array(DelegationId)),
 });
 
 export const AgentRun = Schema.Struct({

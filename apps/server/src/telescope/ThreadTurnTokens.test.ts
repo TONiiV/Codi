@@ -23,14 +23,21 @@ import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
 import * as Orchestrator from "../orchestration-v2/Orchestrator.ts";
 import { runMigrations } from "../persistence/Migrations.ts";
 import * as SqlitePersistence from "../persistence/Sqlite.ts";
+import * as DelegationService from "./DelegationService.ts";
 import * as RunRecordService from "./RunRecordService.ts";
+import * as TelescopeDb from "./TelescopeDb.ts";
 import * as ThreadTurnTokens from "./ThreadTurnTokens.ts";
 import * as WorkspaceService from "./WorkspaceService.ts";
 
 const database = Layer.effectDiscard(runMigrations()).pipe(
   Layer.provideMerge(SqlitePersistence.layerMemory),
 );
-const layer = Layer.mergeAll(RunRecordService.layer, WorkspaceService.layer).pipe(
+const layer = Layer.mergeAll(
+  RunRecordService.layer,
+  WorkspaceService.layer,
+  TelescopeDb.layer,
+  DelegationService.layer,
+).pipe(
   Layer.provideMerge(Layer.merge(database, NodeCrypto.layer)),
   Layer.provide(
     Layer.succeed(ServerEnvironment.ServerEnvironmentIdentity, {

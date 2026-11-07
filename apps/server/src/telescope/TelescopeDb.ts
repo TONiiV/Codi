@@ -122,7 +122,21 @@ export class TelescopeDb extends Context.Service<
     readonly workspaceIdForInvitation: (
       code: string,
     ) => Effect.Effect<Telescope.WorkspaceId | undefined, PersistenceSqlError>;
-    readonly openRunsOnThread: (threadId: string) => Effect.Effect<
+    /** The agent whose resident thread this is, with its owner; company agents have none. */
+    readonly agentThread: (threadId: string) => Effect.Effect<
+      | {
+          readonly workspaceId: Telescope.WorkspaceId;
+          readonly agentId: Telescope.AgentId;
+          readonly ownerSubjectId: string;
+        }
+      | undefined,
+      PersistenceSqlError
+    >;
+    /** With `codiMessageId`, only the runs that serve that Codi run. */
+    readonly openRunsOnThread: (
+      threadId: string,
+      codiMessageId?: string,
+    ) => Effect.Effect<
       ReadonlyArray<{
         readonly workspaceId: Telescope.WorkspaceId;
         readonly runId: Telescope.AgentRunId;
@@ -369,15 +383,39 @@ const make = Effect.gen(function* () {
     `.pipe(Effect.mapError(toPersistenceSqlError("TelescopeDb.workspaceIdForInvitation")));
     return rows[0] === undefined ? undefined : Telescope.WorkspaceId.make(rows[0].workspace_id);
   });
-  const openRunsOnThread = Effect.fn("TelescopeDb.openRunsOnThread")(function* (threadId: string) {
+  const openRunsOnThread = Effect.fn("TelescopeDb.openRunsOnThread")(function* (
+    threadId: string,
+    codiMessageId?: string,
+  ) {
+    const served =
+      codiMessageId === undefined
+        ? sql``
+        : sql`AND json_extract(input_snapshot_json, '$.codiMessageId') = ${codiMessageId}`;
     const rows = yield* sql<{ readonly workspace_id: string; readonly run_id: string }>`
       SELECT workspace_id, run_id FROM telescope_runs
-      WHERE thread_id = ${threadId} AND finished_at IS NULL
+      WHERE thread_id = ${threadId} AND finished_at IS NULL ${served}
     `.pipe(Effect.mapError(toPersistenceSqlError("TelescopeDb.openRunsOnThread")));
     return rows.map((row) => ({
       workspaceId: Telescope.WorkspaceId.make(row.workspace_id),
       runId: Telescope.AgentRunId.make(row.run_id),
     }));
+  });
+  const agentThread = Effect.fn("TelescopeDb.agentThread")(function* (threadId: string) {
+    const [row] = yield* sql<{
+      readonly workspace_id: string;
+      readonly agent_id: string;
+      readonly owner_subject_id: string;
+    }>`
+      SELECT workspace_id, agent_id, owner_subject_id FROM telescope_agents
+      WHERE resident_thread_id = ${threadId} AND owner_subject_id IS NOT NULL LIMIT 1
+    `.pipe(Effect.mapError(toPersistenceSqlError("TelescopeDb.agentThread")));
+    return row === undefined
+      ? undefined
+      : {
+          workspaceId: Telescope.WorkspaceId.make(row.workspace_id),
+          agentId: Telescope.AgentId.make(row.agent_id),
+          ownerSubjectId: row.owner_subject_id,
+        };
   });
   const pruneRunsBefore = Effect.fn("TelescopeDb.pruneRunsBefore")(function* (cutoff: string) {
     yield* sql
@@ -422,6 +460,7 @@ const make = Effect.gen(function* () {
     workspaceIdsOf,
     allWorkspaceIds,
     workspaceIdForInvitation,
+    agentThread,
     openRunsOnThread,
     pruneRunsBefore,
     workspaceIdsWithActiveWakes,
