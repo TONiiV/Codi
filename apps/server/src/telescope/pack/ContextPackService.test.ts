@@ -620,6 +620,13 @@ describe("ContextPackService", () => {
           "home/CLAUDE.md": "Project rules\n",
           "home/.mcp.json": JSON.stringify({ mcpServers: { proj: { command: "proj" } } }),
           "dotfiles/CLAUDE.md": "my own instructions\n",
+          // Override targets exist up front, so a row whose import misses them fails by assertion.
+          "home3/.local/codex/AGENTS.md": "old\n",
+          "home3/.local/codex/config.toml": 'model = "old"\n',
+          "home3/.xdg/opencode/AGENTS.md": "old\n",
+          "home4/.codex/AGENTS.md": "old\n",
+          "home5/AGENTS.md": "old\n",
+          "home6/opencode/AGENTS.md": "old\n",
         },
         { "linked-home/.claude/CLAUDE.md": "../../dotfiles/CLAUDE.md" },
       );
@@ -659,7 +666,7 @@ describe("ContextPackService", () => {
         .import(pack, dir.at("home2"), "cursor", false, "home")
         .pipe(Effect.provide(Logger.layer([capture], { mergeWithExisting: false })));
       expect(warnings.join("\n")).toContain(
-        `Cursor Settings > Rules, not in a file under ${dir.at("home2")}. Paste ${pack}/instructions.md there.`,
+        `Left out the instructions: they go in Cursor Settings > Rules, not in a file under ${dir.at("home2")}. Paste the text of ${pack}/instructions.md there.`,
       );
       expect(yield* dir.read("home2/.cursor/skills/review/SKILL.md")).toBe("Review.\n");
       expect(JSON.parse(yield* dir.read("home2/.cursor/mcp.json")).mcpServers.gh).toEqual({
@@ -668,19 +675,27 @@ describe("ContextPackService", () => {
       });
       expect(yield* dir.exists(dir.at("home2/.cursor/rules"))).toBe(false);
 
-      // CODEX_HOME and XDG_CONFIG_HOME move a harness's files, but never out of the home.
-      const withEnv = (env: Record<string, string>) =>
-        Effect.provide(ConfigProvider.layer(ConfigProvider.fromEnv({ env })));
-      const codexHome = { CODEX_HOME: dir.at("home3/.local/codex") };
-      yield* service.import(pack, dir.at("home3"), "codex", false, "home").pipe(withEnv(codexHome));
-      yield* service
-        .import(pack, dir.at("home3"), "opencode", false, "home")
-        .pipe(withEnv({ XDG_CONFIG_HOME: dir.at("home3/.xdg") }));
-      expect(yield* dir.read("home3/.local/codex/AGENTS.md")).toContain("Prefer small diffs.");
+      // CODEX_HOME and XDG_CONFIG_HOME move a harness's files, but never out of the home. The home
+      // itself is inside it, however it is spelled.
+      const overrides = [
+        ["home3", "codex", "CODEX_HOME", "home3/.local/codex", "home3/.local/codex"],
+        ["home3", "opencode", "XDG_CONFIG_HOME", "home3/.xdg", "home3/.xdg/opencode"],
+        ["home4", "codex", "CODEX_HOME", "home3/.local/codex", "home4/.codex"],
+        ["home5", "codex", "CODEX_HOME", "home5", "home5"],
+        ["home5", "opencode", "XDG_CONFIG_HOME", "home5/", "home5/opencode"],
+        ["home6", "codex", "CODEX_HOME", "home6/", "home6"],
+        ["home6", "opencode", "XDG_CONFIG_HOME", "home6", "home6/opencode"],
+      ] as const;
+      for (const [home, harness, name, value, files] of overrides) {
+        const env = { [name]: dir.at(value) };
+        yield* service
+          .import(pack, dir.at(home), harness, false, "home")
+          .pipe(Effect.provide(ConfigProvider.layer(ConfigProvider.fromEnv({ env }))));
+        expect(yield* dir.read(`${files}/AGENTS.md`), `${name}=${value}`).toContain(
+          "Prefer small diffs.",
+        );
+      }
       expect(yield* dir.read("home3/.local/codex/config.toml")).toContain("[mcp_servers.gh]");
-      expect(yield* dir.read("home3/.xdg/opencode/AGENTS.md")).toContain("Prefer small diffs.");
-      yield* service.import(pack, dir.at("home4"), "codex", false, "home").pipe(withEnv(codexHome));
-      expect(yield* dir.read("home4/.codex/AGENTS.md")).toContain("Prefer small diffs.");
 
       // Syncing the home in place keeps the rest of ~/.claude.json and the user's own CLAUDE.md.
       yield* service.import(pack, dir.at("home"), "claude", true, "home");

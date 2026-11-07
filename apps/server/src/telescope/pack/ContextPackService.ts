@@ -127,7 +127,7 @@ const make = Effect.gen(function* () {
     );
     if (value === "") return fallback;
     const dir = path.resolve(value);
-    if (dir !== home && isInside(path, home, dir)) return path.relative(home, dir);
+    if (isInside(path, home, dir)) return path.relative(home, dir) || ".";
     yield* Effect.logWarning(
       `Ignored ${name}: ${value} is not inside ${home}, so ${fallback} is used.`,
     );
@@ -205,7 +205,7 @@ const make = Effect.gen(function* () {
     if (target.settings !== undefined && pack.instructions.trim() !== "") {
       const text = path.join(path.resolve(packDir), PACK_FILES.instructions);
       yield* Effect.logWarning(
-        `Left out the instructions: ${harness} keeps them in ${target.settings}, not in a file under ${path.resolve(dir)}. Paste ${text} there.`,
+        `Left out the instructions: they go in ${target.settings}, not in a file under ${path.resolve(dir)}. Paste the text of ${text} there.`,
       );
     }
   }, Effect.provide(context));
