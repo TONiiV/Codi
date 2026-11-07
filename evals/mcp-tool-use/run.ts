@@ -55,7 +55,7 @@ import { DeviceToolkit } from "../../apps/server/src/mcp/toolkits/device/tools.t
 import { EnvironmentToolkit } from "../../apps/server/src/mcp/toolkits/environment/tools.ts";
 import { HtmlToolkit } from "../../apps/server/src/mcp/toolkits/html/tools.ts";
 import { MemoryToolkit } from "../../apps/server/src/mcp/toolkits/memory/tools.ts";
-import { renderContextFile } from "../../apps/server/src/telescope/ContextBudget.ts";
+import { boardItem, renderContextFile } from "../../apps/server/src/telescope/ContextBudget.ts";
 import { OrchestratorToolkit } from "../../apps/server/src/mcp/toolkits/orchestrator/tools.ts";
 import { PreviewToolkit } from "../../apps/server/src/mcp/toolkits/preview/tools.ts";
 import { PreviewControlsToolkit } from "../../apps/server/src/mcp/toolkits/previewControls/tools.ts";
@@ -297,7 +297,7 @@ export const McpToolUseCase = Schema.Struct({
     telescopeContext: Schema.optional(
       Schema.Struct({
         pinned: ContextItems,
-        board: ContextItems,
+        board: Schema.Array(Contracts.Telescope.BoardItem),
         recall: ContextItems,
         thread: ContextItems,
       }),
@@ -1000,7 +1000,8 @@ export const buildMessages = (sample: Sample) => {
     native
       ? "You are a subagent started by the parent agent's Agent tool. Your final message goes to the parent agent, not to the user."
       : undefined,
-    telescopeContext && renderContextFile(telescopeContext),
+    telescopeContext &&
+      renderContextFile({ ...telescopeContext, board: telescopeContext.board.map(boardItem) }),
     context,
   ];
   const reminders = base.reminders.toSpliced(base.gitStatusAt, 0, reminder(gitStatus(testCase)));

@@ -24,8 +24,28 @@ export interface ContextItem {
   readonly text: string;
 }
 
-/** Text length over four, the estimate the token saver uses; no tokenizer ships with the server. */
-export const estimateTokens = (text: string) => Math.ceil(text.length / 4);
+const WIDE =
+  /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}\u3000-\u303f\uff00-\uffef]/u;
+/** No tokenizer ships with the server: a CJK character is about a token, other text length / 4. */
+const cost = (char: string) => (WIDE.test(char) ? 1 : char.length / 4);
+
+export const estimateTokens = (text: string) => {
+  let tokens = 0;
+  for (const char of text) tokens += cost(char);
+  return Math.ceil(tokens);
+};
+
+/** The longest prefix that costs at most `tokens`, cut between code points. */
+const cut = (text: string, tokens: number) => {
+  let used = 0;
+  let end = 0;
+  for (const char of text) {
+    used += cost(char);
+    if (used > tokens) break;
+    end += char.length;
+  }
+  return text.slice(0, end);
+};
 
 const mapBlocks = <T extends { readonly [K in BlockName]: unknown }, B>(
   blocks: T,
@@ -59,7 +79,7 @@ const fill = (items: ReadonlyArray<ContextItem>, budget: number) => {
     }
     const room = budget - used;
     if (room >= MIN_CUT_TOKENS) {
-      kept.push({ ...item, text: `${item.text.slice(0, room * 4 - 1)}…` });
+      kept.push({ ...item, text: `${cut(item.text, room - 1)}…` });
       used += room;
     }
     break;
@@ -87,6 +107,24 @@ export const allocate = (input: {
   return { ...(compacted ? at(true) : full), compacted };
 };
 
+const said = (authorId: string, at: string, text: string) =>
+  `${authorId} (${at}): ${JSON.stringify(text)}`;
+
+/** Board free text is JSON-quoted after its author, so a line break in it cannot start a line. */
+export const boardItem = (item: Telescope.BoardItem): ContextItem => {
+  const lines =
+    item.kind === "task"
+      ? [
+          `[${item.status}] ${JSON.stringify(item.title)}`,
+          ...item.freeText.map((note) => said(note.authorId, note.at, note.text)),
+        ]
+      : [
+          `[decision ${item.status}${item.chosen === undefined ? "" : `: ${JSON.stringify(item.chosen)}`}] ${JSON.stringify(item.title)}`,
+          said(item.authorId, item.createdAt, item.text),
+        ];
+  return { kind: "board", id: item.id, text: lines.join("\n") };
+};
+
 const HEADINGS: { readonly [K in BlockName]: string } = {
   pinned: "Pinned memory",
   board: "Task board",
@@ -107,7 +145,7 @@ export const renderContextFile = (blocks: Blocks<{ readonly text: string }>) =>
             "",
             `## ${HEADINGS[name]}`,
             "",
-            ...blocks[name].map((item) => `- ${item.text.replaceAll("\n", "\n  ")}`),
+            ...blocks[name].map((item) => `- ${item.text.replaceAll(/\r\n?|\n/g, "\n  ")}`),
           ],
     ),
     "",

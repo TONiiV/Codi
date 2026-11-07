@@ -44,18 +44,6 @@ interface Assembled {
   readonly compacted: boolean;
 }
 
-const notes = (entries: ReadonlyArray<Telescope.Task["freeText"][number]>) =>
-  entries.map((entry) => `\n${entry.authorId} (${entry.at}): ${entry.text}`).join("");
-const taskItem = (task: Telescope.Task): ContextBudget.ContextItem => ({
-  kind: "board",
-  id: task.id,
-  text: `[${task.status}] ${task.title}${notes(task.freeText)}`,
-});
-const decisionItem = (decision: Telescope.Decision): ContextBudget.ContextItem => ({
-  kind: "board",
-  id: decision.id,
-  text: `[decision ${decision.status}${decision.chosen === undefined ? "" : `: ${decision.chosen}`}] ${decision.title}\n${decision.text}`,
-});
 const memoryItem = (memory: Telescope.Memory): ContextBudget.ContextItem => ({
   kind: memory.layer === "diary" ? "diary" : "memory",
   id: memory.id,
@@ -122,13 +110,10 @@ const make = Effect.gen(function* () {
       blocks: {
         pinned: pinned.map(memoryItem),
         board: [
-          ...open.filter(own).map(taskItem),
-          ...decisions
-            .filter((decision) => decision.status !== "superseded")
-            .toSorted(newestFirst)
-            .map(decisionItem),
-          ...open.filter((task) => !own(task)).map(taskItem),
-        ],
+          ...open.filter(own),
+          ...decisions.filter((decision) => decision.status !== "superseded").toSorted(newestFirst),
+          ...open.filter((task) => !own(task)),
+        ].map(ContextBudget.boardItem),
         recall: recalled.filter((item) => !pinnedIds.has(item.id)).map(memoryItem),
         thread: input.thread.toReversed().map((message) => ({ kind: "thread", ...message })),
       },

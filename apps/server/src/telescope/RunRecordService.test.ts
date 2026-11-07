@@ -121,7 +121,7 @@ it.layer(layer)("Telescope run records", (it) => {
       );
       assert.deepStrictEqual(calls[0]?.args, { query: "[redacted]" });
 
-      // A finished run takes no more calls or thread tokens.
+      // A finished run takes no more calls, context or thread tokens.
       const late = yield* runs
         .recordCall(
           { workspaceId, runId: started.id },
@@ -134,6 +134,13 @@ it.layer(layer)("Telescope run records", (it) => {
         )
         .pipe(Effect.flip);
       assert.strictEqual(reason(late), "conflict");
+      const lateContext = yield* runs
+        .recordContextManifest(
+          { workspaceId, runId: started.id },
+          snapshot(["late"]).contextManifest,
+        )
+        .pipe(Effect.flip);
+      assert.strictEqual(reason(lateContext), "conflict");
       yield* runs.recordThreadTurn(threadId, { ...noTokens, input: 50 });
       assert.strictEqual(
         (yield* runs.get(alice, { workspaceId, runId: started.id })).tokens.input,
