@@ -1,4 +1,5 @@
 import {
+  AuthDesktopBootstrapSubject,
   AuthStandardClientScopes,
   EnvironmentAuthenticatedPrincipal,
   type EnvironmentCloudLinkStateResult,
@@ -636,7 +637,7 @@ const make = Effect.gen(function* () {
       return yield* makeCloudLinkProof(
         request,
         requestUrl,
-        principal.subject === "desktop-bootstrap",
+        principal.subject === AuthDesktopBootstrapSubject,
       );
     },
     Effect.catchIf(ServerSecretStore.isSecretStoreError, internalError("generate-link-proof")),

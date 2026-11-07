@@ -87,6 +87,8 @@ export const CLIENT_GUARDED_RPC_SCOPES = {
   [TELESCOPE_WS_METHODS.budgetSet]: AuthTelescopeAdminScope,
   [TELESCOPE_WS_METHODS.killSwitchSet]: AuthTelescopeAdminScope,
   [TELESCOPE_WS_METHODS.governanceGet]: AuthTelescopeAdminScope,
+  [TELESCOPE_WS_METHODS.routingSet]: AuthTelescopeAdminScope,
+  [TELESCOPE_WS_METHODS.routingDelete]: AuthTelescopeAdminScope,
 } as const;
 export type ClientGuardedRpcTag = keyof typeof CLIENT_GUARDED_RPC_SCOPES;
 

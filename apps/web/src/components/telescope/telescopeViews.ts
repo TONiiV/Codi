@@ -69,19 +69,24 @@ type TelescopeSearch = {
   readonly layout?: "board";
   /** The task whose detail drawer is open. */
   readonly task?: Telescope.TaskId;
+  /** The agent whose chat is open in 对话. */
+  readonly agent?: Telescope.AgentId;
 };
 
 const decodeTaskId = Schema.decodeUnknownOption(Telescope.TaskId);
+const decodeAgentId = Schema.decodeUnknownOption(Telescope.AgentId);
 
 export function telescopeSearch(
   view: TelescopeView,
   layout: TasksLayout,
   task?: Telescope.TaskId,
+  agent?: Telescope.AgentId,
 ): TelescopeSearch {
   return {
     view,
     ...(layout === "board" ? { layout } : {}),
     ...(task === undefined ? {} : { task }),
+    ...(agent === undefined ? {} : { agent }),
   };
 }
 
@@ -91,6 +96,7 @@ export function parseTelescopeSearch(raw: Record<string, unknown>): TelescopeSea
     parseTelescopeView(raw.view),
     layout,
     Option.getOrUndefined(decodeTaskId(raw.task)),
+    Option.getOrUndefined(decodeAgentId(raw.agent)),
   );
 }
 
@@ -135,5 +141,13 @@ export function useTaskDrawerId(): Telescope.TaskId | null {
   return useLocation({
     select: (location) =>
       telescopeSearchAt(location.pathname, location.search, peekAppModalReturnHref())?.task ?? null,
+  });
+}
+
+export function useChatAgentId(): Telescope.AgentId | null {
+  return useLocation({
+    select: (location) =>
+      telescopeSearchAt(location.pathname, location.search, peekAppModalReturnHref())?.agent ??
+      null,
   });
 }
