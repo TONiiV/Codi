@@ -91,6 +91,10 @@ import * as TelescopeGrants from "./telescope/GrantService.ts";
 import * as TelescopeToolGateway from "./telescope/ToolGateway.ts";
 import * as TelescopeThreadTurnTokens from "./telescope/ThreadTurnTokens.ts";
 import * as TelescopeAgentRuntime from "./telescope/AgentRuntime.ts";
+import * as TelescopeAgentLeases from "./telescope/AgentLeases.ts";
+import * as TelescopeAgentTurnContext from "./telescope/AgentTurnContext.ts";
+import * as TelescopeContextAssembler from "./telescope/ContextAssembler.ts";
+import * as TurnPreamble from "./orchestration-v2/TurnPreamble.ts";
 import * as TelescopeDb from "./telescope/TelescopeDb.ts";
 import * as TelescopeWakeQueue from "./telescope/WakeQueueService.ts";
 import * as TelescopeAttribution from "./telescope/AttributionService.ts";
@@ -684,7 +688,12 @@ const layerRuntimeCoreDependenciesBase = Layer.mergeAll(
   ).pipe(Layer.provide(DelegatedTaskQuestionReactor.layer), Layer.provide(ProjectionStoreV2.layer)),
   TelescopeThreadTurnTokens.layer.pipe(
     Layer.provide(
-      Layer.mergeAll(TelescopeRuns.layer, TelescopeDelegations.layer, TelescopeDb.layer),
+      Layer.mergeAll(
+        TelescopeRuns.layer,
+        TelescopeDelegations.layer,
+        TelescopeDb.layer,
+        ProjectionStoreV2.layer,
+      ),
     ),
   ),
   ProviderUsageLimitsIngestion.layer,
@@ -819,6 +828,11 @@ const layerMakeRoutes = Layer.mergeAll(
   ),
   TelescopeWakeQueue.layerWorker.pipe(Layer.provide(TelescopeAgentRuntime.layerWakeRunner)),
   Layer.merge(TelescopeTokenSaver.layerWeekly, TelescopeRuns.layerRetention),
+  // The same preamble provider turns read, by layer memoization.
+  TelescopeAgentTurnContext.layer.pipe(
+    Layer.provide(Layer.merge(TelescopeContextAssembler.layer, TurnPreamble.layer)),
+  ),
+  TelescopeAgentLeases.layer,
 ).pipe(
   Layer.provide(
     PullRequestReviewGuideService.layer.pipe(Layer.provide(PullRequestReviewGuides.layer)),
