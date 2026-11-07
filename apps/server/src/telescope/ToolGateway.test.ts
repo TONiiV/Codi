@@ -160,12 +160,37 @@ it.layer(layer)("Telescope tool gateway", (it) => {
         usedCount,
       } = yield* setup;
 
+      const fake = "0123456789abcdefghij";
+      const prefixed = [
+        "sk-",
+        "sk_live_",
+        "sk_test_",
+        "rk_live_",
+        "rk_test_",
+        "ghp_",
+        "github_pat_",
+        "glpat-",
+        "xoxb-",
+        "AIza",
+      ];
+      // One per credential shape the gateway redacts, each inside other text.
+      const shapes = {
+        Bearer: `Bearer ${fake}`,
+        Basic: `Basic ${fake}`,
+        JWT: `eyJ${fake}.${fake}.${fake}`,
+        PEM: `-----BEGIN RSA PRIVATE KEY-----\n${fake}\n-----END RSA PRIVATE KEY-----`,
+        ...Object.fromEntries(prefixed.map((prefix) => [prefix, `${prefix}${fake}`])),
+        AKIA: `AKIA${fake.toUpperCase().slice(0, 16)}`,
+      };
+      const inText = (text: (shape: string) => string) =>
+        Object.fromEntries(Object.entries(shapes).map(([name, shape]) => [name, text(shape)]));
       const caller = yield* call("open_ticket", {
         title: "Fix",
         apiKey: "sk-1",
         nested: [
           { brief: "curl -H 'Authorization: Bearer abc.def-123456' sk-proj-0123456789abcdef" },
         ],
+        shapes: inText((shape) => `use ${shape} now`),
       });
       assert.deepStrictEqual(caller, {
         workspaceId,
@@ -198,6 +223,7 @@ it.layer(layer)("Telescope tool gateway", (it) => {
         title: "Fix",
         apiKey: "[redacted]",
         nested: [{ brief: "curl -H 'Authorization: [redacted]' [redacted]" }],
+        shapes: inText(() => "use [redacted] now"),
       });
       assert.deepStrictEqual(entries[1]?.onBehalfOf, [beaId]);
       assert.strictEqual(entries[1]?.projectId, web);

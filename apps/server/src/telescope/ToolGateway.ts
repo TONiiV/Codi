@@ -40,7 +40,7 @@ const TOOL_POWERS: Readonly<Record<Telescope.GatewayTool, Telescope.GrantPower |
 const SECRET_KEY = /token|secret|password|passphrase|api.?key|authorization|cookie|credential/i;
 // Known credential shapes only: auth headers, JWTs, private keys and common provider key prefixes.
 const SECRET_VALUE =
-  /\b(?:Bearer|Basic)\s+[\w.~+/=-]{8,}|\beyJ[\w-]{8,}\.[\w-]{8,}\.[\w-]*|-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?(?:-----END [A-Z ]*PRIVATE KEY-----|$)|\b(?:sk|rk)-[\w-]{16,}|\b(?:gh[pousr]_|github_pat_|glpat-|xox[abpr]-|AIza)[\w-]{16,}|\bAKIA[0-9A-Z]{16}\b/g;
+  /\b(?:Bearer|Basic)\s+[\w.~+/=-]{8,}|\beyJ[\w-]{8,}\.[\w-]{8,}\.[\w-]*|-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?(?:-----END [A-Z ]*PRIVATE KEY-----|$)|\bsk-[\w-]{16,}|\b(?:[sr]k_(?:live|test)_|gh[pousr]_|github_pat_|glpat-|xox[abpr]-|AIza)[\w-]{16,}|\bAKIA[0-9A-Z]{16}\b/g;
 
 const decodeTool = Schema.decodeUnknownEffect(Telescope.GatewayTool);
 const RunRow = Schema.Struct({
