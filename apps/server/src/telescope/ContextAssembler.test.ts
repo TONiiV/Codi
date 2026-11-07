@@ -6,6 +6,7 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
+import * as TestClock from "effect/testing/TestClock";
 
 import { ServerConfig } from "../config.ts";
 import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
@@ -231,5 +232,75 @@ it.layer(layer)("Telescope context assembler", (it) => {
       const late = yield* Effect.flip(assemble);
       assert.strictEqual(isWorkspaceError(late) ? late.reason : late._tag, "conflict");
     }),
+  );
+
+  it.effect(
+    "fills each block from its newest item: own tasks, decisions, then other agents' tasks",
+    () =>
+      Effect.gen(function* () {
+        const db = yield* TelescopeDb.TelescopeDb;
+        const memory = yield* MemoryService.MemoryService;
+        const board = yield* TaskBoardService.TaskBoardService;
+        const runs = yield* RunRecordService.RunRecordService;
+        const assembler = yield* ContextAssembler.ContextAssembler;
+        const order = yield* workspaceWithAgent(alice, "Order");
+        const { workspaceId, agentId } = order;
+        const helperId = Telescope.AgentId.make(`${workspaceId}-helper`);
+        yield* db.insert(workspaceId, "agents", agentRow(helperId, order.ownerId));
+        const task = (title: string, ownerAgentId: Telescope.AgentId) =>
+          board.createTask({ caller: alice }, { workspaceId, title, ownerAgentId });
+        yield* TestClock.adjust("1 second");
+        const newerPin = yield* memory.write(
+          { session: alice },
+          { workspaceId, agentId, op: "add", text: "newer pin", pinned: true },
+        );
+        yield* TestClock.adjust("1 second");
+        const helperOld = yield* task("helper old", helperId);
+        yield* TestClock.adjust("1 second");
+        const decision = yield* board.createDecision(
+          { caller: alice },
+          { workspaceId, title: "Use FTS5", text: "No vectors.", status: "decided" },
+        );
+        yield* TestClock.adjust("1 second");
+        const own = yield* task("own", agentId);
+        yield* TestClock.adjust("1 second");
+        const helperNew = yield* task("helper new", helperId);
+        const started = yield* runs.start(alice, workspaceId, {
+          agentId,
+          threadId: ThreadId.make("thread-order"),
+          inputSnapshot: {
+            promptVersion: "p1",
+            skillsVersions: {},
+            powersVersion: "w1",
+            model: "model-a",
+            contextManifest: [],
+          },
+        });
+        // A 16K window gives the thread 1,024 tokens: the newest 600-token message fits,
+        // the next one is cut and the oldest is dropped.
+        const { manifest } = yield* assembler.assemble({
+          caller: alice,
+          run: { workspaceId, runId: started.id },
+          windowTokens: 16_000,
+          usedTokens: 0,
+          thread: ["message-1", "message-2", "message-3"].map((id) => ({
+            id,
+            text: "x".repeat(2_400),
+          })),
+        });
+        assert.deepStrictEqual(
+          manifest.map((entry) => entry.id),
+          [
+            newerPin.id,
+            order.pinned.id,
+            own.id,
+            decision.id,
+            helperNew.id,
+            helperOld.id,
+            "message-2",
+            "message-3",
+          ],
+        );
+      }),
   );
 });
