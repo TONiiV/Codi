@@ -255,8 +255,8 @@ const readOptionalText = Effect.fnUntraced(function* (file: string) {
 // `run` receives the checked real path of `target`.
 interface PlannedWrite {
   readonly target: string;
-  // Under an entry the plan removes first, so it can only be checked when it runs.
-  readonly fresh?: boolean;
+  // The entry this step deletes; later steps resolve it as the plain folder written in its place.
+  readonly removes?: string;
   readonly run: (
     real: string,
   ) => Effect.Effect<void, PlatformError, FileSystem.FileSystem | Path.Path>;
@@ -271,10 +271,15 @@ const textWrite = (target: string, text: string): PlannedWrite => ({
   }),
 });
 
-// Every target is checked before the first write, so a refusal writes nothing. Each write checks
-// its own target again, since the directory can change in between.
+// Every target is checked before the first write, against the tree as the steps before it leave
+// it, so a refusal writes nothing. Each write checks its own target again, since the directory can
+// change in between.
 const runPlan = Effect.fnUntraced(function* (root: string, plan: ReadonlyArray<PlannedWrite>) {
-  for (const step of plan) if (step.fresh !== true) yield* writeTargetInside(root, step.target);
+  const removed: Array<string> = [];
+  for (const step of plan) {
+    yield* writeTargetInside(root, step.target, removed);
+    if (step.removes !== undefined) removed.push(step.removes);
+  }
   for (const step of plan) yield* step.run(yield* writeTargetInside(root, step.target));
 });
 
@@ -324,7 +329,7 @@ const LINK_HOPS = 40;
 // The path the OS writes for `file`, undefined once the hop cap is spent. It walks segment by
 // segment because a `..` applies to the directory a link resolved to, which `path.resolve` and
 // the JS `realpath` both skip by normalizing the text first.
-const linkChainTarget = Effect.fnUntraced(function* (file: string) {
+const linkChainTarget = Effect.fnUntraced(function* (file: string, removed: ReadonlyArray<string>) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   let hops = 0;
@@ -338,7 +343,9 @@ const linkChainTarget = Effect.fnUntraced(function* (file: string) {
           continue;
         }
         const next = path.join(current, part);
-        const link = yield* fs.readLink(next).pipe(Effect.orElseSucceed(() => undefined));
+        const link = removed.some((entry) => isInside(path, entry, next))
+          ? undefined
+          : yield* fs.readLink(next).pipe(Effect.orElseSucceed(() => undefined));
         if (link === undefined) current = next;
         else if (++hops > LINK_HOPS) return undefined;
         else {
@@ -355,11 +362,18 @@ const linkChainTarget = Effect.fnUntraced(function* (file: string) {
 
 // A write follows every link in its target, so what must stay inside the directory being written
 // to is the end of that chain, including the path a dangling link names.
-const writeTargetInside = Effect.fnUntraced(function* (root: string, file: string) {
+const writeTargetInside = Effect.fnUntraced(function* (
+  root: string,
+  file: string,
+  removed: ReadonlyArray<string> = [],
+) {
   const path = yield* Path.Path;
   const realRoot = yield* plannedRealPath(root);
-  const named = yield* linkChainTarget(file);
-  const real = named === undefined ? undefined : yield* plannedRealPath(named);
+  const named = yield* linkChainTarget(file, removed);
+  const real =
+    named === undefined || removed.some((entry) => isInside(path, entry, named))
+      ? named
+      : yield* plannedRealPath(named);
   if (real === undefined || !isInside(path, realRoot, real)) {
     // One directory spelled two ways in one sentence reads like a tool bug, so the refused path is
     // resolved through its parents, without following the link itself.
@@ -404,26 +418,23 @@ const planTree: (
   to: string,
   root: string,
   ancestors: ReadonlyArray<string>,
-  fresh: boolean,
 ) => Effect.Effect<Array<PlannedWrite>, PlatformError, FileSystem.FileSystem | Path.Path> =
-  Effect.fnUntraced(function* (from, to, root, ancestors, fresh) {
+  Effect.fnUntraced(function* (from, to, root, ancestors) {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const plan: Array<PlannedWrite> = [
-      { target: to, fresh, run: (real) => fs.makeDirectory(real, { recursive: true }) },
+      { target: to, run: (real) => fs.makeDirectory(real, { recursive: true }) },
     ];
     for (const name of (yield* fs.readDirectory(from)).toSorted()) {
       const real = yield* realPathInside(root, path.join(from, name));
       if (real === undefined || ancestors.includes(real)) continue;
       const info = yield* fs.stat(real);
       if (info.type === "Directory") {
-        plan.push(
-          ...(yield* planTree(real, path.join(to, name), root, [...ancestors, real], fresh)),
-        );
+        plan.push(...(yield* planTree(real, path.join(to, name), root, [...ancestors, real])));
       } else if (info.type === "File") {
         const run = (target: string) =>
           Effect.flatMap(fs.readFile(real), (bytes) => fs.writeFile(target, bytes));
-        plan.push({ target: path.join(to, name), fresh, run });
+        plan.push({ target: path.join(to, name), run });
       }
     }
     return plan;
@@ -451,13 +462,12 @@ const planSkills = Effect.fnUntraced(function* (
   for (const skill of skills) {
     const target = path.join(dir, skill.name);
     // An import never deletes project files: it writes over a same-name skill, unlinking only a link.
-    const remove = replace || (yield* Effect.isSuccess(fs.readLink(target)));
-    if (remove) {
+    if (replace || (yield* Effect.isSuccess(fs.readLink(target)))) {
       const run = (real: string) =>
         fs.remove(path.join(real, skill.name), { recursive: true, force: true });
-      plan.push({ target: dir, run });
+      plan.push({ target: dir, removes: target, run });
     }
-    plan.push(...(yield* planTree(skill.dir, target, skill.dir, [skill.dir], remove)));
+    plan.push(...(yield* planTree(skill.dir, target, skill.dir, [skill.dir])));
   }
   return plan;
 });

@@ -55,6 +55,26 @@ const fixture = Effect.fn(function* (
   return { root, at: (rel: string) => path.join(root, rel), read, isLink, tree, exists: fs.exists };
 });
 
+// Each harness's skills base and its instructions and MCP files, relative to the project.
+const relinkPaths = {
+  claude: [".claude", "CLAUDE.md", ".mcp.json"],
+  codex: [".agents", "AGENTS.md", ".codex/config.toml"],
+  cursor: [".cursor", ".cursor/rules/context-pack.mdc", ".cursor/mcp.json"],
+  opencode: [".agents", "AGENTS.md", "opencode.json"],
+} as const;
+// A refused row with merge off would remove the link the merge row needs, so each has its own.
+const relinkRows = Object.entries(relinkPaths).flatMap(([harness, [base, instructions, mcp]]) =>
+  [false, true].flatMap((merge) =>
+    [instructions, mcp].map((file, i) => ({
+      target: `relink-${harness}-${i === 0 ? "instructions" : "mcp"}-${merge}`,
+      harness: harness as keyof typeof relinkPaths,
+      merge,
+      base,
+      file,
+    })),
+  ),
+);
+
 const claudeProject = {
   "project/CLAUDE.md": "@AGENTS.md\n",
   "project/AGENTS.md": "# Rules\n\nRun the tests.\n",
@@ -701,6 +721,13 @@ describe("ContextPackService", () => {
           "dotdot-in/deep/er/keep.txt": "keep\n",
           "absolute/.claude/settings.local.json": "{}",
           "out-mcp/pack.json": "{}",
+          ...Object.fromEntries(
+            relinkRows.map(({ target }) => [`${target}/d1/d2/d3/d4/OLD.md`, "old skill\n"]),
+          ),
+          "out-relink-mcp/pack.json": "{}",
+          "out-relink-mcp/d1/d2/d3/OLD.md": "old skill\n",
+          "out-relink-instructions/pack.json": "{}",
+          "out-relink-instructions/d1/d2/d3/OLD.md": "old skill\n",
         },
         {
           // A file and a directory linked out of a same-name skill: `cp -r` would write through both.
@@ -754,6 +781,20 @@ describe("ContextPackService", () => {
           "opencode-agents/AGENTS.md": "../dotfiles/missing-agents.md",
           "opencode-mcp/opencode.json": "../dotfiles/missing-opencode.json",
           "out-mcp/mcp.json": "../dotfiles/missing-out.json",
+          // Inside the project through the same-name skill link, outside once it is removed.
+          ...Object.fromEntries(
+            relinkRows.flatMap(({ target, base, file }) => [
+              [`${target}/${base}/skills/deploy`, "../../d1/d2/d3/d4"],
+              [
+                `${target}/${file}`,
+                `${"../".repeat(file.split("/").length - 1)}${base}/skills/deploy/../../../../x`,
+              ],
+            ]),
+          ),
+          "out-relink-mcp/skills/deploy": "../d1/d2/d3",
+          "out-relink-mcp/mcp.json": "skills/deploy/../../../x.json",
+          "out-relink-instructions/skills/deploy": "../d1/d2/d3",
+          "out-relink-instructions/instructions.md": "skills/deploy/../../../x.md",
         },
       );
       const fs = yield* FileSystem.FileSystem;
@@ -791,6 +832,9 @@ describe("ContextPackService", () => {
           ["cursor-mcp", "cursor"],
           ["opencode-agents", "opencode"],
           ["opencode-mcp", "opencode"],
+          ...relinkRows
+            .filter((row) => row.merge === merge)
+            .map(({ target, harness }) => [target, harness] as const),
         ] as const) {
           const before = yield* dir.tree(target);
           const error = yield* Effect.flip(
@@ -807,11 +851,13 @@ describe("ContextPackService", () => {
           }
         }
       }
-      const outBefore = yield* dir.tree("out-mcp");
-      const outError = yield* Effect.flip(service.export(dir.at("project"), dir.at("out-mcp")));
-      expect(outError._tag).toBe("ContextPackPathError");
-      if (JSON.stringify(yield* dir.tree("out-mcp")) !== JSON.stringify(outBefore)) {
-        changed.push("out-mcp export");
+      for (const out of ["out-mcp", "out-relink-mcp", "out-relink-instructions"]) {
+        const outBefore = yield* dir.tree(out);
+        const outError = yield* Effect.flip(service.export(dir.at("project"), dir.at(out)));
+        expect([out, outError._tag]).toEqual([out, "ContextPackPathError"]);
+        if (JSON.stringify(yield* dir.tree(out)) !== JSON.stringify(outBefore)) {
+          changed.push(`${out} export`);
+        }
       }
       expect(changed).toEqual([]);
       expect(yield* dir.tree("dotfiles")).toEqual(outside);
