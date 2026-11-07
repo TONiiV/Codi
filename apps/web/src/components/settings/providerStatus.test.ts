@@ -1,7 +1,12 @@
 import { ProviderDriverKind, ProviderInstanceId, type ServerProvider } from "@t3tools/contracts";
+import {
+  connectionStatusTitle,
+  type EnvironmentConnectionPhase,
+} from "@t3tools/client-runtime/connection";
 import { describe, expect, it } from "vite-plus/test";
 
 import {
+  connectionStatusTitleText,
   getProviderSummary,
   getProviderVersionAdvisoryPresentation,
   getProviderStatusKey,
@@ -231,5 +236,25 @@ it("shows compatibility in the version popover even when the installed version i
     updateCommand: null,
     emphasis: "normal",
     targetVersion: null,
+  });
+});
+
+describe("connectionStatusTitleText", () => {
+  it("matches the shared English connection title for every phase", () => {
+    const phases: ReadonlyArray<EnvironmentConnectionPhase> = [
+      "available",
+      "offline",
+      "connecting",
+      "reconnecting",
+      "connected",
+      "unsupported",
+      "error",
+    ];
+    for (const phase of phases) {
+      for (const error of [null, "socket closed"]) {
+        const connection = { phase, error, traceId: null };
+        expect(connectionStatusTitleText(connection)).toBe(connectionStatusTitle(connection));
+      }
+    }
   });
 });
