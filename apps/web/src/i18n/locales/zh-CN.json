@@ -2320,7 +2320,8 @@
       "deviceLimits_one": "最多同时 {{count}} 台设备，每台在 {{maxLeaseMinutes}} 分钟后释放",
       "deviceLimits_other": "最多同时 {{count}} 台设备，每台在 {{maxLeaseMinutes}} 分钟后释放",
       "simlockPerEnvironment": "（每个环境一个）",
-      "simlockTokenHelp": "租用、驱动并串流设备。使用 <code>simlock --gateway token create --role agent</code> 创建一个令牌{{perEnvironment}}，或留空稍后添加。令牌留空时，如果机器的 <code>AGENT_DEVICE_DAEMON_BASE_URL</code> 指向此网关，则使用其 <code>AGENT_DEVICE_DAEMON_AUTH_TOKEN</code>。"
+      "simlockTokenHelp": "租用、驱动并串流设备。使用 <code>simlock --gateway token create --role agent</code> 创建一个令牌{{perEnvironment}}，或留空稍后添加。令牌留空时，如果机器的 <code>AGENT_DEVICE_DAEMON_BASE_URL</code> 指向此网关，则使用其 <code>AGENT_DEVICE_DAEMON_AUTH_TOKEN</code>。",
+      "retrying": "正在重试"
     },
     "parallelA": {
       "envArtwork": "图案",

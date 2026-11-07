@@ -2320,7 +2320,8 @@
       "deviceLimits_one": "Up to {{count}} device at once, each released after {{maxLeaseMinutes}} min",
       "deviceLimits_other": "Up to {{count}} devices at once, each released after {{maxLeaseMinutes}} min",
       "simlockPerEnvironment": " per environment",
-      "simlockTokenHelp": "Leases, drives, and streams devices. Create one{{perEnvironment}} with <code>simlock --gateway token create --role agent</code>, or leave it blank to add it later. A blank token uses the machine's <code>AGENT_DEVICE_DAEMON_AUTH_TOKEN</code> when its <code>AGENT_DEVICE_DAEMON_BASE_URL</code> is this gateway."
+      "simlockTokenHelp": "Leases, drives, and streams devices. Create one{{perEnvironment}} with <code>simlock --gateway token create --role agent</code>, or leave it blank to add it later. A blank token uses the machine's <code>AGENT_DEVICE_DAEMON_AUTH_TOKEN</code> when its <code>AGENT_DEVICE_DAEMON_BASE_URL</code> is this gateway.",
+      "retrying": "retrying"
     },
     "parallelA": {
       "envArtwork": "Artwork",

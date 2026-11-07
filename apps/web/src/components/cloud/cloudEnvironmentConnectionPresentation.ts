@@ -22,11 +22,21 @@ const PHASE_TONE: Record<Phase, SavedCloudEnvironmentConnectionPresentation["ton
   available: "idle",
 };
 
+const PHASE_LABEL_KEY = {
+  connected: "settings.parallelShared.cloudPhase_connected",
+  connecting: "settings.parallelShared.cloudPhase_connecting",
+  reconnecting: "settings.parallelShared.cloudPhase_reconnecting",
+  unsupported: "settings.parallelShared.cloudPhase_unsupported",
+  error: "settings.parallelShared.cloudPhase_error",
+  offline: "settings.parallelShared.cloudPhase_offline",
+  available: "settings.parallelShared.cloudPhase_available",
+} as const satisfies Record<Phase, string>;
+
 export function presentSavedCloudEnvironmentConnection(
   connection: EnvironmentConnectionPresentation,
 ): SavedCloudEnvironmentConnectionPresentation {
   return {
-    buttonLabel: i18n.t(`settings.parallelShared.cloudPhase_${connection.phase}`),
+    buttonLabel: i18n.t(PHASE_LABEL_KEY[connection.phase]),
     statusText: connectionStatusText(connection),
     tone: PHASE_TONE[connection.phase],
   };

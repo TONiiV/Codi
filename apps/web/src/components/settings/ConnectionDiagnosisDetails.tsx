@@ -66,13 +66,24 @@ const HOP_NOTE = { ok: "", failed: "Failed", unchecked: "Not checked" } as const
 
 /** Ticks once per second, and only while a retry is scheduled, so the list around it does not re-render. */
 function RetryCountdown({ retryAt }: { readonly retryAt: number }) {
-  return useDeadlinePassed(retryAt) ? "retrying" : <RetryCountdownTicker retryAt={retryAt} />;
+  const { t } = useTranslation();
+  return useDeadlinePassed(retryAt) ? (
+    t("settings.parallelConnections.retrying")
+  ) : (
+    <RetryCountdownTicker retryAt={retryAt} />
+  );
 }
 
 function RetryCountdownTicker({ retryAt }: { readonly retryAt: number }) {
   const { t } = useTranslation();
   const seconds = Math.ceil((retryAt - useNowSecond()) / 1_000);
-  return <>{seconds > 0 ? t("settings.text.retryingInSecondsS", { seconds }) : "retrying"}</>;
+  return (
+    <>
+      {seconds > 0
+        ? t("settings.text.retryingInSecondsS", { seconds })
+        : t("settings.parallelConnections.retrying")}
+    </>
+  );
 }
 
 /** The collapsed failure: the full headline, then the retry state and a Details toggle. */
