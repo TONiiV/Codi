@@ -23,7 +23,6 @@ const BLOUB: Record<AgentActivity, readonly [StateId, number]> = {
 const ORBIT_FOR = 3.7;
 const ORBIT_GAP = 1.6;
 export const LOOP_CAP = 6;
-const FPS = 24;
 const HALF = 124;
 const PAPER = "var(--color-background)";
 const FACE = EXPRESSION_BY_ID.get(DEFAULT_EXPRESSION) ?? null;
@@ -121,13 +120,15 @@ function run() {
 }
 
 function tick(ms: number) {
-  if (!document.hidden) for (const a of awake) if (!a.frame(ms)) awake.delete(a);
-  // A timer paces the loop, so the page renders only the frames the avatars draw.
+  // A timer paces the loop, so the page renders only the frames the avatars draw: working loops
+  // at 12 fps, a look or a state change, which plays once, at 24.
+  const fps = [...awake].some((a) => !loopers.has(a)) ? 24 : 12;
   raf = -1;
   setTimeout(() => {
     raf = 0;
     run();
-  }, 1000 / FPS);
+  }, 1000 / fps);
+  if (!document.hidden) for (const a of awake) if (!a.frame(ms)) awake.delete(a);
 }
 
 // The desktop app keeps rendering hidden windows, so a hidden page stops the loop itself.
