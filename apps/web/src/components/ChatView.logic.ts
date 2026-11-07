@@ -1626,10 +1626,15 @@ export function deriveAvailableRevertTurnCounts(projection: ThreadStructure | nu
 
 /**
  * Why `thread` cannot start side chats: they do not nest or start from subagents, the server
- * config is loading (null) or too old, or the viewer cannot change threads.
+ * config is loading (null) or too old, or the viewer cannot change threads. Mirrors the server's
+ * refusal in ThreadForkService; `thread` is a shell or a thread family row.
  */
 export function sideChatSourceBlock(
-  thread: Pick<EnvironmentThreadShell, "lineage" | "delegatedFrom"> | null,
+  thread:
+    | (Pick<EnvironmentThreadShell, "lineage"> & {
+        readonly delegatedFrom?: EnvironmentThreadShell["delegatedFrom"] | undefined;
+      })
+    | null,
   capabilities: Pick<ExecutionEnvironmentCapabilities, "sideChats"> | null,
   canOperate: boolean,
 ): "sideChat" | "subagent" | "loading" | "unsupported" | "forbidden" | null {
