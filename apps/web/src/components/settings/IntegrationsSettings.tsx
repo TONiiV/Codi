@@ -844,6 +844,7 @@ export function PullRequestLinksOpenInAppSetting() {
 }
 
 function DeviceIntegrationSettings() {
+  const { t } = useTranslation();
   const { search, environment: selected } = useSettingsScope();
   const settings = useScopedSettings();
   const connected = selected?.connection.phase === "connected" && selected.serverConfig !== null;
@@ -853,7 +854,7 @@ function DeviceIntegrationSettings() {
 
   return (
     <>
-      <SettingsSection id="devices" title="Devices">
+      <SettingsSection id="devices" title={t("settings.text.devices")}>
         <DeviceIntegrationControls
           key={`${environmentId}:${JSON.stringify(search)}`}
           environmentId={environmentId}
@@ -878,6 +879,7 @@ function DeviceIntegrationControls({
   enabled: boolean;
   agentAccessEnabled: boolean;
 }) {
+  const { t } = useTranslation();
   const canConfigure = useEnvironmentScope(environmentId, AuthSettingsWriteScope);
   const { state, loaded } = useDeviceState(environmentId);
   const { scope, environments, connectedEnvironments } = useSettingsScope();
@@ -902,10 +904,10 @@ function DeviceIntegrationControls({
     const results = await Promise.allSettled(
       environments.map(async (environment) => {
         if (environment.connection.phase !== "connected" || !environment.serverConfig) {
-          throw new Error("Environment disconnected");
+          throw new Error(t("settings.text.environmentDisconnected"));
         }
         if (!readEnvironmentScope(environment.environmentId, AuthSettingsWriteScope)) {
-          throw new Error("This connection cannot change device settings.");
+          throw new Error(t("settings.text.thisConnectionCannotChangeDeviceSettings"));
         }
         return configure({
           environmentId: environment.environmentId,
@@ -921,8 +923,12 @@ function DeviceIntegrationControls({
     if (failed.length > 0) {
       toastManager.add({
         type: "error",
-        title: "Device settings not saved on all environments",
-        description: `Could not update ${failed.map((environment) => environment.label).join(", ")}.`,
+        title: t("settings.text.deviceSettingsNotSavedOnAll"),
+        description: t("settings.parallelSystem.couldNotUpdateEnvironments", {
+          labels: failed
+            .map((environment) => environment.label)
+            .join(t("settings.parallelA.listSeparator")),
+        }),
       });
     }
   };
@@ -953,7 +959,11 @@ function DeviceIntegrationControls({
                   .finally(() => setPending(null));
               }}
             >
-              {pending === `update-${tool}` ? "Updating…" : `Update to v${version.requiredVersion}`}
+              {pending === `update-${tool}`
+                ? t("settings.text.updating")
+                : t("settings.text.updateToVRequiredversion", {
+                    requiredVersion: version.requiredVersion,
+                  })}
             </Button>
           ) : null}
           {state.supportsToolInspection ? (
@@ -969,7 +979,7 @@ function DeviceIntegrationControls({
                 );
               }}
             >
-              {pending === "check" ? "Checking…" : "Check versions"}
+              {pending === "check" ? t("settings.text.checking") : t("settings.text.checkVersions")}
             </Button>
           ) : null}
         </div>
@@ -985,12 +995,12 @@ function DeviceIntegrationControls({
   return (
     <>
       <SettingsRow
-        {...searchableSetting("device-hub")}
+        {...searchableSetting("device-hub", t)}
         serverScoped
         settingKeys={["enableDeviceSupport"]}
         description={
           <>
-            Open simulators and emulators in the Device panel. Hub:{" "}
+            {t("settings.parallelSystem.deviceHubDescription")}{" "}
             <DeviceToolVersions
               action={versionActions("hub")}
               kind="hub"
@@ -1012,7 +1022,7 @@ function DeviceIntegrationControls({
                 busy ||
                 pending !== null
               }
-              aria-label="Device hub"
+              aria-label={t("settings.text.deviceHub")}
               onCheckedChange={(checked) =>
                 void update("hub", {
                   enabled: Boolean(checked),
@@ -1024,12 +1034,12 @@ function DeviceIntegrationControls({
         }
       />
       <SettingsRow
-        {...searchableSetting("agent-device-access")}
+        {...searchableSetting("agent-device-access", t)}
         serverScoped
         settingKeys={["enableAgentDeviceAccess"]}
         description={
           <>
-            New agent sessions can open and drive these devices. agent-device:{" "}
+            {t("settings.parallelSystem.agentDeviceAccessDescription")}{" "}
             <DeviceToolVersions
               action={versionActions("agent")}
               kind="agent"
@@ -1049,7 +1059,7 @@ function DeviceIntegrationControls({
                 (!projectScope && (!loaded || !anyHubEnabled || busy)) ||
                 pending !== null
               }
-              aria-label="Agent device access"
+              aria-label={t("settings.text.agentDeviceAccess")}
               onCheckedChange={(checked) =>
                 projectScope
                   ? updateSettings({ enableAgentDeviceAccess: Boolean(checked) })
