@@ -626,6 +626,8 @@ describe("ContextPackService", () => {
           "home3/.xdg/opencode/AGENTS.md": "old\n",
           "home4/.codex/AGENTS.md": "old\n",
           "home5/AGENTS.md": "old\n",
+          "home5/opencode/AGENTS.md": "old\n",
+          "home6/AGENTS.md": "old\n",
           "home6/opencode/AGENTS.md": "old\n",
         },
         { "linked-home/.claude/CLAUDE.md": "../../dotfiles/CLAUDE.md" },
@@ -686,15 +688,26 @@ describe("ContextPackService", () => {
         ["home6", "codex", "CODEX_HOME", "home6/", "home6"],
         ["home6", "opencode", "XDG_CONFIG_HOME", "home6", "home6/opencode"],
       ] as const;
+      warnings.length = 0;
       for (const [home, harness, name, value, files] of overrides) {
         const env = { [name]: dir.at(value) };
         yield* service
           .import(pack, dir.at(home), harness, false, "home")
-          .pipe(Effect.provide(ConfigProvider.layer(ConfigProvider.fromEnv({ env }))));
+          .pipe(
+            Effect.provide(
+              Layer.merge(
+                ConfigProvider.layer(ConfigProvider.fromEnv({ env })),
+                Logger.layer([capture], { mergeWithExisting: false }),
+              ),
+            ),
+          );
         expect(yield* dir.read(`${files}/AGENTS.md`), `${name}=${value}`).toContain(
           "Prefer small diffs.",
         );
       }
+      expect(warnings).toEqual([
+        `Ignored CODEX_HOME: ${dir.at("home3/.local/codex")} is not inside ${dir.at("home4")}, so .codex is used.`,
+      ]);
       expect(yield* dir.read("home3/.local/codex/config.toml")).toContain("[mcp_servers.gh]");
 
       // Syncing the home in place keeps the rest of ~/.claude.json and the user's own CLAUDE.md.
