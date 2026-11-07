@@ -101,7 +101,7 @@ interface RunCaller {
 export type Caller = SessionCaller | RunCaller;
 /** The one write rule: a viewer (只读) reads what a member reads and writes nothing. */
 export const isReadOnly = (role: Telescope.WorkspaceRole) => role === "viewer";
-/** D147: this server runs company agents and its owner's; members' run on their own machines. */
+/** This server runs company agents and its owner's; members' run on their own machines. */
 export const runsHere = (agentOwnerId: string | null) =>
   agentOwnerId === null || agentOwnerId === OWNER_MEMBER_ID;
 const isOwner = (caller: Caller) => "subject" in caller && OWNER_SUBJECTS.has(caller.subject);

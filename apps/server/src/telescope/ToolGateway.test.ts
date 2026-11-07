@@ -54,7 +54,7 @@ const ALL: Telescope.StandingPowers = {
   mergePRs: true,
 };
 
-/** Admin `ann`, member `bea`, and a run for bea of the owner's `web` Chief Agent (D147). */
+/** Admin `ann`, member `bea`, and a run for bea of the owner's `web` Chief Agent. */
 const setup = Effect.gen(function* () {
   const workspaces = yield* WorkspaceService.WorkspaceService;
   const { id: workspaceId } = yield* workspaces.create(as.ann, {
@@ -398,7 +398,7 @@ it.layer(layer)("Telescope tool gateway", (it) => {
         "allowed",
       ]);
 
-      // D147: a member's agent runs on their own machine, so here it can only stay stopped.
+      // A member's agent runs on their own machine, so here it can only stay stopped.
       const db = yield* TelescopeDb.TelescopeDb;
       yield* db.update(workspaceId, "agents", { owner_subject_id: beaId }, { agent_id: cos.id });
       const ofBea = (state: Telescope.KillSwitch["state"]) =>

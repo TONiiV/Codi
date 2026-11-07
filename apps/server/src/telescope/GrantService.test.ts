@@ -93,7 +93,7 @@ const setup = Effect.gen(function* () {
     );
   const mine = (caller: WorkspaceService.Caller) =>
     agents.listMine(caller, { workspaceId }).pipe(Effect.map(({ agents }) => agents));
-  // D147: members get no new agents; Bea's are the owner's defaults handed to her before that.
+  // Members get no new agents; Bea's are the owner's defaults handed to her before that rule.
   yield* mine(as.owner);
   yield* db.update(
     workspaceId,

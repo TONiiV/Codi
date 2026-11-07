@@ -1,7 +1,7 @@
 import * as Effect from "effect/Effect";
 import * as SqlClient from "effect/sql/SqlClient";
 
-/** D147, D152: other members' personal agents run on their own machines, so stop them here. */
+/** Other members' personal agents run on their own machines, so stop them here. */
 export default Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
 

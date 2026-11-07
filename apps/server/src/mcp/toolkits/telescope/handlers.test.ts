@@ -361,7 +361,7 @@ it.effect("never reaches another workspace's board", () =>
       { caller: bea },
       { workspaceId: other, title: "Hidden", text: "-" },
     );
-    // D147: only the environment owner gets agents, and it is a member of every workspace here.
+    // Only the environment owner gets agents, and it is a member of every workspace here.
     const { agents: foreignAgents } = yield* (yield* AgentService.AgentService).listMine(ann, {
       workspaceId: other,
     });

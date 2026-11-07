@@ -422,7 +422,7 @@ it.layer(layer)("Telescope run records", (it) => {
         runs.start(mallory, workspaceId, { agentId, inputSnapshot: snapshot([]) }),
         runs.startFor(workspaceId, "mallory-subject", { agentId, inputSnapshot: snapshot([]) }),
         runs.startFor(workspaceId, "revoked-subject", { agentId, inputSnapshot: snapshot([]) }),
-        // D147: a member's personal agents run on their own machine, never on this one.
+        // A member's personal agents run on their own machine, never on this one.
         runOf(aliceId, "agent-alice"),
         runOf(bobId, "agent-bob"),
       ];

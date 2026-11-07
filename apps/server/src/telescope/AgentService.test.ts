@@ -73,7 +73,7 @@ const setup = (kind: "enterprise" | "personal" = "enterprise") =>
     return { workspaceId, beaId: bea.subjectId, agents: yield* AgentService.AgentService };
   });
 
-/** A member's agents from before D147: the owner's defaults, handed to them. */
+/** Agents a member got earlier: the owner's defaults, handed to them. */
 const seedAgentsOf = (workspaceId: Telescope.WorkspaceId, memberId: string) =>
   Effect.gen(function* () {
     yield* (yield* AgentService.AgentService).listMine(as.owner, { workspaceId });
@@ -141,7 +141,7 @@ it.layer(fileLayer)("Telescope agents on a file database", (it) => {
       assert.deepStrictEqual(
         (yield* agents.listMine(as.ann, { workspaceId })).agents,
         [],
-        "other members get none (D147)",
+        "other members get none",
       );
       assert.strictEqual(
         yield* reasonOf(agents.listMine(as.zed, { workspaceId })),
@@ -153,7 +153,7 @@ it.layer(fileLayer)("Telescope agents on a file database", (it) => {
 });
 
 it.layer(layer)("Telescope agents", (it) => {
-  it.effect("gives personal agents only to the environment owner (D147)", () =>
+  it.effect("gives personal agents only to the environment owner", () =>
     Effect.gen(function* () {
       const { workspaceId, agents } = yield* setup();
       const mine = (caller: WorkspaceService.SessionCaller) =>
