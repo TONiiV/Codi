@@ -13,6 +13,7 @@ import {
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Ref from "effect/Ref";
 import * as Schema from "effect/Schema";
 import * as RpcTest from "effect/rpc/RpcTest";
 
@@ -132,6 +133,28 @@ it.layer(layer)("Telescope invite links", (it) => {
         })
         .pipe(Effect.flip);
       assert.strictEqual(refused._tag, "ServerAuthInvalidCredentialError");
+
+      // An invite issued between the sweep's two reads keeps its link.
+      const raced = yield* Ref.make<ReadonlyArray<Telescope.InvitePairingLink>>([]);
+      const racing = {
+        ...workspaces,
+        liveInvitationIds: () =>
+          workspaces
+            .liveInvitationIds()
+            .pipe(
+              Effect.tap(() =>
+                invite(owner).pipe(
+                  Effect.flatMap(({ pairingLink }) =>
+                    Ref.update(raced, (all) => [...all, pairingLink]),
+                  ),
+                ),
+              ),
+            ),
+      };
+      yield* InviteLink.followCodes({ workspaces: racing, auth })(Effect.void);
+      const kept = yield* Effect.forEach(yield* Ref.get(raced), grantOf);
+      assert.strictEqual(kept.length, 1);
+      assert.isDefined(kept[0]);
     }).pipe(Effect.scoped),
   );
 });

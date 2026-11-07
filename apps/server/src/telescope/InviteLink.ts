@@ -66,8 +66,10 @@ export const invite = Effect.fn("Telescope.InviteLink.invite")(function* (
 /** Revokes every unused invite link whose code no longer works: voided, used or deleted. */
 const revokeDeadLinks = Effect.fn("Telescope.InviteLink.revokeDeadLinks")(
   function* ({ workspaces, auth }: InviteServices) {
+    // Links first: an invite landing between the reads then has a live code and no listed link.
+    const links = yield* auth.listPairingLinks();
     const live = yield* workspaces.liveInvitationIds();
-    const dead = (yield* auth.listPairingLinks()).filter(
+    const dead = links.filter(
       ({ label }) => label?.startsWith(LINK_LABEL) && !live.has(label.slice(LINK_LABEL.length)),
     );
     yield* Effect.forEach(dead, (link) => auth.revokePairingLink(link.id), { discard: true });

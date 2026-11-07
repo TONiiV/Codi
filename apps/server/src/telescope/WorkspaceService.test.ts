@@ -16,11 +16,14 @@ import * as TestClock from "effect/testing/TestClock";
 
 import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
 import * as ProjectStore from "../orchestration-v2/ProjectStore.ts";
+import * as ProviderAdapterRegistry from "../orchestration-v2/ProviderAdapterRegistry.ts";
 import * as ThreadManagementService from "../orchestration-v2/ThreadManagementService.ts";
 import * as AuthSessions from "../persistence/AuthSessions.ts";
 import { runMigrations } from "../persistence/Migrations.ts";
 import * as SqlitePersistence from "../persistence/Sqlite.ts";
-import { ServerSettingsService } from "../serverSettings.ts";
+import * as ManagedProjectFolders from "../project/ManagedProjectFolders.ts";
+import * as ServerSettings from "../serverSettings.ts";
+import * as AgentRuntime from "./AgentRuntime.ts";
 import * as AgentService from "./AgentService.ts";
 import * as DelegationService from "./DelegationService.ts";
 import * as GrantService from "./GrantService.ts";
@@ -55,13 +58,15 @@ const services = Layer.mergeAll(
     }),
   ),
 );
-const layer = WorkerDispatch.layer.pipe(
+const layer = Layer.merge(WorkerDispatch.layer, AgentRuntime.layer).pipe(
   Layer.provideMerge(services),
   Layer.provide(
     Layer.mergeAll(
       Layer.mock(RoutingService.RoutingService)({}),
       Layer.mock(ThreadManagementService.ThreadManagementService)({}),
-      Layer.mock(ServerSettingsService)({}),
+      Layer.mock(ManagedProjectFolders.ManagedProjectFolders)({ namedProjectsRoot: "/unused" }),
+      Layer.mock(ProviderAdapterRegistry.ProviderAdapterRegistryV2)({}),
+      ServerSettings.layerTest(),
     ),
   ),
 );
@@ -522,6 +527,7 @@ it.layer(layer)("WorkspaceService", (it) => {
         const memory = yield* MemoryService.MemoryService;
         const runs = yield* RunRecordService.RunRecordService;
         const workers = yield* WorkerDispatch.WorkerDispatch;
+        const runtime = yield* AgentRuntime.AgentRuntime;
         const grants = yield* GrantService.GrantService;
         const db = yield* TelescopeDb.TelescopeDb;
         const [owner, v] = [desktop("owner"), session("viewer")];
@@ -574,6 +580,7 @@ it.layer(layer)("WorkspaceService", (it) => {
           ["lease.release", board.releaseLease(as, leaseRef)],
           ["agent.createCustom", agents.createCustom(v, { workspaceId, name: "Helper" })],
           ["agent.update", agents.update(v, { workspaceId, agentId, name: "Renamed" })],
+          ["agent.openThread", runtime.openThread(v, { workspaceId, agentId })],
           [
             "memory.write",
             memory.write({ session: v }, { workspaceId, agentId, op: "add", text: "记住" }),

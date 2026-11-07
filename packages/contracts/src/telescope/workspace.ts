@@ -84,8 +84,9 @@ export const MemberInviteInput = Schema.Struct({
   expiresInSeconds: Schema.optionalKey(CodeTtlSeconds),
 });
 /**
- * A one-time pairing credential whose only scope is `telescope:member`: an invite never gives
- * machine access. Only a session that may create pairing links gets one (`owner_only` otherwise).
+ * A one-time pairing credential with Telescope scopes only (`telescope:member`, plus
+ * `telescope:admin` for an admin invite): an invite never gives machine access. Only a session
+ * that may create pairing links gets one (`owner_only` otherwise).
  */
 export const InvitePairingLink = Schema.Union([
   Schema.Struct({
