@@ -116,6 +116,56 @@ describe("runMigrations", () => {
     }).pipe(Effect.provide(NodeSqliteClient.layer({ filename: ":memory:" }))),
   );
 
+  it.effect("turns stored Telescope gateway refusal messages into reason codes", () =>
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      yield* runMigrations({ toMigrationInclusive: 94 });
+      const reasons = [
+        "A Telescope budget is used up. Level: agent.",
+        "The agent's grant does not allow this tool.",
+        "An admin stopped this agent.",
+        "Only a project's agent opens Worker threads. Delegate to its Chief Agent instead.",
+        "Only an agent without a project hands work to a Chief Agent. Report back to the agent that gave you this task.",
+        "An agent's own thread does not open or steer other threads. Open a Worker for the task with `dispatch_worker` and a brief.",
+        "A Worker reports through its thread; Telescope tools are not for Workers.",
+        "Telescope agents cannot act on a linked environment yet. Leave out environmentId to work here.",
+        "The member role does not grant this in this project.",
+        null,
+      ];
+      yield* Effect.forEach(
+        reasons,
+        (reason, index) => sql`
+          INSERT INTO telescope_audit
+            (audit_id, workspace_id, agent_id, on_behalf_of_json, outcome, reason, created_at)
+          VALUES (${`audit-${index}`}, 'workspace-1', 'agent-1', '["member-1"]', 'denied',
+            ${reason}, '2026-11-07T00:00:00.000Z')
+        `,
+        { discard: true },
+      );
+
+      yield* runMigrations();
+
+      const rows = yield* sql<{ readonly reason: string | null }>`
+        SELECT reason FROM telescope_audit ORDER BY audit_id
+      `;
+      assert.deepStrictEqual(
+        rows.map((row) => row.reason),
+        [
+          "budget",
+          "forbidden",
+          "stopped",
+          "project_only",
+          "no_project",
+          "resident",
+          "worker",
+          "linked",
+          null,
+          null,
+        ],
+      );
+    }).pipe(Effect.provide(NodeSqliteClient.layer({ filename: ":memory:" }))),
+  );
+
   it.effect.each([30, 54])("still starts with a site-local migration at id %s", (id) =>
     Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;

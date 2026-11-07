@@ -364,13 +364,7 @@ it.effect.each(Object.keys(opens) as Array<keyof typeof opens>)(
           "Only a project's agent opens Worker threads. Hand the work to its Chief Agent with `delegate`. Do not retry; tell your member.",
       });
       assert.deepStrictEqual(opened, []);
-      assert.deepStrictEqual(yield* audit, [
-        [
-          "dispatch_worker",
-          "denied",
-          "Only a project's agent opens Worker threads. Hand the work to its Chief Agent with `delegate`.",
-        ],
-      ]);
+      assert.deepStrictEqual(yield* audit, [["dispatch_worker", "denied", "project_only"]]);
     }).pipe(Effect.provide(layer(opened)));
   },
 );
@@ -396,7 +390,7 @@ it.effect.each(Object.keys(opens) as Array<keyof typeof opens>)(
         message: RESIDENT,
       });
       assert.deepStrictEqual(opened, []);
-      assert.deepStrictEqual(yield* audit, [["dispatch_worker", "denied", RESIDENT]]);
+      assert.deepStrictEqual(yield* audit, [["dispatch_worker", "denied", "resident"]]);
     }).pipe(Effect.provide(layer(opened)));
   },
 );
@@ -412,6 +406,7 @@ it.effect("an ordinary thread's create_threads is unchanged", () => {
   }).pipe(Effect.provide(layer(opened)));
 });
 
+const FAILS_AFTER_GATEWAY = new Set(["t3_thread_send_attachments", "watch_pull_request"]);
 it.effect.each([
   "t3_thread_send",
   "schedule_task update",
@@ -428,10 +423,11 @@ it.effect.each([
     const gateway = yield* ToolGateway.ToolGateway;
     const budget = { workspaceId, scope: "agent" as const, scopeId: chief.agentId };
     yield* gateway.setBudget(ann, { ...budget, limitCalls: 5 });
-    // Past the gateway; some mocked service steps then fail.
+    // Past the gateway; some mocked service steps then fail, and the audit says so.
     assert.notPropertyVal(yield* opens[tool](chief), "code", "capability_denied");
     assert.deepStrictEqual(opened, [tool]);
-    assert.deepStrictEqual(yield* audit, [["dispatch_worker", "allowed", undefined]]);
+    const outcome = FAILS_AFTER_GATEWAY.has(tool) ? "failed" : "allowed";
+    assert.deepStrictEqual(yield* audit, [["dispatch_worker", outcome, undefined]]);
     const { budgets } = yield* gateway.governance(ann, { workspaceId });
     assert.deepStrictEqual(
       budgets.map((row) => row.usedCalls),
@@ -564,7 +560,7 @@ it.effect.each(opensElsewhere)(
         message: linkedRefusal,
       });
       assert.deepStrictEqual(opened, []);
-      const refused = [["dispatch_worker", "denied", linkedRefusal]];
+      const refused = [["dispatch_worker", "denied", "linked"]];
       assert.deepStrictEqual(yield* audit, refused);
       const { calls } = yield* (yield* RunRecordService.RunRecordService).calls(ann, {
         workspaceId,

@@ -269,8 +269,12 @@ it.effect("works the board as the run's agent through every board tool", () =>
 
     const { entries } = yield* (yield* GrantService.GrantService).auditList(ann, { workspaceId });
     assert.deepStrictEqual(
-      entries.map((entry) => entry.outcome).toSorted(),
-      Array.from({ length: entries.length }, () => "allowed"),
+      entries
+        .filter((entry) => entry.outcome !== "allowed")
+        .map((entry) => `${entry.tool}:${entry.outcome}`)
+        .toSorted(),
+      ["decision_record:failed", "decision_record:failed", "ticket_lease:failed"],
+      "a call the board then refuses is audited as failed",
     );
     assert.strictEqual(entries.length, 14, "every call is audited");
 

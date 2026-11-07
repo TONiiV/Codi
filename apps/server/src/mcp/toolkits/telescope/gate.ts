@@ -126,13 +126,7 @@ export const gateDispatch = Effect.fn("mcp.telescope.gateDispatch")(function* <A
     (environmentId) => PeerForwarding.remoteTarget(scope, environmentId) !== undefined,
   );
   const exit = yield* gateway.value
-    .callIfRun(
-      thread,
-      "dispatch_worker",
-      asJson(input),
-      Effect.exit(use),
-      linked ? "linked" : undefined,
-    )
+    .callIfRun(thread, "dispatch_worker", asJson(input), use, linked ? "linked" : undefined)
     .pipe(Effect.mapError(toFailure));
   return yield* exit;
 });

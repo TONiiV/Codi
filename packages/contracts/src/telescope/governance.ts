@@ -55,6 +55,8 @@ export const BudgetSetInput = Schema.Struct({
   scopeId: Text,
   /** Absent removes the limit; the count carries on. */
   limitCalls: Schema.optionalKey(Count),
+  /** A paused budget refuses every call at its level and counts none; absent keeps the state. */
+  paused: Schema.optionalKey(Schema.Boolean),
 });
 
 export const KillSwitch = Schema.Struct({

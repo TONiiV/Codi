@@ -83,7 +83,24 @@ export const GrantExplainInput = Schema.Struct({
   projectId: Schema.optionalKey(ProjectId),
 });
 
-export const AuditOutcome = Schema.Literals(["allowed", "denied"]);
+/** `failed`: the gateway allowed the call and the tool then failed. */
+export const AuditOutcome = Schema.Literals(["allowed", "denied", "failed"]);
+
+/** Why the gateway refused a call. */
+export const GatewayRefusal = Schema.Literals([
+  "unknown_tool",
+  "no_run",
+  "stopped",
+  "forbidden",
+  "budget",
+  "budget_paused",
+  "project_only",
+  "no_project",
+  "resident",
+  "worker",
+  "linked",
+]);
+export type GatewayRefusal = typeof GatewayRefusal.Type;
 
 export const AuditEntry = Schema.Struct({
   id: AuditEntryId,
@@ -97,7 +114,7 @@ export const AuditEntry = Schema.Struct({
   tool: Schema.optionalKey(Text),
   argsRedacted: Schema.optionalKey(Schema.Json),
   outcome: AuditOutcome,
-  reason: Schema.optionalKey(Schema.String),
+  reason: Schema.optionalKey(GatewayRefusal),
   createdAt: Timestamp,
 });
 export type AuditEntry = typeof AuditEntry.Type;

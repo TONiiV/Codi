@@ -1,9 +1,18 @@
+// @effect-diagnostics nodeBuiltinImport:off
+import * as NodeSqlite from "node:sqlite";
+
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
+import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, it } from "@effect/vitest";
 import { AuthSessionId, EnvironmentId, ProjectId, Telescope, ThreadId } from "@t3tools/contracts";
+import * as NodeSqliteClient from "@t3tools/shared/nodeSqliteClient";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
+import type * as SqlClient from "effect/sql/SqlClient";
 import * as TestClock from "effect/testing/TestClock";
 
 import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
@@ -16,26 +25,28 @@ import * as TelescopeDb from "./TelescopeDb.ts";
 import * as ToolGateway from "./ToolGateway.ts";
 import * as WorkspaceService from "./WorkspaceService.ts";
 
-const layer = Layer.mergeAll(
-  ToolGateway.layer,
-  GrantService.layer,
-  RunRecordService.layer,
-  AgentService.layer,
-  WorkspaceService.layer,
-  TelescopeDb.layer,
-).pipe(
-  Layer.provideMerge(
-    Layer.merge(
-      Layer.effectDiscard(runMigrations()).pipe(Layer.provideMerge(SqlitePersistence.layerMemory)),
-      NodeCrypto.layer,
+const servicesOn = <E>(database: Layer.Layer<SqlClient.SqlClient, E>) =>
+  Layer.mergeAll(
+    ToolGateway.layer,
+    GrantService.layer,
+    RunRecordService.layer,
+    AgentService.layer,
+    WorkspaceService.layer,
+    TelescopeDb.layer,
+  ).pipe(
+    Layer.provideMerge(
+      Layer.merge(
+        Layer.effectDiscard(runMigrations()).pipe(Layer.provideMerge(database)),
+        NodeCrypto.layer,
+      ),
     ),
-  ),
-  Layer.provide(
-    Layer.succeed(ServerEnvironment.ServerEnvironmentIdentity, {
-      getEnvironmentId: Effect.succeed(EnvironmentId.make("env-elsewhere")),
-    }),
-  ),
-);
+    Layer.provide(
+      Layer.succeed(ServerEnvironment.ServerEnvironmentIdentity, {
+        getEnvironmentId: Effect.succeed(EnvironmentId.make("env-elsewhere")),
+      }),
+    ),
+  );
+const layer = servicesOn(SqlitePersistence.layerMemory);
 
 const session = (name: string): WorkspaceService.SessionCaller => ({
   sessionId: AuthSessionId.make(`session-${name}`),
@@ -132,12 +143,29 @@ const setup = Effect.gen(function* () {
 });
 
 it.layer(layer)("Telescope tool gateway", (it) => {
-  it.effect("refuses a member's Chief Agent merging a PR and audits both outcomes", () =>
+  it.effect("refuses a member's Chief Agent merging a PR and audits each outcome", () =>
     Effect.gen(function* () {
-      const { workspaceId, beaId, chiefId, runId, call, denial, audit, calls, usedCount } =
-        yield* setup;
+      const {
+        workspaceId,
+        threadId,
+        beaId,
+        chiefId,
+        runId,
+        gateway,
+        call,
+        denial,
+        audit,
+        calls,
+        usedCount,
+      } = yield* setup;
 
-      const caller = yield* call("open_ticket", { title: "Fix", apiKey: "sk-1", nested: [{}] });
+      const caller = yield* call("open_ticket", {
+        title: "Fix",
+        apiKey: "sk-1",
+        nested: [
+          { brief: "curl -H 'Authorization: Bearer abc.def-123456' sk-proj-0123456789abcdef" },
+        ],
+      });
       assert.deepStrictEqual(caller, {
         workspaceId,
         runId,
@@ -148,28 +176,39 @@ it.layer(layer)("Telescope tool gateway", (it) => {
       });
       assert.strictEqual(yield* denial("merge_pr"), "forbidden");
       assert.strictEqual(usedCount(), 1, "a refused tool never runs");
+      yield* TestClock.adjust("1 second");
+      // A real clock times a call in fractions of a millisecond.
+      const slowFail = TestClock.adjust("1500 micros").pipe(Effect.andThen(Effect.fail("boom")));
+      const failed = yield* gateway
+        .call(threadId, "ticket_get", {}, () => slowFail)
+        .pipe(Effect.flip);
+      assert.strictEqual(failed, "boom");
 
       const entries = yield* audit;
       assert.deepStrictEqual(
-        entries.map((entry) => [entry.tool, entry.power, entry.outcome, entry.runId]),
+        entries.map((entry) => [entry.tool, entry.power, entry.outcome, entry.runId, entry.reason]),
         [
-          ["open_ticket", "openTickets", "allowed", runId],
-          ["merge_pr", "mergePRs", "denied", runId],
+          ["open_ticket", "openTickets", "allowed", runId, undefined],
+          ["merge_pr", "mergePRs", "denied", runId, "forbidden"],
+          ["ticket_get", "openTickets", "failed", runId, undefined],
         ],
       );
       assert.deepStrictEqual(entries[0]?.argsRedacted, {
         title: "Fix",
         apiKey: "[redacted]",
-        nested: [{}],
+        nested: [{ brief: "curl -H 'Authorization: [redacted]' [redacted]" }],
       });
       assert.deepStrictEqual(entries[1]?.onBehalfOf, [beaId]);
       assert.strictEqual(entries[1]?.projectId, web);
-      assert.deepStrictEqual(yield* calls, ["open_ticket:allowed", "merge_pr:denied"]);
+      assert.deepStrictEqual(yield* calls, [
+        "open_ticket:allowed",
+        "merge_pr:denied",
+        "ticket_get:allowed",
+      ]);
 
       assert.strictEqual(yield* denial(" "), "unknown_tool");
       assert.strictEqual(yield* denial("memory_pin"), "unknown_tool");
-      assert.lengthOf(yield* audit, 2, "unknown tools never reach the audit");
-      const gateway = yield* ToolGateway.ToolGateway;
+      assert.lengthOf(yield* audit, 3, "unknown tools never reach the audit");
       const noRun = yield* gateway
         .call(ThreadId.make("thread-without-run"), "open_ticket", {}, () => Effect.void)
         .pipe(Effect.flip);
@@ -181,22 +220,30 @@ it.layer(layer)("Telescope tool gateway", (it) => {
     Effect.gen(function* () {
       const { threadId, gateway, audit, calls } = yield* setup;
       const plain = ThreadId.make("thread-without-run");
-      assert.strictEqual(
+      assert.deepStrictEqual(
         yield* gateway.callIfRun(plain, "dispatch_worker", {}, Effect.succeed("ran")),
-        "ran",
+        Exit.succeed("ran"),
       );
-      assert.strictEqual(
-        yield* gateway
-          .callIfRun(plain, "dispatch_worker", {}, Effect.fail("own"))
-          .pipe(Effect.flip),
-        "own",
+      assert.deepStrictEqual(
+        yield* gateway.callIfRun(plain, "dispatch_worker", {}, Effect.fail("own")),
+        Exit.fail("own"),
       );
       assert.lengthOf(yield* audit, 0);
-      assert.strictEqual(
+      assert.deepStrictEqual(
         yield* gateway.callIfRun(threadId, "dispatch_worker", {}, Effect.succeed("gated")),
-        "gated",
+        Exit.succeed("gated"),
       );
-      assert.deepStrictEqual(yield* calls, ["dispatch_worker:allowed"]);
+      yield* TestClock.adjust("1 second");
+      assert.deepStrictEqual(
+        yield* gateway.callIfRun(threadId, "dispatch_worker", {}, Effect.fail("own")),
+        Exit.fail("own"),
+        "the tool's own failure comes back as its exit, apart from the gateway's refusals",
+      );
+      assert.deepStrictEqual(
+        (yield* audit).map((entry) => entry.outcome),
+        ["allowed", "failed"],
+      );
+      assert.deepStrictEqual(yield* calls, ["dispatch_worker:allowed", "dispatch_worker:allowed"]);
     }),
   );
 
@@ -249,12 +296,7 @@ it.layer(layer)("Telescope tool gateway", (it) => {
       const [entry] = (yield* audit).toReversed();
       assert.deepStrictEqual(
         [entry?.agentId, entry?.tool, entry?.outcome, entry?.reason],
-        [
-          pa.id,
-          "dispatch_worker",
-          "denied",
-          "Only a project's agent opens Worker threads. Hand the work to its Chief Agent with `delegate`.",
-        ],
+        [pa.id, "dispatch_worker", "denied", "project_only"],
       );
       yield* gateway.call(paThread, "open_ticket", {}, () => Effect.void);
       yield* gateway.call(paThread, "delegate", {}, () => Effect.void);
@@ -263,12 +305,7 @@ it.layer(layer)("Telescope tool gateway", (it) => {
       const [chiefEntry] = (yield* audit).toReversed();
       assert.deepStrictEqual(
         [chiefEntry?.agentId, chiefEntry?.tool, chiefEntry?.outcome, chiefEntry?.reason],
-        [
-          chiefId,
-          "delegate",
-          "denied",
-          "Only an agent without a project hands work to a Chief Agent. Do your own project's work with your Workers (`dispatch_worker`); report work outside your project back with `delegation_report`.",
-        ],
+        [chiefId, "delegate", "denied", "no_project"],
       );
     }),
   );
@@ -396,12 +433,21 @@ it.layer(layer)("Telescope tool gateway", (it) => {
     }),
   );
 
-  it.effect("fails a call once any budget level runs out, naming that level", () =>
+  it.effect("fails a call once any budget level runs out or is paused, naming that level", () =>
     Effect.forEach(Telescope.BudgetScope.literals, (level) =>
       Effect.gen(function* () {
         const { workspaceId, beaId, chiefId, gateway, call, denial, audit } = yield* setup;
         const scopeId = { company: "ignored", project: web, agent: chiefId, person: beaId }[level];
         const budget = { workspaceId, scope: level, scopeId };
+        const otherKind = { company: undefined, project: chiefId, agent: beaId, person: web }[
+          level
+        ];
+        if (otherKind !== undefined) {
+          const wrong = yield* gateway
+            .setBudget(as.ann, { ...budget, scopeId: otherKind, limitCalls: 2 })
+            .pipe(Effect.flip);
+          assert.strictEqual(wrong._tag === "TelescopeWorkspaceError" && wrong.reason, "not_found");
+        }
         yield* call("open_ticket");
         const set = yield* gateway.setBudget(as.ann, { ...budget, limitCalls: 2 });
         assert.deepStrictEqual(
@@ -415,14 +461,58 @@ it.layer(layer)("Telescope tool gateway", (it) => {
         assert.strictEqual(yield* denial("memory_search"), `budget:${level}`);
         const [denied] = (yield* audit).toReversed();
         assert.strictEqual(denied?.tool, "memory_search");
-        assert.strictEqual(denied?.reason, `A Telescope budget is used up. Level: ${level}.`);
+        assert.strictEqual(denied?.reason, "budget");
 
         const lifted = yield* gateway.setBudget(as.ann, budget);
         assert.deepStrictEqual([lifted.usedCalls, lifted.limitCalls], [2, undefined]);
         const { budgets } = yield* gateway.governance(as.ann, { workspaceId });
         assert.deepStrictEqual(budgets, [lifted]);
         yield* call("open_ticket");
+
+        assert.isTrue((yield* gateway.setBudget(as.ann, { ...budget, paused: true })).paused);
+        const kept = yield* gateway.setBudget(as.ann, { ...budget, limitCalls: 9 });
+        assert.isTrue(kept.paused, "a limit change keeps the pause");
+        assert.strictEqual(yield* denial("memory_search"), `budget_paused:${level}`);
+        const resumed = yield* gateway.setBudget(as.ann, {
+          ...budget,
+          limitCalls: 9,
+          paused: false,
+        });
+        assert.deepStrictEqual([resumed.paused, resumed.usedCalls], [false, 3]);
+        yield* call("open_ticket");
       }),
     ),
   );
 });
+
+// Its own database file, so another connection can write between the gateway's steps.
+it.effect("decides on the run as it stands when the call is audited", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const filename = path.join(yield* fs.makeTempDirectoryScoped(), "state.sqlite");
+    yield* Effect.gen(function* () {
+      const { threadId, runId, gateway, audit, usedCount } = yield* setup;
+      const other = new NodeSqlite.DatabaseSync(filename);
+      const end = other.prepare("UPDATE telescope_runs SET finished_at = ? WHERE run_id = ?");
+      // Another connection ends the run while the gateway reads the call's arguments.
+      const args = {
+        get title() {
+          end.run("2026-11-07T00:00:00.000Z", runId);
+          return "Fix";
+        },
+      };
+      const outcome = yield* gateway
+        .call(threadId, "open_ticket", args, () => Effect.succeed("ran"))
+        .pipe(
+          Effect.catchTags({
+            TelescopeToolGatewayDenied: (error) => Effect.succeed(error.reason),
+          }),
+        );
+      other.close();
+      assert.strictEqual(outcome, "no_run");
+      assert.strictEqual(usedCount(), 0);
+      assert.lengthOf(yield* audit, 0);
+    }).pipe(Effect.provide(servicesOn(NodeSqliteClient.layer({ filename }))));
+  }).pipe(Effect.provide(NodeServices.layer)),
+);

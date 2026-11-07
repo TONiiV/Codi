@@ -3,6 +3,7 @@ import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import type * as Rpc from "effect/rpc/Rpc";
 import * as Schema from "effect/Schema";
@@ -37,6 +38,9 @@ const TOOL_POWERS: Readonly<Record<Telescope.GatewayTool, Telescope.GrantPower |
   memory_write: null,
 };
 const SECRET_KEY = /token|secret|password|passphrase|api.?key|authorization|cookie|credential/i;
+// Known credential shapes only: auth headers, JWTs, private keys and common provider key prefixes.
+const SECRET_VALUE =
+  /\b(?:Bearer|Basic)\s+[\w.~+/=-]{8,}|\beyJ[\w-]{8,}\.[\w-]{8,}\.[\w-]*|-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?(?:-----END [A-Z ]*PRIVATE KEY-----|$)|\b(?:sk|rk)-[\w-]{16,}|\b(?:gh[pousr]_|github_pat_|glpat-|xox[abpr]-|AIza)[\w-]{16,}|\bAKIA[0-9A-Z]{16}\b/g;
 
 const decodeTool = Schema.decodeUnknownEffect(Telescope.GatewayTool);
 const RunRow = Schema.Struct({
@@ -117,16 +121,18 @@ const toKillSwitch = (row: typeof KillSwitchRow.Type): Telescope.KillSwitch => (
 });
 
 const redact = (value: Schema.Json): Schema.Json =>
-  Array.isArray(value)
-    ? value.map(redact)
-    : typeof value === "object" && value !== null
-      ? Object.fromEntries(
-          Object.entries(value).map(([key, inner]) => [
-            key,
-            SECRET_KEY.test(key) ? "[redacted]" : redact(inner),
-          ]),
-        )
-      : value;
+  typeof value === "string"
+    ? value.replace(SECRET_VALUE, "[redacted]")
+    : Array.isArray(value)
+      ? value.map(redact)
+      : typeof value === "object" && value !== null
+        ? Object.fromEntries(
+            Object.entries(value).map(([key, inner]) => [
+              key,
+              SECRET_KEY.test(key) ? "[redacted]" : redact(inner),
+            ]),
+          )
+        : value;
 
 const DENIED_MESSAGES = {
   unknown_tool: "This tool does not go through the Telescope gateway.",
@@ -134,6 +140,7 @@ const DENIED_MESSAGES = {
   stopped: "An admin stopped this agent.",
   forbidden: "The agent's grant does not allow this tool.",
   budget: "A Telescope budget is used up.",
+  budget_paused: "A Telescope budget is paused.",
   project_only:
     "Only a project's agent opens Worker threads. Hand the work to its Chief Agent with `delegate`.",
   no_project:
@@ -148,20 +155,9 @@ const DENIED_MESSAGES = {
 export class ToolGatewayDenied extends Schema.TaggedError<ToolGatewayDenied>()(
   "TelescopeToolGatewayDenied",
   {
-    reason: Schema.Literals([
-      "unknown_tool",
-      "no_run",
-      "stopped",
-      "forbidden",
-      "budget",
-      "project_only",
-      "no_project",
-      "resident",
-      "worker",
-      "linked",
-    ]),
+    reason: Telescope.GatewayRefusal,
     tool: Schema.optionalKey(Telescope.GatewayTool),
-    /** The first budget level, in `BudgetScope` order, whose call limit is reached. */
+    /** The first budget level, in `BudgetScope` order, that is paused or out of calls. */
     level: Schema.optionalKey(Telescope.BudgetScope),
   },
 ) {
@@ -174,6 +170,16 @@ export class ToolGatewayDenied extends Schema.TaggedError<ToolGatewayDenied>()(
 const isDenied = Schema.is(ToolGatewayDenied);
 /** Refused before the grant (a linked environment, a Worker run) or after it (an agent's own thread). */
 type Refusal = "linked" | "worker" | "resident";
+type RefusalOf = (
+  run: OpenRun,
+) => Effect.Effect<Refusal | undefined, PersistenceSqlError | PersistenceDecodeError>;
+
+// A budget at any level other than the company's names a row of this kind in the workspace.
+const BUDGET_OWNERS = {
+  project: ["project_bindings", "project_id"],
+  agent: ["agents", "agent_id"],
+  person: ["members", "subject_id"],
+} as const;
 
 /** Who an allowed tool call acts as, taken from the thread's run, never from the tool input. */
 export interface ToolCaller {
@@ -208,7 +214,8 @@ export class ToolGateway extends Context.Service<
     /**
      * `call` on a thread with an open run, or that call refused and recorded as `refuse`; any
      * other thread runs `use` as it would without Telescope. An agent's own thread is refused:
-     * its agent opens Workers with `dispatch_worker` only.
+     * its agent opens Workers with `dispatch_worker` only. `use`'s own outcome comes back as its
+     * exit, so its errors never mix with the gateway's.
      */
     readonly callIfRun: <A, E, R>(
       threadId: ThreadId,
@@ -216,7 +223,7 @@ export class ToolGateway extends Context.Service<
       args: Schema.Json,
       use: Effect.Effect<A, E, R>,
       refuse?: "linked",
-    ) => Effect.Effect<A, E | ToolGatewayDenied | Failure, R>;
+    ) => Effect.Effect<Exit.Exit<A, E>, ToolGatewayDenied | Failure, R>;
     readonly setBudget: Method<"telescope.budget.set">;
     readonly setKillSwitch: Method<"telescope.killSwitch.set">;
     readonly governance: Method<"telescope.governance.get">;
@@ -230,13 +237,17 @@ const make = Effect.gen(function* () {
   const runs = yield* RunRecordService.RunRecordService;
   const now = DateTime.now.pipe(Effect.map(DateTime.formatIso));
 
-  // One transaction: the budget check and its count cannot interleave with another call.
+  // One transaction: the run lookup, the budget check and its count, and the audit row cannot
+  // interleave with another call or with the run's end.
   const decide = Effect.fn("ToolGateway.decide")(function* (
-    run: OpenRun,
+    threadId: ThreadId,
     tool: Telescope.GatewayTool,
     argsRedacted: Schema.Json,
-    refuse?: Refusal,
+    refusalOf: RefusalOf,
   ) {
+    const [run] = yield* db.latestRunForThread(threadId, decodeRuns);
+    if (run === undefined) return undefined;
+    const refuse = yield* refusalOf(run);
     const { workspace_id: workspaceId, agent_id: agentId, on_behalf_of_json: onBehalfOf } = run;
     const power = TOOL_POWERS[tool];
     // `onBehalfOf[0]` is the member; a stop of any agent the run acts through holds.
@@ -262,13 +273,13 @@ const make = Effect.gen(function* () {
     const budgets = (yield* db.select(workspaceId, "budgets", decodeBudgets)).filter(
       (budget) => levelIds[budget.scope] === budget.scope_id,
     );
-    const spent = Telescope.BudgetScope.literals.find((level) =>
-      budgets.some(
-        (budget) =>
-          budget.scope === level &&
-          budget.limit_calls !== null &&
-          budget.used_calls >= budget.limit_calls,
-      ),
+    const blocked = (test: (budget: typeof BudgetRow.Type) => boolean) =>
+      Telescope.BudgetScope.literals.find((level) =>
+        budgets.some((budget) => budget.scope === level && test(budget)),
+      );
+    const paused = blocked((budget) => budget.paused === 1);
+    const spent = blocked(
+      (budget) => budget.limit_calls !== null && budget.used_calls >= budget.limit_calls,
     );
     // The PA's own thread is refused as project_only, which names the path it has.
     const reason: ToolGatewayDenied["reason"] | undefined =
@@ -283,16 +294,18 @@ const make = Effect.gen(function* () {
               ? "project_only"
               : tool === "delegate" && grant.projectId !== undefined
                 ? "no_project"
-                : (refuse ?? (spent !== undefined ? "budget" : undefined));
+                : (refuse ??
+                  (paused !== undefined
+                    ? "budget_paused"
+                    : spent !== undefined
+                      ? "budget"
+                      : undefined));
+    const level = reason === "budget_paused" ? paused : reason === "budget" ? spent : undefined;
     const denied =
       reason === undefined
         ? undefined
-        : new ToolGatewayDenied({
-            reason,
-            tool,
-            ...(reason !== "budget" || spent === undefined ? {} : { level: spent }),
-          });
-    yield* grants.audit(workspaceId, {
+        : new ToolGatewayDenied({ reason, tool, ...(level === undefined ? {} : { level }) });
+    const entry = yield* grants.audit(workspaceId, {
       runId: run.run_id,
       agentId,
       onBehalfOf,
@@ -301,7 +314,7 @@ const make = Effect.gen(function* () {
       argsRedacted,
       outcome: denied === undefined ? "allowed" : "denied",
       ...(grant.projectId === undefined ? {} : { projectId: grant.projectId }),
-      ...(denied === undefined ? {} : { reason: denied.message }),
+      ...(reason === undefined ? {} : { reason }),
     });
     if (denied !== undefined) {
       const ref = { workspaceId, runId: run.run_id };
@@ -327,31 +340,36 @@ const make = Effect.gen(function* () {
       onBehalfOf,
       ...(grant.projectId === undefined ? {} : { projectId: grant.projectId }),
     };
-    return caller;
+    return { caller, auditId: entry.id };
   });
 
   const gate = Effect.fn("ToolGateway.gate")(function* <A, E, R>(
-    run: OpenRun,
+    threadId: ThreadId,
     tool: Telescope.GatewayTool,
     args: Schema.Json,
     use: (caller: ToolCaller) => Effect.Effect<A, E, R>,
-    refuse?: Refusal,
+    refusalOf: RefusalOf,
   ) {
     const argsRedacted = redact(args);
-    const decided = yield* db.transaction(decide(run, tool, argsRedacted, refuse));
+    const decided = yield* db.transaction(decide(threadId, tool, argsRedacted, refusalOf));
+    if (decided === undefined) return undefined;
     if (isDenied(decided)) return yield* decided;
-    const [duration, exit] = yield* Effect.timed(Effect.exit(use(decided)));
+    const { caller, auditId } = decided;
+    const [duration, exit] = yield* Effect.timed(Effect.exit(use(caller)));
+    const ref = { workspaceId: caller.workspaceId, runId: caller.runId };
+    // A run call stores whole milliseconds; a real clock times in nanoseconds.
+    const durationMs = Math.round(Duration.toMillis(duration));
+    const warn = Effect.catchCause((cause) =>
+      Effect.logWarning("recording a Telescope tool call failed", { cause }),
+    );
     yield* runs
-      .recordCall(
-        { workspaceId: decided.workspaceId, runId: decided.runId },
-        { tool, argsRedacted, grantCheck: "allowed", durationMs: Duration.toMillis(duration) },
-      )
-      .pipe(
-        Effect.catchCause((cause) =>
-          Effect.logWarning("recording a Telescope tool call failed", { cause }),
-        ),
-      );
-    return yield* exit;
+      .recordCall(ref, { tool, argsRedacted, grantCheck: "allowed", durationMs })
+      .pipe(warn);
+    if (Exit.isFailure(exit))
+      yield* db
+        .update(ref.workspaceId, "audit", { outcome: "failed" }, { audit_id: auditId })
+        .pipe(warn);
+    return exit;
   });
 
   const call = Effect.fn("ToolGateway.call")(function* <A, E, R>(
@@ -363,15 +381,19 @@ const make = Effect.gen(function* () {
     const tool = yield* decodeTool(toolName).pipe(
       Effect.mapError(() => new ToolGatewayDenied({ reason: "unknown_tool" })),
     );
-    const [run] = yield* db.latestRunForThread(threadId, decodeRuns);
-    if (run === undefined) return yield* new ToolGatewayDenied({ reason: "no_run", tool });
-    const worker = yield* db.select(run.workspace_id, "delegations", decodeDelegationIds, {
-      thread_id: threadId,
-      hop: "worker",
-    });
     // A Worker keeps its memory, the tools that need no power.
-    const refuse = worker.length > 0 && TOOL_POWERS[tool] !== null ? "worker" : undefined;
-    return yield* gate(run, tool, args, use, refuse);
+    const workerRefusal: RefusalOf = (run) =>
+      TOOL_POWERS[tool] === null
+        ? Effect.undefined
+        : db
+            .select(run.workspace_id, "delegations", decodeDelegationIds, {
+              thread_id: threadId,
+              hop: "worker",
+            })
+            .pipe(Effect.map((rows) => (rows.length > 0 ? "worker" : undefined)));
+    const exit = yield* gate(threadId, tool, args, use, workerRefusal);
+    if (exit === undefined) return yield* new ToolGatewayDenied({ reason: "no_run", tool });
+    return yield* exit;
   });
 
   const callIfRun = Effect.fn("ToolGateway.callIfRun")(function* <A, E, R>(
@@ -381,11 +403,14 @@ const make = Effect.gen(function* () {
     use: Effect.Effect<A, E, R>,
     refuse?: "linked",
   ) {
-    const [run] = yield* db.latestRunForThread(threadId, decodeRuns);
-    if (run === undefined) return yield* use;
-    const resident =
-      refuse ?? ((yield* db.agentThread(threadId)) === undefined ? undefined : "resident");
-    return yield* gate(run, tool, args, () => use, resident);
+    const residentRefusal: RefusalOf = () =>
+      refuse !== undefined
+        ? Effect.succeed(refuse)
+        : db
+            .agentThread(threadId)
+            .pipe(Effect.map((agent) => (agent === undefined ? undefined : "resident")));
+    const exit = yield* gate(threadId, tool, args, () => use, residentRefusal);
+    return exit ?? (yield* Effect.exit(use));
   });
 
   const requireAdmin = Effect.fn("ToolGateway.requireAdmin")(function* (
@@ -406,15 +431,26 @@ const make = Effect.gen(function* () {
       const { workspaceId, scope } = input;
       yield* requireAdmin(caller, workspaceId);
       const where = { scope, scope_id: scope === "company" ? workspaceId : input.scopeId };
-      const limit = { limit_calls: input.limitCalls ?? null };
+      const fields = {
+        limit_calls: input.limitCalls ?? null,
+        ...(input.paused === undefined ? {} : { paused: input.paused ? 1 : 0 }),
+      };
       const save = Effect.gen(function* () {
+        if (scope !== "company") {
+          const [table, column] = BUDGET_OWNERS[scope];
+          if ((yield* db.count(workspaceId, table, { [column]: input.scopeId })) === 0)
+            return yield* new Telescope.WorkspaceError({
+              reason: "not_found",
+              message: `That ${scope} is not in this workspace.`,
+            });
+        }
         const [existing] = yield* db.select(workspaceId, "budgets", decodeBudgets, where);
         yield* existing === undefined
-          ? db.insert(workspaceId, "budgets", { ...where, ...limit })
-          : db.update(workspaceId, "budgets", limit, where);
+          ? db.insert(workspaceId, "budgets", { ...where, ...fields })
+          : db.update(workspaceId, "budgets", fields, where);
         return toBudget({
           ...(existing ?? { ...EMPTY_BUDGET, workspace_id: workspaceId, ...where }),
-          ...limit,
+          ...fields,
         });
       });
       return yield* db.transaction(save);

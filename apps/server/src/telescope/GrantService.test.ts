@@ -388,7 +388,7 @@ it.layer(layer)("Telescope grants", (it) => {
             tool: "merge_pull_request",
             argsRedacted: { token: "***" },
             outcome: index % 2 === 0 ? "denied" : "allowed",
-            reason: "The member role does not grant this in this project.",
+            reason: "forbidden",
           }),
         );
       }

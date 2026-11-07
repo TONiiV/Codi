@@ -55,7 +55,7 @@ const AuditRow = Schema.Struct({
   tool: Schema.NullOr(Telescope.Text),
   args_redacted_json: Schema.NullOr(Schema.fromJsonString(Schema.Json)),
   outcome: Telescope.AuditOutcome,
-  reason: Schema.NullOr(Schema.String),
+  reason: Schema.NullOr(Telescope.GatewayRefusal),
   created_at: Schema.String,
 });
 const decodeAudit = Schema.decodeUnknownEffect(Schema.Array(AuditRow));
@@ -127,7 +127,7 @@ export interface AuditInput {
   readonly tool?: typeof Telescope.Text.Type;
   readonly argsRedacted?: Schema.Json;
   readonly outcome: Telescope.AuditEntry["outcome"];
-  readonly reason?: string;
+  readonly reason?: Telescope.GatewayRefusal;
 }
 
 const fail = (reason: Telescope.WorkspaceError["reason"], message: string) =>
