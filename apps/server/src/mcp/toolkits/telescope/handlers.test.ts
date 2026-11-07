@@ -569,7 +569,7 @@ export const runsRefusedAtCompileTime = (
     // @ts-expect-error a run reads the audit
     grants.auditList(run, { workspaceId }),
     // @ts-expect-error a run caps a project's powers
-    grants.setProjectRule(run, { workspaceId, projectId, powers }),
+    grants.setProjectRule(run, { workspaceId, projectId, powers, routing: null }),
     // @ts-expect-error a run creates an agent
     agents.createCustom(run, { workspaceId, name: "Helper" }),
     // @ts-expect-error a run raises its own agent's powers

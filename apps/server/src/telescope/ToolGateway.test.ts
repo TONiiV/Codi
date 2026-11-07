@@ -265,7 +265,7 @@ it.layer(layer)("Telescope tool gateway", (it) => {
       const { workspaceId, beaId, workspaces, call, denial, audit } = yield* setup;
       const grants = yield* GrantService.GrantService;
       const rule = (powers: Telescope.StandingPowers) =>
-        grants.setProjectRule(as.ann, { workspaceId, projectId: web, powers });
+        grants.setProjectRule(as.ann, { workspaceId, projectId: web, powers, routing: null });
       yield* call("open_ticket");
       yield* rule({ ...ALL, openTickets: false });
       assert.strictEqual(yield* denial("open_ticket"), "forbidden");

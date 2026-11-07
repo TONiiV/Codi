@@ -94,6 +94,7 @@ import * as TelescopeWakeQueue from "./telescope/WakeQueueService.ts";
 import * as TelescopeAttribution from "./telescope/AttributionService.ts";
 import * as TelescopeTokenSaver from "./telescope/tokensaver/TokenSaverService.ts";
 import * as TelescopeMemory from "./telescope/MemoryService.ts";
+import * as TelescopeRouting from "./telescope/RoutingService.ts";
 import * as PeerLinks from "./peer/PeerLinks.ts";
 import * as PeerMcpClient from "./peer/PeerMcpClient.ts";
 import * as McpSessionRegistry from "./mcp/McpSessionRegistry.ts";
@@ -833,6 +834,7 @@ const layerMakeRoutes = Layer.mergeAll(
       TelescopeToolGateway.layer,
       TelescopeDelegations.layer,
       TelescopeAttribution.layer,
+      TelescopeRouting.layer,
       TelescopeWorkspaceData.layer,
     ),
   ),
