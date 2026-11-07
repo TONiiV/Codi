@@ -51,7 +51,7 @@ const AuditRow = Schema.Struct({
   agent_id: Telescope.AgentId,
   on_behalf_of_json: Schema.fromJsonString(Telescope.OnBehalfOf),
   project_id: Schema.NullOr(ProjectId),
-  power: Telescope.GrantPower,
+  power: Schema.NullOr(Telescope.GrantPower),
   tool: Schema.NullOr(Telescope.Text),
   args_redacted_json: Schema.NullOr(Schema.fromJsonString(Schema.Json)),
   outcome: Telescope.AuditOutcome,
@@ -68,11 +68,11 @@ const toAuditEntry = (row: typeof AuditRow.Type): Telescope.AuditEntry => ({
   workspaceId: row.workspace_id,
   agentId: row.agent_id,
   onBehalfOf: row.on_behalf_of_json,
-  power: row.power,
   outcome: row.outcome,
   createdAt: row.created_at,
   ...(row.run_id === null ? {} : { runId: row.run_id }),
   ...(row.project_id === null ? {} : { projectId: row.project_id }),
+  ...(row.power === null ? {} : { power: row.power }),
   ...(row.tool === null ? {} : { tool: row.tool }),
   ...(row.args_redacted_json === null ? {} : { argsRedacted: row.args_redacted_json }),
   ...(row.reason === null ? {} : { reason: row.reason }),
@@ -120,7 +120,7 @@ export interface AuditInput {
   readonly agentId: Telescope.AgentId;
   readonly onBehalfOf: typeof Telescope.OnBehalfOf.Type;
   readonly projectId?: ProjectId;
-  readonly power: Telescope.GrantPower;
+  readonly power?: Telescope.GrantPower;
   readonly tool?: typeof Telescope.Text.Type;
   readonly argsRedacted?: Schema.Json;
   readonly outcome: Telescope.AuditEntry["outcome"];
@@ -306,7 +306,7 @@ const make = Effect.gen(function* () {
       agent_id: entry.agentId,
       on_behalf_of_json: entry.onBehalfOf,
       project_id: entry.projectId ?? null,
-      power: entry.power,
+      power: entry.power ?? null,
       tool: entry.tool ?? null,
       args_redacted_json: entry.argsRedacted ?? null,
       outcome: entry.outcome,

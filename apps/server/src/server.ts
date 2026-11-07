@@ -817,10 +817,7 @@ const layerMakeRoutes = Layer.mergeAll(
   Layer.effectDiscard(
     RemoteDelegation.RemoteDelegation.pipe(Effect.flatMap((remote) => remote.start())),
   ),
-  TelescopeWakeQueue.layerWorker.pipe(
-    Layer.provide(TelescopeAgentRuntime.layer),
-    Layer.provide(ProviderAdapterRegistry.layerFromProviderInstanceRegistry),
-  ),
+  TelescopeWakeQueue.layerWorker.pipe(Layer.provide(TelescopeAgentRuntime.layerWakeRunner)),
   Layer.merge(TelescopeTokenSaver.layerWeekly, TelescopeRuns.layerRetention),
 ).pipe(
   Layer.provide(
@@ -834,7 +831,17 @@ const layerMakeRoutes = Layer.mergeAll(
   Layer.provide(TelescopeWorkspaces.layer),
   // The same notice hub TaskBoardService publishes to, by layer memoization.
   Layer.provide(Layer.merge(TelescopeBoard.layer, TelescopeBoardChanges.layer)),
-  Layer.provide(TelescopeAgents.layer),
+  Layer.provide(
+    TelescopeAgentRuntime.layer.pipe(
+      Layer.provide(
+        Layer.merge(
+          ProviderAdapterRegistry.layerFromProviderInstanceRegistry,
+          TelescopeWorkspaces.layer,
+        ),
+      ),
+      Layer.provideMerge(TelescopeAgents.layer),
+    ),
+  ),
   Layer.provide(
     Layer.mergeAll(
       TelescopeRuns.layer,

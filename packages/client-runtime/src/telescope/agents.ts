@@ -1,13 +1,16 @@
 import { type EnvironmentId, Telescope } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
 import type { Atom, AtomRegistry } from "effect/reactivity";
 
 import type { EnvironmentRegistry } from "../connection/registry.ts";
 import {
+  type AtomCommandResult,
   createEnvironmentRpcCommand,
   createEnvironmentRpcQueryAtomFamily,
+  squashAtomCommandFailure,
 } from "../state/runtime.ts";
-import { rereadRoleWhenForbidden } from "./workspaces.ts";
+import { failureText, rereadRoleWhenForbidden } from "./workspaces.ts";
 
 const { WS_METHODS } = Telescope;
 const EXPOSURES = Telescope.AgentExposure.literals;
@@ -51,6 +54,23 @@ export function cappedPowers(
   canMerge: boolean,
 ): Telescope.StandingPowers {
   return { ...powers, mergePRs: powers.mergePRs && canMerge };
+}
+
+/** Only the owner starts an agent's chat; the server checks it again. */
+export function offersOpenThread(agent: Telescope.Agent, self: Telescope.Member): boolean {
+  return agent.ownerSubjectId === self.subjectId && self.revokedAt === undefined;
+}
+
+const MODEL_REFUSALS: ReadonlyArray<string> = Object.values(Telescope.AGENT_MODEL_REFUSALS);
+const isWorkspaceError = Schema.is(Telescope.WorkspaceError);
+
+/** Points at the default model only when the model or its provider is why the chat cannot open. */
+export function openThreadFailureText(result: AtomCommandResult<unknown, unknown>): string | null {
+  const error = result._tag === "Failure" ? squashAtomCommandFailure(result) : null;
+  if (!isWorkspaceError(error) || error.reason !== "invalid") return failureText(result);
+  return MODEL_REFUSALS.includes(error.message)
+    ? "现在开不了这个对话：它需要一个能用 Codi 工具的模型。请在 设置 → 会话 → 新会话 → 模型 里选一个默认模型。"
+    : `现在开不了这个对话：${error.message}`;
 }
 
 export function createTelescopeAgentAtoms<R, E>(
@@ -112,6 +132,15 @@ export function createTelescopeAgentAtoms<R, E>(
       label: "telescope:agent:update",
       tag: WS_METHODS.agentUpdate,
       onSuccess: (target, registry, agent) => refreshAgent(target, registry, agent),
+    }),
+    openThread: createEnvironmentRpcCommand(runtime, {
+      label: "telescope:agent:open-thread",
+      tag: WS_METHODS.agentOpenThread,
+      onSuccess: ({ environmentId, input }, registry) =>
+        Effect.sync(() => {
+          refreshLists(environmentId, input.workspaceId, registry);
+          registry.refresh(get({ environmentId, input }));
+        }),
     }),
     updateCompany: createEnvironmentRpcCommand(runtime, {
       label: "telescope:agent:update-company",

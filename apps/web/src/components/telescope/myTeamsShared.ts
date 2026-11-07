@@ -18,6 +18,15 @@ export const KIND_LABEL: Record<Telescope.AgentKind, string> = {
   department: "职能代理",
 };
 
+// The server names every new personal assistant this; a renamed one keeps its own name.
+const DEFAULT_ASSISTANT_NAME = "Chief of Staff";
+
+export function agentDisplayName(agent: Telescope.Agent): string {
+  return agent.kind === "chief_of_staff" && agent.name === DEFAULT_ASSISTANT_NAME
+    ? KIND_LABEL.chief_of_staff
+    : agent.name;
+}
+
 export const EXPOSURE_LABEL: Record<Telescope.AgentExposure, string> = {
   hidden: "不暴露",
   visible: "可查看",

@@ -8,7 +8,6 @@ import {
   jsonMcp,
   makeHarness,
   mergeInstructions,
-  writeText,
 } from "../Pack.ts";
 
 const PACK_RULE = "context-pack.mdc";
@@ -45,14 +44,14 @@ export const cursor = makeHarness({
       return bodies.length === 0 ? undefined : bodies.join("\n\n");
     }),
     // Only the pack rule is written, so the project's other rules survive in either mode.
-    write: Effect.fnUntraced(function* (dir, rulesDir, text, merge) {
+    render: Effect.fnUntraced(function* (dir, rulesDir, text, merge) {
       const fs = yield* FileSystem.FileSystem;
       const target = (yield* Path.Path).join(dir, rulesDir, PACK_RULE);
       const existing = (yield* fs.exists(target))
         ? (yield* fs.readFileString(target)).replace(FRONTMATTER, "")
         : undefined;
       const body = mergeInstructions(existing, text, merge).trimEnd();
-      yield* writeText(dir, target, `${PACK_RULE_HEADER}${body}\n`);
+      return [target, `${PACK_RULE_HEADER}${body}\n`] as const;
     }),
   },
   mcp: jsonMcp("mcpServers", (server) =>

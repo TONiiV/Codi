@@ -5,6 +5,7 @@ import {
   Telescope,
   type AuthSessionState,
 } from "@t3tools/contracts";
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
@@ -21,6 +22,8 @@ import type { RpcSession } from "../rpc/session.ts";
 import {
   cappedPowers,
   createTelescopeAgentAtoms,
+  offersOpenThread,
+  openThreadFailureText,
   ownerCanMergePRs,
   selectableExposures,
 } from "./agents.ts";
@@ -108,6 +111,70 @@ describe("telescope standing power cap", () => {
   it("keeps a stored merge right off above the cap and leaves other powers alone", () => {
     expect(cappedPowers(ALL_POWERS, false)).toEqual({ ...ALL_POWERS, mergePRs: false });
     expect(cappedPowers(ALL_POWERS, true)).toEqual(ALL_POWERS);
+  });
+});
+
+describe("telescope agent chat", () => {
+  const assistant: Telescope.Agent = {
+    id: Telescope.AgentId.make("pa"),
+    workspaceId,
+    ownerSubjectId: "me",
+    kind: "chief_of_staff",
+    name: "Chief of Staff",
+    standingPowers: ALL_POWERS,
+    exposure: "visible",
+    syncWithBoard: false,
+    dispatchMode: "inbox",
+    channels: [],
+    createdAt: "2026-11-06T00:00:00.000Z",
+    updatedAt: "2026-11-06T00:00:00.000Z",
+  };
+
+  it.each([
+    {
+      who: "the owner",
+      agent: assistant,
+      self: member("member"),
+      offered: true,
+    },
+    {
+      who: "another member",
+      agent: { ...assistant, ownerSubjectId: "someone-else" },
+      self: member("admin"),
+      offered: false,
+    },
+    {
+      who: "a member, for a company agent",
+      agent: { ...assistant, ownerSubjectId: null, kind: "company_main" as const },
+      self: member("admin"),
+      offered: false,
+    },
+    {
+      who: "a revoked owner",
+      agent: assistant,
+      self: { ...member("member"), revokedAt: "2026-11-07T00:00:00.000Z" },
+      offered: false,
+    },
+  ])(
+    "openThread is not offered for another member's agent: $who → $offered",
+    ({ agent, self, offered }) => {
+      expect(offersOpenThread(agent, self)).toBe(offered);
+    },
+  );
+
+  it.each([
+    { cause: "no model", message: Telescope.AGENT_MODEL_REFUSALS.no_model, shown: false },
+    {
+      cause: "a provider without tools",
+      message: Telescope.AGENT_MODEL_REFUSALS.no_mcp,
+      shown: false,
+    },
+    { cause: "no Scratch", message: "Threads without a project are not available.", shown: true },
+  ])("an openThread refusal for $cause shows the server's reason: $shown", ({ message, shown }) => {
+    const refused = AsyncResult.failure(
+      Cause.fail(new Telescope.WorkspaceError({ reason: "invalid", message })),
+    );
+    expect(openThreadFailureText(refused)?.includes(message)).toBe(shown);
   });
 });
 
