@@ -349,7 +349,8 @@ export function DeviceSourcesSettings(props: {
               const result = checked[target.environmentId];
               return t("settings.parallelConnections.environmentFailure", {
                 label: target.label,
-                message: result?.status === "failed" ? result.error : t("settings.text.failed"),
+                message:
+                  result?.status === "failed" ? result.error : t("settings.text.failedLower"),
               });
             })
             .join("\n")
@@ -706,7 +707,7 @@ function PlatformIcon(props: {
               title: props.row.title,
               platform: props.label,
               availability: available
-                ? t("settings.text.available")
+                ? t("settings.text.availableLower")
                 : t("settings.text.notAvailable"),
             })}
             className={cn(
@@ -730,7 +731,7 @@ function PlatformIcon(props: {
           {available
             ? partial
               ? t("settings.text.availableOnSome")
-              : t("settings.text.available")
+              : t("settings.text.availableLower")
             : t("settings.text.notAvailable")}
         </p>
         {props.row.shared ? (
@@ -801,6 +802,7 @@ function PlatformIcon(props: {
 }
 
 function DeviceSourceRow(props: { row: SourceRow }) {
+  const { t } = useTranslation();
   const { row } = props;
   const several = row.environments.length > 1;
   const issues = row.environments.filter(
@@ -838,7 +840,9 @@ function DeviceSourceRow(props: { row: SourceRow }) {
             </span>
             {environment.status.tone === "warning" && environment.status.detail ? (
               <Popover>
-                <PopoverTrigger render={<InlineButton />}>Details</PopoverTrigger>
+                <PopoverTrigger render={<InlineButton />}>
+                  {t("settings.text.details")}
+                </PopoverTrigger>
                 <PopoverPopup side="bottom" align="start" width="lg" padding="compact">
                   <p className="whitespace-pre-wrap break-words font-mono text-xs text-muted-foreground">
                     {environment.status.detail}
