@@ -20,9 +20,11 @@ const splitServers = (text: string) => {
       current = blocks.get(name) ?? [];
       blocks.set(name, current);
     } else if (ANY_HEADER.test(line) && current !== rest) {
-      // Comments and blank lines just above a non-MCP table belong to that table.
+      // Comments and blank lines just above a non-MCP table belong to that table, up to the
+      // block's own transport marker.
       let start = current.length;
-      while (start > 0 && /^\s*(#.*)?$/.test(current[start - 1]!)) start--;
+      const owned = (line: string) => /^\s*(#.*)?$/.test(line) && !TRANSPORT.test(line);
+      while (start > 0 && owned(current[start - 1]!)) start--;
       rest.push(...current.splice(start));
       current = rest;
     }
