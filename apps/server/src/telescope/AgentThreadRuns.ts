@@ -204,7 +204,7 @@ export const makeHandler = Effect.gen(function* () {
     });
   });
 
-  // D144: a run whose Codi run ended or went missing while the server was down settles at startup.
+  // A run whose Codi run ended or went missing while the server was down settles at startup.
   // After orchestration's recovery, a Codi run still there and not terminal is live (a queued run
   // kept across the restart); its own end event settles it later.
   const settleOrphan = Effect.fn("AgentThreadRuns.settleOrphan")(function* (

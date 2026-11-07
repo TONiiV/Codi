@@ -646,7 +646,7 @@ it.effect.each([
   { worker: "ended its turn", started: true },
   { worker: "never got its thread", started: false },
 ] as const)(
-  "a restart finishes the runs left open while it was down, where the Worker $worker, and wakes the Chief once for its task; settling again changes nothing (D144)",
+  "a restart finishes the runs left open while it was down, where the Worker $worker, and wakes the Chief once for its task; settling again changes nothing",
   ({ started }) =>
     withHarness(
       (harness) =>

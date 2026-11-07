@@ -1242,7 +1242,7 @@ it.effect.each([
 it.effect.each([
   { left: "ended", outcome: "fails its task as unreported and its leases lapse" },
   { left: "running", outcome: "stays open with its task and leases" },
-] as const)("after a restart, a Chief run whose Codi run $left $outcome (D144)", ({ left }) =>
+] as const)("after a restart, a Chief run whose Codi run $left $outcome", ({ left }) =>
   withHarness({ mcp: true, listening: false }, (harness) =>
     Effect.gen(function* () {
       const seeded = yield* seed;
