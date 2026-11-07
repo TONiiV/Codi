@@ -62,7 +62,7 @@ const MemorySourceRow = Schema.Struct({
   source_json: Schema.fromJsonString(Telescope.Memory.fields.source),
 });
 
-const decodeRuns = Schema.decodeUnknownEffect(Schema.Array(RunRow));
+export const decodeRuns = Schema.decodeUnknownEffect(Schema.Array(RunRow));
 const decodeCalls = Schema.decodeUnknownEffect(Schema.Array(CallRow));
 const decodeMemorySources = Schema.decodeUnknownEffect(Schema.Array(MemorySourceRow));
 // The repository writes workspace_id itself and refuses rows that carry it.

@@ -375,6 +375,32 @@ it.effect.each(Object.keys(opens) as Array<keyof typeof opens>)(
   },
 );
 
+const RESIDENT =
+  "An agent's own thread does not open or steer other threads. Open a Worker for the task with `dispatch_worker` and a brief.";
+it.effect.each(Object.keys(opens) as Array<keyof typeof opens>)(
+  "a Chief's %s on its own thread is refused with use dispatch_worker",
+  (tool) => {
+    const opened: Array<string> = [];
+    return Effect.gen(function* () {
+      const { workspaceId, on, audit } = yield* setup;
+      const chief = yield* on("chief_agent");
+      yield* (yield* TelescopeDb.TelescopeDb).update(
+        workspaceId,
+        "agents",
+        { resident_thread_id: chief.threadId },
+        { agent_id: chief.agentId },
+      );
+      assert.deepInclude(yield* opens[tool](chief), {
+        _tag: "OrchestratorMcpFailure",
+        code: "capability_denied",
+        message: RESIDENT,
+      });
+      assert.deepStrictEqual(opened, []);
+      assert.deepStrictEqual(yield* audit, [["dispatch_worker", "denied", RESIDENT]]);
+    }).pipe(Effect.provide(layer(opened)));
+  },
+);
+
 it.effect("an ordinary thread's create_threads is unchanged", () => {
   const opened: Array<string> = [];
   return Effect.gen(function* () {

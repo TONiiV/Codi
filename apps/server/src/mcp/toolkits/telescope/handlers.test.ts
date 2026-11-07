@@ -15,17 +15,20 @@ import type { Tool } from "effect/ai";
 import * as SqlClient from "effect/sql/SqlClient";
 
 import * as ServerEnvironment from "../../../environment/ServerEnvironment.ts";
+import * as ServerSettings from "../../../serverSettings.ts";
 import { runMigrations } from "../../../persistence/Migrations.ts";
 import * as SqlitePersistence from "../../../persistence/Sqlite.ts";
 import * as AgentService from "../../../telescope/AgentService.ts";
 import * as DelegationService from "../../../telescope/DelegationService.ts";
 import * as GrantService from "../../../telescope/GrantService.ts";
 import type * as MemoryService from "../../../telescope/MemoryService.ts";
+import * as RoutingService from "../../../telescope/RoutingService.ts";
 import * as RunRecordService from "../../../telescope/RunRecordService.ts";
 import * as TaskBoardService from "../../../telescope/TaskBoardService.ts";
 import * as TelescopeDb from "../../../telescope/TelescopeDb.ts";
 import * as ToolGateway from "../../../telescope/ToolGateway.ts";
 import * as WakeQueueService from "../../../telescope/WakeQueueService.ts";
+import * as WorkerDispatch from "../../../telescope/WorkerDispatch.ts";
 import * as WorkspaceService from "../../../telescope/WorkspaceService.ts";
 import * as McpInvocationContext from "../../McpInvocationContext.ts";
 import * as McpToolAccess from "../../McpToolAccess.ts";
@@ -56,7 +59,13 @@ const services = Layer.mergeAll(
     }),
   ),
 );
+// Opening Workers is covered by WorkerDispatch.integration.test.ts; cancel runs for real here.
+const workers = WorkerDispatch.layer.pipe(
+  Layer.provide(Layer.mock(RoutingService.RoutingService)({})),
+  Layer.provide(ServerSettings.layerTest()),
+);
 const layer = McpToolAccess.HandlersLayer.layer(TelescopeHandlers.layer).pipe(
+  Layer.provideMerge(workers),
   Layer.provideMerge(Layer.mergeAll(services, liveThreadsLayer)),
 );
 
@@ -86,8 +95,8 @@ const runOn = Effect.fn(function* (
   workspaceId: Telescope.WorkspaceId,
   agentId: Telescope.AgentId,
   via?: ReadonlyArray<Telescope.AgentId>,
+  threadId = ThreadId.make(`thread-${agentId}`),
 ) {
-  const threadId = ThreadId.make(`thread-${agentId}`);
   yield* (yield* RunRecordService.RunRecordService).start(ann, workspaceId, {
     agentId,
     threadId,
@@ -153,18 +162,21 @@ const everyTool = (
     call("delegation_list", {}),
     call("delegation_report", { delegationId, state: "COMPLETED", report: done }),
     call("delegation_cancel", { delegationId }),
+    call("dispatch_worker", { delegationId, brief }),
   ]);
 };
 const TOOL_COUNT = Object.keys(TelescopeToolkit.tools).length;
 
-const deniedWith = (results: ReadonlyArray<unknown>, message: string) => {
+/** `dispatchWorker`: the PA's own refusal of the last call, where it comes before `message`. */
+const deniedWith = (results: ReadonlyArray<unknown>, message: string, dispatchWorker = message) => {
   assert.strictEqual(results.length, TOOL_COUNT);
-  for (const result of results)
+  results.forEach((result, index) =>
     assert.deepInclude(result, {
       _tag: "OrchestratorMcpFailure",
       code: "capability_denied",
-      message: `${message} Do not retry; tell your member.`,
-    });
+      message: `${index === TOOL_COUNT - 1 ? dispatchWorker : message} Do not retry; tell your member.`,
+    }),
+  );
 };
 
 it.effect("works the board as the run's agent through every board tool", () =>
@@ -325,6 +337,7 @@ it.effect("refuses every tool once the agent's call budget is spent", () =>
     deniedWith(
       yield* everyTool(call, { taskId: "task-1", leaseId: "lease-1" }),
       "A Telescope budget is used up. Level: agent.",
+      "Only a project's agent opens Worker threads. Hand the work to its Chief Agent with `delegate`.",
     );
   }).pipe(Effect.provide(layer)),
 );
@@ -514,7 +527,7 @@ it.effect("delegate to another member's agent is not found", () =>
       assert.deepInclude(
         yield* chief.call("delegate", { toAgentId, brief }),
         refused(
-          "Only an agent without a project hands work to a Chief Agent. Report back to the agent that gave you this task. Do not retry; tell your member.",
+          "Only an agent without a project hands work to a Chief Agent. Do your own project's work with your Workers (`dispatch_worker`); report work outside your project back with `delegation_report`.",
         ),
       );
     assert.isUndefined(yield* queue.dequeue);
@@ -579,6 +592,47 @@ it.effect("delegation_cancel from the to-agent is refused", () =>
       refused("Only the agent that sent a task cancels it."),
     );
     assert.strictEqual(yield* get(sent.id), "SUBMITTED");
+  }).pipe(Effect.provide(layer)),
+);
+
+it.effect("a Worker run is refused every Telescope tool, and each refusal is audited", () =>
+  Effect.gen(function* () {
+    const { workspaceId, db, pa, chief, delegations } = yield* chain;
+    const sent = (yield* pa.call("delegate", {
+      toAgentId: chief.id,
+      brief,
+    })) as Telescope.Delegation;
+    yield* delegations.start({ workspaceId, delegationId: sent.id });
+    const threadId = ThreadId.make("thread-worker");
+    yield* db.insert(workspaceId, "delegations", {
+      delegation_id: "worker-1",
+      context_id: "context-worker",
+      parent_id: sent.id,
+      from_agent_id: chief.id,
+      to_agent_id: chief.id,
+      hop: "worker",
+      thread_id: threadId,
+      decision_id: null,
+      state: "WORKING",
+      brief_json: JSON.stringify(brief),
+      report_json: null,
+      messages_json: "[]",
+      artifacts_json: "[]",
+      created_at: "2026-11-07T00:00:00.000Z",
+      updated_at: "2026-11-07T00:00:00.000Z",
+    });
+    const worker = yield* runOn(workspaceId, chief.id, [pa.id], threadId);
+    const results = yield* everyTool(worker, { taskId: "task-1", leaseId: "lease-1" });
+    assert.strictEqual(results.length, TOOL_COUNT);
+    for (const result of results)
+      assert.deepInclude(
+        result,
+        refused("A Worker reports through its thread; Telescope tools are not for Workers."),
+      );
+    const { entries } = yield* (yield* GrantService.GrantService).auditList(ann, { workspaceId });
+    assert.strictEqual(entries.filter((entry) => entry.outcome === "denied").length, TOOL_COUNT);
+    // The Chief's own thread keeps its tools.
+    assert.property(yield* chief.call("delegation_list", {}), "delegations");
   }).pipe(Effect.provide(layer)),
 );
 

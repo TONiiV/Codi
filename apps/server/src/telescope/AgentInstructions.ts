@@ -2,13 +2,13 @@ import { Telescope } from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
 
 /** Recorded on every run as `inputSnapshot.promptVersion`; bump it when the role text changes. */
-export const PROMPT_VERSION = "telescope-agent-instructions@4";
+export const PROMPT_VERSION = "telescope-agent-instructions@5";
 
 /** What a wake carries; the chat page sends to the thread itself, not a `message` wake (D86). */
 export const WakePayload = Schema.Union([
   Schema.Struct({ kind: Schema.Literal("message"), text: Telescope.Text }),
   Schema.Struct({
-    kind: Schema.Literals(["delegation", "report", "answer"]),
+    kind: Schema.Literals(["delegation", "report", "worker", "answer"]),
     delegationId: Telescope.DelegationId,
   }),
 ]);
@@ -17,7 +17,7 @@ export type WakePayload = typeof WakePayload.Type;
 export type TurnItem =
   | { readonly kind: "message"; readonly text: string }
   | {
-      readonly kind: "delegation" | "report" | "answer";
+      readonly kind: "delegation" | "report" | "worker" | "answer";
       readonly delegation: Telescope.Delegation;
     };
 
@@ -29,19 +29,18 @@ const ASSISTANT = [
 ].join("\n");
 const CHIEF = [
   "You are {name}, the Chief Agent of one project in Telescope. This is your resident thread: each turn starts with a task delegated to you, by its task id, or a message from your member.",
-  "- Do not write code or run the work yourself.",
+  "- Do not write code or run the work yourself. Open a Worker for it with `dispatch_worker` and a brief; the Worker works in its own thread.",
   "- Report on the task id with `delegation_report`: the state, the result, decisions taken, what blocks it and who must decide. Link threads instead of pasting them.",
   "- When the task or a Worker needs your member to choose or approve, ask with `delegation_report` (INPUT_REQUIRED or AUTH_REQUIRED) on that task id instead of guessing; the answer comes back on the same task id.",
-  "- A turn on a delegated task that ends without `delegation_report` fails the task as unreported.",
+  "- A turn on a delegated task that ends without `delegation_report` and without an open Worker fails the task as unreported.",
 ].join("\n");
 
 const list = (label: string, values: ReadonlyArray<string> | undefined) =>
   values === undefined || values.length === 0 ? [] : [`${label}:`, ...values.map((v) => `- ${v}`)];
 
-const delegationText = (delegation: Telescope.Delegation) => {
-  const { brief } = delegation;
-  return [
-    `Delegated task ${delegation.id} from agent ${delegation.fromAgentId}.`,
+/** A Worker's first and only message, and the body of a delegated task's turn. */
+export const renderBrief = (brief: typeof Telescope.DelegationBrief.Type) =>
+  [
     `Goal: ${brief.goal}`,
     ...list("Goal chain", brief.goalChain),
     ...list("Constraints", brief.constraints),
@@ -49,7 +48,16 @@ const delegationText = (delegation: Telescope.Delegation) => {
     ...list("Acceptance", brief.acceptance),
     ...list("Preferences", brief.preferences),
   ].join("\n");
-};
+
+const delegationText = (delegation: Telescope.Delegation) =>
+  `Delegated task ${delegation.id} from agent ${delegation.fromAgentId}.\n${renderBrief(delegation.brief)}`;
+
+const workerText = (delegation: Telescope.Delegation) =>
+  [
+    `Your Worker on task ${delegation.id} ended its turn.`,
+    `Goal: ${delegation.brief.goal}`,
+    "Read the Worker's thread (the Worker task in `delegation_list` names it). Close the Worker task with `delegation_report`, then report on this task, or open another Worker with `dispatch_worker`.",
+  ].join("\n");
 
 const reportText = (delegation: Telescope.Delegation) => {
   const report = delegation.report;
@@ -83,9 +91,11 @@ export const renderTurn = (
       ? `Message from your member:\n${item.text}`
       : item.kind === "delegation"
         ? delegationText(item.delegation)
-        : item.kind === "answer"
-          ? answerText(item.delegation)
-          : reportText(item.delegation),
+        : item.kind === "worker"
+          ? workerText(item.delegation)
+          : item.kind === "answer"
+            ? answerText(item.delegation)
+            : reportText(item.delegation),
   );
   return [...(options.firstTurn ? [role] : []), ...parts].join("\n\n");
 };
