@@ -142,6 +142,7 @@ import * as TelescopeMemory from "./telescope/MemoryService.ts";
 import * as TelescopeAttribution from "./telescope/AttributionService.ts";
 import * as TelescopeRouting from "./telescope/RoutingService.ts";
 import * as TelescopeDelegations from "./telescope/DelegationService.ts";
+import * as TelescopeInviteLink from "./telescope/InviteLink.ts";
 import * as SecretRequests from "./secrets/SecretRequests.ts";
 import * as GuestShareService from "./guest/GuestShareService.ts";
 import {
@@ -2414,7 +2415,9 @@ export const layerWsRpc = (
         [Telescope.WS_METHODS.workspaceDelete]: (input) =>
           telescopeStorage(telescopeData.delete(caller, input)),
         [Telescope.WS_METHODS.memberInvite]: (input) =>
-          telescopeStorage(telescope.invite(caller, input)),
+          telescopeStorage(
+            TelescopeInviteLink.invite({ workspaces: telescope, auth: serverAuth }, caller, input),
+          ),
         [Telescope.WS_METHODS.memberLinkCode]: (input) =>
           telescopeStorage(telescope.linkCode(caller, input)),
         [Telescope.WS_METHODS.memberAccept]: (input) =>

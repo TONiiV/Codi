@@ -260,7 +260,7 @@ const make = Effect.gen(function* () {
     workspaceId: WorkspaceId,
     input: RunStartInput,
   ) {
-    const { self } = yield* requireMember(workspaceId, caller);
+    const { self } = yield* workspaces.getForWrite(caller, { workspaceId });
     return yield* startFor(workspaceId, self.subjectId, input);
   });
 

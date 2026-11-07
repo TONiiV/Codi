@@ -717,6 +717,7 @@ const make = Effect.gen(function* () {
   const cancelForMember: DelegationService["Service"]["cancelForMember"] = Effect.fn(
     "DelegationService.cancelForMember",
   )(function* (caller, input) {
+    yield* workspaces.getForWrite(caller, input);
     const member = yield* memberOf(caller, input.workspaceId);
     const cancelled = yield* cancel(member, input.delegationId);
     return { canceled: cancelled.map((row) => row.id) };

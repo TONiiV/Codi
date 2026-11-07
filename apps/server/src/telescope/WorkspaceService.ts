@@ -99,6 +99,8 @@ interface RunCaller {
   readonly memberId: string;
 }
 export type Caller = SessionCaller | RunCaller;
+/** The one write rule: a viewer (只读) reads what a member reads and writes nothing. */
+export const isReadOnly = (role: Telescope.WorkspaceRole) => role === "viewer";
 const isOwner = (caller: Caller) => "subject" in caller && OWNER_SUBJECTS.has(caller.subject);
 // A proof key outlives its hourly sessions and re-pairing; a cookie session moves on replacement.
 // A run's key is linked to no member, so a run never reaches a workspace through a device link.
@@ -111,6 +113,10 @@ type Method<Tag extends Rpcs["_tag"]> = (
   caller: Caller,
   input: In<Tag>,
 ) => Effect.Effect<Rpc.Success<Rpc.ExtractTag<Rpcs, Tag>>, Failure>;
+type Invite = (
+  caller: Caller,
+  input: In<"telescope.member.invite">,
+) => Effect.Effect<Telescope.Invitation, Failure>;
 
 /**
  * Workspaces, members, invitations and project bindings. The owner acts as `OWNER_MEMBER_ID`; any
@@ -122,7 +128,9 @@ export class WorkspaceService extends Context.Service<
     readonly create: Method<"telescope.workspace.create">;
     readonly list: Method<"telescope.workspace.list">;
     readonly get: Method<"telescope.workspace.get">;
-    readonly invite: Method<"telescope.member.invite">;
+    /** `get` for a member write: a read-only member is refused. */
+    readonly getForWrite: Method<"telescope.workspace.get">;
+    readonly invite: Invite;
     readonly linkCode: Method<"telescope.member.linkCode">;
     readonly accept: Method<"telescope.member.accept">;
     readonly members: Method<"telescope.member.list">;
@@ -181,13 +189,15 @@ const make = Effect.gen(function* () {
   const requireMember = Effect.fn("WorkspaceService.requireMember")(function* (
     workspaceId: Telescope.WorkspaceId,
     caller: Caller,
-    role?: "admin",
+    access?: "admin" | "write",
   ) {
     const member = yield* callerMember(workspaceId, caller);
     if (member === undefined || member.revoked_at !== null)
       return yield* fail("forbidden", "You are not a member of this workspace.");
-    if (role !== undefined && (member.role !== role || "runId" in caller))
+    if (access === "admin" && (member.role !== "admin" || "runId" in caller))
       return yield* fail("forbidden", "Only workspace admins can do this.");
+    if (access === "write" && isReadOnly(member.role))
+      return yield* fail("forbidden", "Read-only members cannot change anything here.");
     return member;
   });
 
@@ -281,15 +291,19 @@ const make = Effect.gen(function* () {
     return { workspaces: rows.flat().map(toWorkspace) };
   });
 
-  const get = Effect.fn("WorkspaceService.get")(function* (
+  const workspaceFor = Effect.fn("WorkspaceService.get")(function* (
     caller: Caller,
     { workspaceId }: In<"telescope.workspace.get">,
+    access?: "write",
   ) {
-    const self = yield* requireMember(workspaceId, caller);
+    const self = yield* requireMember(workspaceId, caller, access);
     const [workspace] = yield* db.select(workspaceId, "workspaces", decodeWorkspaces);
     if (workspace === undefined) return yield* fail("not_found", "Workspace not found.");
     return { workspace: toWorkspace(workspace), self: toMember(self) };
   });
+  const get: Method<"telescope.workspace.get"> = (caller, input) => workspaceFor(caller, input);
+  const getForWrite: Method<"telescope.workspace.get"> = (caller, input) =>
+    workspaceFor(caller, input, "write");
 
   const invite = Effect.fn("WorkspaceService.invite")(function* (
     caller: Caller,
@@ -515,6 +529,7 @@ const make = Effect.gen(function* () {
     create,
     list,
     get,
+    getForWrite,
     invite,
     linkCode,
     accept,
