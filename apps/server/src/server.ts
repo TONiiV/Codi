@@ -82,6 +82,7 @@ import * as RemoteDelegation from "./peer/RemoteDelegation.ts";
 import * as PeerLinkRequests from "./peer/PeerLinkRequests.ts";
 import * as TelescopeWorkspaces from "./telescope/WorkspaceService.ts";
 import * as TelescopeBoard from "./telescope/TaskBoardService.ts";
+import * as TelescopeBoardChanges from "./telescope/BoardChanges.ts";
 import * as TelescopeAgents from "./telescope/AgentService.ts";
 import * as TelescopeRuns from "./telescope/RunRecordService.ts";
 import * as TelescopeGrants from "./telescope/GrantService.ts";
@@ -819,7 +820,8 @@ const layerMakeRoutes = Layer.mergeAll(
   Layer.provide(PeerLinkRequests.layer),
   Layer.provide(TelescopeWakeQueue.layer),
   Layer.provide(TelescopeWorkspaces.layer),
-  Layer.provide(TelescopeBoard.layer),
+  // The same notice hub TaskBoardService publishes to, by layer memoization.
+  Layer.provide(Layer.merge(TelescopeBoard.layer, TelescopeBoardChanges.layer)),
   Layer.provide(TelescopeAgents.layer),
   Layer.provide(
     Layer.mergeAll(

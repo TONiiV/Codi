@@ -248,6 +248,7 @@ const RPC_AGGREGATES = {
   [Telescope.WS_METHODS.decisionCreate]: "telescope",
   [Telescope.WS_METHODS.decisionList]: "telescope",
   [Telescope.WS_METHODS.commitList]: "telescope",
+  [Telescope.WS_METHODS.boardWatch]: "telescope",
   [Telescope.WS_METHODS.agentListMine]: "telescope",
   [Telescope.WS_METHODS.agentGet]: "telescope",
   [Telescope.WS_METHODS.agentCreateCustom]: "telescope",

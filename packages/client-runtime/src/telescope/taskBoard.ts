@@ -1,12 +1,15 @@
-import { type EnvironmentId, Telescope } from "@t3tools/contracts";
+import { EnvironmentId, Telescope } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
-import type { Atom, AtomRegistry } from "effect/reactivity";
+import * as Stream from "effect/Stream";
+import { AsyncResult, Atom, type AtomRegistry } from "effect/reactivity";
 
 import type { EnvironmentRegistry } from "../connection/registry.ts";
+import { subscribe } from "../rpc/client.ts";
 import {
   createEnvironmentRpcCommand,
   createEnvironmentRpcQueryAtomFamily,
+  followStreamInEnvironment,
 } from "../state/runtime.ts";
 
 const { WS_METHODS } = Telescope;
@@ -127,11 +130,37 @@ export function isStaleTaskVersion(error: unknown): boolean {
 
 const isWorkspaceError = Schema.is(Telescope.WorkspaceError);
 
+/** A write the server refused as `conflict`, such as deciding a proposal someone already decided. */
+export function isWorkspaceConflict(error: unknown): boolean {
+  return isWorkspaceError(error) && error.reason === "conflict";
+}
+
 /** Chinese copy when someone else decided the proposal first; the server's own text is English. */
 export function decideFailureText(error: unknown): string | null {
-  return isWorkspaceError(error) && error.reason === "conflict"
-    ? "这条提议已经有人决定了，列表已刷新。"
-    : null;
+  return isWorkspaceConflict(error) ? "这条提议已经有人决定了，列表已刷新。" : null;
+}
+
+/** The notices one board watch has seen, counted by the reads each one makes stale. */
+interface BoardNotices {
+  readonly tasks: number;
+  readonly decisions: number;
+  readonly byTask: Readonly<Record<string, number>>;
+}
+const NO_NOTICES: BoardNotices = { tasks: 0, decisions: 0, byTask: {} };
+
+function countNotice(seen: BoardNotices, item: Telescope.BoardWatchItem): BoardNotices {
+  switch (item.kind) {
+    case "synchronized":
+      return seen;
+    case "decision":
+      return { ...seen, decisions: seen.decisions + 1 };
+    case "task":
+      return {
+        ...seen,
+        tasks: seen.tasks + 1,
+        byTask: { ...seen.byTask, [item.id]: (seen.byTask[item.id] ?? 0) + 1 },
+      };
+  }
 }
 
 interface BoardTarget {
@@ -145,17 +174,45 @@ interface BoardTarget {
 export function createTelescopeBoardAtoms<R, E>(
   runtime: Atom.AtomRuntime<EnvironmentRegistry | R, E>,
 ) {
+  // One watch per environment and workspace, open while any of its board reads is cached. Every
+  // query already re-reads on a new session, which covers notices missed while disconnected.
+  const watch = Atom.family((key: string) => {
+    const [environmentId, workspaceId]: [string, string] = JSON.parse(key);
+    const watched = subscribe(WS_METHODS.boardWatch, {
+      workspaceId: Telescope.WorkspaceId.make(workspaceId),
+    });
+    return runtime
+      .atom(
+        followStreamInEnvironment(EnvironmentId.make(environmentId), watched).pipe(
+          Stream.scan(() => NO_NOTICES, countNotice),
+        ),
+      )
+      .pipe(Atom.withLabel(`telescope:board:watch:${key}`));
+  });
+  /** A board read re-reads when its own count moves, and once more if the watch fails. */
+  const noticesFor = (target: BoardTarget, count: (seen: BoardNotices) => number) => {
+    const seen = watch(JSON.stringify([target.environmentId, target.input.workspaceId]));
+    return Atom.make((get) => {
+      const result = get(seen);
+      return result._tag === "Failure"
+        ? -1
+        : count(AsyncResult.getOrElse(result, () => NO_NOTICES));
+    });
+  };
   const tasks = createEnvironmentRpcQueryAtomFamily(runtime, {
     label: "telescope:task:list",
     tag: WS_METHODS.taskList,
+    refreshTrigger: (target) => noticesFor(target, (seen) => seen.tasks),
   });
   const task = createEnvironmentRpcQueryAtomFamily(runtime, {
     label: "telescope:task:get",
     tag: WS_METHODS.taskGet,
+    refreshTrigger: (target) => noticesFor(target, (seen) => seen.byTask[target.input.taskId] ?? 0),
   });
   const decisions = createEnvironmentRpcQueryAtomFamily(runtime, {
     label: "telescope:decision:list",
     tag: WS_METHODS.decisionList,
+    refreshTrigger: (target) => noticesFor(target, (seen) => seen.decisions),
   });
 
   // A merged or conflicting write changes the board as well, so every write refreshes on settle.

@@ -47,6 +47,7 @@ import {
   WorkspaceScopedInput,
 } from "./workspace.ts";
 import {
+  BoardWatchItem,
   CommitListInput,
   CommitListResult,
   DecisionCreateInput,
@@ -102,6 +103,7 @@ export const WS_METHODS = {
   decisionCreate: "telescope.decision.create",
   decisionList: "telescope.decision.list",
   commitList: "telescope.commit.list",
+  boardWatch: "telescope.board.watch",
   agentListMine: "telescope.agent.listMine",
   agentGet: "telescope.agent.get",
   agentCreateCustom: "telescope.agent.createCustom",
@@ -172,6 +174,12 @@ export const TaskBoardRpcs = [
   makeBoard(WS_METHODS.decisionCreate, DecisionCreateInput, Decision),
   makeBoard(WS_METHODS.decisionList, WorkspaceScopedInput, DecisionListResult),
   makeBoard(WS_METHODS.commitList, CommitListInput, CommitListResult),
+  Rpc.make(WS_METHODS.boardWatch, {
+    payload: WorkspaceScopedInput,
+    success: BoardWatchItem,
+    error,
+    stream: true,
+  }),
   makeBoard(WS_METHODS.leaseAcquire, LeaseAcquireInput, Lease),
   makeBoard(WS_METHODS.leaseHeartbeat, LeaseScopedInput, Lease),
   makeBoard(WS_METHODS.leaseRelease, LeaseScopedInput, Schema.Struct({})),
