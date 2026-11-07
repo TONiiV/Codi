@@ -2,6 +2,7 @@ import {
   CommandId,
   type GitManagerServiceError,
   ProjectId,
+  Telescope,
   type ThreadId,
   VcsProcessSpawnError,
 } from "@t3tools/contracts";
@@ -30,7 +31,7 @@ export class ScratchUnavailableError extends Schema.TaggedError<ScratchUnavailab
   {},
 ) {
   override get message(): string {
-    return "Threads without a project are not available on this environment.";
+    return Telescope.AGENT_SCRATCH_REFUSAL;
   }
 }
 
