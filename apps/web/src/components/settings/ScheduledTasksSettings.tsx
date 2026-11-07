@@ -1,5 +1,4 @@
 import { useAtomValue } from "@effect/atom-react";
-import { connectionStatusTitle } from "@t3tools/client-runtime/connection";
 import { AsyncResult } from "effect/reactivity";
 import {
   Clock3Icon,
@@ -84,6 +83,7 @@ import { readEnvironmentScope } from "~/state/session";
 import { useSettingsScope } from "./SettingsScopeContext";
 import { EnvironmentRow, useEnvironmentTransportLabel } from "./EnvironmentRow";
 import { SettingsGroup } from "./SettingsGroup";
+import { connectionStatusTitleText } from "./providerStatus";
 import { settingsScopeEnvironmentLabel, settingsScopeEnvironmentLabels } from "./settingsScopeAxis";
 import {
   WEBHOOK_SIGNATURE_DEFAULTS,
@@ -585,7 +585,9 @@ function ScheduledTaskEnvironmentList({
   for (const { environment, connected, tasks, error } of states) {
     const label = settingsScopeEnvironmentLabel(environment, environments);
     if (!connected) {
-      summaries[0]!.entries.push(`${label} (${connectionStatusTitle(environment.connection)})`);
+      summaries[0]!.entries.push(
+        `${label} (${connectionStatusTitleText(environment.connection, t)})`,
+      );
     } else if (error !== null) {
       summaries[2]!.entries.push(`${label}: ${error}`);
     } else if (!tasks) {
@@ -610,10 +612,10 @@ function ScheduledTaskEnvironmentList({
             >
               <ConnectionStatusDot
                 dotClassName={connectionPhaseDotClassName(environment.connection.phase)}
-                tooltipText={connectionStatusTitle(environment.connection)}
+                tooltipText={connectionStatusTitleText(environment.connection, t)}
               />
               <span className="text-xs text-muted-foreground">
-                {connectionStatusTitle(environment.connection)}
+                {connectionStatusTitleText(environment.connection, t)}
               </span>
             </EnvironmentRow>
             {tasks?.map((task) => (
@@ -778,13 +780,13 @@ function ScheduledTaskRow({
   const [deliveriesOpen, setDeliveriesOpen] = useState(false);
   const isWebhook = task.schedule.type === "webhook";
   const toggle = useAtomCommand(serverEnvironment.setScheduledTaskEnabled, {
-    label: t("settings.text.scheduledTaskEnabled"),
+    label: "scheduled task enabled",
   });
   const run = useAtomCommand(serverEnvironment.runScheduledTaskNow, {
-    label: t("settings.text.scheduledTaskRunNow"),
+    label: "scheduled task run now",
   });
   const remove = useAtomCommand(serverEnvironment.deleteScheduledTask, {
-    label: t("settings.text.scheduledTaskDelete"),
+    label: "scheduled task delete",
   });
   const act = async (action: "toggle" | "run" | "delete") => {
     if (busy || !readEnvironmentScope(environmentId, AuthOrchestrationOperateScope)) return;
@@ -906,13 +908,14 @@ function ScheduledTaskThreadLink({
 }) {
   const ref = scopeThreadRef(environmentId, threadId);
   const title = useQuietThreadShell(ref)?.title.trim();
+  const { t } = useTranslation();
   return (
     <Link
       to="/$environmentId/$threadId"
       params={buildThreadRouteParams(ref)}
       className="max-w-64 truncate underline underline-offset-2 hover:text-foreground"
     >
-      {title || "Open thread"}
+      {title || t("settings.text.openThread")}
     </Link>
   );
 }
@@ -1064,10 +1067,9 @@ function WebhookDeliveriesDialog({
                     ) : null}
                     {delivery.missingFields.length > 0 ? (
                       <span className="text-muted-foreground">
-                        {t("settings.text.lengthEmptyPlaceholder", {
-                          length: delivery.missingFields.length,
+                        {t("settings.text.emptyPlaceholderCount", {
+                          count: delivery.missingFields.length,
                         })}
-                        {delivery.missingFields.length === 1 ? "" : "s"}
                       </span>
                     ) : null}
                   </button>
