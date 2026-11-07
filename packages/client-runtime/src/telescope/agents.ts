@@ -61,6 +61,26 @@ export function offersOpenThread(agent: Telescope.Agent, self: Telescope.Member)
   return agent.ownerSubjectId === self.subjectId && self.revokedAt === undefined;
 }
 
+const COPILOT_KINDS: ReadonlySet<Telescope.AgentKind> = new Set(["chief_of_staff", "chief_agent"]);
+
+/**
+ * The Copilot panel's choices (the assistant and Chief Agents, never the main pane's chat) and the
+ * one it shows: the stored pick while it is still a choice, else the assistant.
+ */
+export function copilotAgents(
+  mine: ReadonlyArray<Telescope.Agent>,
+  stored: Telescope.AgentId | null,
+  mainPane: Telescope.AgentId | null,
+): { readonly choices: ReadonlyArray<Telescope.Agent>; readonly shown: Telescope.Agent | null } {
+  const choices = mine.filter((agent) => COPILOT_KINDS.has(agent.kind) && agent.id !== mainPane);
+  const shown =
+    choices.find((agent) => agent.id === stored) ??
+    choices.find((agent) => agent.kind === "chief_of_staff") ??
+    choices[0] ??
+    null;
+  return { choices, shown };
+}
+
 const MODEL_REFUSALS: ReadonlyArray<string> = Object.values(Telescope.AGENT_MODEL_REFUSALS);
 const isWorkspaceError = Schema.is(Telescope.WorkspaceError);
 
