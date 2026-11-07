@@ -27,7 +27,7 @@ import {
 } from "./config.ts";
 
 // Whoever can run the CLI owns this T3 home, so it acts as the environment owner.
-const OWNER: WorkspaceService.Caller = {
+const OWNER: WorkspaceService.SessionCaller = {
   sessionId: AuthSessionId.make("cli"),
   subject: INTERNAL_ADMINISTRATIVE_BOOTSTRAP_SUBJECT,
 };
@@ -199,7 +199,11 @@ const orgExportCommand = Command.make("export", {
               userMessage: `${flags.out} is not empty. Export into a new or empty directory.`,
             });
           const data = yield* WorkspaceDataService.WorkspaceDataService;
-          const { files } = yield* data.export(OWNER, { workspaceId: flags.workspace });
+          const { files } = yield* data.export(
+            OWNER,
+            { workspaceId: flags.workspace },
+            { maxBytes: Number.POSITIVE_INFINITY },
+          );
           yield* fs.makeDirectory(flags.out, { recursive: true });
           for (const file of files)
             yield* fs.writeFileString(path.join(flags.out, file.path), file.text);
@@ -235,13 +239,16 @@ const orgDeleteCommand = Command.make("delete", {
           const fs = yield* FileSystem.FileSystem;
           const file = Option.getOrUndefined(flags.manifest);
           // The manifest is the only record of the deletion, so its path is proven writable first,
-          // by appending nothing: a refused deletion leaves an earlier manifest there intact.
+          // by appending nothing. A refused deletion leaves an earlier manifest there intact, and
+          // removes the empty file it created.
+          const created = file !== undefined && !(yield* fs.exists(file));
           if (file !== undefined) yield* fs.writeFileString(file, "", { flag: "a" });
           const data = yield* WorkspaceDataService.WorkspaceDataService;
-          const manifest = yield* data.delete(OWNER, {
-            workspaceId: flags.workspace,
-            confirmName: flags.confirm,
-          });
+          const manifest = yield* data
+            .delete(OWNER, { workspaceId: flags.workspace, confirmName: flags.confirm })
+            .pipe(
+              Effect.onError(() => (created ? fs.remove(file).pipe(Effect.ignore) : Effect.void)),
+            );
           if (file !== undefined) yield* fs.writeFileString(file, `${encodeManifest(manifest)}\n`);
           return manifest;
         }),
@@ -252,6 +259,13 @@ const orgDeleteCommand = Command.make("delete", {
             ["TABLE", "ROWS"],
             manifest.tables.map((row) => [row.table, String(row.count)]),
           ),
+          `Removed ${manifest.contextFiles.length} run context files.`,
+          ...(manifest.contextFilesLeft.length === 0
+            ? []
+            : [
+                "Left behind under the server's state directory; remove them by hand:",
+                ...manifest.contextFilesLeft.map((file) => `- [ ] ${file.path} (${file.reason})`),
+              ]),
         ].join("\n"),
     ),
   ),
@@ -261,6 +275,8 @@ export const orgCommand = Command.make("org").pipe(
   Command.withDescription("Manage Telescope workspaces."),
   Command.withSubcommands([orgInitCommand, orgListCommand, orgExportCommand, orgDeleteCommand]),
 );
+
+const MAX_INVITATION_TTL = Duration.seconds(Telescope.MEMBER_CODE_MAX_TTL_SECONDS);
 
 const memberInviteCommand = Command.make("invite", {
   ...common,
@@ -272,7 +288,13 @@ const memberInviteCommand = Command.make("invite", {
       (expires) => Duration.isPositive(expires) && Duration.isFinite(expires),
       () => "Invitation codes always expire. Use a duration longer than 0s, for example `1h`.",
     ),
-    Flag.withDescription("How long the code stays valid, for example `1h` or `3d`. Default: 7d."),
+    Flag.filter(
+      (expires) => Duration.isLessThanOrEqualTo(expires, MAX_INVITATION_TTL),
+      () => "Invitation codes last at most 365 days.",
+    ),
+    Flag.withDescription(
+      "How long the code stays valid, for example `1h` or `3d`, at most 365d. Default: 7d.",
+    ),
     Flag.optional,
   ),
 }).pipe(
@@ -338,7 +360,7 @@ const memberRestoreCommand = Command.make("restore", {
   member: memberFlag("member", "Member id of a revoked member, from `t3 member list`."),
 }).pipe(
   Command.withDescription(
-    "Re-admit a revoked member with their previous role. Project leads are not restored: rebind with `--lead`.",
+    "Re-admit a revoked member with their previous role. Project leads are not restored: rebind with `t3 project bind --lead`.",
   ),
   Command.withHandler((flags) =>
     runAsOwner(

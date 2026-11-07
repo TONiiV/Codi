@@ -6,6 +6,7 @@ import {
   killSwitchState,
   parseCallLimit,
 } from "@t3tools/client-runtime/telescope/governance";
+import * as Routing from "@t3tools/client-runtime/telescope/routing";
 import {
   canManageMember,
   failureText,
@@ -14,24 +15,35 @@ import {
 import { type EnvironmentId, Telescope } from "@t3tools/contracts";
 import type { AtomCommandResult } from "@t3tools/client-runtime/state/runtime";
 import * as Schema from "effect/Schema";
-import { Settings2Icon } from "lucide-react";
+import { PlusIcon, Settings2Icon } from "lucide-react";
 import { useState, type ReactNode } from "react";
 
 import { connectionAtomRuntime } from "../../connection/runtime";
+import { useProjects } from "../../state/entities";
+import { useEnvironmentProviders } from "../../state/environments";
 import { useEnvironmentQuery, type EnvironmentQueryView } from "../../state/query";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { SettingsPageContainer, SettingsRow, SettingsSection } from "../settings/settingsLayout";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
+import { Label } from "../ui/label";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { Toggle, ToggleGroup } from "../ui/toggle-group";
 import { AgentSettingsDialog } from "./MyTeamsAgentDialog";
 import { KIND_LABEL, powerSummary, telescopeAgents } from "./myTeamsShared";
-import { ErrorNote, useFreshMembers, WORKSPACE_ROLE_LABEL } from "./TelescopeAccountDialogs";
+import {
+  ErrorNote,
+  FormDialog,
+  TextField,
+  useFreshMembers,
+  WORKSPACE_ROLE_LABEL,
+} from "./TelescopeAccountDialogs";
 import { telescope, useTelescopeWorkspaces, WORKSPACE_KIND_LABEL } from "./telescopeState";
 
 const governance = createTelescopeGovernanceAtoms(connectionAtomRuntime);
+const routing = Routing.createTelescopeRoutingAtoms(connectionAtomRuntime);
+const ALL_PROJECTS = "all";
 
 const isRole = Schema.is(Telescope.WorkspaceRole);
 const KILL_SWITCH_LABEL = { running: "运行", paused: "暂停", terminated: "终止" } as const;
@@ -377,6 +389,369 @@ function GovernanceSection({ environmentId, workspace, self }: Scoped) {
   );
 }
 
+function Picker<T extends string>(props: {
+  label: string;
+  value: T | null;
+  options: ReadonlyArray<{ value: T; label: string }>;
+  onChange: (value: T) => void;
+}) {
+  const selected = props.options.find((entry) => entry.value === props.value);
+  return (
+    <Label className="flex min-w-40 flex-1 flex-col items-stretch">
+      {props.label}
+      <Select
+        value={props.value}
+        onValueChange={(next) => {
+          const option = props.options.find((entry) => entry.value === next);
+          if (option) props.onChange(option.value);
+        }}
+      >
+        <SelectTrigger className="w-full">
+          <SelectValue>{selected?.label ?? "无可选项"}</SelectValue>
+        </SelectTrigger>
+        <SelectPopup>
+          {props.options.map((entry) => (
+            <SelectItem key={entry.value} value={entry.value}>
+              {entry.label}
+            </SelectItem>
+          ))}
+        </SelectPopup>
+      </Select>
+    </Label>
+  );
+}
+
+/** Bound projects and the harnesses this server runs, under the names the page shows. */
+function useRoutingNames(environmentId: EnvironmentId, workspace: Telescope.Workspace) {
+  const { bindings } = useTelescopeWorkspaces();
+  const bound = useEnvironmentQuery(telescope.bindingSummary({ environmentId, input: {} }));
+  const allProjects = useProjects();
+  const projects = bindings
+    .filter((binding) => binding.workspaceId === workspace.id)
+    .map((binding) => ({
+      value: binding.projectId,
+      label:
+        allProjects.find(
+          (project) =>
+            project.environmentId === binding.environmentId && project.id === binding.projectId,
+        )?.title ?? binding.projectId,
+    }));
+  const harnesses = (useEnvironmentProviders().get(environmentId) ?? [])
+    .filter((provider) => provider.enabled)
+    .map((provider) => ({
+      value: provider.instanceId,
+      label: provider.displayName ?? provider.instanceId,
+    }));
+  const unbound = (id: Telescope.RoutingRule["projectId"]) =>
+    id !== undefined && bound.data !== null && !projects.some((entry) => entry.value === id);
+  const project = (id: Telescope.RoutingRule["projectId"]) =>
+    id === undefined
+      ? "全部项目"
+      : (projects.find((entry) => entry.value === id)?.label ??
+        (unbound(id) ? `${id}（已解除绑定）` : id));
+  const harness = (id: Telescope.RoutingRule["harness"]) =>
+    harnesses.find((entry) => entry.value === id)?.label ?? id;
+  const rule = (rule: Telescope.RoutingRule) =>
+    `${project(rule.projectId)} · ${Routing.taskTypeLabel(rule.taskType)} → ${harness(rule.harness)} · ${rule.model}`;
+  return { projects, harnesses, unbound, project, harness, rule };
+}
+type RoutingNames = ReturnType<typeof useRoutingNames>;
+
+function RoutingRuleDialog(
+  props: Scoped & { names: RoutingNames; rule: Telescope.RoutingRule | null; onClose: () => void },
+) {
+  const { rule, names } = props;
+  const [draft, setDraft] = useState<Routing.RoutingRuleDraft>({
+    projectId: rule?.projectId ?? null,
+    taskType: rule === null || rule.taskType === Telescope.ANY_TASK_TYPE ? "" : rule.taskType,
+    harness: rule?.harness ?? names.harnesses[0]?.value ?? null,
+    model: rule?.model ?? "",
+    priority: String(rule?.priority ?? 0),
+  });
+  const [touched, setTouched] = useState(rule !== null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const set = useAtomCommand(routing.set, "保存路由规则");
+  const unbound = names.unbound(draft.projectId ?? undefined);
+  const parsed = unbound
+    ? { problem: "这个项目已解除绑定，请换一个项目。" }
+    : Routing.parseRoutingRuleDraft(draft);
+  const update = (fields: Partial<Routing.RoutingRuleDraft>) => {
+    setDraft({ ...draft, ...fields });
+    setTouched(true);
+  };
+  const projects =
+    rule?.projectId !== undefined && names.unbound(rule.projectId)
+      ? [...names.projects, { value: rule.projectId, label: names.project(rule.projectId) }]
+      : names.projects;
+  // A rule may name a harness this server does not run; editing it must not drop that harness.
+  const harnesses =
+    rule === null || names.harnesses.some((entry) => entry.value === rule.harness)
+      ? names.harnesses
+      : [...names.harnesses, { value: rule.harness, label: `${rule.harness}（这台服务器没有）` }];
+  return (
+    <FormDialog
+      title={rule === null ? "添加路由规则" : "修改路由规则"}
+      description="授权单不允许，或这台服务器没有为项目启用这个 harness 时，跳到下一条规则。"
+      submitLabel={rule === null ? "添加" : "保存"}
+      canSubmit={!busy && "fields" in parsed}
+      error={error ?? (touched && "problem" in parsed ? parsed.problem : null)}
+      onClose={props.onClose}
+      onSubmit={async () => {
+        if (!("fields" in parsed)) return;
+        setBusy(true);
+        setError(null);
+        const id = rule === null ? {} : { id: rule.id };
+        const result = await set({
+          environmentId: props.environmentId,
+          input: { workspaceId: props.workspace.id, ...parsed.fields, ...id },
+        });
+        setBusy(false);
+        if (result._tag === "Success") props.onClose();
+        else setError(failureText(result, Routing.ROUTING_ERROR_TEXT));
+      }}
+    >
+      <Picker
+        label="项目"
+        value={draft.projectId ?? ALL_PROJECTS}
+        options={[{ value: ALL_PROJECTS, label: "全部项目" }, ...projects]}
+        onChange={(value) => update({ projectId: value === ALL_PROJECTS ? null : value })}
+      />
+      <TextField
+        label="任务类型（留空表示任意类型）"
+        placeholder="例如 review"
+        value={draft.taskType}
+        onChange={(taskType) => update({ taskType })}
+      />
+      <Picker
+        label="Harness"
+        value={draft.harness}
+        options={harnesses}
+        onChange={(harness) => update({ harness })}
+      />
+      <TextField
+        label="模型"
+        placeholder="例如 gpt-5.4-mini"
+        value={draft.model}
+        onChange={(model) => update({ model })}
+      />
+      <TextField
+        label="优先级（同组里数字大的先用）"
+        value={draft.priority}
+        onChange={(priority) => update({ priority })}
+      />
+    </FormDialog>
+  );
+}
+
+function RoutingPreview(
+  props: Scoped & { names: RoutingNames; rules: ReadonlyArray<Telescope.RoutingRule> },
+) {
+  const scoped = { environmentId: props.environmentId, input: { workspaceId: props.workspace.id } };
+  const mine = useEnvironmentQuery(telescopeAgents.listMine(scoped));
+  const company = useEnvironmentQuery(
+    props.workspace.kind === "enterprise" ? telescopeAgents.listCompany(scoped) : null,
+  );
+  const agents = [...(mine.data?.agents ?? []), ...(company.data?.agents ?? [])]
+    .filter((agent, index, all) => all.findIndex((other) => other.id === agent.id) === index)
+    .map((agent) => ({ value: agent.id, label: agent.name }));
+  const resolve = useAtomCommand(routing.resolve, "试一下路由");
+  const [agentId, setAgentId] = useState<Telescope.AgentId | null>(null);
+  const [taskType, setTaskType] = useState("");
+  const [pending, setPending] = useState(false);
+  const [answer, setAnswer] = useState<{
+    asked: { agentId: Telescope.AgentId; taskType: string };
+    outcome: Telescope.RoutingResolution | string | null;
+  } | null>(null);
+  const chosen = agents.find((agent) => agent.value === agentId)?.value ?? agents[0]?.value;
+  const outcome =
+    answer !== null && Routing.answersPreview(answer.asked, { agentId: chosen, taskType })
+      ? answer.outcome
+      : null;
+  const candidate = (ruleId: Telescope.RoutingRuleId | undefined) => {
+    const rule = props.rules.find((entry) => entry.id === ruleId);
+    if (ruleId === undefined) return "agent 自己的模型";
+    return rule === undefined ? "一条刚改过的规则（刷新后可见）" : props.names.rule(rule);
+  };
+  return (
+    <SettingsRow
+      title="试一下"
+      description="选一个 agent 和任务类型，看这类任务交给哪个 harness 和模型。"
+    >
+      <form
+        className="flex flex-wrap items-end gap-2 pt-2 pb-3"
+        onSubmit={async (event) => {
+          event.preventDefault();
+          if (pending || chosen === undefined || Routing.taskTypeProblem(taskType) !== null) return;
+          const asked = { agentId: chosen, taskType };
+          setPending(true);
+          const result = await resolve({
+            environmentId: props.environmentId,
+            input: { workspaceId: props.workspace.id, agentId: chosen, taskType: taskType.trim() },
+          });
+          setPending(false);
+          setAnswer({
+            asked,
+            outcome:
+              result._tag === "Success"
+                ? result.value
+                : failureText(result, Routing.ROUTING_ERROR_TEXT),
+          });
+        }}
+      >
+        <Picker label="Agent" value={chosen ?? null} options={agents} onChange={setAgentId} />
+        <div className="min-w-40 flex-1">
+          <TextField
+            label="任务类型"
+            placeholder="例如 review"
+            value={taskType}
+            onChange={setTaskType}
+          />
+        </div>
+        <Button
+          type="submit"
+          variant="outline"
+          disabled={pending || chosen === undefined || Routing.taskTypeProblem(taskType) !== null}
+        >
+          {pending ? "正在试…" : "试一下"}
+        </Button>
+      </form>
+      {typeof outcome === "string" ? <ErrorNote text={outcome} /> : null}
+      {outcome !== null && typeof outcome !== "string" ? (
+        <div className="flex flex-col gap-1 pb-3 text-xs text-muted-foreground wrap-anywhere">
+          <p className="text-sm text-foreground">
+            {outcome.modelSelection === undefined
+              ? "不会交给任何 harness"
+              : `${props.names.harness(outcome.modelSelection.instanceId)} · ${outcome.modelSelection.model}`}
+          </p>
+          <p>
+            {Routing.ROUTING_SOURCE_TEXT[outcome.source]}
+            {outcome.source === "rule" ? `：${candidate(outcome.ruleId)}` : ""}
+          </p>
+          {outcome.skipped.map((skip) => (
+            <p key={skip.ruleId ?? "agent"}>
+              跳过 {candidate(skip.ruleId)}：{Routing.ROUTING_SKIP_REASON_TEXT[skip.reason]}
+            </p>
+          ))}
+        </div>
+      ) : null}
+    </SettingsRow>
+  );
+}
+
+function RoutingSection(props: Scoped) {
+  const { environmentId, workspace, self } = props;
+  const query = useEnvironmentQuery(
+    routing.list({ environmentId, input: { workspaceId: workspace.id } }),
+  );
+  const isAdmin = self.role === "admin";
+  const maySet = useAtomValue(routing.set.permissionAtom(environmentId));
+  const mayEdit = useAtomValue(routing.remove.permissionAtom(environmentId)) && maySet && isAdmin;
+  const names = useRoutingNames(environmentId, workspace);
+  const remove = useAtomCommand(routing.remove, "删除路由规则");
+  const [editing, setEditing] = useState<Telescope.RoutingRule | "new" | null>(null);
+  const [confirming, setConfirming] = useState<Telescope.RoutingRuleId | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const rules = query.data?.rules ?? [];
+  const confirmDelete = async (id: Telescope.RoutingRuleId) => {
+    setBusy(true);
+    const result = await remove({ environmentId, input: { workspaceId: workspace.id, id } });
+    setBusy(false);
+    setConfirming(null);
+    setError(failureText(result, Routing.ROUTING_ERROR_TEXT));
+  };
+  return (
+    <SettingsSection
+      id="telescope-routing"
+      title="路由规则"
+      headerAction={
+        mayEdit ? (
+          <Button size="xs" variant="outline" onClick={() => setEditing("new")}>
+            <PlusIcon /> 添加规则
+          </Button>
+        ) : null
+      }
+    >
+      <StatusRow text="一类任务交给哪个 harness 和模型。按下面的分组从上往下找，同组里优先级高的先，同优先级先建的先；都不适用时用 agent 自己的模型。" />
+      {query.data === null ? <QueryStatus query={query} what="路由规则" /> : null}
+      {query.data !== null && rules.length === 0 ? (
+        <StatusRow text="还没有路由规则，任务都用 agent 自己的模型。" />
+      ) : null}
+      {Routing.groupRoutingRules(rules).map(({ label, rules: grouped }) => [
+        <div
+          key={label}
+          className="px-3 pt-3 pb-1 text-xs font-medium text-muted-foreground sm:px-4"
+        >
+          {label}
+        </div>,
+        ...grouped.map((rule) => (
+          <SettingsRow
+            key={rule.id}
+            className="wrap-anywhere"
+            title={`${names.project(rule.projectId)} · ${Routing.taskTypeLabel(rule.taskType)}`}
+            description={`${names.harness(rule.harness)} · ${rule.model} · 优先级 ${rule.priority}`}
+            control={
+              confirming === rule.id && mayEdit ? (
+                <>
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    disabled={busy}
+                    onClick={() => confirmDelete(rule.id)}
+                  >
+                    确认删除
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost-muted"
+                    disabled={busy}
+                    onClick={() => setConfirming(null)}
+                  >
+                    取消
+                  </Button>
+                </>
+              ) : mayEdit ? (
+                <>
+                  <Button size="sm" variant="outline" onClick={() => setEditing(rule)}>
+                    修改
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="destructive-outline"
+                    onClick={() => setConfirming(rule.id)}
+                  >
+                    删除
+                  </Button>
+                </>
+              ) : null
+            }
+          />
+        )),
+      ])}
+      {query.data !== null && !mayEdit ? (
+        <StatusRow
+          text={
+            isAdmin
+              ? "这个连接没有 Telescope 管理权限，只能查看路由规则。"
+              : "只有管理员能添加、修改和删除路由规则。"
+          }
+        />
+      ) : null}
+      {error === null ? null : <StatusRow text={error} failed />}
+      <RoutingPreview {...props} names={names} rules={rules} />
+      {editing === null ? null : (
+        <RoutingRuleDialog
+          {...props}
+          names={names}
+          rule={editing === "new" ? null : editing}
+          onClose={() => setEditing(null)}
+        />
+      )}
+    </SettingsSection>
+  );
+}
+
 /** Telescope's server settings for the current workspace; the server checks every change. */
 export function TelescopeSettingsPanel() {
   const { environmentId, current } = useTelescopeWorkspaces();
@@ -407,6 +782,7 @@ export function TelescopeSettingsPanel() {
             <CompanyAgentsSection environmentId={environmentId} {...loaded} />
           ) : null}
           <GovernanceSection environmentId={environmentId} {...loaded} />
+          <RoutingSection environmentId={environmentId} {...loaded} />
         </>
       ) : (
         <SettingsSection id="telescope-members" title="成员与角色">

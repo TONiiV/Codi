@@ -28,6 +28,10 @@ const TOOL_POWERS: Readonly<Record<Telescope.GatewayTool, Telescope.GrantPower>>
   decision_list: "openTickets",
   decision_record: "openTickets",
   agent_list: "openTickets",
+  delegate: "dispatchWorkers",
+  delegation_list: "openTickets",
+  delegation_report: "openTickets",
+  delegation_cancel: "dispatchWorkers",
 };
 const SECRET_KEY = /token|secret|password|passphrase|api.?key|authorization|cookie|credential/i;
 
@@ -44,6 +48,16 @@ type OpenRun = typeof RunRow.Type;
 const decodeRuns = Schema.decodeUnknownEffect(Schema.Array(RunRow));
 const decodeAgents = Schema.decodeUnknownEffect(
   Schema.Array(Schema.Struct({ agent_id: Telescope.AgentId })),
+);
+const decodeGovernanceAgents = Schema.decodeUnknownEffect(
+  Schema.Array(
+    Schema.Struct({
+      agent_id: Telescope.AgentId,
+      name: Telescope.Text,
+      kind: Telescope.AgentKind,
+      owner_subject_id: Schema.NullOr(Telescope.SubjectId),
+    }),
+  ),
 );
 const KillSwitchRow = Schema.Struct({
   workspace_id: Telescope.WorkspaceId,
@@ -114,12 +128,27 @@ const DENIED_MESSAGES = {
   stopped: "An admin stopped this agent.",
   forbidden: "The agent's grant does not allow this tool.",
   budget: "A Telescope budget is used up.",
+  project_only:
+    "Only a project's agent opens Worker threads. Hand the work to its Chief Agent with `delegate`.",
+  no_project:
+    "Only an agent without a project hands work to a Chief Agent. Report back to the agent that gave you this task.",
+  linked:
+    "Telescope agents cannot act on a linked environment yet. Leave out environmentId to work here.",
 } as const;
 
 export class ToolGatewayDenied extends Schema.TaggedError<ToolGatewayDenied>()(
   "TelescopeToolGatewayDenied",
   {
-    reason: Schema.Literals(["unknown_tool", "no_run", "stopped", "forbidden", "budget"]),
+    reason: Schema.Literals([
+      "unknown_tool",
+      "no_run",
+      "stopped",
+      "forbidden",
+      "budget",
+      "project_only",
+      "no_project",
+      "linked",
+    ]),
     tool: Schema.optionalKey(Telescope.GatewayTool),
     /** The first budget level, in `BudgetScope` order, whose call limit is reached. */
     level: Schema.optionalKey(Telescope.BudgetScope),
@@ -163,6 +192,17 @@ export class ToolGateway extends Context.Service<
       args: Schema.Json,
       use: (caller: ToolCaller) => Effect.Effect<A, E, R>,
     ) => Effect.Effect<A, E | ToolGatewayDenied | Failure, R>;
+    /**
+     * `call` on a thread with an open run, or that call refused and recorded as `refuse`; any
+     * other thread runs `use` as it would without Telescope.
+     */
+    readonly callIfRun: <A, E, R>(
+      threadId: ThreadId,
+      tool: Telescope.GatewayTool,
+      args: Schema.Json,
+      use: Effect.Effect<A, E, R>,
+      refuse?: "linked",
+    ) => Effect.Effect<A, E | ToolGatewayDenied | Failure, R>;
     readonly setBudget: Method<"telescope.budget.set">;
     readonly setKillSwitch: Method<"telescope.killSwitch.set">;
     readonly governance: Method<"telescope.governance.get">;
@@ -181,6 +221,7 @@ const make = Effect.gen(function* () {
     run: OpenRun,
     tool: Telescope.GatewayTool,
     argsRedacted: Schema.Json,
+    refuse?: "linked",
   ) {
     const { workspace_id: workspaceId, agent_id: agentId, on_behalf_of_json: onBehalfOf } = run;
     const power = TOOL_POWERS[tool];
@@ -207,13 +248,20 @@ const make = Effect.gen(function* () {
           budget.used_calls >= budget.limit_calls,
       ),
     );
-    const denied = stopped
-      ? new ToolGatewayDenied({ reason: "stopped", tool })
-      : !grant.powers[power]
-        ? new ToolGatewayDenied({ reason: "forbidden", tool })
-        : spent !== undefined
-          ? new ToolGatewayDenied({ reason: "budget", tool, level: spent })
-          : undefined;
+    const denied = refuse
+      ? new ToolGatewayDenied({ reason: refuse, tool })
+      : stopped
+        ? new ToolGatewayDenied({ reason: "stopped", tool })
+        : !grant.powers[power]
+          ? new ToolGatewayDenied({ reason: "forbidden", tool })
+          : // An agent without a project still holds dispatchWorkers, to pass down the chain.
+            tool === "dispatch_worker" && grant.projectId === undefined
+            ? new ToolGatewayDenied({ reason: "project_only", tool })
+            : tool === "delegate" && grant.projectId !== undefined
+              ? new ToolGatewayDenied({ reason: "no_project", tool })
+              : spent !== undefined
+                ? new ToolGatewayDenied({ reason: "budget", tool, level: spent })
+                : undefined;
     yield* grants.audit(workspaceId, {
       runId: run.run_id,
       agentId,
@@ -252,19 +300,15 @@ const make = Effect.gen(function* () {
     return caller;
   });
 
-  const call = Effect.fn("ToolGateway.call")(function* <A, E, R>(
-    threadId: ThreadId,
-    toolName: string,
+  const gate = Effect.fn("ToolGateway.gate")(function* <A, E, R>(
+    run: OpenRun,
+    tool: Telescope.GatewayTool,
     args: Schema.Json,
     use: (caller: ToolCaller) => Effect.Effect<A, E, R>,
+    refuse?: "linked",
   ) {
-    const tool = yield* decodeTool(toolName).pipe(
-      Effect.mapError(() => new ToolGatewayDenied({ reason: "unknown_tool" })),
-    );
-    const [run] = yield* db.latestRunForThread(threadId, decodeRuns);
-    if (run === undefined) return yield* new ToolGatewayDenied({ reason: "no_run", tool });
     const argsRedacted = redact(args);
-    const decided = yield* db.transaction(decide(run, tool, argsRedacted));
+    const decided = yield* db.transaction(decide(run, tool, argsRedacted, refuse));
     if (isDenied(decided)) return yield* decided;
     const [duration, exit] = yield* Effect.timed(Effect.exit(use(decided)));
     yield* runs
@@ -278,6 +322,31 @@ const make = Effect.gen(function* () {
         ),
       );
     return yield* exit;
+  });
+
+  const call = Effect.fn("ToolGateway.call")(function* <A, E, R>(
+    threadId: ThreadId,
+    toolName: string,
+    args: Schema.Json,
+    use: (caller: ToolCaller) => Effect.Effect<A, E, R>,
+  ) {
+    const tool = yield* decodeTool(toolName).pipe(
+      Effect.mapError(() => new ToolGatewayDenied({ reason: "unknown_tool" })),
+    );
+    const [run] = yield* db.latestRunForThread(threadId, decodeRuns);
+    if (run === undefined) return yield* new ToolGatewayDenied({ reason: "no_run", tool });
+    return yield* gate(run, tool, args, use);
+  });
+
+  const callIfRun = Effect.fn("ToolGateway.callIfRun")(function* <A, E, R>(
+    threadId: ThreadId,
+    tool: Telescope.GatewayTool,
+    args: Schema.Json,
+    use: Effect.Effect<A, E, R>,
+    refuse?: "linked",
+  ) {
+    const [run] = yield* db.latestRunForThread(threadId, decodeRuns);
+    return yield* run === undefined ? use : gate(run, tool, args, () => use, refuse);
   });
 
   const requireAdmin = Effect.fn("ToolGateway.requireAdmin")(function* (
@@ -338,11 +407,23 @@ const make = Effect.gen(function* () {
       yield* requireAdmin(caller, workspaceId);
       const budgets = yield* db.select(workspaceId, "budgets", decodeBudgets);
       const killSwitches = yield* db.select(workspaceId, "kill_switches", decodeKillSwitches);
-      return { budgets: budgets.map(toBudget), killSwitches: killSwitches.map(toKillSwitch) };
+      const agents = yield* db.select(workspaceId, "agents", decodeGovernanceAgents, undefined, {
+        orderBy: ["created_at", "agent_id"],
+      });
+      return {
+        budgets: budgets.map(toBudget),
+        killSwitches: killSwitches.map(toKillSwitch),
+        agents: agents.map((row) => ({
+          id: row.agent_id,
+          name: row.name,
+          kind: row.kind,
+          ownerSubjectId: row.owner_subject_id,
+        })),
+      };
     },
   );
 
-  return ToolGateway.of({ call, setBudget, setKillSwitch, governance });
+  return ToolGateway.of({ call, callIfRun, setBudget, setKillSwitch, governance });
 });
 
 export const layer = Layer.effect(ToolGateway, make).pipe(

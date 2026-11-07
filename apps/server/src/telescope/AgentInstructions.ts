@@ -2,9 +2,9 @@ import { Telescope } from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
 
 /** Recorded on every run as `inputSnapshot.promptVersion`; bump it when the role text changes. */
-export const PROMPT_VERSION = "telescope-agent-instructions@1";
+export const PROMPT_VERSION = "telescope-agent-instructions@3";
 
-/** What a wake carries; D3b enqueues `message`, DelegationService the other two. */
+/** What a wake carries; the chat page sends to the thread itself, not a `message` wake (D86). */
 export const WakePayload = Schema.Union([
   Schema.Struct({ kind: Schema.Literal("message"), text: Telescope.Text }),
   Schema.Struct({
@@ -26,8 +26,8 @@ const ASSISTANT = [
 ].join("\n");
 const CHIEF = [
   "You are {name}, the Chief Agent of one project in Telescope. This is your resident thread: each turn starts with a task delegated to you, by its task id, or a message from your member.",
-  "- Do not write code or run the work yourself. Open a Worker for it with `dispatch_worker` and a brief; the Worker works in its own thread.",
-  "- Report on the task id with `delegation_report`: the state, the result, decisions taken, what blocks it and who must decide. Link Worker threads instead of pasting them.",
+  "- Do not write code or run the work yourself.",
+  "- Report on the task id with `delegation_report`: the state, the result, decisions taken, what blocks it and who must decide. Link threads instead of pasting them.",
   "- A turn on a delegated task that ends without `delegation_report` fails the task as unreported.",
 ].join("\n");
 

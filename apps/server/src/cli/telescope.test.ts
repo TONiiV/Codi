@@ -130,6 +130,12 @@ it.layer(layer)("telescope CLI", (it) => {
         "does not match",
       );
       assert.strictEqual(yield* fs.readFileString(file), "an earlier manifest\n");
+      const fresh = path.join(baseDir, "fresh-manifest.json");
+      assert.include(
+        yield* failureOf(t3("org", "delete", org, "--confirm", "acme", "--manifest", fresh)),
+        "does not match",
+      );
+      assert.isFalse(yield* fs.exists(fresh));
       const unwritable = path.join(baseDir, "missing", "manifest.json");
       const fileError = yield* Effect.flip(
         t3("org", "delete", org, "--confirm", "Acme", "--manifest", unwritable),
@@ -210,13 +216,34 @@ it.layer(layer)("telescope CLI", (it) => {
         yield* failureOf(t3("member", "restore", "--org", org, "--member", "nobody")),
         "That person was never a member of this workspace.",
       );
-      for (const expires of ["0s", "0ms", "Infinity"])
+      for (const [expires, message] of [
+        ["0s", "Invitation codes always expire."],
+        ["0ms", "Invitation codes always expire."],
+        ["Infinity", "Invitation codes always expire."],
+        ["366d", "Invitation codes last at most 365 days."],
+        ["99999999999d", "Invitation codes last at most 365 days."],
+      ] as const)
         assert.include(
           yield* failureOf(
             t3("member", "invite", "--org", org, "--role", "member", "--expires", expires),
           ),
-          "Invitation codes always expire.",
+          message,
         );
+      const longest = yield* t3(
+        "member",
+        "invite",
+        "--org",
+        org,
+        "--role",
+        "member",
+        "--expires",
+        "365d",
+        "--json",
+      ).pipe(Effect.flatMap(decodeJson(Telescope.Invitation)));
+      assert.strictEqual(
+        longest.expiresAt,
+        DateTime.formatIso(DateTime.add(yield* DateTime.now, { days: 365 })),
+      );
 
       assert.include(
         yield* failureOf(t3("member", "revoke", "--org", org, "--member", "owner")),

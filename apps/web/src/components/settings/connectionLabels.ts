@@ -1,9 +1,11 @@
+import type { EnvironmentConnectReachability } from "@t3tools/contracts";
 import type { TFunction } from "i18next";
 import {
   connectionRouteKind,
   connectionRouteLabel,
   routeHttpBaseUrl,
   type ConnectionRoute,
+  type EnvironmentConnectionPresentation,
 } from "@t3tools/client-runtime/connection";
 
 function routeHostname(route: ConnectionRoute): string | null {
@@ -26,4 +28,43 @@ export function connectionRouteText(route: ConnectionRoute, t: TFunction): strin
     default:
       return connectionRouteLabel(route);
   }
+}
+
+export function connectionStatusLabel(
+  connection: EnvironmentConnectionPresentation,
+  t: TFunction,
+): string {
+  switch (connection.phase) {
+    case "available":
+      return t("settings.text.available");
+    case "offline":
+      return t("settings.text.offline");
+    case "connecting":
+      return t("settings.text.connectionConnecting");
+    case "reconnecting":
+      return connection.error
+        ? t("settings.manual.connectionStatus.reconnectingError", { error: connection.error })
+        : t("settings.text.connectionReconnecting");
+    case "connected":
+      return t("settings.text.connected");
+    case "unsupported":
+      return t("settings.text.clientNotSupported");
+    case "error":
+      return connection.error
+        ? t("settings.manual.connectionStatus.failedError", { error: connection.error })
+        : t("settings.manual.envStatus.failed");
+  }
+}
+
+/** contracts' `formatConnectReachable`, in the app language; the server keeps the English one. */
+export function connectReachableText(
+  reachability: Extract<EnvironmentConnectReachability, { status: "reachable" }>,
+  t: TFunction,
+): string {
+  const count = reachability.readyConnections;
+  return [
+    t("settings.manual.connectReachable.tunnelConnected"),
+    ...(count === null ? [] : [t("settings.manual.connectReachable.connections", { count })]),
+    ...(reachability.protocol ? [reachability.protocol.toUpperCase()] : []),
+  ].join(" · ");
 }

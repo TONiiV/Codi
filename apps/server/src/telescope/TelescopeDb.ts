@@ -1,4 +1,5 @@
 import { Telescope } from "@t3tools/contracts";
+import * as Arr from "effect/Array";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -132,7 +133,11 @@ export class TelescopeDb extends Context.Service<
       | undefined,
       PersistenceSqlError
     >;
-    readonly openRunsOnThread: (threadId: string) => Effect.Effect<
+    /** With `codiMessageId`, only the runs that serve that Codi run. */
+    readonly openRunsOnThread: (
+      threadId: string,
+      codiMessageId?: string,
+    ) => Effect.Effect<
       ReadonlyArray<{
         readonly workspaceId: Telescope.WorkspaceId;
         readonly runId: Telescope.AgentRunId;
@@ -140,7 +145,13 @@ export class TelescopeDb extends Context.Service<
       PersistenceSqlError
     >;
     /** Retention: drops every workspace's runs that finished before `cutoff`, with their calls. */
-    readonly pruneRunsBefore: (cutoff: string) => Effect.Effect<void, PersistenceSqlError>;
+    readonly pruneRunsBefore: (
+      cutoff: string,
+    ) => Effect.Effect<ReadonlyArray<Telescope.AgentRunId>, PersistenceSqlError>;
+    /** The ids, among `runIds`, that no workspace has a run row for. */
+    readonly runIdsWithoutRows: (
+      runIds: ReadonlyArray<string>,
+    ) => Effect.Effect<ReadonlyArray<string>, PersistenceSqlError>;
     /** The wake queue is shared by the whole machine. */
     readonly workspaceIdsWithActiveWakes: Effect.Effect<
       ReadonlyArray<Telescope.WorkspaceId>,
@@ -379,10 +390,17 @@ const make = Effect.gen(function* () {
     `.pipe(Effect.mapError(toPersistenceSqlError("TelescopeDb.workspaceIdForInvitation")));
     return rows[0] === undefined ? undefined : Telescope.WorkspaceId.make(rows[0].workspace_id);
   });
-  const openRunsOnThread = Effect.fn("TelescopeDb.openRunsOnThread")(function* (threadId: string) {
+  const openRunsOnThread = Effect.fn("TelescopeDb.openRunsOnThread")(function* (
+    threadId: string,
+    codiMessageId?: string,
+  ) {
+    const served =
+      codiMessageId === undefined
+        ? sql``
+        : sql`AND json_extract(input_snapshot_json, '$.codiMessageId') = ${codiMessageId}`;
     const rows = yield* sql<{ readonly workspace_id: string; readonly run_id: string }>`
       SELECT workspace_id, run_id FROM telescope_runs
-      WHERE thread_id = ${threadId} AND finished_at IS NULL
+      WHERE thread_id = ${threadId} AND finished_at IS NULL ${served}
     `.pipe(Effect.mapError(toPersistenceSqlError("TelescopeDb.openRunsOnThread")));
     return rows.map((row) => ({
       workspaceId: Telescope.WorkspaceId.make(row.workspace_id),
@@ -407,16 +425,30 @@ const make = Effect.gen(function* () {
         };
   });
   const pruneRunsBefore = Effect.fn("TelescopeDb.pruneRunsBefore")(function* (cutoff: string) {
-    yield* sql
+    const [, dropped] = yield* sql
       .withTransaction(
         Effect.all([
           sql`DELETE FROM telescope_run_calls WHERE run_id IN
           (SELECT run_id FROM telescope_runs
           WHERE finished_at IS NOT NULL AND finished_at < ${cutoff})`,
-          sql`DELETE FROM telescope_runs WHERE finished_at IS NOT NULL AND finished_at < ${cutoff}`,
+          sql<{ readonly run_id: string }>`DELETE FROM telescope_runs
+          WHERE finished_at IS NOT NULL AND finished_at < ${cutoff} RETURNING run_id`,
         ]),
       )
       .pipe(Effect.mapError(toPersistenceSqlError("TelescopeDb.pruneRunsBefore")));
+    return dropped.map((row) => Telescope.AgentRunId.make(row.run_id));
+  });
+  const runIdsWithoutRows = Effect.fn("TelescopeDb.runIdsWithoutRows")(function* (
+    runIds: ReadonlyArray<string>,
+  ) {
+    const found = yield* Effect.forEach(Arr.chunksOf(runIds, 500), (chunk) =>
+      sql<{ readonly run_id: string }>`SELECT run_id FROM telescope_runs
+      WHERE ${sql.in("run_id", chunk)}`.pipe(
+        Effect.mapError(toPersistenceSqlError("TelescopeDb.runIdsWithoutRows")),
+      ),
+    );
+    const known = new Set(found.flat().map((row) => row.run_id));
+    return runIds.filter((runId) => !known.has(runId));
   });
   const workspaceIdsWithActiveWakes = sql<{ readonly workspace_id: string }>`
     SELECT DISTINCT workspace_id FROM telescope_wakes WHERE status IN ('queued', 'running')
@@ -452,6 +484,7 @@ const make = Effect.gen(function* () {
     agentThread,
     openRunsOnThread,
     pruneRunsBefore,
+    runIdsWithoutRows,
     workspaceIdsWithActiveWakes,
     transaction,
   });

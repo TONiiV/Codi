@@ -70,7 +70,7 @@ export function ErrorNote({ text, onRetry }: { text: string; onRetry?: () => voi
   );
 }
 
-function FormDialog({
+export function FormDialog({
   title,
   description,
   submitLabel,
@@ -104,11 +104,13 @@ function FormDialog({
             <DialogDescription>{description}</DialogDescription>
           </DialogHeader>
           <DialogPanel>
-            <div className="flex flex-col gap-4">
-              {children}
-              {error === null ? null : <ErrorNote text={error} />}
-            </div>
+            <div className="flex flex-col gap-4">{children}</div>
           </DialogPanel>
+          {error === null ? null : (
+            <div className="px-6 pb-4">
+              <ErrorNote text={error} />
+            </div>
+          )}
           <DialogFooter>
             <Button type="button" variant="ghost-muted" onClick={onClose}>
               取消
@@ -123,7 +125,7 @@ function FormDialog({
   );
 }
 
-function TextField(props: {
+export function TextField(props: {
   label: string;
   value: string;
   onChange: (value: string) => void;
@@ -336,12 +338,12 @@ export function MembersDialog(props: {
               </p>
             </div>
           )}
-          {error === null ? null : (
-            <div className="mt-4">
-              <ErrorNote text={error} />
-            </div>
-          )}
         </DialogPanel>
+        {error === null ? null : (
+          <div className="px-6 pb-4">
+            <ErrorNote text={error} />
+          </div>
+        )}
         <DialogFooter>
           <Button
             variant="outline"

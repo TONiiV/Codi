@@ -5,6 +5,8 @@ import {
   Agent,
   BoardItem,
   Delegation,
+  MemberInviteInput,
+  MemberLinkCodeInput,
   MemberSetRoleInput,
   MemorySearchInput,
   MemorySearchQuery,
@@ -21,6 +23,8 @@ const decodeBoardItem = Schema.decodeSync(BoardItem);
 const decodeAgent = Schema.decodeSync(Agent);
 const decodeTaskCommit = Schema.decodeUnknownSync(TaskCommit);
 const decodeSetRole = Schema.decodeUnknownSync(MemberSetRoleInput);
+const decodeInvite = Schema.decodeUnknownSync(MemberInviteInput);
+const decodeLinkCode = Schema.decodeUnknownSync(MemberLinkCodeInput);
 const decodeDelegation = Schema.decodeUnknownSync(Delegation);
 const decodeMemoryWrite = Schema.decodeUnknownSync(MemoryWrite);
 const decodeMemoryWriteInput = Schema.decodeUnknownSync(MemoryWriteInput);
@@ -99,6 +103,13 @@ describe("telescope contracts", () => {
         subjectId: "u",
         role: "owner",
       }),
+    ).toThrow();
+    const yearSeconds = 365 * 24 * 60 * 60;
+    const invite = { workspaceId: "ws-1", role: "member", expiresInSeconds: yearSeconds };
+    expect(decodeInvite(invite).expiresInSeconds).toBe(yearSeconds);
+    expect(() => decodeInvite({ ...invite, expiresInSeconds: yearSeconds + 1 })).toThrow();
+    expect(() =>
+      decodeLinkCode({ workspaceId: "ws-1", subjectId: "u", expiresInSeconds: yearSeconds + 1 }),
     ).toThrow();
     const delegation = {
       id: "t-1",

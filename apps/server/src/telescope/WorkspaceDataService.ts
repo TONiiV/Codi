@@ -3,14 +3,19 @@ import * as NodeSqliteClient from "@t3tools/shared/nodeSqliteClient";
 import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Path from "effect/Path";
 import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import * as Struct from "effect/Struct";
 import * as SqlClient from "effect/sql/SqlClient";
 
+import { ServerConfig } from "../config.ts";
 import type { PersistenceDecodeError, PersistenceSqlError } from "../persistence/Errors.ts";
+import * as AgentService from "./AgentService.ts";
+import * as RunRecordService from "./RunRecordService.ts";
 import * as TelescopeDb from "./TelescopeDb.ts";
 import * as WorkspaceService from "./WorkspaceService.ts";
 
@@ -60,13 +65,13 @@ const encodeWorkspaceJson = Schema.encodeSync(
       formatVersion: Schema.Literal(1),
       exportedAt: Schema.String,
       workspace: Telescope.Workspace,
-      withheldMemories: Schema.Number,
-      withheldAgents: Schema.Number,
+      withheld: Schema.Record(Schema.String, Schema.Number),
       tables: Schema.Record(Schema.String, Schema.Array(Row)),
     }),
     { space: 2 },
   ),
 );
+const encodeExport = Schema.encodeSync(Schema.fromJsonString(Telescope.WorkspaceExportResult));
 const fromJson = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown));
 
 const json = (column: unknown) =>
@@ -161,9 +166,12 @@ const readme = (
   workspace: Telescope.Workspace,
   exportedAt: string,
   tables: ReadonlyArray<readonly [string, ReadonlyArray<Row>]>,
-  withheld: { readonly memories: number; readonly agents: number },
-) =>
-  [
+  withheld: Readonly<Record<string, number>>,
+) => {
+  const owned = Object.entries(withheld).filter(
+    ([table]) => table !== "telescope_memories" && table !== "telescope_agents",
+  );
+  return [
     `# ${workspace.name}`,
     "",
     `Telescope workspace ${workspace.id} (${workspace.kind}), exported ${exportedAt}.`,
@@ -179,11 +187,16 @@ const readme = (
     "",
     "Left out:",
     "- Invitation codes: an unused one still lets someone join.",
-    `- ${withheld.memories} memories the exporting member cannot read: another member's private ones, or ones about another member.`,
-    `- ${withheld.agents} agents other members keep hidden, because the app shows a hidden agent only to its owner.`,
+    `- ${withheld.telescope_memories ?? 0} memories the exporting member cannot read: another member's private ones, or ones about another member.`,
+    `- ${withheld.telescope_agents ?? 0} agents the app hides from the exporting member: another member's hidden agents, a former member's agents, and Chief Agents of projects no longer bound.`,
+    ...(owned.length === 0
+      ? []
+      : [`- Rows of those agents: ${owned.map(([table, n]) => `${table} ${n}`).join(", ")}.`]),
     ...Object.entries(NOT_EXPORTED).map(([table, reason]) => `- \`${table}\`: ${reason}.`),
     "",
   ].join("\n");
+};
+const mib = (bytes: number) => (bytes / 1024 / 1024).toFixed(1);
 
 const fail = (reason: Telescope.WorkspaceError["reason"], message: string) =>
   Effect.fail(new Telescope.WorkspaceError({ reason, message }));
@@ -193,14 +206,21 @@ type Failure = Telescope.WorkspaceError | PersistenceSqlError | PersistenceDecod
 export class WorkspaceDataService extends Context.Service<
   WorkspaceDataService,
   {
-    /** Leaves out invitation codes, and memories and agents the caller cannot see in the app. */
+    /**
+     * Leaves out invitation codes, and memories, agents and agents' rows the caller cannot see in
+     * the app. Refused over `maxBytes` of JSON; the CLI, which writes files, lifts that cap.
+     */
     readonly export: (
-      caller: WorkspaceService.Caller,
+      caller: WorkspaceService.SessionCaller,
       input: typeof Telescope.WorkspaceScopedInput.Type,
+      options?: { readonly maxBytes: number },
     ) => Effect.Effect<typeof Telescope.WorkspaceExportResult.Type, Failure>;
-    /** One transaction, refused while the workspace has runs or wakes in flight. */
+    /**
+     * One transaction, refused while the workspace has runs or wakes in flight. The runs' context
+     * files are removed after it commits; one that cannot be is listed in `contextFilesLeft`.
+     */
     readonly delete: (
-      caller: WorkspaceService.Caller,
+      caller: WorkspaceService.SessionCaller,
       input: typeof Telescope.WorkspaceDeleteInput.Type,
     ) => Effect.Effect<Telescope.WorkspaceDeleteManifest, Failure | Telescope.WorkspaceBusyError>;
   }
@@ -210,9 +230,15 @@ const make = Effect.gen(function* () {
   const db = yield* TelescopeDb.TelescopeDb;
   const workspaces = yield* WorkspaceService.WorkspaceService;
   const sql = yield* SqlClient.SqlClient;
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const { stateDir } = yield* ServerConfig;
   const now = DateTime.now.pipe(Effect.map(DateTime.formatIso));
 
-  const requireAdmin = (caller: WorkspaceService.Caller, workspaceId: Telescope.WorkspaceId) =>
+  const requireAdmin = (
+    caller: WorkspaceService.SessionCaller,
+    workspaceId: Telescope.WorkspaceId,
+  ) =>
     workspaces.get(caller, { workspaceId }).pipe(
       Effect.filterOrElse(
         (access) => access.self.role === "admin",
@@ -221,8 +247,9 @@ const make = Effect.gen(function* () {
     );
 
   const exportWorkspace = Effect.fn("WorkspaceDataService.export")(function* (
-    caller: WorkspaceService.Caller,
+    caller: WorkspaceService.SessionCaller,
     { workspaceId }: typeof Telescope.WorkspaceScopedInput.Type,
+    { maxBytes } = { maxBytes: Telescope.WORKSPACE_EXPORT_MAX_BYTES },
   ) {
     const { workspace, self } = yield* requireAdmin(caller, workspaceId);
     // One read transaction, so every table comes from the same moment.
@@ -230,53 +257,96 @@ const make = Effect.gen(function* () {
       db.select(workspaceId, table, decodeRows, {}, { orderBy: ["rowid"] }),
     );
     const read = yield* db.transaction(reads).pipe(NodeSqliteClient.readOnly);
-    const rows = new Map(TABLES.map((table, index) => [table, read[index] ?? []]));
-    const of = (table: TelescopeDb.TelescopeTable) => rows.get(table) ?? [];
-    const owners = new Map(of("agents").map((agent) => [agent.agent_id, agent.owner_subject_id]));
-    // Memory search's rule for a member's own session: private memories only of agents they
-    // own, person records only about themselves.
-    const memories = of("memories").filter(
-      (memory) =>
-        (memory.level !== "private" || owners.get(memory.agent_id) === self.subjectId) &&
-        (memory.scope !== "person" || memory.about_subject_id === self.subjectId),
-    );
-    // `AgentService.get`'s rule: another member's hidden agent stays hidden, from admins too.
-    const agents = of("agents").filter(
-      (agent) =>
-        agent.owner_subject_id === null ||
-        agent.owner_subject_id === self.subjectId ||
-        agent.exposure !== "hidden",
-    );
-    const withheld = {
-      memories: of("memories").length - memories.length,
-      agents: of("agents").length - agents.length,
+    const stored = new Map(TABLES.map((table, index) => [table, read[index] ?? []]));
+    const all = (table: TelescopeDb.TelescopeTable) => stored.get(table) ?? [];
+    const owners = new Map(all("agents").map((agent) => [agent.agent_id, agent.owner_subject_id]));
+    const active = all("members").filter((member) => member.revoked_at === null);
+    const reach = {
+      roles: new Set(active.map((member) => member.subject_id)),
+      leads: new Set(all("project_bindings").map((binding) => binding.project_id)),
     };
-    const invitations = of("invitations").map((row) => Struct.omit(row, ["code"]));
-    rows.set("memories", memories).set("invitations", invitations).set("agents", agents);
+    const text = (column: Row[string] | undefined) => (typeof column === "string" ? column : null);
+    const hiddenAgents = new Set<unknown>(
+      all("agents")
+        .filter(
+          (agent) =>
+            !AgentService.visibleTo(self.subjectId, reach, {
+              ownerSubjectId: text(agent.owner_subject_id),
+              kind: String(agent.kind),
+              projectId: text(agent.project_id) ?? undefined,
+              exposure: String(agent.exposure),
+            }),
+        )
+        .map((agent) => agent.agent_id),
+    );
+    const hidden = (...agentIds: ReadonlyArray<unknown>) =>
+      agentIds.some((agentId) => hiddenAgents.has(agentId));
+    const chain = (row: Row): ReadonlyArray<unknown> => {
+      const onBehalfOf = json(row.on_behalf_of_json);
+      return Array.isArray(onBehalfOf) ? onBehalfOf : [];
+    };
+    // Only agents the app hides leave, with the rows reachable through no other read path:
+    // delegations (D68), grants and channel bindings. Everything else stays as the app shows it
+    // to an admin (D76). Memories follow memory search's rule for the member's own session.
+    const withheldRow: Partial<Record<TelescopeDb.TelescopeTable, (row: Row) => boolean>> = {
+      agents: (agent) => hidden(agent.agent_id),
+      delegations: (delegation) => hidden(delegation.from_agent_id, delegation.to_agent_id),
+      grants: (grant) => hidden(...chain(grant)),
+      channel_bindings: (binding) => hidden(binding.agent_id),
+      memories: (memory) =>
+        (memory.level === "private" && owners.get(memory.agent_id) !== self.subjectId) ||
+        (memory.scope === "person" && memory.about_subject_id !== self.subjectId),
+    };
+    const rows = new Map(
+      TABLES.map((table) => {
+        const withhold = withheldRow[table];
+        return [
+          table,
+          withhold === undefined ? all(table) : all(table).filter((row) => !withhold(row)),
+        ];
+      }),
+    );
+    rows.set(
+      "invitations",
+      all("invitations").map((row) => Struct.omit(row, ["code"])),
+    );
+    const of = (table: TelescopeDb.TelescopeTable) => rows.get(table) ?? [];
+    const withheld = Object.fromEntries(
+      TABLES.flatMap((table) => {
+        const count = all(table).length - of(table).length;
+        return count === 0 ? [] : [[`telescope_${table}`, count] as const];
+      }),
+    );
     const exportedAt = yield* now;
     const tables = TABLES.map((table) => [`telescope_${table}`, of(table)] as const);
-    const json = encodeWorkspaceJson({
+    const bundle = encodeWorkspaceJson({
       formatVersion: 1,
       exportedAt,
       workspace,
-      withheldMemories: withheld.memories,
-      withheldAgents: withheld.agents,
+      withheld,
       tables: Object.fromEntries(tables),
     });
-    return {
+    const result = {
       files: [
         { path: "README.md", text: readme(workspace, exportedAt, tables, withheld) },
-        { path: "workspace.json", text: `${json}\n` },
+        { path: "workspace.json", text: `${bundle}\n` },
         { path: "tasks.md", text: tasksMarkdown(of("tasks"), of("task_commits")) },
         { path: "decisions.md", text: decisionsMarkdown(of("tasks")) },
-        { path: "memory.md", text: memoryMarkdown(memories) },
+        { path: "memory.md", text: memoryMarkdown(of("memories")) },
         { path: "runs.md", text: runsMarkdown(of("runs"), of("run_calls")) },
       ],
     };
+    const bytes = Buffer.byteLength(encodeExport(result));
+    if (bytes > maxBytes)
+      return yield* fail(
+        "invalid",
+        `This export is ${mib(bytes)} MiB, over the ${mib(maxBytes)} MiB the app downloads. On the server's machine, run \`t3 org export ${workspaceId} --out <directory>\` to write it to files instead.`,
+      );
+    return result;
   });
 
   const deleteWorkspace = Effect.fn("WorkspaceDataService.delete")(function* (
-    caller: WorkspaceService.Caller,
+    caller: WorkspaceService.SessionCaller,
     input: typeof Telescope.WorkspaceDeleteInput.Type,
   ) {
     const { workspace } = yield* requireAdmin(caller, input.workspaceId);
@@ -284,7 +354,7 @@ const make = Effect.gen(function* () {
       return yield* fail("invalid", "The name typed does not match this workspace's name.");
     const workspaceId = workspace.id;
     const inFlight = { filter: sql.in("status", ["queued", "running"]) };
-    return yield* db.transaction(
+    const deleted = yield* db.transaction(
       Effect.gen(function* () {
         const runs = yield* db.select(workspaceId, "runs", decodeRunIds, { finished_at: null });
         const wakes = yield* db.select(workspaceId, "wakes", decodeWakeIds, {}, inFlight);
@@ -307,6 +377,29 @@ const make = Effect.gen(function* () {
         return { workspace, deletedAt: yield* now, tables };
       }),
     );
+    // After the commit, so a file that stays never keeps the rows; the manifest lists it instead.
+    const runIds = deleted.tables.find(({ table }) => table === "telescope_runs")?.ids ?? [];
+    const outcomes = yield* Effect.forEach(runIds, (runId) => {
+      const file = RunRecordService.contextFile(path, stateDir, runId);
+      const relative = path.relative(stateDir, file);
+      return fs.exists(file).pipe(
+        Effect.flatMap((exists) =>
+          exists ? fs.remove(file).pipe(Effect.as(true)) : Effect.succeed(false),
+        ),
+        Effect.match({
+          onSuccess: (removed) => ({ removed: removed ? [relative] : [], left: [] }),
+          onFailure: (error) => ({
+            removed: [],
+            left: [{ path: relative, reason: error.message }],
+          }),
+        }),
+      );
+    });
+    return {
+      ...deleted,
+      contextFiles: outcomes.flatMap((outcome) => outcome.removed),
+      contextFilesLeft: outcomes.flatMap((outcome) => outcome.left),
+    };
   });
 
   return WorkspaceDataService.of({ export: exportWorkspace, delete: deleteWorkspace });

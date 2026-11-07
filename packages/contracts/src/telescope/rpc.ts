@@ -86,6 +86,9 @@ import {
   GrantAuditListResult,
   GrantExplainInput,
   GrantExplainResult,
+  ProjectRule,
+  ProjectRuleListResult,
+  ProjectRuleSetInput,
 } from "./grant.ts";
 import { DashboardSummary } from "./dashboard.ts";
 import {
@@ -142,6 +145,8 @@ export const WS_METHODS = {
   budgetSet: "telescope.budget.set",
   killSwitchSet: "telescope.killSwitch.set",
   governanceGet: "telescope.governance.get",
+  projectRuleList: "telescope.projectRule.list",
+  projectRuleSet: "telescope.projectRule.set",
   memorySearch: "telescope.memory.search",
   memoryWrite: "telescope.memory.write",
   memoryPin: "telescope.memory.pin",
@@ -242,6 +247,8 @@ export const GrantRpcs = [
   make(WS_METHODS.budgetSet, BudgetSetInput, Budget),
   make(WS_METHODS.killSwitchSet, KillSwitchSetInput, KillSwitch),
   make(WS_METHODS.governanceGet, WorkspaceScopedInput, GovernanceState),
+  make(WS_METHODS.projectRuleList, WorkspaceScopedInput, ProjectRuleListResult),
+  make(WS_METHODS.projectRuleSet, ProjectRuleSetInput, ProjectRule),
 ] as const;
 
 export const MemoryRpcs = [

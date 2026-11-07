@@ -273,6 +273,8 @@ const RPC_AGGREGATES = {
   [Telescope.WS_METHODS.budgetSet]: "telescope",
   [Telescope.WS_METHODS.killSwitchSet]: "telescope",
   [Telescope.WS_METHODS.governanceGet]: "telescope",
+  [Telescope.WS_METHODS.projectRuleList]: "telescope",
+  [Telescope.WS_METHODS.projectRuleSet]: "telescope",
   [Telescope.WS_METHODS.memorySearch]: "telescope",
   [Telescope.WS_METHODS.memoryWrite]: "telescope",
   [Telescope.WS_METHODS.memoryPin]: "telescope",

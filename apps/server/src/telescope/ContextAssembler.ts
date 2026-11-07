@@ -125,7 +125,7 @@ const make = Effect.gen(function* () {
         hash(item.text).pipe(Effect.map((h) => ({ kind: item.kind, id: item.id, hash: h }))),
     );
 
-    const file = path.join(stateDir, "telescope", "context", `${run.id}.md`);
+    const file = RunRecordService.contextFile(path, stateDir, run.id);
     yield* fs.makeDirectory(path.dirname(file), { recursive: true });
     yield* fs.writeFileString(file, ContextBudget.renderContextFile(ordered));
     yield* runs.recordContextManifest(input.run, manifest);

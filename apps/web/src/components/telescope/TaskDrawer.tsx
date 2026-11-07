@@ -14,6 +14,7 @@ import { useThreadShell } from "../../state/entities";
 import { useEnvironment } from "../../state/environments";
 import { useEnvironmentQuery } from "../../state/query";
 import { useEnvironmentScope } from "../../state/session";
+import { threadFamilies } from "../../state/threads";
 import { buildThreadRouteParams } from "../../threadRoutes";
 import { sideChatSourceBlock } from "../ChatView.logic";
 import { useSideChat } from "../chat/useSideChat";
@@ -42,7 +43,7 @@ import {
 
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <section className="flex flex-col gap-1.5">
+    <section className="flex flex-col items-start gap-1.5">
       <h3 className="text-xs font-medium text-muted-foreground">{label}</h3>
       {children}
     </section>
@@ -72,6 +73,7 @@ function ThreadLink({
     <Button
       variant="link"
       size="sm"
+      className="-ms-2.5"
       render={<Link to="/$environmentId/$threadId" params={buildThreadRouteParams(ref)} />}
     >
       <span className="truncate">{title ?? "关联的对话"}</span>
@@ -93,7 +95,18 @@ function SideChatButton({
     task.threadId === undefined ? null : scopeThreadRef(environmentId, task.threadId);
   const capabilities = useEnvironment(environmentId)?.serverConfig?.environment.capabilities;
   const canOperate = useEnvironmentScope(environmentId, AuthOrchestrationOperateScope);
-  const block = sideChatSourceBlock(useThreadShell(threadRef), capabilities ?? null, canOperate);
+  const shell = useThreadShell(threadRef);
+  // The shell omits idle subagents; their family read still carries the lineage.
+  const family = useEnvironmentQuery(
+    threadRef !== null && shell === null
+      ? threadFamilies.familyAtom(environmentId, threadRef.threadId)
+      : null,
+  );
+  const thread = shell ?? family.data?.threads.find((row) => row.id === task.threadId) ?? null;
+  const block =
+    family.data === null && family.isPending
+      ? "loading"
+      : sideChatSourceBlock(thread, capabilities ?? null, canOperate);
   const hint =
     threadRef === null
       ? "这条任务还没有关联对话，关联后才能在 side chat 里聊它。"
@@ -194,6 +207,7 @@ function TaskDetail({ target, taskId }: { target: BoardTarget; taskId: Telescope
             <Button
               variant="link"
               size="sm"
+              className="-ms-2.5"
               render={<a href={task.forgeIssue.url} target="_blank" rel="noopener noreferrer" />}
             >
               {task.forgeIssue.repo}#{task.forgeIssue.number}

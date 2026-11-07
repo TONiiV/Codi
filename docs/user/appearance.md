@@ -21,6 +21,10 @@ Android uses **Material You Layout** by default unless you have turned it off in
 It changes shapes, spacing, and controls independently
 of the selected theme.
 
+## Language
+
+On web and desktop, choose the interface language under **Settings → General → Language**. **System default** follows your browser or OS language. Simplified Chinese covers Settings, the main sidebar, the composer's model and effort pickers, and settings results in the command palette; the rest of Codi stays in English.
+
 ## Composer context
 
 Git-backed projects show branch and worktree controls below the composer while you create a thread.

@@ -85,13 +85,13 @@ import * as TelescopeWorkspaceData from "./telescope/WorkspaceDataService.ts";
 import * as TelescopeBoard from "./telescope/TaskBoardService.ts";
 import * as TelescopeBoardChanges from "./telescope/BoardChanges.ts";
 import * as TelescopeAgents from "./telescope/AgentService.ts";
+import * as TelescopeDelegations from "./telescope/DelegationService.ts";
 import * as TelescopeRuns from "./telescope/RunRecordService.ts";
 import * as TelescopeGrants from "./telescope/GrantService.ts";
 import * as TelescopeToolGateway from "./telescope/ToolGateway.ts";
 import * as TelescopeThreadTurnTokens from "./telescope/ThreadTurnTokens.ts";
 import * as TelescopeAgentRuntime from "./telescope/AgentRuntime.ts";
 import * as TelescopeDb from "./telescope/TelescopeDb.ts";
-import * as TelescopeDelegations from "./telescope/DelegationService.ts";
 import * as TelescopeWakeQueue from "./telescope/WakeQueueService.ts";
 import * as TelescopeAttribution from "./telescope/AttributionService.ts";
 import * as TelescopeTokenSaver from "./telescope/tokensaver/TokenSaverService.ts";
@@ -831,7 +831,6 @@ const layerMakeRoutes = Layer.mergeAll(
   Layer.provide(TelescopeWorkspaces.layer),
   // The same notice hub TaskBoardService publishes to, by layer memoization.
   Layer.provide(Layer.merge(TelescopeBoard.layer, TelescopeBoardChanges.layer)),
-  // One runtime for the wake worker and the chat page's openThread, so they share agent locks.
   Layer.provide(
     TelescopeAgentRuntime.layer.pipe(
       Layer.provide(
@@ -849,10 +848,10 @@ const layerMakeRoutes = Layer.mergeAll(
       TelescopeGrants.layer,
       TelescopeMemory.layer,
       TelescopeToolGateway.layer,
+      TelescopeDelegations.layer,
       TelescopeAttribution.layer,
       TelescopeRouting.layer,
       TelescopeWorkspaceData.layer,
-      TelescopeDelegations.layer,
       TelescopeDb.layer,
     ),
   ),

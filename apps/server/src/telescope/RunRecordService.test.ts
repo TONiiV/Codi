@@ -1,14 +1,20 @@
+// @effect-diagnostics nodeBuiltinImport:off - Effect's FileSystem has no lutimes, which the symlink rows need.
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
+import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, it } from "@effect/vitest";
+import * as NodeFS from "node:fs";
 import { AuthSessionId, EnvironmentId, Telescope, ThreadId } from "@t3tools/contracts";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import * as SqlClient from "effect/sql/SqlClient";
 import * as TestClock from "effect/testing/TestClock";
 import * as Tracer from "effect/Tracer";
 
+import { ServerConfig } from "../config.ts";
 import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
 import { runMigrations } from "../persistence/Migrations.ts";
 import * as SqlitePersistence from "../persistence/Sqlite.ts";
@@ -312,6 +318,17 @@ it.layer(layer)("Telescope run records", (it) => {
         inputSnapshot: snapshot([]),
       });
       const scoped = { workspaceId, runId: run.id };
+      yield* SqlClient.SqlClient.use(
+        (sql) =>
+          sql`INSERT INTO telescope_members ${sql.insert({
+            workspace_id: workspaceId,
+            subject_id: "revoked-subject",
+            display_name: "Rex",
+            role: "member",
+            joined_at: "2026-01-01T00:00:00.000Z",
+            revoked_at: "2026-01-02T00:00:00.000Z",
+          })}`,
+      );
       const reads: ReadonlyArray<Effect.Effect<object, { readonly _tag: string }>> = [
         runs.get(mallory, scoped),
         runs.calls(mallory, scoped),
@@ -320,6 +337,7 @@ it.layer(layer)("Telescope run records", (it) => {
         runs.memoriesForRun(mallory, scoped),
         runs.start(mallory, workspaceId, { agentId, inputSnapshot: snapshot([]) }),
         runs.startFor(workspaceId, "mallory-subject", { agentId, inputSnapshot: snapshot([]) }),
+        runs.startFor(workspaceId, "revoked-subject", { agentId, inputSnapshot: snapshot([]) }),
       ];
       for (const read of reads) {
         assert.strictEqual(reason(yield* Effect.flip(read)), "forbidden");
@@ -328,9 +346,12 @@ it.layer(layer)("Telescope run records", (it) => {
   );
 });
 
-it.effect("the retention pass prunes runs past the configured days once a day", () =>
+it.effect("the retention pass prunes runs and their context files once a day", () =>
   Effect.gen(function* () {
     const { runs, workspaceId } = yield* setup;
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const { stateDir } = yield* ServerConfig;
     const day = 24 * 60 * 60 * 1000;
     const exists = (runId: Telescope.AgentRunId) =>
       runs
@@ -339,6 +360,12 @@ it.effect("the retention pass prunes runs past the configured days once a day", 
           Effect.as(true),
           Effect.catchTags({ TelescopeWorkspaceError: () => Effect.succeed(false) }),
         );
+    const fileOf = (runId: Telescope.AgentRunId) =>
+      RunRecordService.contextFile(path, stateDir, runId);
+    const writeContext = (runId: Telescope.AgentRunId) =>
+      fs
+        .makeDirectory(path.dirname(fileOf(runId)), { recursive: true })
+        .pipe(Effect.andThen(fs.writeFileString(fileOf(runId), "context")));
     const start = runs.start(alice, workspaceId, { agentId, inputSnapshot: snapshot([]) });
     const finish = (runId: Telescope.AgentRunId) =>
       runs.finish(
@@ -348,17 +375,73 @@ it.effect("the retention pass prunes runs past the configured days once a day", 
     yield* TestClock.setTime(0);
     const old = yield* start;
     yield* finish(old.id);
+    yield* writeContext(old.id);
+    const withoutFile = yield* start;
+    yield* finish(withoutFile.id);
     const stillOpen = yield* start;
     yield* TestClock.setTime(5 * day);
     const recent = yield* start;
     yield* finish(recent.id);
+    yield* writeContext(recent.id);
+    const [oldOrphan, freshOrphan, notContext, folder, emptyStem, fileLink, folderLink] = [
+      "orphan-old.md",
+      "orphan-fresh.md",
+      "notes.txt",
+      "folder.md",
+      ".md",
+      "link-file.md",
+      "link-folder.md",
+    ].map((name) => path.join(path.dirname(fileOf(old.id)), name)) as [
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+    ];
+    const [outsideFile, outsideFolder] = [
+      path.join(stateDir, "outside.md"),
+      path.join(stateDir, "outside"),
+    ];
+    for (const file of [oldOrphan, freshOrphan, notContext, emptyStem, outsideFile]) {
+      yield* fs.writeFileString(file, "x");
+    }
+    yield* fs.makeDirectory(folder);
+    yield* fs.makeDirectory(outsideFolder);
+    yield* fs.symlink(outsideFile, fileLink);
+    yield* fs.symlink(outsideFolder, folderLink);
+    for (const file of [oldOrphan, notContext, folder, emptyStem]) yield* fs.utimes(file, 0, 0);
+    for (const link of [fileLink, folderLink]) NodeFS.lutimesSync(link, 0, 0);
+    yield* fs.utimes(freshOrphan, (6 * day) / 1000, (6 * day) / 1000);
     const pass = yield* RunRecordService.makeRetentionPass;
 
     yield* TestClock.setTime(7 * day);
     yield* pass;
     assert.deepStrictEqual(
-      [yield* exists(old.id), yield* exists(stillOpen.id), yield* exists(recent.id)],
-      [false, true, true],
+      [
+        yield* exists(old.id),
+        yield* fs.exists(fileOf(old.id)),
+        yield* exists(withoutFile.id),
+        yield* exists(stillOpen.id),
+        yield* exists(recent.id),
+        yield* fs.exists(fileOf(recent.id)),
+      ],
+      [false, false, false, true, true, true],
+    );
+    assert.deepStrictEqual(
+      [
+        yield* fs.exists(oldOrphan),
+        yield* fs.exists(freshOrphan),
+        yield* fs.exists(notContext),
+        yield* fs.exists(folder),
+        yield* fs.exists(emptyStem),
+        yield* fs.exists(fileLink),
+        yield* fs.exists(folderLink),
+        yield* fs.exists(outsideFile),
+        yield* fs.exists(outsideFolder),
+      ],
+      [false, true, true, true, true, true, true, true, true],
     );
 
     // The next check waits a day, so a run that ages out meanwhile survives until then.
@@ -379,13 +462,22 @@ it.effect("the retention pass prunes runs past the configured days once a day", 
     yield* TestClock.setTime(10 * day + 60_000);
     yield* pass;
     assert.isTrue(yield* exists(stillOpen.id));
+    // A non-empty directory where the context file should be cannot be removed; the run still goes.
+    yield* fs.makeDirectory(fileOf(stillOpen.id), { recursive: true });
+    yield* fs.writeFileString(path.join(fileOf(stillOpen.id), "inside"), "context");
     yield* TestClock.setTime(12 * day + 60_000);
     yield* pass;
     assert.isFalse(yield* exists(stillOpen.id));
+    assert.isTrue(yield* fs.exists(fileOf(stillOpen.id)));
   }).pipe(
     Effect.provide(
       layer.pipe(
         Layer.provideMerge(ServerSettings.layerTest({ telescope: { runRetentionDays: 2 } })),
+        Layer.provideMerge(
+          ServerConfig.layerTest(process.cwd(), { prefix: "telescope-runs-test-" }).pipe(
+            Layer.provideMerge(NodeServices.layer),
+          ),
+        ),
       ),
     ),
   ),
