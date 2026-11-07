@@ -6,6 +6,7 @@ import {
   BoardItemId,
   Count,
   DecisionId,
+  DelegationId,
   LeaseId,
   Strings,
   SubjectId,
@@ -91,13 +92,14 @@ export const LeaseScopedInput = Schema.Struct({ ...InWorkspace, leaseId: LeaseId
 export const LeaseGetResult = Schema.Struct({ lease: Schema.optionalKey(Lease) });
 
 /**
- * A committed write to one board item, by its new version. It never carries the item: a watcher
- * re-reads what it shows. A lease change reaches its task this way through the task's `leaseId`.
+ * A committed write to one board item or delegation, by its new version (a delegation's is its
+ * message count). It never carries the item: a watcher re-reads what it shows. A lease change
+ * reaches its task this way through the task's `leaseId`.
  */
 export const BoardChange = Schema.Struct({
-  kind: Schema.Literals(["task", "decision"]),
+  kind: Schema.Literals(["task", "decision", "delegation"]),
   workspaceId: WorkspaceId,
-  id: BoardItemId,
+  id: Schema.Union([BoardItemId, DelegationId]),
   version: Count,
 });
 export type BoardChange = typeof BoardChange.Type;

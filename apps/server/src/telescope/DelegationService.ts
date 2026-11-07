@@ -10,6 +10,7 @@ import * as Semaphore from "effect/Semaphore";
 import * as Struct from "effect/Struct";
 
 import type { PersistenceDecodeError, PersistenceSqlError } from "../persistence/Errors.ts";
+import * as BoardChanges from "./BoardChanges.ts";
 import * as TaskBoardService from "./TaskBoardService.ts";
 import * as TelescopeDb from "./TelescopeDb.ts";
 import * as WakeQueueService from "./WakeQueueService.ts";
@@ -239,11 +240,20 @@ const make = Effect.gen(function* () {
   const db = yield* TelescopeDb.TelescopeDb;
   const wakes = yield* WakeQueueService.WakeQueueService;
   const board = yield* TaskBoardService.TaskBoardService;
+  const changes = yield* BoardChanges.BoardChanges;
   const workspaces = yield* WorkspaceService.WorkspaceService;
   const random = yield* SecureRandom.SecureRandom;
   // Moves read a row and write it back; one at a time keeps a report and a cancel from crossing.
   const lock = yield* Semaphore.make(1);
   const now = DateTime.now.pipe(Effect.map(DateTime.formatIso));
+  // Every row write adds a message, so its count is the row's version.
+  const published = (row: DelegationRow) =>
+    changes.publish({
+      kind: "delegation",
+      workspaceId: row.workspace_id,
+      id: row.delegation_id,
+      version: row.messages_json.length,
+    });
 
   const message = (
     row: DelegationRow,
@@ -274,6 +284,7 @@ const make = Effect.gen(function* () {
     yield* db.update(row.workspace_id, "delegations", encodeRow(next), {
       delegation_id: row.delegation_id,
     });
+    yield* published(next);
     return next;
   });
 
@@ -326,6 +337,7 @@ const make = Effect.gen(function* () {
     ]);
     const created = { ...row, messages_json: [briefMessage] };
     yield* db.insert(workspaceId, "delegations", encodeRow(created));
+    yield* published(created);
     return created;
   });
 
@@ -556,7 +568,11 @@ const make = Effect.gen(function* () {
     const rows = [root, ...(yield* openDescendants(root))];
     const by_ = byAgent ? { agentId: by.agentId } : { memberId: by.memberId };
     const cancelled = yield* db.transaction(
-      Effect.forEach(rows, (row) => move(row, "CANCELED", byAgent ? "agent" : "user", { by: by_ })),
+      changes.batch(
+        Effect.forEach(rows, (row) =>
+          move(row, "CANCELED", byAgent ? "agent" : "user", { by: by_ }),
+        ),
+      ),
     );
     yield* Effect.forEach(cancelled, (row) =>
       wakes.drop(by.workspaceId, wakeKey(row.delegation_id)),
@@ -739,6 +755,7 @@ export const layer = Layer.effect(DelegationService, make).pipe(
       WakeQueueService.layer,
       TaskBoardService.layer,
       WorkspaceService.layer,
+      BoardChanges.layer,
     ),
   ),
 );

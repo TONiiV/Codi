@@ -409,6 +409,18 @@ describe("board watch", () => {
       const rewatch = yield* nextWatch;
       yield* Queue.offer(rewatch, changes(taskAt(t2, 3)));
       expect(yield* nextReads(2)).toEqual(["task:t2", "tasks"]);
+      // A delegation's notice is not the board's; it moves only the delegation count.
+      const delegationNotices = board.delegationNotices(at({ workspaceId }));
+      registry.mount(delegationNotices);
+      const before = registry.get(delegationNotices);
+      const delegationId = Telescope.DelegationId.make("g1");
+      yield* Queue.offer(
+        rewatch,
+        changes({ kind: "delegation", workspaceId, id: delegationId, version: 1 }),
+      );
+      yield* Queue.offer(rewatch, changes(taskAt(t2, 4)));
+      expect(yield* nextReads(2)).toEqual(["task:t2", "tasks"]);
+      expect(registry.get(delegationNotices) - before).toBe(1);
       const marker = board.agents(at({ workspaceId }));
       registry.mount(marker);
       expect(yield* readsBefore("agents")).toEqual([]);
