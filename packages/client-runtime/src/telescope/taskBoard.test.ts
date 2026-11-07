@@ -27,7 +27,7 @@ import {
   decideInput,
   decisionOptionsLocked,
   isStaleTaskVersion,
-  reportsInOrder,
+  leaseRecheckDelay,
   sortDecisions,
   TASK_STATUSES,
   tasksByStatus,
@@ -196,30 +196,33 @@ describe("task writes", () => {
   });
 });
 
-describe("reportsInOrder", () => {
-  const entry = (text: string, at: string) => ({ authorId: "agent", text, at });
+describe("leaseRecheckDelay", () => {
+  const now = Date.parse("2026-11-01T00:00:00.000Z");
+  const lease = (expiresAt: string): Telescope.Lease => ({
+    id: Telescope.LeaseId.make("l1"),
+    workspaceId,
+    taskId: Telescope.TaskId.make("t1"),
+    holderAgentId: Telescope.AgentId.make("a1"),
+    holderSubjectId: Telescope.SubjectId.make("s1"),
+    acquiredAt: "2026-10-31T23:59:00.000Z",
+    heartbeatAt: "2026-10-31T23:59:00.000Z",
+    expiresAt,
+  });
   it.each([
-    { name: "empty", entries: [], texts: [] },
+    { name: "no lease", lease: undefined, delay: null },
+    { name: "at its expiry", lease: lease("2026-11-01T00:01:30.000Z"), delay: 90_000 },
     {
-      name: "already in order",
-      entries: [entry("a", "2026-11-01T00:00:00.000Z"), entry("b", "2026-11-01T00:01:00.000Z")],
-      texts: ["a", "b"],
+      name: "a lapse the server has not seen yet",
+      lease: lease("2026-10-31T23:00:00.000Z"),
+      delay: 5_000,
     },
     {
-      name: "an older entry appended late",
-      entries: [entry("new", "2026-11-01T00:05:00.000Z"), entry("old", "2026-11-01T00:01:00.000Z")],
-      texts: ["old", "new"],
+      name: "an expiry closer than the floor",
+      lease: lease("2026-11-01T00:00:01.000Z"),
+      delay: 5_000,
     },
-    {
-      name: "equal times keep append order",
-      entries: [
-        entry("first", "2026-11-01T00:00:00.000Z"),
-        entry("second", "2026-11-01T00:00:00Z"),
-      ],
-      texts: ["first", "second"],
-    },
-  ])("$name", ({ entries, texts }) => {
-    expect(reportsInOrder(entries).map((e) => e.text)).toEqual(texts);
+  ])("$name", ({ lease, delay }) => {
+    expect(leaseRecheckDelay(lease, now)).toBe(delay);
   });
 });
 
@@ -247,13 +250,23 @@ const connectedBoard = Effect.fn("TaskBoardTest.connectedBoard")(function* () {
   const watches = yield* Queue.unbounded<{ readonly notices: Watch; readonly openedAt: number }>();
   const ended = yield* Queue.unbounded<void>();
   let newest: Watch | undefined;
-  const read = <A>(name: string, value: A) => Queue.offer(reads, name).pipe(Effect.as(value));
+  let revoked = false;
+  const read = <A>(name: string, value: A) =>
+    Queue.offer(reads, name).pipe(
+      Effect.andThen(
+        revoked
+          ? Effect.fail(new Telescope.WorkspaceError({ reason: "forbidden", message: "Revoked." }))
+          : Effect.succeed(value),
+      ),
+    );
   const client = {
     [Telescope.WS_METHODS.taskList]: () => read("tasks", { tasks: [] }),
     [Telescope.WS_METHODS.taskGet]: (input: typeof Telescope.TaskGetInput.Type) =>
       read(`task:${input.taskId}`, task(input.taskId, "todo")),
     [Telescope.WS_METHODS.decisionList]: () => read("decisions", { decisions: [] }),
-    [Telescope.WS_METHODS.leaseGet]: () => read("lease", {}),
+    [Telescope.WS_METHODS.leaseGet]: (input: typeof Telescope.TaskGetInput.Type) =>
+      read(`lease:${input.taskId}`, {}),
+    [Telescope.WS_METHODS.agentListMine]: () => read("agents", { agents: [] }),
     [Telescope.WS_METHODS.taskUpdate]: (input: typeof Telescope.TaskUpdateInput.Type) => {
       const echo = { kind: "task" as const, workspaceId, id: input.taskId, version: 2 };
       return Effect.as(
@@ -319,6 +332,8 @@ const connectedBoard = Effect.fn("TaskBoardTest.connectedBoard")(function* () {
     watches,
     /** Signals each time a watch stream ends. */
     ended,
+    /** While revoked, every read is refused as `forbidden`. */
+    setRevoked: (next: boolean) => Effect.sync(() => (revoked = next)),
     /** The next watch, once it has sent `synchronized`. */
     nextWatch: Effect.gen(function* () {
       const opened = yield* Queue.take(watches);
@@ -363,19 +378,22 @@ describe("board watch", () => {
       registry.mount(board.task(at({ workspaceId, taskId: t1 })));
       registry.mount(board.task(at({ workspaceId, taskId: t2 })));
       registry.mount(board.decisions(at({ workspaceId })));
-      expect(yield* nextReads(4)).toEqual(["decisions", "task:t1", "task:t2", "tasks"]);
+      // A lease change commits to its task, so the task's notice re-reads its lease too.
+      registry.mount(board.lease(at({ workspaceId, taskId: t1 })));
+      const all = ["decisions", "lease:t1", "task:t1", "task:t2", "tasks"];
+      expect(yield* nextReads(5)).toEqual(all);
 
       const watch = yield* nextWatch;
       yield* Queue.offer(watch, changes(taskAt(t1, 2)));
-      expect(yield* nextReads(2)).toEqual(["task:t1", "tasks"]);
+      expect(yield* nextReads(3)).toEqual(["lease:t1", "task:t1", "tasks"]);
       yield* Queue.offer(watch, decided);
       expect(yield* nextReads(1)).toEqual(["decisions"]);
       // One write's notices re-read each list once.
       yield* Queue.offer(watch, changes(taskAt(t1, 3), taskAt(t2, 2), decisionNotice));
-      expect(yield* nextReads(4)).toEqual(["decisions", "task:t1", "task:t2", "tasks"]);
+      expect(yield* nextReads(5)).toEqual(all);
 
       yield* reconnect;
-      expect(yield* nextReads(4)).toEqual(["decisions", "task:t1", "task:t2", "tasks"]);
+      expect(yield* nextReads(5)).toEqual(all);
       const rewatch = yield* nextWatch;
       yield* Queue.offer(rewatch, changes(taskAt(t2, 3)));
       expect(yield* nextReads(2)).toEqual(["task:t2", "tasks"]);
@@ -384,18 +402,19 @@ describe("board watch", () => {
 
   it.effect("reads a write once from its echo, and on settle when refused or unwatched", () =>
     Effect.gen(function* () {
-      const { board, registry, watches, ended, nextWatch, nextReads, unread, readsBefore } =
-        yield* connectedBoard();
-      registry.mount(board.tasks(at({ workspaceId })));
+      const fake = yield* connectedBoard();
+      const { board, registry, watches, ended, nextWatch, nextReads, unread, readsBefore } = fake;
+      const tasks = board.tasks(at({ workspaceId }));
+      registry.mount(tasks);
       registry.mount(board.decisions(at({ workspaceId })));
       // No notice names t2, so only the watch failing re-reads it.
       registry.mount(board.task(at({ workspaceId, taskId: t2 })));
-      // The lease read has no trigger: refreshing it marks where a write's own reads end.
-      const lease = board.lease(at({ workspaceId, taskId: t1 }));
-      registry.mount(lease);
-      expect(yield* nextReads(4)).toEqual(["decisions", "lease", "task:t2", "tasks"]);
-      const settled = Effect.sync(() => registry.refresh(lease)).pipe(
-        Effect.andThen(readsBefore("lease")),
+      // The agents read has no trigger: refreshing it marks where a write's own reads end.
+      const marker = board.agents(at({ workspaceId }));
+      registry.mount(marker);
+      expect(yield* nextReads(4)).toEqual(["agents", "decisions", "task:t2", "tasks"]);
+      const settled = Effect.sync(() => registry.refresh(marker)).pipe(
+        Effect.andThen(readsBefore("agents")),
       );
       const watch = yield* nextWatch;
       // A read after a notice shows the watch has synchronized.
@@ -418,6 +437,7 @@ describe("board watch", () => {
       expect(yield* settled).toEqual(["decisions", "tasks"]);
 
       // A refused member's watch stays failed: each read re-reads once and no watch reopens.
+      yield* fake.setRevoked(true);
       yield* Queue.failCause(
         watch,
         Cause.fail(new Telescope.WorkspaceError({ reason: "forbidden", message: "Revoked." })),
@@ -430,6 +450,16 @@ describe("board watch", () => {
       yield* Effect.promise(() => board.updateTask.run(registry, at(write)));
       expect(yield* settled).toEqual(["decisions", "tasks"]);
       expect(yield* unread).toBe(0);
+
+      // Once a read is answered again the member is back: the watch reopens and each read re-reads.
+      yield* fake.setRevoked(false);
+      registry.refresh(tasks);
+      expect(yield* nextReads(1)).toEqual(["tasks"]);
+      const restored = yield* nextWatch;
+      expect(yield* nextReads(3)).toEqual(["decisions", "task:t2", "tasks"]);
+      yield* Queue.offer(restored, decided);
+      expect(yield* nextReads(1)).toEqual(["decisions"]);
+      expect(yield* unread).toBe(0);
     }),
   );
 
@@ -438,9 +468,9 @@ describe("board watch", () => {
       const { board, registry, watches, nextReads, readsBefore } = yield* connectedBoard();
       registry.mount(board.tasks(at({ workspaceId })));
       registry.mount(board.decisions(at({ workspaceId })));
-      const lease = board.lease(at({ workspaceId, taskId: t1 }));
-      registry.mount(lease);
-      expect(yield* nextReads(3)).toEqual(["decisions", "lease", "tasks"]);
+      const marker = board.agents(at({ workspaceId }));
+      registry.mount(marker);
+      expect(yield* nextReads(3)).toEqual(["agents", "decisions", "tasks"]);
       const first = yield* Queue.take(watches);
       yield* Queue.offer(first.notices, { kind: "synchronized" });
       yield* Queue.failCause(
@@ -456,8 +486,8 @@ describe("board watch", () => {
       // Not yet subscribed again, so nothing echoes a write: it re-reads on settle.
       const write = { workspaceId, taskId: t1, baseVersion: 1, set: { status: "done" as const } };
       yield* Effect.promise(() => board.updateTask.run(registry, at(write)));
-      registry.refresh(lease);
-      expect(yield* readsBefore("lease")).toEqual(["decisions", "tasks"]);
+      registry.refresh(marker);
+      expect(yield* readsBefore("agents")).toEqual(["decisions", "tasks"]);
 
       yield* Queue.offer(second.notices, { kind: "synchronized" });
       expect(yield* nextReads(2)).toEqual(["decisions", "tasks"]);

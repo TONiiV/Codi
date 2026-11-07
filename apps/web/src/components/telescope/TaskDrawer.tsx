@@ -1,5 +1,6 @@
+import { RegistryContext } from "@effect/atom-react";
 import { scopeThreadRef } from "@t3tools/client-runtime/environment";
-import { reportsInOrder } from "@t3tools/client-runtime/telescope/taskBoard";
+import { leaseRecheckDelay } from "@t3tools/client-runtime/telescope/taskBoard";
 import {
   AuthOrchestrationOperateScope,
   type EnvironmentId,
@@ -8,7 +9,7 @@ import {
 } from "@t3tools/contracts";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { ExternalLinkIcon, MessageSquarePlusIcon } from "lucide-react";
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useContext, useEffect, useState } from "react";
 
 import { useThreadShell } from "../../state/entities";
 import { useEnvironment } from "../../state/environments";
@@ -17,7 +18,7 @@ import { useEnvironmentScope } from "../../state/session";
 import { threadFamilies } from "../../state/threads";
 import { buildThreadRouteParams } from "../../threadRoutes";
 import { sideChatSourceBlock } from "../ChatView.logic";
-import { useSideChat } from "../chat/useSideChat";
+import { type SideChatFailureStage, useSideChat } from "../chat/useSideChat";
 import { TELESCOPE_PATH } from "../sidebar/mainAppLocation";
 import { Button } from "../ui/button";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "../ui/empty";
@@ -58,7 +59,14 @@ const SIDE_CHAT_BLOCKED = {
   loading: "side chat 还没准备好，稍后再试。",
   unsupported: "这个环境的 Codi 服务器还不支持 side chat，更新后才能用。",
   forbidden: "你在这个环境里没有操作对话的权限。",
+  gone: "关联的对话已归档或删除，不能从它开 side chat。",
 } as const;
+
+const SIDE_CHAT_FAILED: Record<SideChatFailureStage, string> = {
+  fork: "服务器没有开出 side chat，请稍后再试。",
+  sync: "side chat 没有同步到这台设备，请再试一次。",
+  send: "第一条消息没有发出去，请再试一次。",
+};
 
 function ThreadLink({
   environmentId,
@@ -90,6 +98,7 @@ function SideChatButton({
   task: Telescope.Task;
 }) {
   const navigate = useNavigate();
+  const registry = useContext(RegistryContext);
   const [pending, setPending] = useState(false);
   const threadRef =
     task.threadId === undefined ? null : scopeThreadRef(environmentId, task.threadId);
@@ -103,10 +112,14 @@ function SideChatButton({
       : null,
   );
   const thread = shell ?? family.data?.threads.find((row) => row.id === task.threadId) ?? null;
+  const familyFailed = family.data === null && family.error !== null;
+  // The shell and the family read carry active threads only.
   const block =
     family.data === null && family.isPending
       ? "loading"
-      : sideChatSourceBlock(thread, capabilities ?? null, canOperate);
+      : family.data !== null && thread === null
+        ? "gone"
+        : sideChatSourceBlock(thread, capabilities ?? null, canOperate);
   const hint =
     threadRef === null
       ? "这条任务还没有关联对话，关联后才能在 side chat 里聊它。"
@@ -115,8 +128,12 @@ function SideChatButton({
         : SIDE_CHAT_BLOCKED[block];
   const sideChat = useSideChat({
     threadRef,
-    onError: (description) =>
-      toastManager.add({ type: "error", title: "没能加到 side chat", description }),
+    onError: (_message, stage) =>
+      toastManager.add({
+        type: "error",
+        title: "没能加到 side chat",
+        description: SIDE_CHAT_FAILED[stage],
+      }),
   });
   const prompt = [
     `关于任务「${task.title}」（${task.id}）`,
@@ -127,7 +144,7 @@ function SideChatButton({
     <div className="flex flex-col items-start gap-1.5">
       <Button
         size="sm"
-        disabled={hint !== null || pending}
+        disabled={hint !== null || familyFailed || pending}
         onClick={async () => {
           if (threadRef === null) return;
           setPending(true);
@@ -143,7 +160,14 @@ function SideChatButton({
         {pending ? <Spinner /> : <MessageSquarePlusIcon />}
         加到 side chat
       </Button>
-      {hint === null ? null : <p className="text-xs text-muted-foreground">{hint}</p>}
+      {familyFailed && threadRef !== null ? (
+        <ErrorNote
+          text="没有读到关联对话的状态"
+          onRetry={() => threadFamilies.refresh(registry, environmentId, threadRef.threadId)}
+        />
+      ) : hint === null ? null : (
+        <p className="text-xs text-muted-foreground">{hint}</p>
+      )}
     </div>
   );
 }
@@ -154,6 +178,15 @@ function TaskDetail({ target, taskId }: { target: BoardTarget; taskId: Telescope
   const query = useEnvironmentQuery(telescopeBoard.task({ environmentId, input }));
   const leaseQuery = useEnvironmentQuery(telescopeBoard.lease({ environmentId, input }));
   const lease = leaseQuery.data?.lease;
+  const { dataUpdatedAt, refresh: refreshLease } = leaseQuery;
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- a lease lapses on the server's clock with no notice, so re-read it then
+  useEffect(() => {
+    const delay = leaseRecheckDelay(lease, Date.now());
+    if (delay === null) return;
+    const handle = window.setTimeout(refreshLease, delay);
+    return () => window.clearTimeout(handle);
+    // oxlint-disable-next-line react/exhaustive-effect-dependencies -- An unchanged re-read keeps the same lease object; its time still restarts the timer.
+  }, [lease, dataUpdatedAt, refreshLease]);
   const names = useBoardNames(target);
   const task = query.data;
   if (task === null)
@@ -172,7 +205,7 @@ function TaskDetail({ target, taskId }: { target: BoardTarget; taskId: Telescope
     );
   const holder =
     lease && (names(lease.holderAgentId) ?? names(lease.holderSubjectId) ?? "其他成员的 agent");
-  const reports = reportsInOrder(task.freeText);
+  const reports = task.freeText;
   return (
     <>
       <SheetHeader>

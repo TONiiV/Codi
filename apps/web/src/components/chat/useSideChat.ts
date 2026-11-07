@@ -16,6 +16,9 @@ import { threadEnvironment } from "../../state/threads";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { useOrchestrationCommand } from "../../state/use-orchestration-command";
 
+/** Where a start failed: the fork, the side chat reaching this client, or its first message. */
+export type SideChatFailureStage = "fork" | "sync" | "send";
+
 /**
  * Starts side chats from `threadRef`, or offers none when it is null. `open` forks the
  * thread's latest stable point, sends `prompt` there, and shows the side chat's tab. It
@@ -23,7 +26,7 @@ import { useOrchestrationCommand } from "../../state/use-orchestration-command";
  */
 export function useSideChat(input: {
   readonly threadRef: ScopedThreadRef | null;
-  readonly onError: (message: string) => void;
+  readonly onError: (message: string, stage: SideChatFailureStage) => void;
 }) {
   const pendingRef = useRef(false);
   const forkSideChat = useAtomCommand(threadEnvironment.forkSideChat, { reportFailure: false });
@@ -34,10 +37,11 @@ export function useSideChat(input: {
   const reportFailure = (
     failure: Extract<AtomCommandResult<unknown, unknown>, { readonly _tag: "Failure" }>,
     fallback: string,
+    stage: SideChatFailureStage,
   ) => {
     if (isAtomCommandInterrupted(failure)) return;
     const error = squashAtomCommandFailure(failure);
-    input.onError(error instanceof Error ? error.message : fallback);
+    input.onError(error instanceof Error ? error.message : fallback, stage);
   };
   const start = async (threadRef: ScopedThreadRef, prompt: string | undefined) => {
     const targetThreadId = newThreadId();
@@ -46,7 +50,7 @@ export function useSideChat(input: {
       input: { sourceThreadId: threadRef.threadId, targetThreadId, title: "Side chat" },
     });
     if (fork._tag === "Failure") {
-      reportFailure(fork, "Could not start a side chat.");
+      reportFailure(fork, "Could not start a side chat.", "fork");
       return false;
     }
     // Drops the empty side chat a failed start leaves behind; one that got its message stays.
@@ -57,13 +61,13 @@ export function useSideChat(input: {
       });
     const targetRef = scopeThreadRef(threadRef.environmentId, targetThreadId);
     if (!(await waitForThreadShell(targetRef))) {
-      input.onError("The side chat was created, but it did not reach this client.");
+      input.onError("The side chat was created, but it did not reach this client.", "sync");
       discard();
       return false;
     }
     const sideChat = readThreadShell(targetRef);
     if (sideChat === null) {
-      input.onError("The side chat is no longer available.");
+      input.onError("The side chat is no longer available.", "sync");
       discard();
       return false;
     }
@@ -82,7 +86,7 @@ export function useSideChat(input: {
         },
       });
       if (turn._tag === "Failure") {
-        reportFailure(turn, "Could not send the side chat message.");
+        reportFailure(turn, "Could not send the side chat message.", "send");
         discard();
         return false;
       }
