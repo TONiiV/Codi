@@ -55,7 +55,7 @@ const decisionLink = (hash: Telescope.DecisionId) => ({
   hash,
 });
 
-export function NeedsYouBadge({ task }: { task: Telescope.Task }) {
+export function NeedsYouBadge({ task }: { task: Pick<Telescope.Task, "conflictDecisionId"> }) {
   if (task.conflictDecisionId === undefined) return null;
   return (
     <Badge variant="error" render={<Link {...decisionLink(task.conflictDecisionId)} />}>

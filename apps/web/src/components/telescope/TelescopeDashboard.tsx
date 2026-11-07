@@ -20,7 +20,7 @@ import {
 import { RefreshIcon } from "../ui/refresh-icon";
 import { Skeleton } from "../ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
-import { NoWorkspace, TASK_STATUS } from "./TasksParts";
+import { NeedsYouBadge, NoWorkspace, TASK_STATUS } from "./TasksParts";
 import { telescope, useTelescopeWorkspaces } from "./telescopeState";
 
 const MINUTE = 60_000;
@@ -120,7 +120,7 @@ function SummaryView({ summary }: { summary: Telescope.DashboardSummary }) {
                     <Badge variant={TASK_STATUS[task.status].badge}>
                       {TASK_STATUS[task.status].label}
                     </Badge>
-                    {task.conflictDecisionId ? <Badge variant="warning">有冲突</Badge> : null}
+                    <NeedsYouBadge task={task} />
                   </span>
                 </TableCell>
                 <TableCell>
