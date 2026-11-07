@@ -285,7 +285,7 @@ const make = Effect.gen(function* () {
     workspaceId: Telescope.WorkspaceId,
   ) {
     const { self } = yield* workspaces.get(caller, { workspaceId });
-    if (self.role !== "admin")
+    if (self.role !== "admin" || "runId" in caller)
       return yield* new Telescope.WorkspaceError({
         reason: "forbidden",
         message: "Only admins manage budgets and stops.",

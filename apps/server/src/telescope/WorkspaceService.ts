@@ -177,6 +177,7 @@ const make = Effect.gen(function* () {
   });
 
   // Missing workspaces and foreign ones answer alike, so ids cannot be probed.
+  // An agent run never acts as an admin, whatever its member's role.
   const requireMember = Effect.fn("WorkspaceService.requireMember")(function* (
     workspaceId: Telescope.WorkspaceId,
     caller: Caller,
@@ -185,7 +186,7 @@ const make = Effect.gen(function* () {
     const member = yield* callerMember(workspaceId, caller);
     if (member === undefined || member.revoked_at !== null)
       return yield* fail("forbidden", "You are not a member of this workspace.");
-    if (role !== undefined && member.role !== role)
+    if (role !== undefined && (member.role !== role || "runId" in caller))
       return yield* fail("forbidden", "Only workspace admins can do this.");
     return member;
   });

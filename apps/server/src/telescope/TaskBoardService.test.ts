@@ -493,7 +493,7 @@ it.layer(layer)("Telescope task board", (it) => {
 
   it.effect("keeps the conflict marker out of merges and settles it with its decision", () =>
     Effect.gen(function* () {
-      const { workspaces, board, a } = yield* setup;
+      const { workspaces, board, a, agent } = yield* setup;
       const bob = { caller: session("bob") };
       const { code } = yield* workspaces.invite(alice.caller, { workspaceId: a, role: "member" });
       yield* workspaces.accept(bob.caller, { code, displayName: "Bob" });
@@ -532,6 +532,16 @@ it.layer(layer)("Telescope task board", (it) => {
       const holder = { ...alice, authorId: "agent-h" };
       yield* board.acquireLease(holder, { workspaceId: a, taskId: task.id });
       yield* update(holder, 3, { conflictDecisionId: null });
+      assert.strictEqual((yield* current).conflictDecisionId, d2);
+      assert.isDefined(d2);
+      const { version } = yield* current;
+      const agentSettle = { workspaceId: a, title: "Settle", text: "", supersedes: d2 };
+      const refused = yield* Effect.all([
+        Effect.flip(update(agent, version, { conflictDecisionId: null })),
+        Effect.flip(board.createDecision(agent, { ...agentSettle, chosen: "incoming" })),
+      ]);
+      assert.deepStrictEqual(refused.map(reasonOf), ["forbidden", "forbidden"]);
+      yield* board.createDecision(agent, { ...agentSettle, status: "proposed" });
       assert.strictEqual((yield* current).conflictDecisionId, d2);
 
       yield* decide(d2, "incoming");

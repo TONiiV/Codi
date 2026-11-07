@@ -75,7 +75,7 @@ const OpenTicketTool = boardTool("open_ticket", {
 const TicketUpdateTool = boardTool("ticket_update", {
   title: "Update ticket",
   description:
-    "Change a Telescope ticket's fields with `set`, or append a `note`; notes are never edited. `baseVersion`: the `version` you read. A stale write is merged; fields no rule settles open a decision, returned as `conflict`.",
+    "Change a Telescope ticket's fields with `set`, or append a `note`; notes are never edited. `baseVersion`: the `version` you read. A stale write is merged; fields no rule settles open a decision for a member to settle, returned as `conflict`.",
   parameters: Telescope.TaskUpdateInput.mapFields(Struct.omit(["workspaceId"])),
   success: Telescope.TaskUpdateResult,
   readonly: false,
@@ -92,7 +92,8 @@ const TicketLeaseTool = boardTool("ticket_lease", {
 
 const TicketLeaseRenewTool = boardTool("ticket_lease_renew", {
   title: "Renew ticket lease",
-  description: "Extend a ticket lease you hold, by `leaseId`, before its `expiresAt`.",
+  description:
+    "Extend a ticket lease, by `leaseId`, before its `expiresAt`. You or any agent or device of the member you act for may renew it.",
   parameters: Telescope.LeaseScopedInput.mapFields(Struct.omit(["workspaceId"])),
   success: Telescope.Lease,
   readonly: false,
@@ -100,7 +101,8 @@ const TicketLeaseRenewTool = boardTool("ticket_lease_renew", {
 
 const TicketLeaseReleaseTool = boardTool("ticket_lease_release", {
   title: "Release ticket lease",
-  description: "Release a ticket lease you hold, by `leaseId`, so others can take the ticket.",
+  description:
+    "Release a ticket lease, by `leaseId`, so others can take the ticket. You or any agent or device of the member you act for may release it.",
   parameters: Telescope.LeaseScopedInput.mapFields(Struct.omit(["workspaceId"])),
   success: Schema.Struct({}),
   readonly: false,
@@ -118,7 +120,7 @@ const DecisionListTool = boardTool("decision_list", {
 const DecisionRecordTool = boardTool("decision_record", {
   title: "Record decision",
   description:
-    "Record a decision on the Telescope board. `status` defaults to decided; use proposed when a member must decide. `supersedes`: the id of the decision it replaces. To settle a proposal, supersede it with `chosen` set to one of its option ids.",
+    "Record a decision on the Telescope board. `status` defaults to decided; use proposed to ask a member to decide (需要你定). `supersedes`: the id of the decision it replaces. Only a member settles a proposal; record your recommendation as a new proposal instead.",
   parameters: Telescope.DecisionCreateInput.mapFields(Struct.omit(["workspaceId"])),
   success: Telescope.Decision,
   readonly: false,
@@ -130,7 +132,7 @@ const AgentListTool = boardTool("agent_list", {
     "List the agents of the member you act for: their chief of staff, project Chief Agents and custom agents, with each one's project and standing powers.",
   parameters: Tool.EmptyParams,
   success: Telescope.AgentListResult,
-  readonly: true,
+  readonly: false,
 });
 
 export const TelescopeToolkit = Toolkit.make(

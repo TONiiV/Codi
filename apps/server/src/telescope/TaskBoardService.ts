@@ -373,6 +373,8 @@ const make = Effect.gen(function* () {
     input: In<"telescope.task.update">,
   ) {
     const author = yield* requireMember(actor, input.workspaceId);
+    if (actor.onBehalfOf !== undefined && "conflictDecisionId" in (input.set ?? {}))
+      return yield* fail("forbidden", "Only a member can clear a conflict marker.");
     return yield* db.transaction(
       findTask(input.workspaceId, input.taskId).pipe(
         Effect.flatMap((current) => commitTask(author, input, current)),
@@ -457,6 +459,8 @@ const make = Effect.gen(function* () {
       if (old.status === "superseded")
         return yield* fail("conflict", "That decision has already been superseded.");
       if (status === "decided") {
+        if (old.status === "proposed" && author.onBehalfOf !== undefined)
+          return yield* fail("forbidden", "Only a member can settle a proposal.");
         // Deciding a proposal also retires what it proposed to replace: one step, no recursion.
         const target =
           old.status === "proposed" && old.supersedes !== undefined

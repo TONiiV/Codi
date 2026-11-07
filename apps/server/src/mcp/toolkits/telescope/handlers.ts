@@ -137,7 +137,7 @@ const handlers = {
       ),
     ),
   ),
-  agent_list: McpToolAccess.readsAsCaller(() =>
+  agent_list: McpToolAccess.actsAsCaller(() =>
     gated("agent_list", {}, (caller) =>
       Effect.flatMap(AgentService.AgentService, (agents) =>
         agents.listMine(caller, { workspaceId: caller.workspaceId }),

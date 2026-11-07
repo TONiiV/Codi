@@ -181,12 +181,65 @@ it.effect("works the board as the run's agent through every Telescope tool", () 
       chief.id,
     );
 
+    const board = yield* TaskBoardService.TaskBoardService;
+    const member = { caller: ann };
+    const { version } = yield* board.getTask(member, { workspaceId, taskId });
+    yield* board.updateTask(member, {
+      workspaceId,
+      taskId,
+      baseVersion: version,
+      set: { title: "Ann v2" },
+    });
+    const stale = (yield* call("ticket_update", {
+      taskId,
+      baseVersion: version,
+      set: { title: "Agent title" },
+    })) as typeof Telescope.TaskUpdateResult.Type;
+    const conflictId = stale.conflict?.decisionId;
+    assert.isDefined(conflictId);
+    const memberOnly = (message: string) => ({ code: "capability_denied", message });
+    assert.deepInclude(
+      yield* call("ticket_update", {
+        taskId,
+        baseVersion: stale.version,
+        set: { conflictDecisionId: null },
+      }),
+      memberOnly("Only a member can clear a conflict marker."),
+    );
+    assert.deepInclude(
+      yield* call("decision_record", {
+        title: "Take the agent's title",
+        text: "-",
+        supersedes: conflictId,
+        chosen: "incoming",
+      }),
+      memberOnly("Only a member can settle a proposal."),
+    );
+    assert.deepInclude(
+      yield* call("decision_record", {
+        title: "Keep Ann's title",
+        text: "Recommend keeping it.",
+        status: "proposed",
+        supersedes: conflictId,
+      }),
+      { status: "proposed", authorId: chief.id },
+    );
+    yield* board.createDecision(member, {
+      workspaceId,
+      title: "Keep",
+      text: "-",
+      supersedes: conflictId,
+      chosen: "keep",
+    });
+    const settled = yield* board.getTask(member, { workspaceId, taskId });
+    assert.deepStrictEqual([settled.title, settled.conflictDecisionId], ["Ann v2", undefined]);
+
     const { entries } = yield* (yield* GrantService.GrantService).auditList(ann, { workspaceId });
     assert.deepStrictEqual(
       entries.map((entry) => entry.outcome).toSorted(),
       Array.from({ length: entries.length }, () => "allowed"),
     );
-    assert.strictEqual(entries.length, TOOL_COUNT + 1, "every call is audited");
+    assert.strictEqual(entries.length, TOOL_COUNT + 5, "every call is audited");
   }).pipe(Effect.provide(layer)),
 );
 
