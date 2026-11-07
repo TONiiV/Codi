@@ -1,7 +1,9 @@
+import { TASK_STATUSES, tasksByStatus } from "@t3tools/client-runtime/telescope/taskBoard";
 import { Telescope } from "@t3tools/contracts";
 import { ChevronDownIcon, ChevronRightIcon } from "lucide-react";
 import { useState } from "react";
 
+import { cn } from "../../lib/utils";
 import { useEnvironmentQuery } from "../../state/query";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
@@ -12,6 +14,7 @@ import { telescopeBoard } from "./telescopeState";
 import {
   type BoardTarget,
   NeedsYouBadge,
+  StatusBadge,
   TASK_STATUS,
   useBoardNames,
   useTaskWrite,
@@ -180,5 +183,70 @@ export function TasksTable(props: { target: BoardTarget; tasks: ReadonlyArray<Te
         ))}
       </TableBody>
     </Table>
+  );
+}
+
+const DRAG_TYPE = "application/x-telescope-task";
+
+/** One column per status; a drop is a `task.update` pinned to the card's version. */
+export function TasksBoard(props: { target: BoardTarget; tasks: ReadonlyArray<Telescope.Task> }) {
+  const write = useTaskWrite(props.target);
+  const names = useBoardNames(props.target);
+  const [over, setOver] = useState<Telescope.TaskStatus | null>(null);
+  const columns = tasksByStatus(props.tasks);
+  return (
+    <div className="flex items-start gap-3 overflow-x-auto p-4">
+      {TASK_STATUSES.map((status) => (
+        <section
+          key={status}
+          aria-label={TASK_STATUS[status].label}
+          onDragOver={(event) => {
+            if (!event.dataTransfer.types.includes(DRAG_TYPE)) return;
+            event.preventDefault();
+            setOver(status);
+          }}
+          onDragLeave={(event) => {
+            const next = event.relatedTarget;
+            if (!(next instanceof Node) || !event.currentTarget.contains(next)) setOver(null);
+          }}
+          onDrop={(event) => {
+            event.preventDefault();
+            setOver(null);
+            const id = event.dataTransfer.getData(DRAG_TYPE);
+            const task = props.tasks.find((item) => item.id === id);
+            if (task && task.status !== status) void write(task, { set: { status } });
+          }}
+          className={cn(
+            "flex w-64 shrink-0 flex-col gap-2 rounded-xl bg-muted/50 p-2",
+            over === status && "ring-2 ring-primary/40",
+          )}
+        >
+          <header className="flex items-center gap-2 px-1 pt-1">
+            <StatusBadge status={status} />
+            <span className="text-xs text-muted-foreground tabular-nums">
+              {columns[status].length}
+            </span>
+          </header>
+          {columns[status].map((task) => (
+            <div
+              key={task.id}
+              draggable
+              onDragStart={(event) => {
+                event.dataTransfer.setData(DRAG_TYPE, task.id);
+                event.dataTransfer.effectAllowed = "move";
+              }}
+              className="flex cursor-grab flex-col gap-1.5 rounded-lg border bg-card p-3 text-sm shadow-xs"
+            >
+              <span className="font-medium wrap-anywhere">{task.title}</span>
+              <span className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                <NeedsYouBadge task={task} />
+                {task.ownerAgentId && (names(task.ownerAgentId) ?? "其他成员的 agent")}
+                <span className="ms-auto tabular-nums">v{task.version}</span>
+              </span>
+            </div>
+          ))}
+        </section>
+      ))}
+    </div>
   );
 }

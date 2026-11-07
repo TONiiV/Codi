@@ -1,5 +1,6 @@
 import { Telescope } from "@t3tools/contracts";
-import { PlusIcon } from "lucide-react";
+import { useNavigate } from "@tanstack/react-router";
+import { Columns3Icon, PlusIcon, TableIcon } from "lucide-react";
 import { useState } from "react";
 
 import { useEnvironmentQuery } from "../../state/query";
@@ -13,6 +14,7 @@ import {
   DialogPopup,
   DialogTitle,
 } from "../ui/dialog";
+import { TELESCOPE_PATH } from "../sidebar/mainAppLocation";
 import { Input } from "../ui/input";
 import { TelescopeEmptyState } from "./TelescopeShell";
 import { telescopeBoard } from "./telescopeState";
@@ -23,7 +25,8 @@ import {
   useBoardCommand,
   useBoardTarget,
 } from "./TasksParts";
-import { TasksTable } from "./TasksViews";
+import { TasksBoard, TasksTable } from "./TasksViews";
+import { type TasksLayout, useTasksLayout } from "./telescopeViews";
 
 function NewTaskDialog({ target }: { target: BoardTarget }) {
   const [open, setOpen] = useState(false);
@@ -72,17 +75,45 @@ function NewTaskDialog({ target }: { target: BoardTarget }) {
 }
 
 function TasksBody({ target }: { target: BoardTarget }) {
+  const layout = useTasksLayout();
+  const navigate = useNavigate();
   const input = { workspaceId: target.workspaceId };
   const query = useEnvironmentQuery(
     telescopeBoard.tasks({ environmentId: target.environmentId, input }),
   );
   const tasks = query.data?.tasks ?? [];
+  const View = layout === "table" ? TasksTable : TasksBoard;
+  const layoutButton = (id: TasksLayout, label: string, Icon: typeof TableIcon) => (
+    <Button
+      size="xs"
+      variant={layout === id ? "secondary" : "ghost-muted"}
+      aria-pressed={layout === id}
+      onClick={() =>
+        void navigate({
+          to: TELESCOPE_PATH,
+          search: { view: "tasks", ...(id === "board" ? { layout: id } : {}) },
+          replace: true,
+        })
+      }
+    >
+      <Icon /> {label}
+    </Button>
+  );
   return (
-    <BoardFrame query={query} actions={<NewTaskDialog target={target} />}>
+    <BoardFrame
+      query={query}
+      actions={
+        <>
+          {layoutButton("table", "表格", TableIcon)}
+          {layoutButton("board", "按状态", Columns3Icon)}
+          <NewTaskDialog target={target} />
+        </>
+      }
+    >
       {tasks.length === 0 ? (
         <TelescopeEmptyState view="tasks" />
       ) : (
-        <TasksTable target={target} tasks={tasks} />
+        <View target={target} tasks={tasks} />
       )}
     </BoardFrame>
   );

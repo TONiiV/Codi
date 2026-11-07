@@ -7,9 +7,9 @@ import {
 import { describe, expect, it } from "vite-plus/test";
 
 import { Route as TelescopeRoute } from "../../routes/_chat.telescope";
-import { telescopeViewAt } from "./telescopeViews";
+import { telescopeSearchAt } from "./telescopeViews";
 
-function matchedView(url: string) {
+function matchedSearch(url: string) {
   const root = createRootRoute();
   const chat = createRoute({ getParentRoute: () => root, id: "_chat" });
   const telescope = createRoute({
@@ -21,27 +21,36 @@ function matchedView(url: string) {
     routeTree: root.addChildren([chat.addChildren([telescope])]),
     history: createMemoryHistory({ initialEntries: [url] }),
   });
-  return router.matchRoutes(router.latestLocation).at(-1)?.search.view;
+  return router.matchRoutes(router.latestLocation).at(-1)?.search;
 }
 
 describe("telescope view", () => {
-  it("deep links to a known view and falls back to chats otherwise", () => {
-    expect(matchedView("/telescope?view=tasks")).toBe("tasks");
-    expect(matchedView("/telescope?view=lighthouse")).toBe("chats");
-    expect(matchedView("/telescope?view=123")).toBe("chats");
-    expect(matchedView("/telescope")).toBe("chats");
+  it("deep links to a known view and layout and falls back otherwise", () => {
+    expect(matchedSearch("/telescope?view=tasks")).toEqual({ view: "tasks" });
+    expect(matchedSearch("/telescope?view=tasks&layout=board")).toEqual({
+      view: "tasks",
+      layout: "board",
+    });
+    expect(telescopeSearchAt("/telescope", { view: "tasks", layout: "grid" }, null)).toEqual({
+      view: "tasks",
+    });
+    expect(matchedSearch("/telescope?view=lighthouse")).toEqual({ view: "chats" });
+    expect(matchedSearch("/telescope?view=123")).toEqual({ view: "chats" });
+    expect(matchedSearch("/telescope")).toEqual({ view: "chats" });
   });
 
   it("stays on behind a Settings or Usage modal opened from Telescope", () => {
     expect({
-      settings: telescopeViewAt("/settings/general", undefined, "/telescope?view=tasks"),
-      usage: telescopeViewAt("/usage", undefined, "/telescope"),
-      fromCode: telescopeViewAt("/settings", undefined, "/env/thread"),
-      noOpener: telescopeViewAt("/usage", undefined, null),
-      utilityPage: telescopeViewAt("/pull-requests", undefined, "/telescope?view=tasks"),
+      settings: telescopeSearchAt("/settings/general", {}, "/telescope?view=tasks"),
+      board: telescopeSearchAt("/settings", {}, "/telescope?view=tasks&layout=board"),
+      usage: telescopeSearchAt("/usage", {}, "/telescope"),
+      fromCode: telescopeSearchAt("/settings", {}, "/env/thread"),
+      noOpener: telescopeSearchAt("/usage", {}, null),
+      utilityPage: telescopeSearchAt("/pull-requests", {}, "/telescope?view=tasks"),
     }).toEqual({
-      settings: "tasks",
-      usage: "chats",
+      settings: { view: "tasks" },
+      board: { view: "tasks", layout: "board" },
+      usage: { view: "chats" },
       fromCode: null,
       noOpener: null,
       utilityPage: null,

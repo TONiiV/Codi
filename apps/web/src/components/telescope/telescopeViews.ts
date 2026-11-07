@@ -54,8 +54,21 @@ export const TELESCOPE_VIEWS = [
 
 export type TelescopeView = (typeof TELESCOPE_VIEWS)[number]["id"];
 
-export function parseTelescopeView(raw: unknown): TelescopeView {
+function parseTelescopeView(raw: unknown): TelescopeView {
   return TELESCOPE_VIEWS.find((view) => view.id === raw)?.id ?? "chats";
+}
+
+export type TasksLayout = "table" | "board";
+
+/** The tasks layout rides along every Telescope URL, so switching views keeps it. */
+type TelescopeSearch = {
+  readonly view: TelescopeView;
+  readonly layout?: "board";
+};
+
+export function parseTelescopeSearch(raw: Record<string, unknown>): TelescopeSearch {
+  const view = parseTelescopeView(raw.view);
+  return raw.layout === "board" ? { view, layout: "board" } : { view };
 }
 
 export function telescopeViewEntry(view: TelescopeView) {
@@ -63,19 +76,19 @@ export function telescopeViewEntry(view: TelescopeView) {
 }
 
 /**
- * The Telescope view on screen: its own route, or the route a Settings or Usage modal was opened
- * from, so the shell stays put behind the modal.
+ * The Telescope search in effect: its own route's, or that of the route a Settings or Usage modal
+ * was opened from, so the shell stays put behind the modal.
  */
-export function telescopeViewAt(
+export function telescopeSearchAt(
   pathname: string,
-  searchView: unknown,
+  search: Record<string, unknown>,
   modalReturnHref: string | null,
-): TelescopeView | null {
-  if (pathname === TELESCOPE_PATH) return parseTelescopeView(searchView);
+): TelescopeSearch | null {
+  if (pathname === TELESCOPE_PATH) return parseTelescopeSearch(search);
   if (!isAppModalPage(pathname) || modalReturnHref === null) return null;
   const opener = new URL(modalReturnHref, "http://codi.local");
   return opener.pathname === TELESCOPE_PATH
-    ? parseTelescopeView(opener.searchParams.get("view"))
+    ? parseTelescopeSearch(Object.fromEntries(opener.searchParams))
     : null;
 }
 
@@ -83,6 +96,14 @@ export function telescopeViewAt(
 export function useTelescopeView(): TelescopeView | null {
   return useLocation({
     select: (location) =>
-      telescopeViewAt(location.pathname, location.search.view, peekAppModalReturnHref()),
+      telescopeSearchAt(location.pathname, location.search, peekAppModalReturnHref())?.view ?? null,
+  });
+}
+
+export function useTasksLayout(): TasksLayout {
+  return useLocation({
+    select: (location) =>
+      telescopeSearchAt(location.pathname, location.search, peekAppModalReturnHref())?.layout ??
+      "table",
   });
 }
