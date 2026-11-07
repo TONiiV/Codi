@@ -802,6 +802,40 @@ const layerCommandReadiness = HttpRouter.middleware(
   { global: true },
 );
 
+// Telescope's services as one argument of the layerMakeRoutes pipe: Effect's pipe takes at most 20.
+const provideTelescope = <A, E, R>(layer: Layer.Layer<A, E, R>) =>
+  layer.pipe(
+    Layer.provide(Layer.merge(TelescopeWorkers.layer, TelescopeWakeQueue.layer)),
+    Layer.provide(TelescopeWorkspaces.layer),
+    // The same notice hub TaskBoardService publishes to, by layer memoization.
+    Layer.provide(Layer.merge(TelescopeBoard.layer, TelescopeBoardChanges.layer)),
+    Layer.provide(
+      TelescopeAgentRuntime.layer.pipe(
+        Layer.provide(
+          Layer.merge(
+            ProviderAdapterRegistry.layerFromProviderInstanceRegistry,
+            TelescopeWorkspaces.layer,
+          ),
+        ),
+        Layer.provideMerge(TelescopeAgents.layer),
+      ),
+    ),
+    Layer.provide(
+      Layer.mergeAll(
+        TelescopeRuns.layer,
+        TelescopeGrants.layer,
+        TelescopeMemory.layer,
+        TelescopeToolGateway.layer,
+        TelescopeDelegations.layer,
+        TelescopeAttribution.layer,
+        TelescopeRouting.layer,
+        TelescopeWorkspaceData.layer,
+        TelescopeDb.layer,
+      ),
+    ),
+    Layer.provide(TelescopeTokenSaver.layer.pipe(Layer.provide(UsageProjectResolver.layer))),
+  );
+
 const layerMakeRoutes = Layer.mergeAll(
   Layer.mergeAll(
     HttpApiBuilder.layer(EnvironmentHttpApi).pipe(
@@ -844,35 +878,7 @@ const layerMakeRoutes = Layer.mergeAll(
   Layer.provide(RemoteDelegation.layer.pipe(Layer.provide(ProjectionStoreV2.layer))),
   // Links agents ask for: shown in a thread from /mcp, answered over WebSocket.
   Layer.provide(PeerLinkRequests.layer),
-  Layer.provide(Layer.merge(TelescopeWorkers.layer, TelescopeWakeQueue.layer)),
-  Layer.provide(TelescopeWorkspaces.layer),
-  // The same notice hub TaskBoardService publishes to, by layer memoization.
-  Layer.provide(Layer.merge(TelescopeBoard.layer, TelescopeBoardChanges.layer)),
-  Layer.provide(
-    TelescopeAgentRuntime.layer.pipe(
-      Layer.provide(
-        Layer.merge(
-          ProviderAdapterRegistry.layerFromProviderInstanceRegistry,
-          TelescopeWorkspaces.layer,
-        ),
-      ),
-      Layer.provideMerge(TelescopeAgents.layer),
-    ),
-  ),
-  Layer.provide(
-    Layer.mergeAll(
-      TelescopeRuns.layer,
-      TelescopeGrants.layer,
-      TelescopeMemory.layer,
-      TelescopeToolGateway.layer,
-      TelescopeDelegations.layer,
-      TelescopeAttribution.layer,
-      TelescopeRouting.layer,
-      TelescopeWorkspaceData.layer,
-      TelescopeDb.layer,
-    ),
-  ),
-  Layer.provide(TelescopeTokenSaver.layer.pipe(Layer.provide(UsageProjectResolver.layer))),
+  provideTelescope,
   // Share the service so HTTP/WS clients single-flight reads and invalidate each other's cached patches.
   Layer.provide(layerPullRequestService),
   // The same activity instance RunExecutionService reports to, by layer memoization.

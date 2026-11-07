@@ -56,7 +56,7 @@ function TelescopeRail({ view, collapsed }: { view: TelescopeView; collapsed: bo
                   if (isMobile) setOpenMobile(false);
                   void navigate({
                     to: TELESCOPE_PATH,
-                    search: { view: item.id, ...(layout === "board" ? { layout } : {}) },
+                    search: { view: item.id, ...(layout === "table" ? {} : { layout }) },
                   });
                 }}
               />

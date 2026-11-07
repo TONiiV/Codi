@@ -221,6 +221,7 @@ describe("open in editor announcement", () => {
     const expectSpokenOnceAfterRefusedThenOpened = async () => {
       refuse();
       await pressOpenFavorite();
+      expect(state.announce).not.toHaveBeenCalled();
       await pressOpenFavorite();
       await vi.waitFor(() => expect(state.announce).toHaveBeenCalled());
       expect(state.announce.mock.calls).toEqual([["Opened in VS Code"]]);
