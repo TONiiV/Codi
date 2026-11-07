@@ -13,7 +13,7 @@ import {
   Text,
   WorkspaceId,
 } from "./common.ts";
-import { Decision, ForgeIssueRef, Task, TaskCommit, TaskStatus } from "./board.ts";
+import { Decision, ForgeIssueRef, Lease, Task, TaskCommit, TaskStatus } from "./board.ts";
 
 const InWorkspace = { workspaceId: WorkspaceId };
 
@@ -87,6 +87,8 @@ export const CommitListResult = Schema.Struct({ commits: Schema.Array(TaskCommit
 /** The lease holder is the caller's author: its agent, else the member. */
 export const LeaseAcquireInput = Schema.Struct({ ...InWorkspace, taskId: TaskId });
 export const LeaseScopedInput = Schema.Struct({ ...InWorkspace, leaseId: LeaseId });
+/** The task's unexpired lease; absent while nobody holds it. */
+export const LeaseGetResult = Schema.Struct({ lease: Schema.optionalKey(Lease) });
 
 export class StaleTaskVersionError extends Schema.TaggedError<StaleTaskVersionError>()(
   "TelescopeStaleTaskVersionError",

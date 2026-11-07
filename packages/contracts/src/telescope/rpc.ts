@@ -53,6 +53,7 @@ import {
   DecisionListResult,
   FreeTextLimitError,
   LeaseAcquireInput,
+  LeaseGetResult,
   LeaseScopedInput,
   StaleTaskVersionError,
   TaskCreateInput,
@@ -113,6 +114,7 @@ export const WS_METHODS = {
   leaseAcquire: "telescope.lease.acquire",
   leaseHeartbeat: "telescope.lease.heartbeat",
   leaseRelease: "telescope.lease.release",
+  leaseGet: "telescope.lease.get",
   wakeList: "telescope.wake.list",
   tokenSaverRun: "telescope.tokensaver.run",
   grantExplain: "telescope.grant.explain",
@@ -173,6 +175,7 @@ export const TaskBoardRpcs = [
   makeBoard(WS_METHODS.leaseAcquire, LeaseAcquireInput, Lease),
   makeBoard(WS_METHODS.leaseHeartbeat, LeaseScopedInput, Lease),
   makeBoard(WS_METHODS.leaseRelease, LeaseScopedInput, Schema.Struct({})),
+  makeBoard(WS_METHODS.leaseGet, TaskGetInput, LeaseGetResult),
 ] as const;
 
 export const AgentRpcs = [

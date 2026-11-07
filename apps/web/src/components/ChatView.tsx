@@ -11,6 +11,7 @@ import {
   deriveAvailableRevertTurnCounts,
   deriveThreadPendingBackgroundTasks,
   presentThreadShellFromProjection,
+  sideChatSourceBlock,
 } from "./ChatView.logic";
 import { usePullRequestDraftThread } from "./chat/usePullRequestDraftThread";
 import { useComposerSelection } from "./chat/useComposerSelection";
@@ -2782,16 +2783,13 @@ export default function ChatView(props: ChatViewProps) {
   }, [embedded, toggleRightPanelStable, toggleRightPanelMaximizedStable]);
 
   usePasteToFocusComposer(embedded ? null : activeThreadId, composerRef);
-  // A delegated task is a remote thread's subagent.
-  const isSubagentThread =
-    activeThread?.lineage.relationshipToParent === "subagent" || delegatedFrom !== null;
-  // Side chats do not nest or start from subagents, and older servers would fork a listed thread.
-  const sideChatsOffered =
-    !embedded &&
-    canOperateThread &&
-    activeThread?.lineage.sideChat !== true &&
-    !isSubagentThread &&
-    serverConfig?.environment.capabilities.sideChats === true;
+  // Older servers would fork a listed thread.
+  const sideChatBlock = sideChatSourceBlock(
+    activeThread ?? null,
+    serverConfig?.environment.capabilities ?? null,
+    canOperateThread,
+  );
+  const sideChatsOffered = !embedded && sideChatBlock === null;
   const sideChat = useSideChat({
     threadRef: sideChatsOffered && isServerThread ? activeThreadRef : null,
     onError: (message) => {
@@ -2805,13 +2803,13 @@ export default function ChatView(props: ChatViewProps) {
   });
   // Main-thread surfaces show this reason; `/side` sent anyway gets it as a toast.
   const sideChatDisabledReason =
-    activeThread?.lineage.sideChat === true
+    sideChatBlock === "sideChat"
       ? "Side chats cannot start side chats."
-      : isSubagentThread
+      : sideChatBlock === "subagent"
         ? "Subagent threads cannot start side chats."
-        : serverConfig === null
+        : sideChatBlock === "loading"
           ? "Side chats are not ready yet. Try again in a moment."
-          : serverConfig.environment.capabilities.sideChats !== true
+          : sideChatBlock === "unsupported"
             ? "Update this environment's Codi server to use side chats."
             : sideChatsOffered && !isServerThread
               ? "Side chats start after the first message."

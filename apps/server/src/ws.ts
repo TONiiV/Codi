@@ -2457,6 +2457,7 @@ export const layerWsRpc = (
           telescopeStorage(board.heartbeatLease(actor, input)),
         [Telescope.WS_METHODS.leaseRelease]: (input) =>
           telescopeStorage(board.releaseLease(actor, input)),
+        [Telescope.WS_METHODS.leaseGet]: (input) => telescopeStorage(board.getLease(actor, input)),
         [Telescope.WS_METHODS.wakeList]: (input) =>
           telescopeStorage(telescopeWakes.list(caller, input)),
         [Telescope.WS_METHODS.tokenSaverRun]: (input) =>

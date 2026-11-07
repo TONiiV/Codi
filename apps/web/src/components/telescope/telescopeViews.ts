@@ -1,4 +1,7 @@
+import { Telescope } from "@t3tools/contracts";
 import { useLocation } from "@tanstack/react-router";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
 import {
   GitBranchIcon,
   LayoutDashboardIcon,
@@ -64,11 +67,31 @@ export type TasksLayout = "table" | "board";
 type TelescopeSearch = {
   readonly view: TelescopeView;
   readonly layout?: "board";
+  /** The task whose detail drawer is open. */
+  readonly task?: Telescope.TaskId;
 };
 
+const decodeTaskId = Schema.decodeUnknownOption(Telescope.TaskId);
+
+export function telescopeSearch(
+  view: TelescopeView,
+  layout: TasksLayout,
+  task?: Telescope.TaskId,
+): TelescopeSearch {
+  return {
+    view,
+    ...(layout === "board" ? { layout } : {}),
+    ...(task === undefined ? {} : { task }),
+  };
+}
+
 export function parseTelescopeSearch(raw: Record<string, unknown>): TelescopeSearch {
-  const view = parseTelescopeView(raw.view);
-  return raw.layout === "board" ? { view, layout: "board" } : { view };
+  const layout = raw.layout === "board" ? "board" : "table";
+  return telescopeSearch(
+    parseTelescopeView(raw.view),
+    layout,
+    Option.getOrUndefined(decodeTaskId(raw.task)),
+  );
 }
 
 export function telescopeViewEntry(view: TelescopeView) {
@@ -105,5 +128,12 @@ export function useTasksLayout(): TasksLayout {
     select: (location) =>
       telescopeSearchAt(location.pathname, location.search, peekAppModalReturnHref())?.layout ??
       "table",
+  });
+}
+
+export function useTaskDrawerId(): Telescope.TaskId | null {
+  return useLocation({
+    select: (location) =>
+      telescopeSearchAt(location.pathname, location.search, peekAppModalReturnHref())?.task ?? null,
   });
 }

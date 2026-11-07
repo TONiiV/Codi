@@ -140,6 +140,7 @@ export class TaskBoardService extends Context.Service<
     readonly acquireLease: Method<"telescope.lease.acquire">;
     readonly heartbeatLease: Method<"telescope.lease.heartbeat">;
     readonly releaseLease: Method<"telescope.lease.release">;
+    readonly getLease: Method<"telescope.lease.get">;
   }
 >()("t3/telescope/TaskBoardService") {}
 
@@ -613,6 +614,17 @@ const make = Effect.gen(function* () {
     return {};
   });
 
+  const getLease = Effect.fn("TaskBoardService.getLease")(function* (
+    actor: Actor,
+    { workspaceId, taskId }: In<"telescope.lease.get">,
+  ) {
+    yield* requireMember(actor, workspaceId);
+    yield* expireLeases(workspaceId);
+    const where = { task_id: taskId };
+    const [lease] = yield* db.select(workspaceId, "leases", decodeLeases, where);
+    return lease === undefined ? {} : { lease };
+  });
+
   return TaskBoardService.of({
     createTask,
     updateTask,
@@ -624,6 +636,7 @@ const make = Effect.gen(function* () {
     acquireLease,
     heartbeatLease,
     releaseLease,
+    getLease,
   });
 });
 
