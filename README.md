@@ -24,3 +24,7 @@ vp run start
 ## Docs
 
 See [docs/](./docs). To build from source, start at [docs/internals/overview.md](./docs/internals/overview.md).
+
+## Credits
+
+Codi is a fork of [T3 Code](https://github.com/pingdotgg/t3code) by T3 Tools, built by Theo, Julius and the T3 Code contributors. Most of what Codi does stands on their work. Both projects are MIT licensed; see [LICENSE](./LICENSE).
