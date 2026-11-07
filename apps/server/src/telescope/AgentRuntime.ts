@@ -206,11 +206,15 @@ const make = Effect.gen(function* () {
         workspaceId: wake.workspaceId,
         delegationId: payload.delegationId,
       });
-      if (payload.kind === "report" || delegation.state === "SUBMITTED")
+      // An answer serves a task back in WORKING; a cancel since then drops it.
+      const live = payload.kind === "answer" ? "WORKING" : "SUBMITTED";
+      if (payload.kind === "report" || delegation.state === live)
         items.push({ kind: payload.kind, delegation });
     }
     if (items.length === 0) return;
-    const held = items.flatMap((item) => (item.kind === "delegation" ? [item.delegation] : []));
+    const held = items.flatMap((item) =>
+      item.kind === "delegation" || item.kind === "answer" ? [item.delegation] : [],
+    );
     const via = held[0] === undefined ? [] : [held[0].fromAgentId];
     const abandonHeld = (blockedOn: string) =>
       Effect.forEach(held, (delegation) => abandon(wake, delegation, blockedOn), {
@@ -260,7 +264,7 @@ const make = Effect.gen(function* () {
         )
         .pipe(Effect.andThen(abandonHeld(error.message)));
     yield* Effect.forEach(
-      held,
+      held.filter((delegation) => delegation.state === "SUBMITTED"),
       (delegation) =>
         delegations.start({ workspaceId: wake.workspaceId, delegationId: delegation.id, threadId }),
       { discard: true },

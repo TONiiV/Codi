@@ -91,6 +91,7 @@ import * as TelescopeGrants from "./telescope/GrantService.ts";
 import * as TelescopeToolGateway from "./telescope/ToolGateway.ts";
 import * as TelescopeThreadTurnTokens from "./telescope/ThreadTurnTokens.ts";
 import * as TelescopeAgentRuntime from "./telescope/AgentRuntime.ts";
+import * as TelescopeDelegationAnswers from "./telescope/DelegationAnswers.ts";
 import * as TelescopeDb from "./telescope/TelescopeDb.ts";
 import * as TelescopeWakeQueue from "./telescope/WakeQueueService.ts";
 import * as TelescopeAttribution from "./telescope/AttributionService.ts";
@@ -686,6 +687,9 @@ const layerRuntimeCoreDependenciesBase = Layer.mergeAll(
     Layer.provide(
       Layer.mergeAll(TelescopeRuns.layer, TelescopeDelegations.layer, TelescopeDb.layer),
     ),
+  ),
+  TelescopeDelegationAnswers.layer.pipe(
+    Layer.provide(Layer.merge(TelescopeDelegations.layer, TelescopeBoardChanges.layer)),
   ),
   ProviderUsageLimitsIngestion.layer,
   layerProviderInstallationRefresh,
