@@ -216,8 +216,8 @@ export class WorkspaceDataService extends Context.Service<
       options?: { readonly maxBytes: number },
     ) => Effect.Effect<typeof Telescope.WorkspaceExportResult.Type, Failure>;
     /**
-     * One transaction that also removes the runs' context files, refused while the workspace has
-     * runs or wakes in flight.
+     * One transaction, refused while the workspace has runs or wakes in flight. The runs' context
+     * files are removed after it commits; one that cannot be is listed in `contextFilesLeft`.
      */
     readonly delete: (
       caller: WorkspaceService.SessionCaller,
@@ -285,26 +285,14 @@ const make = Effect.gen(function* () {
       const onBehalfOf = json(row.on_behalf_of_json);
       return Array.isArray(onBehalfOf) ? onBehalfOf : [];
     };
-    const hiddenRuns = new Set<unknown>(
-      all("runs")
-        .filter((run) => hidden(run.agent_id, ...chain(run)))
-        .map((run) => run.run_id),
-    );
-    // A withheld agent takes its work and setup along. Memories follow memory search's rule for
-    // a member's own session: private ones only of agents they own, person records only about
-    // themselves. Tasks stay: the board shows every task to every member.
+    // Only agents the app hides leave, with the rows reachable through no other read path:
+    // delegations (D68), grants and channel bindings. Everything else stays as the app shows it
+    // to an admin (D76). Memories follow memory search's rule for the member's own session.
     const withheldRow: Partial<Record<TelescopeDb.TelescopeTable, (row: Row) => boolean>> = {
       agents: (agent) => hidden(agent.agent_id),
       delegations: (delegation) => hidden(delegation.from_agent_id, delegation.to_agent_id),
-      runs: (run) => hiddenRuns.has(run.run_id),
-      run_calls: (call) => hiddenRuns.has(call.run_id),
-      audit: (entry) => hiddenRuns.has(entry.run_id) || hidden(entry.agent_id, ...chain(entry)),
       grants: (grant) => hidden(...chain(grant)),
-      wakes: (wake) => hidden(wake.agent_id),
-      leases: (lease) => hidden(lease.holder_agent_id),
-      kill_switches: (kill) => hidden(kill.agent_id),
       channel_bindings: (binding) => hidden(binding.agent_id),
-      budgets: (budget) => budget.scope === "agent" && hidden(budget.scope_id),
       memories: (memory) =>
         (memory.level === "private" && owners.get(memory.agent_id) !== self.subjectId) ||
         (memory.scope === "person" && memory.about_subject_id !== self.subjectId),
@@ -366,7 +354,7 @@ const make = Effect.gen(function* () {
       return yield* fail("invalid", "The name typed does not match this workspace's name.");
     const workspaceId = workspace.id;
     const inFlight = { filter: sql.in("status", ["queued", "running"]) };
-    return yield* db.transaction(
+    const deleted = yield* db.transaction(
       Effect.gen(function* () {
         const runs = yield* db.select(workspaceId, "runs", decodeRunIds, { finished_at: null });
         const wakes = yield* db.select(workspaceId, "wakes", decodeWakeIds, {}, inFlight);
@@ -386,28 +374,32 @@ const make = Effect.gen(function* () {
             return { table: `telescope_${table}`, count: rows.length, ids };
           }),
         );
-        const runIds = tables.find(({ table }) => table === "telescope_runs")?.ids ?? [];
-        const contextFiles = yield* Effect.forEach(runIds, (runId) =>
-          Effect.gen(function* () {
-            const file = ContextAssembler.contextFile(path, stateDir, runId);
-            if (!(yield* fs.exists(file))) return [];
-            yield* fs.remove(file);
-            return [path.relative(stateDir, file)];
-          }),
-        ).pipe(
-          Effect.map((files) => files.flat()),
-          Effect.mapError(
-            (cause) =>
-              new Telescope.WorkspaceError({
-                reason: "storage",
-                message: `A run's context file could not be removed (${cause.message}). The workspace was not deleted; try again.`,
-                cause,
-              }),
-          ),
-        );
-        return { workspace, deletedAt: yield* now, tables, contextFiles };
+        return { workspace, deletedAt: yield* now, tables };
       }),
     );
+    // After the commit, so a file that stays never keeps the rows; the manifest lists it instead.
+    const runIds = deleted.tables.find(({ table }) => table === "telescope_runs")?.ids ?? [];
+    const outcomes = yield* Effect.forEach(runIds, (runId) => {
+      const file = ContextAssembler.contextFile(path, stateDir, runId);
+      const relative = path.relative(stateDir, file);
+      return fs.exists(file).pipe(
+        Effect.flatMap((exists) =>
+          exists ? fs.remove(file).pipe(Effect.as(true)) : Effect.succeed(false),
+        ),
+        Effect.match({
+          onSuccess: (removed) => ({ removed: removed ? [relative] : [], left: [] }),
+          onFailure: (error) => ({
+            removed: [],
+            left: [{ path: relative, reason: error.message }],
+          }),
+        }),
+      );
+    });
+    return {
+      ...deleted,
+      contextFiles: outcomes.flatMap((outcome) => outcome.removed),
+      contextFilesLeft: outcomes.flatMap((outcome) => outcome.left),
+    };
   });
 
   return WorkspaceDataService.of({ export: exportWorkspace, delete: deleteWorkspace });

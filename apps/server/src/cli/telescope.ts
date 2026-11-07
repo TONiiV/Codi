@@ -260,6 +260,12 @@ const orgDeleteCommand = Command.make("delete", {
             manifest.tables.map((row) => [row.table, String(row.count)]),
           ),
           `Removed ${manifest.contextFiles.length} run context files.`,
+          ...(manifest.contextFilesLeft.length === 0
+            ? []
+            : [
+                "Left behind under the server's state directory; remove them by hand:",
+                ...manifest.contextFilesLeft.map((file) => `- [ ] ${file.path} (${file.reason})`),
+              ]),
         ].join("\n"),
     ),
   ),

@@ -16,7 +16,7 @@ export const WorkspaceDeleteInput = Schema.Struct({ workspaceId: WorkspaceId, co
 
 /**
  * Every Telescope table and the rows deleted from it, named by their key (`/` joins a pair), and
- * the runs' context files removed, by their path under the server's state directory.
+ * the runs' context files removed or left behind, by their path under the server's state directory.
  */
 export const WorkspaceDeleteManifest = Schema.Struct({
   workspace: Workspace,
@@ -25,6 +25,7 @@ export const WorkspaceDeleteManifest = Schema.Struct({
     Schema.Struct({ table: Text, count: Count, ids: Schema.Array(Schema.String) }),
   ),
   contextFiles: Schema.Array(Schema.String),
+  contextFilesLeft: Schema.Array(Schema.Struct({ path: Schema.String, reason: Schema.String })),
 });
 export type WorkspaceDeleteManifest = typeof WorkspaceDeleteManifest.Type;
 

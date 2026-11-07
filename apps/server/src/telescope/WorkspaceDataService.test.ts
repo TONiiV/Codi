@@ -194,7 +194,7 @@ it.layer(layer)("WorkspaceDataService", (it) => {
   );
 
   it.effect(
-    "leaves out invitation codes, and memories, agents and agents' rows the app hides",
+    "leaves out invitation codes, memories and agents the app hides, and only their unread rows",
     () =>
       Effect.gen(function* () {
         const service = yield* WorkspaceService.WorkspaceService;
@@ -296,24 +296,22 @@ it.layer(layer)("WorkspaceDataService", (it) => {
           bundle.tables.telescope_delegations?.map((row) => row.to_agent_id),
           ["agent-shared"],
         );
+        // The app's run, audit, governance, wake and lease reads show these rows to an admin.
         assert.deepStrictEqual(
           bundle.tables.telescope_runs?.map((row) => row.run_id),
-          ["run-shared"],
+          ["run-bob", "run_id run-via", "run-shared"],
+        );
+        assert.deepStrictEqual(
+          bundle.tables.telescope_run_calls?.map((row) => row.run_id),
+          ["run-bob", "run-shared"],
         );
         assert.deepStrictEqual(
           bundle.tables.telescope_budgets?.map((row) => row.scope_id),
-          ["agent-shared"],
+          ["agent-bob", "agent-shared"],
         );
         assert.deepStrictEqual(bundle.withheld, {
           telescope_agents: 3,
-          telescope_leases: 1,
           telescope_grants: 1,
-          telescope_audit: 1,
-          telescope_budgets: 1,
-          telescope_kill_switches: 1,
-          telescope_wakes: 1,
-          telescope_runs: 2,
-          telescope_run_calls: 1,
           telescope_memories: 2,
           telescope_channel_bindings: 1,
           telescope_delegations: 1,
@@ -321,7 +319,10 @@ it.layer(layer)("WorkspaceDataService", (it) => {
         const readme = files.find((file) => file.path === "README.md")?.text;
         assert.include(readme, "\n- 2 memories the exporting member cannot read");
         assert.include(readme, "\n- 3 agents the app hides from the exporting member");
-        assert.include(readme, "\n- Rows of those agents: telescope_leases 1, telescope_grants 1,");
+        assert.include(
+          readme,
+          "\n- Rows of those agents: telescope_grants 1, telescope_channel_bindings 1, telescope_delegations 1.",
+        );
         assert.deepStrictEqual(
           bundle.tables.telescope_invitations?.map((row) => "code" in row),
           [false, false, false],
@@ -332,7 +333,6 @@ it.layer(layer)("WorkspaceDataService", (it) => {
           assert.notInclude(file.text, "bob-private");
           assert.notInclude(file.text, "name agent-bob");
           assert.notInclude(file.text, "name agent-carol");
-          assert.notInclude(file.text, "run-bob");
         }
         const bobs = yield* bundleOf((yield* data.export(bob, { workspaceId })).files);
         assert.deepStrictEqual(agentIds(bobs.tables), [
@@ -376,7 +376,7 @@ it.layer(layer)("WorkspaceDataService", (it) => {
     }),
   );
 
-  it.effect("deletes every row of one workspace in one transaction and lists them", () =>
+  it.effect("deletes every row of one workspace, then its context files, and lists them", () =>
     Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
       const db = yield* TelescopeDb.TelescopeDb;
@@ -394,11 +394,21 @@ it.layer(layer)("WorkspaceDataService", (it) => {
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
       const { stateDir } = yield* ServerConfig;
-      const [alphaContext, bravoContext] = ["run_id delete-alpha", "run_id delete-bravo"].map(
-        (runId) => ContextAssembler.contextFile(path, stateDir, runId),
-      ) as [string, string];
+      yield* seed(alpha.id, "telescope_runs", "stuck", { run_id: "stuck-run" });
+      const [alphaContext, bravoContext, stuckContext] = [
+        "run_id delete-alpha",
+        "run_id delete-bravo",
+        "stuck-run",
+      ].map((runId) => ContextAssembler.contextFile(path, stateDir, runId)) as [
+        string,
+        string,
+        string,
+      ];
       yield* fs.makeDirectory(path.dirname(alphaContext), { recursive: true });
       for (const file of [alphaContext, bravoContext]) yield* fs.writeFileString(file, "context");
+      // A non-empty directory where a context file should be cannot be removed as a file.
+      yield* fs.makeDirectory(stuckContext);
+      yield* fs.writeFileString(path.join(stuckContext, "inside"), "context");
       const alphaBefore = yield* rowCounts(alpha.id);
       const bravoBefore = yield* rowCounts(bravo.id);
       const confirm = { workspaceId: alpha.id, confirmName: "Alpha" };
@@ -423,6 +433,12 @@ it.layer(layer)("WorkspaceDataService", (it) => {
       const manifest = yield* data.delete(alice, confirm);
       assert.strictEqual(manifest.workspace.id, alpha.id);
       assert.deepStrictEqual(manifest.contextFiles, [path.relative(stateDir, alphaContext)]);
+      assert.deepStrictEqual(
+        manifest.contextFilesLeft.map((file) => file.path),
+        [path.relative(stateDir, stuckContext)],
+      );
+      assert.isNotEmpty(manifest.contextFilesLeft[0]?.reason);
+      assert.isTrue(yield* fs.exists(stuckContext));
       assert.isFalse(yield* fs.exists(alphaContext));
       assert.isTrue(yield* fs.exists(bravoContext));
       assert.deepStrictEqual(
