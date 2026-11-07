@@ -395,7 +395,24 @@ const refused = (message: string) =>
 
 it.effect("delegate from the PA creates a delegation for its own Chief and a wake", () =>
   Effect.gen(function* () {
-    const { workspaceId, pa, chief, delegations, queue } = yield* chain;
+    const { workspaceId, db, pa, chief, delegations, queue } = yield* chain;
+    yield* db.insert(workspaceId, "delegations", {
+      delegation_id: "bea-pa-to-bea-chief",
+      context_id: "context-bea",
+      parent_id: null,
+      from_agent_id: "bea-pa",
+      to_agent_id: "bea-chief",
+      hop: "agent",
+      thread_id: null,
+      decision_id: null,
+      state: "SUBMITTED",
+      brief_json: JSON.stringify(brief),
+      report_json: null,
+      messages_json: "[]",
+      artifacts_json: "[]",
+      created_at: "2026-11-07T00:00:00.000Z",
+      updated_at: "2026-11-07T00:00:00.000Z",
+    });
     const sent = (yield* pa.call("delegate", {
       toAgentId: chief.id,
       brief,
@@ -459,7 +476,7 @@ it.effect("delegate from the PA creates a delegation for its own Chief and a wak
   }).pipe(Effect.provide(layer)),
 );
 
-it.effect("delegate to another member's agent is not found, and a Chief does not delegate", () =>
+it.effect("delegate to another member's agent is not found", () =>
   Effect.gen(function* () {
     const { workspaceId, db, pa, chief, queue } = yield* chain;
     const agent = (id: string, owner: string | null, kind: Telescope.AgentKind) =>
@@ -525,7 +542,7 @@ it.effect("delegation_report by the from-agent is refused", () =>
   }).pipe(Effect.provide(layer)),
 );
 
-it.effect("a stopped Chief's delegation_report is refused (kill switch along the chain)", () =>
+it.effect("a stopped Chief's delegation_report is refused (kill switch along the chain, D48)", () =>
   Effect.gen(function* () {
     const { workspaceId, pa, chief, delegations, get } = yield* chain;
     const sent = (yield* pa.call("delegate", {
