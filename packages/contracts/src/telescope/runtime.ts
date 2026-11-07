@@ -130,7 +130,8 @@ export const RunCall = Schema.Struct({
   runId: AgentRunId,
   seq: Count,
   tool: Text,
-  args: Schema.Json,
+  /** Left out for members other than the run's own member and admins. */
+  args: Schema.optionalKey(Schema.Json),
   grantId: Schema.optionalKey(GrantId),
   grantCheck: Schema.Literals(["allowed", "denied"]),
   tokens: Schema.optionalKey(Count),
