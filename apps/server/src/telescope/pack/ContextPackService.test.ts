@@ -880,6 +880,9 @@ describe("ContextPackService", () => {
           "out-relink-mcp/mcp.json": "skills/deploy/../../../x.json",
           "out-relink-instructions/skills/deploy": "../d1/d2/d3",
           "out-relink-instructions/instructions.md": "skills/deploy/../../../x.md",
+          // A target that is itself a dangling link or a loop has no ancestor inside it.
+          "dangling-root": "gone/home",
+          "loop-root": "loop-root",
         },
       );
       const fs = yield* FileSystem.FileSystem;
@@ -951,6 +954,17 @@ describe("ContextPackService", () => {
           changed.push(`${out} export`);
         }
       }
+      const real = yield* fs.realPath(dir.root);
+      for (const target of ["dangling-root", "loop-root"]) {
+        const error = yield* Effect.flip(
+          service.import(dir.at("pack"), dir.at(target), "codex", false),
+        );
+        expect([target, error.message.split(" does not")[0]]).toEqual([
+          target,
+          `${real}/${target}/.agents`,
+        ]);
+      }
+      expect(yield* dir.exists(dir.at("gone"))).toBe(false);
       expect(changed).toEqual([]);
       expect(yield* dir.tree("dotfiles")).toEqual(outside);
       expect(yield* dir.read("dotfiles/deploy.md")).toBe("MY OWN SKILL\n");

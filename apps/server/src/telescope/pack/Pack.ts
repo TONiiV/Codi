@@ -384,10 +384,11 @@ const writeTargetInside = Effect.fnUntraced(function* (
   const inside = (real: string | undefined) => real !== undefined && isInside(path, realRoot, real);
   const real = yield* writeTarget(file, removed);
   if (real !== undefined && inside(real)) return real;
-  // The refusal names the outermost entry that leads out, so a linked parent directory, not a
-  // file under it that is no link at all.
+  // The refusal names the outermost entry under the root that leads out, so a linked parent
+  // directory, not a file under it that is no link at all.
+  const top = path.resolve(root);
   let [link, target] = [file, real];
-  for (let at = path.dirname(file); at !== path.dirname(at); at = path.dirname(at)) {
+  for (let at = path.dirname(file); at !== top && isInside(path, top, at); at = path.dirname(at)) {
     const next = yield* writeTarget(at, removed);
     if (inside(next)) break;
     [link, target] = [at, next];
