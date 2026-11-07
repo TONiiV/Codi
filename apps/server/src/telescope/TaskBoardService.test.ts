@@ -570,6 +570,14 @@ it.layer(layer)("Telescope task board", (it) => {
         Effect.flip(board.createDecision(agent, { ...agentSettle, status: "proposed" })),
       ]);
       assert.deepStrictEqual(refused.map(reasonOf), Array(4).fill("forbidden"));
+      const other = yield* board.createTask(alice, { workspaceId: a, title: "Other" });
+      const elsewhere = yield* board.updateTask(agent, {
+        workspaceId: a,
+        taskId: other.id,
+        baseVersion: 1,
+        set: { title: "Agent plan" },
+      });
+      assert.strictEqual(elsewhere.title, "Agent plan", "d2 holds title on its own task only");
       yield* update(agent, version, { status: "in_review" });
       yield* update(alice, version + 1, { goalChain: ["Q4"] });
       const moved = yield* Effect.flip(update(agent, version, { goalChain: ["Q1"] }));

@@ -10,6 +10,7 @@ import * as McpInvocationContext from "../../McpInvocationContext.ts";
 import * as McpToolAccess from "../../McpToolAccess.ts";
 import * as OrchestratorMcpService from "../../OrchestratorMcpService.ts";
 import * as ThreadMetadataMcpService from "../../ThreadMetadataMcpService.ts";
+import { gatedIfRun } from "../telescope/gate.ts";
 
 const handlers = {
   orchestrator_capabilities: McpToolAccess.reads((input) =>
@@ -24,7 +25,7 @@ const handlers = {
       const scope = yield* McpInvocationContext.McpInvocationContext;
       const service = yield* OrchestratorMcpService.OrchestratorMcpService;
       return yield* service.delegateTask(scope, input);
-    }),
+    }).pipe(gatedIfRun("dispatch_worker", input)),
   ),
   task_status: McpToolAccess.actsAsCaller(({ taskId }) =>
     Effect.gen(function* () {
@@ -95,7 +96,10 @@ const handlers = {
           }
           const scope = yield* McpInvocationContext.McpInvocationContext;
           const service = yield* OrchestratorMcpService.OrchestratorMcpService;
-          return yield* service.scheduleTask(scope, { ...input, prompt, schedule });
+          const created = { ...input, prompt, schedule };
+          return yield* service
+            .scheduleTask(scope, created)
+            .pipe(gatedIfRun("dispatch_worker", created));
         }),
       // A scheduled run starts long after its caller, with nothing to carry the link.
       { refused: "schedule tasks in this environment" },
@@ -143,7 +147,7 @@ const handlers = {
       const scope = yield* McpInvocationContext.McpInvocationContext;
       const service = yield* OrchestratorMcpService.OrchestratorMcpService;
       return yield* service.createThreads(scope, input);
-    }),
+    }).pipe(gatedIfRun("dispatch_worker", input)),
   ),
   t3_thread_list: McpToolAccess.reads((input) =>
     Effect.gen(function* () {
@@ -175,7 +179,7 @@ const handlers = {
         const scope = yield* McpInvocationContext.McpInvocationContext;
         const service = yield* OrchestratorMcpService.OrchestratorMcpService;
         return yield* service.sendToThread(scope, input);
-      }),
+      }).pipe(gatedIfRun("dispatch_worker", input)),
   ),
   t3_thread_wait: McpToolAccess.reads((input) =>
     Effect.gen(function* () {

@@ -117,6 +117,7 @@ const setup = Effect.gen(function* () {
     .pipe(Effect.map((result) => result.calls.map((c) => `${c.tool}:${c.grantCheck}`)));
   return {
     workspaceId,
+    threadId,
     beaId: bea.subjectId,
     chiefId: chief.id,
     runId: run.id,
@@ -173,6 +174,89 @@ it.layer(layer)("Telescope tool gateway", (it) => {
         .call(ThreadId.make("thread-without-run"), "open_ticket", {}, () => Effect.void)
         .pipe(Effect.flip);
       assert.strictEqual(noRun._tag === "TelescopeToolGatewayDenied" && noRun.reason, "no_run");
+    }),
+  );
+
+  it.effect("callIfRun runs ungated on a thread without a run", () =>
+    Effect.gen(function* () {
+      const { threadId, gateway, audit, calls } = yield* setup;
+      const plain = ThreadId.make("thread-without-run");
+      assert.strictEqual(
+        yield* gateway.callIfRun(plain, "dispatch_worker", {}, Effect.succeed("ran")),
+        "ran",
+      );
+      assert.strictEqual(
+        yield* gateway
+          .callIfRun(plain, "dispatch_worker", {}, Effect.fail("own"))
+          .pipe(Effect.flip),
+        "own",
+      );
+      assert.lengthOf(yield* audit, 0);
+      assert.strictEqual(
+        yield* gateway.callIfRun(threadId, "dispatch_worker", {}, Effect.succeed("gated")),
+        "gated",
+      );
+      assert.deepStrictEqual(yield* calls, ["dispatch_worker:allowed"]);
+    }),
+  );
+
+  it.effect("dispatch_worker is refused project_only for the PA and audited", () =>
+    Effect.gen(function* () {
+      const { workspaceId, beaId, gateway, audit } = yield* setup;
+      const { agents: mine } = yield* (yield* AgentService.AgentService).listMine(as.bea, {
+        workspaceId,
+      });
+      const pa = mine.find((agent) => agent.kind === "chief_of_staff");
+      assert.isDefined(pa);
+      const db = yield* TelescopeDb.TelescopeDb;
+      yield* db.update(
+        workspaceId,
+        "agents",
+        { standing_powers_json: JSON.stringify(ALL) },
+        { agent_id: pa.id },
+      );
+      const paThread = ThreadId.make(`thread-pa-${workspaceId}`);
+      yield* (yield* RunRecordService.RunRecordService).start(as.bea, workspaceId, {
+        agentId: pa.id,
+        threadId: paThread,
+        inputSnapshot: {
+          promptVersion: "prompt@1",
+          skillsVersions: {},
+          powersVersion: "powers@1",
+          model: "model-a",
+          contextManifest: [],
+        },
+      });
+      const { powers } = yield* (yield* GrantService.GrantService).effectiveGrant(workspaceId, {
+        agentId: pa.id,
+        onBehalfOf: [beaId],
+      });
+      assert.isTrue(powers.dispatchWorkers, "the PA holds the power to pass it down");
+      let ran = false;
+      const denied = yield* gateway
+        .callIfRun(
+          paThread,
+          "dispatch_worker",
+          {},
+          Effect.sync(() => (ran = true)),
+        )
+        .pipe(Effect.flip);
+      assert.strictEqual(
+        denied._tag === "TelescopeToolGatewayDenied" && denied.reason,
+        "project_only",
+      );
+      assert.isFalse(ran);
+      const [entry] = (yield* audit).toReversed();
+      assert.deepStrictEqual(
+        [entry?.agentId, entry?.tool, entry?.outcome, entry?.reason],
+        [
+          pa.id,
+          "dispatch_worker",
+          "denied",
+          "Only a project's agent opens Worker threads. Delegate to its Chief Agent instead.",
+        ],
+      );
+      yield* gateway.call(paThread, "open_ticket", {}, () => Effect.void);
     }),
   );
 

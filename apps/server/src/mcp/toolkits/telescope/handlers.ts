@@ -1,58 +1,12 @@
-import { OrchestratorMcpFailure, type Telescope } from "@t3tools/contracts";
+import type { Telescope } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
-import type * as Schema from "effect/Schema";
 
-import type { PersistenceDecodeError, PersistenceSqlError } from "../../../persistence/Errors.ts";
 import * as AgentService from "../../../telescope/AgentService.ts";
 import * as TaskBoardService from "../../../telescope/TaskBoardService.ts";
 import * as ToolGateway from "../../../telescope/ToolGateway.ts";
-import * as McpInvocationContext from "../../McpInvocationContext.ts";
 import * as McpToolAccess from "../../McpToolAccess.ts";
+import { type Failure, gated } from "./gate.ts";
 import { TelescopeToolkit } from "./tools.ts";
-
-type Failure =
-  | ToolGateway.ToolGatewayDenied
-  | Telescope.WorkspaceError
-  | Telescope.StaleTaskVersionError
-  | Telescope.FreeTextLimitError
-  | PersistenceSqlError
-  | PersistenceDecodeError;
-
-const toFailure = (error: Failure) => {
-  switch (error._tag) {
-    case "TelescopeToolGatewayDenied":
-      return new OrchestratorMcpFailure({
-        code: "capability_denied",
-        message: `${error.message} Do not retry; tell your member.`,
-      });
-    case "TelescopeWorkspaceError":
-      if (error.reason !== "storage")
-        return new OrchestratorMcpFailure({
-          code: error.reason === "forbidden" ? "capability_denied" : "invalid_request",
-          message: error.message,
-        });
-      break;
-    case "TelescopeStaleTaskVersionError":
-    case "TelescopeFreeTextLimitError":
-      return new OrchestratorMcpFailure({ code: "invalid_request", message: error.message });
-  }
-  return new OrchestratorMcpFailure({
-    code: "orchestration_error",
-    message: "The Telescope board is unavailable.",
-  });
-};
-
-/** Every call goes through the gateway; the thread's open run decides who it acts as. */
-const gated = Effect.fn("mcp.telescope.gated")(function* <A, R>(
-  tool: Telescope.GatewayTool,
-  args: Schema.Json,
-  use: (caller: ToolGateway.ToolCaller) => Effect.Effect<A, Failure, R>,
-) {
-  const scope = yield* McpInvocationContext.McpInvocationContext;
-  const { thread } = yield* McpInvocationContext.requireThreadScope(scope, "Telescope tools");
-  const gateway = yield* ToolGateway.ToolGateway;
-  return yield* gateway.call(thread.threadId, tool, args, use).pipe(Effect.mapError(toFailure));
-});
 
 /** Board writes are signed by the run's agent, acting for the chain the run carries. */
 const onBoard =

@@ -30,6 +30,7 @@ import { resolveRuntimeMode } from "../../delegatedTaskModes.ts";
 import * as McpInvocationContext from "../../McpInvocationContext.ts";
 import * as McpToolAccess from "../../McpToolAccess.ts";
 import { newCommandId, readCaller, resolveProjectId, unavailable } from "../../threadAccess.ts";
+import { gatedIfRun } from "../telescope/gate.ts";
 import { ProjectToolkit } from "./tools.ts";
 
 const isAboveCeilingError = Schema.is(OrchestratorRuntimeModeAboveCeilingError);
@@ -283,7 +284,7 @@ export const layer = McpToolAccess.toLayer(ProjectToolkit, {
           runId: run?.id ?? null,
           status: run?.status ?? null,
         };
-      }),
+      }).pipe(gatedIfRun("dispatch_worker", input)),
     // The launched thread carries the caller's link, if it has one.
     "stamped",
   ),

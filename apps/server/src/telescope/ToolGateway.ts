@@ -114,12 +114,20 @@ const DENIED_MESSAGES = {
   stopped: "An admin stopped this agent.",
   forbidden: "The agent's grant does not allow this tool.",
   budget: "A Telescope budget is used up.",
+  project_only: "Only a project's agent opens Worker threads. Delegate to its Chief Agent instead.",
 } as const;
 
 export class ToolGatewayDenied extends Schema.TaggedError<ToolGatewayDenied>()(
   "TelescopeToolGatewayDenied",
   {
-    reason: Schema.Literals(["unknown_tool", "no_run", "stopped", "forbidden", "budget"]),
+    reason: Schema.Literals([
+      "unknown_tool",
+      "no_run",
+      "stopped",
+      "forbidden",
+      "budget",
+      "project_only",
+    ]),
     tool: Schema.optionalKey(Telescope.GatewayTool),
     /** The first budget level, in `BudgetScope` order, whose call limit is reached. */
     level: Schema.optionalKey(Telescope.BudgetScope),
@@ -162,6 +170,13 @@ export class ToolGateway extends Context.Service<
       tool: string,
       args: Schema.Json,
       use: (caller: ToolCaller) => Effect.Effect<A, E, R>,
+    ) => Effect.Effect<A, E | ToolGatewayDenied | Failure, R>;
+    /** `call` on a thread with an open run; any other thread runs `use` as it would without Telescope. */
+    readonly callIfRun: <A, E, R>(
+      threadId: ThreadId,
+      tool: Telescope.GatewayTool,
+      args: Schema.Json,
+      use: Effect.Effect<A, E, R>,
     ) => Effect.Effect<A, E | ToolGatewayDenied | Failure, R>;
     readonly setBudget: Method<"telescope.budget.set">;
     readonly setKillSwitch: Method<"telescope.killSwitch.set">;
@@ -211,9 +226,12 @@ const make = Effect.gen(function* () {
       ? new ToolGatewayDenied({ reason: "stopped", tool })
       : !grant.powers[power]
         ? new ToolGatewayDenied({ reason: "forbidden", tool })
-        : spent !== undefined
-          ? new ToolGatewayDenied({ reason: "budget", tool, level: spent })
-          : undefined;
+        : // An agent without a project still holds dispatchWorkers, to pass down the chain.
+          tool === "dispatch_worker" && grant.projectId === undefined
+          ? new ToolGatewayDenied({ reason: "project_only", tool })
+          : spent !== undefined
+            ? new ToolGatewayDenied({ reason: "budget", tool, level: spent })
+            : undefined;
     yield* grants.audit(workspaceId, {
       runId: run.run_id,
       agentId,
@@ -252,17 +270,12 @@ const make = Effect.gen(function* () {
     return caller;
   });
 
-  const call = Effect.fn("ToolGateway.call")(function* <A, E, R>(
-    threadId: ThreadId,
-    toolName: string,
+  const gate = Effect.fn("ToolGateway.gate")(function* <A, E, R>(
+    run: OpenRun,
+    tool: Telescope.GatewayTool,
     args: Schema.Json,
     use: (caller: ToolCaller) => Effect.Effect<A, E, R>,
   ) {
-    const tool = yield* decodeTool(toolName).pipe(
-      Effect.mapError(() => new ToolGatewayDenied({ reason: "unknown_tool" })),
-    );
-    const [run] = yield* db.latestRunForThread(threadId, decodeRuns);
-    if (run === undefined) return yield* new ToolGatewayDenied({ reason: "no_run", tool });
     const argsRedacted = redact(args);
     const decided = yield* db.transaction(decide(run, tool, argsRedacted));
     if (isDenied(decided)) return yield* decided;
@@ -278,6 +291,30 @@ const make = Effect.gen(function* () {
         ),
       );
     return yield* exit;
+  });
+
+  const call = Effect.fn("ToolGateway.call")(function* <A, E, R>(
+    threadId: ThreadId,
+    toolName: string,
+    args: Schema.Json,
+    use: (caller: ToolCaller) => Effect.Effect<A, E, R>,
+  ) {
+    const tool = yield* decodeTool(toolName).pipe(
+      Effect.mapError(() => new ToolGatewayDenied({ reason: "unknown_tool" })),
+    );
+    const [run] = yield* db.latestRunForThread(threadId, decodeRuns);
+    if (run === undefined) return yield* new ToolGatewayDenied({ reason: "no_run", tool });
+    return yield* gate(run, tool, args, use);
+  });
+
+  const callIfRun = Effect.fn("ToolGateway.callIfRun")(function* <A, E, R>(
+    threadId: ThreadId,
+    tool: Telescope.GatewayTool,
+    args: Schema.Json,
+    use: Effect.Effect<A, E, R>,
+  ) {
+    const [run] = yield* db.latestRunForThread(threadId, decodeRuns);
+    return yield* run === undefined ? use : gate(run, tool, args, () => use);
   });
 
   const requireAdmin = Effect.fn("ToolGateway.requireAdmin")(function* (
@@ -342,7 +379,7 @@ const make = Effect.gen(function* () {
     },
   );
 
-  return ToolGateway.of({ call, setBudget, setKillSwitch, governance });
+  return ToolGateway.of({ call, callIfRun, setBudget, setKillSwitch, governance });
 });
 
 export const layer = Layer.effect(ToolGateway, make).pipe(

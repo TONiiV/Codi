@@ -22,6 +22,7 @@ import {
 import * as ThreadSearch from "../../../orchestration-v2/ThreadSearch.ts";
 import * as ScheduledTasks from "../../../scheduledTasks/ScheduledTaskService.ts";
 import { queuedRunsInDeliveryOrder } from "../../../orchestration-v2/QueuedRunOrder.ts";
+import { gatedIfRun } from "../telescope/gate.ts";
 import { ThreadToolkit } from "./tools.ts";
 
 function queueEntry(
@@ -121,7 +122,7 @@ export const layer = McpToolAccess.toLayer(ThreadToolkit, {
         runCount: task.runCount,
         nextRunAt: task.nextRunAt,
       };
-    }),
+    }).pipe(gatedIfRun("dispatch_worker", input)),
   ),
   t3_thread_search: McpToolAccess.reads((input) =>
     Effect.gen(function* () {

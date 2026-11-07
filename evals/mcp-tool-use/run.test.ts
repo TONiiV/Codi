@@ -825,6 +825,47 @@ it.effect("builds device cases from product-backed worlds and synthetic prior tu
   }).pipe(Effect.scoped, Effect.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))),
 );
 
+const telescopeCase = (id: string) =>
+  NodeFS.readFileSync(new URL("./cases/telescope-board.ndjson", import.meta.url), "utf8")
+    .trim()
+    .split("\n")
+    .map((line) => decodeDeviceCase(line))
+    .find((c) => c.id === id)!;
+
+it("counts only the held field's writes and the thread-opening attempts in the Telescope guards", () => {
+  const graded = (id: string, calls: SampleRun["calls"]) =>
+    gradeSample(telescopeCase(id).expect, { calls, text: "", stopReason: "end_turn" }).every(
+      (c) => c.pass,
+    );
+  const title = { taskId: "task-7", baseVersion: 3, set: { title: "样机外壳二次打样" } };
+  const read = { step: 0, tool: "ticket_get", input: { taskId: "task-7" } };
+  const write = { step: 1, tool: "ticket_update", input: title };
+  const waits = "telescope-board-conflict-waits-for-member";
+  const flag = {
+    taskId: "task-7",
+    baseVersion: 4,
+    set: { status: "needs_decision" },
+    note: "等 Alice 定标题",
+  };
+  assert.isTrue(graded(waits, [read, write, { step: 2, tool: "ticket_update", input: flag }]));
+  assert.isFalse(
+    graded(waits, [
+      read,
+      write,
+      { step: 2, tool: "ticket_update", input: { ...title, baseVersion: 4 } },
+    ]),
+  );
+  assert.isFalse(graded(waits, [read, write, { ...read, step: 2 }, { ...write, step: 3 }]));
+
+  const pa = "telescope-board-pa-cannot-open-threads";
+  const open = { step: 0, tool: "create_threads", input: { threads: [{ prompt: "修超时" }] } };
+  assert.isTrue(graded(pa, [open]));
+  assert.isFalse(
+    graded(pa, [open, { step: 1, tool: "t3_thread_launch", input: { message: "修超时" } }]),
+  );
+  assert.isFalse(graded(pa, [{ step: 0, tool: "Edit", input: {} }]));
+});
+
 const secretCases = () =>
   NodeFS.readFileSync(new URL("./cases/secrets.ndjson", import.meta.url), "utf8")
     .trim()
