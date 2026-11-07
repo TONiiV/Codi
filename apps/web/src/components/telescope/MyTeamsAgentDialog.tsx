@@ -62,11 +62,13 @@ function SettingsDialog(props: {
             <DialogDescription>{props.description}</DialogDescription>
           </DialogHeader>
           <DialogPanel>
-            <div className="flex flex-col gap-4">
-              {props.children}
-              {props.error === null ? null : <ErrorNote text={props.error} />}
-            </div>
+            <div className="flex flex-col gap-4">{props.children}</div>
           </DialogPanel>
+          {props.error === null ? null : (
+            <div className="px-6 pb-4">
+              <ErrorNote text={props.error} />
+            </div>
+          )}
           <DialogFooter>
             <Button type="button" variant="ghost-muted" onClick={props.onClose}>
               取消

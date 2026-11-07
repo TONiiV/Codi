@@ -81,13 +81,18 @@ describe("telescope command failure text", () => {
 
   it.each([
     ["success", AsyncResult.success({}), undefined, null],
-    ["interrupted", AsyncResult.failure(Cause.interrupt()), undefined, null],
     ["forbidden", refused("forbidden"), undefined, "你没有权限做这件事。"],
     ["conflict", refused("conflict"), undefined, "和当前状态冲突，请刷新后再试。"],
     ["invalid", refused("invalid"), undefined, "请求内容无效，请检查后重试。"],
     ["not_found with custom copy", refused("not_found"), join, "邀请码无效。"],
     [
       "dropped connection",
+      AsyncResult.failure(Cause.interrupt(115)),
+      undefined,
+      "连接已断开，请检查连接后重试。",
+    ],
+    [
+      "defect",
       AsyncResult.failure(Cause.die(new Error("socket closed"))),
       undefined,
       "请求失败，请检查连接后再试。",

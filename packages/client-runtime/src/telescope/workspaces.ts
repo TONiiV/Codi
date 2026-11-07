@@ -27,12 +27,14 @@ export const WORKSPACE_ERROR_TEXT: WorkspaceErrorText = {
 
 const isWorkspaceError = Schema.is(Telescope.WorkspaceError);
 
-/** Null on success or interruption; otherwise Chinese copy for the server's reason. */
+/** Null on success; otherwise Chinese copy for the server's reason or the lost connection. */
 export function failureText(
   result: AtomCommandResult<unknown, unknown>,
   text: WorkspaceErrorText = WORKSPACE_ERROR_TEXT,
 ): string | null {
-  if (result._tag === "Success" || isAtomCommandInterrupted(result)) return null;
+  if (result._tag === "Success") return null;
+  // A closed session settles its pending calls as interrupted; these commands cannot be cancelled.
+  if (isAtomCommandInterrupted(result)) return "连接已断开，请检查连接后重试。";
   const error = squashAtomCommandFailure(result);
   return isWorkspaceError(error) ? text[error.reason] : "请求失败，请检查连接后再试。";
 }
