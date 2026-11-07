@@ -44,6 +44,7 @@ import * as ProviderAdapterRegistry from "../orchestration-v2/ProviderAdapterReg
 import * as ProviderReplayHarness from "../orchestration-v2/testkit/ProviderReplayHarness.ts";
 import * as ThreadManagementService from "../orchestration-v2/ThreadManagementService.ts";
 import * as TurnPreamble from "../orchestration-v2/TurnPreamble.ts";
+import { PersistenceSqlError } from "../persistence/Errors.ts";
 import * as SqlitePersistence from "../persistence/Sqlite.ts";
 import * as ManagedProjectFolders from "../project/ManagedProjectFolders.ts";
 import * as ServerSettings from "../serverSettings.ts";
@@ -1240,7 +1241,7 @@ it.effect.each([
 );
 
 it.effect(
-  "after a restart, a Chief run whose Codi run ended fails its task as unreported and its leases lapse",
+  "after a restart, a Chief run whose Codi run ended fails its task as unreported and its leases lapse, past an open run that cannot be read",
   () =>
     withHarness({ mcp: true, listening: false }, (harness) =>
       Effect.gen(function* () {
@@ -1265,6 +1266,14 @@ it.effect(
         const turn = yield* Queue.take(harness.started);
         yield* harness.complete(turn, 1);
         yield* Fiber.join(runner);
+        yield* db.insert(workspaceId, "runs", {
+          run_id: "run-unreadable",
+          agent_id: seeded.pa,
+          on_behalf_of_json: JSON.stringify([seeded.member]),
+          input_snapshot_json: "{",
+          started_at: "2026-01-01T00:00:00.000Z",
+          thread_id: "thread-unreadable",
+        });
 
         yield* (yield* AgentThreadRuns.makeHandler).settleOrphans;
         yield* TestClock.adjust("40 minutes");
@@ -1278,6 +1287,26 @@ it.effect(
         assert.deepStrictEqual(yield* board.getLease({ caller: alice }, read), {});
       }),
     ),
+);
+
+it.effect("the server still starts when the open Telescope runs cannot be read", () =>
+  withHarness({ mcp: true, listening: false }, () =>
+    Effect.gen(function* () {
+      const db = yield* TelescopeDb.TelescopeDb;
+      const unreadable = {
+        ...db,
+        allWorkspaceIds: Effect.fail(
+          new PersistenceSqlError({ operation: "TelescopeDb.allWorkspaceIds" }),
+        ),
+      };
+      const started = yield* Effect.exit(
+        Layer.build(ThreadTurnTokens.layer).pipe(
+          Effect.provideService(TelescopeDb.TelescopeDb, unreadable),
+        ),
+      );
+      assert.isTrue(Exit.isSuccess(started));
+    }),
+  ),
 );
 
 it.effect(

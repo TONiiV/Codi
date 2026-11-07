@@ -34,6 +34,7 @@ const workerWakeKey = (taskId: Telescope.DelegationId) => `delegation:${taskId}:
 const decodeWakes = Schema.decodeUnknownEffect(
   Schema.Array(Schema.Struct({ wake_id: Schema.String, status: Schema.String })),
 );
+const decodeRows = Schema.decodeUnknownEffect(Schema.Array(Schema.Unknown));
 
 const STARTED: ReadonlySet<OrchestrationV2Run["status"]> = new Set([
   "starting",
@@ -100,9 +101,13 @@ export const makeHandler = Effect.gen(function* () {
   // The startup pass and the event handler must not interleave, as two events never do.
   const lock = yield* Semaphore.make(1);
   // Read before the server takes commands: a run opened later may not have its Codi run yet.
-  const leftOpen = yield* Effect.forEach(yield* db.allWorkspaceIds, (workspaceId) =>
-    db.select(workspaceId, "runs", RunRecordService.decodeRuns, { finished_at: null }),
-  ).pipe(
+  // Rows decode one by one in the pass, so one bad row cannot hide the others.
+  const leftOpen = yield* db.allWorkspaceIds.pipe(
+    Effect.flatMap((workspaceIds) =>
+      Effect.forEach(workspaceIds, (workspaceId) =>
+        db.select(workspaceId, "runs", decodeRows, { finished_at: null }),
+      ),
+    ),
     Effect.map((rows) => rows.flat()),
     Effect.catchCause((cause) =>
       Effect.logWarning("reading open Telescope runs failed", { cause }).pipe(Effect.as([])),
@@ -260,12 +265,11 @@ export const makeHandler = Effect.gen(function* () {
 
   // A run left open by a restart settles at startup when its Codi run ended or is gone, unless
   // Codi resumes that run; a Codi run still live after recovery settles on its own end.
-  const settleOrphan = Effect.fn("AgentThreadRuns.settleOrphan")(function* (
-    row: (typeof leftOpen)[number],
-  ) {
-    const codiMessageId = row.input_snapshot_json.codiMessageId;
-    if (row.thread_id === null || codiMessageId === undefined) return;
-    const threadId = row.thread_id;
+  const settleOrphan = Effect.fn("AgentThreadRuns.settleOrphan")(function* (row: unknown) {
+    const [run] = yield* RunRecordService.decodeRuns([row]);
+    const codiMessageId = run?.input_snapshot_json.codiMessageId;
+    if (run?.thread_id == null || codiMessageId === undefined) return;
+    const threadId = run.thread_id;
     const pending = yield* settleIfEnded(threadId, codiMessageId);
     // A declined continuation emits no event, so the run is looked at again once it is decided.
     if (pending !== undefined)
