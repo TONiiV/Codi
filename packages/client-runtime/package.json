@@ -251,6 +251,10 @@
       "types": "./src/telescope/routing.ts",
       "default": "./src/telescope/routing.ts"
     },
+    "./telescope/projectRules": {
+      "types": "./src/telescope/projectRules.ts",
+      "default": "./src/telescope/projectRules.ts"
+    },
     "./state/environmentHttpAuth": {
       "types": "./src/state/environmentHttpAuth.ts",
       "default": "./src/state/environmentHttpAuth.ts"

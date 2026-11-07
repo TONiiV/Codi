@@ -245,6 +245,7 @@
       "telescope-agents": "Company agents",
       "telescope-governance": "Budgets and kill switch",
       "telescope-routing": "Routing rules",
+      "telescope-project-rules": "Project rules",
       "archive": "Archived threads"
     },
     "general": {
@@ -2946,6 +2947,7 @@
       "telescope-agents": "telescope company agents main department",
       "telescope-governance": "telescope budget limit tool calls usage kill switch stop pause",
       "telescope-routing": "telescope routing rules harness model task type priority",
+      "telescope-project-rules": "telescope project rules powers allowlist harness model default",
       "archive": "restore reopen deleted history projects"
     },
     "keybindingCommands": {
