@@ -120,6 +120,7 @@ describe("ContextPackService", () => {
           "",
           "[mcp_servers.docs]",
           'url = "https://docs.example.com/mcp"',
+          '# transport = "sse"',
           'bearer_token_env_var = "DOCS_TOKEN"',
           "",
         ].join("\n"),
@@ -137,11 +138,26 @@ describe("ContextPackService", () => {
             env: { GITHUB_TOKEN: "${env:GITHUB_TOKEN}" },
           },
           docs: {
+            type: "sse",
             url: "https://docs.example.com/mcp",
             headers: { Authorization: "Bearer ${env:DOCS_TOKEN}" },
           },
         },
       });
+
+      // The SSE marker survives each harness, so a later Claude import does not downgrade it.
+      yield* service.export(dir.at("cursor"), dir.at("pack3"));
+      yield* service.import(dir.at("pack3"), dir.at("opencode"), "opencode", false);
+      yield* service.export(dir.at("opencode"), dir.at("pack4"));
+      yield* service.import(dir.at("pack4"), dir.at("claude2"), "claude", false);
+      for (const pack of ["pack2", "pack3", "pack4"]) {
+        expect(JSON.parse(yield* dir.read(`${pack}/mcp.json`)).servers.docs).toEqual({
+          url: "https://docs.example.com/mcp",
+          transport: "sse",
+          bearerTokenEnv: "DOCS_TOKEN",
+        });
+      }
+      expect(JSON.parse(yield* dir.read("claude2/.mcp.json")).mcpServers.docs.type).toBe("sse");
 
       for (const file of ["pack/mcp.json", "codex/.codex/config.toml", "cursor/.cursor/mcp.json"]) {
         expect(yield* dir.read(file)).not.toContain("ghp_secret_value");
@@ -292,6 +308,8 @@ describe("ContextPackService", () => {
           "[mcp_servers.remote]",
           'url = "https://r.example/mcp"',
           'bearer_token_env_var = "REMOTE_TOKEN"',
+          // Hand-edited spelling of the marker export writes as `# transport = "sse"`.
+          "  # transport = 'sse'",
         ].join("\n"),
         "opencode/AGENTS.md": "OpenCode rules\n",
         "opencode/.opencode/skills/greet/SKILL.md": "Say hi.\n",
@@ -335,7 +353,11 @@ describe("ContextPackService", () => {
           servers: {
             inline: { command: "npx", env: ["INLINE_KEY"] },
             table: { command: "table-mcp", env: ["TABLE_KEY"] },
-            remote: { url: "https://r.example/mcp", bearerTokenEnv: "REMOTE_TOKEN" },
+            remote: {
+              url: "https://r.example/mcp",
+              bearerTokenEnv: "REMOTE_TOKEN",
+              transport: "sse",
+            },
           },
         },
         {
@@ -523,6 +545,7 @@ describe("ContextPackService", () => {
         service.import(dir.at("pack"), dir.at("leak"), "codex", false),
       );
       expect(error._tag).toBe("ContextPackPathError");
+      expect(error.message).not.toContain("run the command again");
       expect(yield* dir.exists(dir.at("leak"))).toBe(false);
 
       yield* fs.writeFileString(
@@ -533,6 +556,125 @@ describe("ContextPackService", () => {
         service.import(dir.at("pack"), dir.at("leak"), "codex", false),
       );
       expect(bad._tag).toBe("ContextPackFormatError");
+    }).pipe(Effect.scoped, Effect.provide(TestLayer)),
+  );
+  it.effect("refuses an import a link in the target would carry outside the project", () =>
+    Effect.gen(function* () {
+      const service = yield* ContextPackService.ContextPackService;
+      const dir = yield* fixture(
+        {
+          ...claudeProject,
+          "dotfiles/deploy.md": "MY OWN SKILL\n",
+          "dotfiles/scripts/run.sh": "echo mine\n",
+          "dotfiles/CLAUDE.md": "my own instructions\n",
+          "dotfiles/mcp.json": "{}\n",
+          "nested-file/.claude/skills/deploy/notes.md": "keep\n",
+          "nested-dir/.claude/skills/deploy/notes.md": "keep\n",
+          "new-dir/.claude/skills/deploy/notes.md": "keep\n",
+          "dangling/.claude/skills/deploy/notes.md": "keep\n",
+          "chain-skill/.claude/skills/deploy/notes.md": "keep\n",
+          "inside-chain/inner/keep.txt": "keep\n",
+          "absolute/.claude/settings.local.json": "{}",
+        },
+        {
+          // A file and a directory linked out of a same-name skill: `cp -r` would write through both.
+          "nested-file/.claude/skills/deploy/SKILL.md": "../../../../dotfiles/deploy.md",
+          "nested-dir/.claude/skills/deploy/scripts": "../../../../dotfiles/scripts",
+          "new-dir/.claude/skills/deploy/scripts": "../../../../dotfiles/new-scripts",
+          // A link the project owns, so removing it to make room for a skill reaches outside too.
+          "dotfiles/deploy": "deploy.md",
+          // A link with nothing at the end of it still names a path to create outside the project.
+          "dangling/.claude/skills/deploy/SKILL.md": "../../../../dotfiles/missing.md",
+          // A dangling link at the end of a chain names the same outside path one hop further away.
+          "chain-file/CLAUDE.md": "hop2",
+          "chain-file/hop2": "../dotfiles/missing-chain.md",
+          "chain-mcp/.mcp.json": "hop2",
+          "chain-mcp/hop2": "../dotfiles/missing-chain.json",
+          "chain-skill/.claude/skills/deploy/SKILL.md": "hop2",
+          "chain-skill/.claude/skills/deploy/hop2": "../../../../dotfiles/missing-chain.md",
+          "chain3/CLAUDE.md": "h1",
+          "chain3/h1": "h2",
+          "chain3/h2": "../dotfiles/missing-chain.md",
+          // A cycle names no path at all, so it is refused rather than followed.
+          "cycle/.claude/skills": "a",
+          "cycle/.claude/a": "b",
+          "cycle/.claude/b": "a",
+          // A chain that stays inside the project is still written through.
+          "inside-chain/CLAUDE.md": "hop2",
+          "inside-chain/hop2": "inner/CLAUDE.md",
+          "skills-dir/.claude/skills": "../../dotfiles",
+          "dotdot/.claude/skills": "../../project/../dotfiles",
+          "instructions/CLAUDE.md": "../dotfiles/CLAUDE.md",
+          "mcp/.mcp.json": "../dotfiles/mcp.json",
+          // The pack itself is the target an import must not rewrite.
+          "into-pack/CLAUDE.md": "../pack/instructions.md",
+          "into-pack/.mcp.json": "../pack/mcp.json",
+        },
+      );
+      const fs = yield* FileSystem.FileSystem;
+      yield* fs.symlink(dir.at("dotfiles"), dir.at("absolute/.claude/skills"));
+      yield* service.export(dir.at("project"), dir.at("pack"));
+      const packed = yield* dir.read("pack/mcp.json");
+
+      for (const merge of [false, true]) {
+        for (const target of [
+          "nested-file",
+          "nested-dir",
+          "new-dir",
+          "dangling",
+          "chain-file",
+          "chain-mcp",
+          "chain-skill",
+          "chain3",
+          "cycle",
+          "skills-dir",
+          "dotdot",
+          "absolute",
+          "instructions",
+          "mcp",
+          "into-pack",
+        ]) {
+          const error = yield* Effect.flip(
+            service.import(dir.at("pack"), dir.at(target), "claude", merge),
+          );
+          expect([target, error._tag]).toEqual([target, "ContextPackPathError"]);
+          if (target === "instructions") {
+            const root = yield* fs.realPath(dir.at(target));
+            expect(error.message).toContain(
+              `Copy what ${root}/CLAUDE.md links to into ${root}, or remove the link, then run the command again.`,
+            );
+          }
+        }
+      }
+      expect(yield* dir.read("dotfiles/deploy.md")).toBe("MY OWN SKILL\n");
+      expect(yield* dir.read("dotfiles/scripts/run.sh")).toBe("echo mine\n");
+      expect(yield* dir.read("dotfiles/CLAUDE.md")).toBe("my own instructions\n");
+      expect(yield* dir.read("dotfiles/mcp.json")).toBe("{}\n");
+      expect(yield* dir.exists(dir.at("dotfiles/missing.md"))).toBe(false);
+      expect(yield* dir.exists(dir.at("dotfiles/missing-chain.md"))).toBe(false);
+      expect(yield* dir.exists(dir.at("dotfiles/missing-chain.json"))).toBe(false);
+      expect(yield* dir.exists(dir.at("dotfiles/new-scripts"))).toBe(false);
+      expect(yield* dir.isLink("dotfiles/deploy")).toBe(true);
+      expect(yield* dir.read("pack/instructions.md")).toContain("Run the tests.");
+      expect(yield* dir.read("pack/mcp.json")).toBe(packed);
+
+      for (const merge of [false, true]) {
+        yield* service.import(dir.at("pack"), dir.at("inside-chain"), "claude", merge);
+      }
+      expect(yield* dir.read("inside-chain/inner/CLAUDE.md")).toContain("Run the tests.");
+
+      // A skill name that escapes the pack by shape is refused by the manifest itself.
+      const manifest = JSON.parse(yield* dir.read("pack/pack.json"));
+      for (const name of ["..", "../deploy", "/abs/deploy", "sub/deploy"]) {
+        yield* fs.writeFileString(
+          dir.at("pack/pack.json"),
+          JSON.stringify({ ...manifest, skills: [name] }),
+        );
+        const bad = yield* Effect.flip(
+          service.import(dir.at("pack"), dir.at("by-name"), "claude", false),
+        );
+        expect([name, bad._tag]).toEqual([name, "ContextPackFormatError"]);
+      }
     }).pipe(Effect.scoped, Effect.provide(TestLayer)),
   );
 });
