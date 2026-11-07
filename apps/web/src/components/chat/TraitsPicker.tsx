@@ -102,9 +102,10 @@ type TraitsPersistence =
       onModelOptionsChange: (nextOptions: ProviderOptions | undefined) => void;
     };
 
-// Labels come from provider data (and the shared trigger text), so known English phrases are
-// swapped for translations and anything else passes through unchanged.
-const TRAIT_PHRASES = [
+// Labels come from provider data, user-typed option labels and client-runtime's " · "-joined
+// trigger text. A segment is translated only when it is a known phrase, or a known phrase plus the
+// On/Off or speed word the trigger appends; anything else passes through untouched.
+const TRAIT_PHRASES: ReadonlySet<string> = new Set([
   "Reasoning effort",
   "Service Tier",
   "Extra High Effort",
@@ -132,15 +133,27 @@ const TRAIT_PHRASES = [
   "Default",
   "On",
   "Off",
-];
-const TRAIT_PHRASE_PATTERN = new RegExp(String.raw`\b(?:${TRAIT_PHRASES.join("|")})\b`, "g");
+]);
+const TRAIT_SUFFIXES: ReadonlySet<string> = new Set(["On", "Off", "Fast", "Ultrafast"]);
+
+const traitPhrase = (phrase: string, t: TFunction) =>
+  t(`settings.parallelFinalUI.trait_${phrase.toLowerCase().replaceAll(" ", "_")}`);
+
+function traitSegment(segment: string, t: TFunction): string {
+  if (TRAIT_PHRASES.has(segment)) return traitPhrase(segment, t);
+  const space = segment.lastIndexOf(" ");
+  const head = segment.slice(0, space);
+  const tail = segment.slice(space + 1);
+  return space > 0 && TRAIT_SUFFIXES.has(tail) && TRAIT_PHRASES.has(head)
+    ? `${traitPhrase(head, t)} ${traitPhrase(tail, t)}`
+    : segment;
+}
 
 export function traitText(text: string, t: TFunction): string {
-  return text.replace(TRAIT_PHRASE_PATTERN, (phrase) =>
-    t(`settings.parallelFinalUI.trait_${phrase.toLowerCase().replaceAll(" ", "_")}`, {
-      defaultValue: phrase,
-    }),
-  );
+  return text
+    .split(" · ")
+    .map((segment) => traitSegment(segment, t))
+    .join(" · ");
 }
 
 function DefaultBadge() {
@@ -413,9 +426,6 @@ export function useTraitsSelection({
   };
 }
 
-export const ULTRATHINK_IN_BODY_NOTE =
-  'Your prompt contains "ultrathink" in the text. Remove it to change this option.';
-
 const TraitsMenuContent = memo(function TraitsMenuContentImpl(props: TraitsSelectionInput) {
   const { t } = useTranslation();
   const traits = useTraitsSelection(props);
@@ -468,9 +478,7 @@ const TraitsMenuContent = memo(function TraitsMenuContentImpl(props: TraitsSelec
             </div>
             {ultrathinkInBodyText && descriptor.id === primarySelectDescriptor?.id ? (
               <div className="px-2 pb-1.5 text-muted-foreground/80 text-xs">
-                {t("settings.parallelFinalUI.ultrathinkInBodyNote", {
-                  defaultValue: ULTRATHINK_IN_BODY_NOTE,
-                })}
+                {t("settings.parallelFinalUI.ultrathinkInBodyNote")}
               </div>
             ) : null}
             <MenuRadioGroup

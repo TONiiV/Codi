@@ -32,7 +32,6 @@ import {
   getTraitsSectionVisibility,
   traitText,
   type TraitsSelectionInput,
-  ULTRATHINK_IN_BODY_NOTE,
   useTraitsSelection,
 } from "./TraitsPicker";
 
@@ -350,9 +349,7 @@ function EffortRows(props: { control: ColumnControl; traits: TraitsSelection; lo
     >
       {locked ? (
         <div className="px-2 pb-1.5 text-muted-foreground/80 text-xs">
-          {t("settings.parallelFinalUI.ultrathinkInBodyNote", {
-            defaultValue: ULTRATHINK_IN_BODY_NOTE,
-          })}
+          {t("settings.parallelFinalUI.ultrathinkInBodyNote")}
         </div>
       ) : null}
       {choices.map((option, index) => (
