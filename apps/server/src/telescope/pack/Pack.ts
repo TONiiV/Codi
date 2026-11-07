@@ -293,18 +293,36 @@ const plannedRealPath: (
 // 40 follows the platform's own SYMLOOP_MAX; a cycle or a longer chain names no path at all.
 const LINK_HOPS = 40;
 
-// The path at the end of a link chain, undefined once the hop cap is spent.
+// The path the OS writes for `file`, undefined once the hop cap is spent. It walks segment by
+// segment because a `..` applies to the directory a link resolved to, which `path.resolve` and
+// the JS `realpath` both skip by normalizing the text first.
 const linkChainTarget = Effect.fnUntraced(function* (file: string) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
-  let current = file;
-  for (let hop = 0; hop < LINK_HOPS; hop++) {
-    const link = yield* fs.readLink(current).pipe(Effect.orElseSucceed(() => undefined));
-    if (link === undefined) return current;
-    // A relative target is relative to the link's directory as the OS resolves it, links included.
-    current = path.resolve(yield* plannedRealPath(path.dirname(current)), link);
-  }
-  return undefined;
+  let hops = 0;
+  const walk: (dir: string, text: string) => Effect.Effect<string | undefined> = Effect.fnUntraced(
+    function* (dir, text) {
+      let current = path.isAbsolute(text) ? path.parse(text).root : dir;
+      for (const part of text.split(path.sep)) {
+        if (part === "" || part === ".") continue;
+        if (part === "..") {
+          current = path.dirname(current);
+          continue;
+        }
+        const next = path.join(current, part);
+        const link = yield* fs.readLink(next).pipe(Effect.orElseSucceed(() => undefined));
+        if (link === undefined) current = next;
+        else if (++hops > LINK_HOPS) return undefined;
+        else {
+          const target = yield* walk(current, link);
+          if (target === undefined) return undefined;
+          current = target;
+        }
+      }
+      return current;
+    },
+  );
+  return yield* walk(path.sep, path.resolve(file));
 });
 
 // A write follows every link in its target, so what must stay inside the directory being written

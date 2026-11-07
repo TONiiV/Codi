@@ -680,6 +680,11 @@ describe("ContextPackService", () => {
           "chain-dir/.claude/skills/deploy/notes.md": "keep\n",
           "inside-chain/inner/keep.txt": "keep\n",
           "linked-dir/AGENTS.md": "KEEP: the project's own AGENTS.md\n",
+          "dotdot-out/victim.md": "KEEP\n",
+          "dotfiles/a/b/keep.txt": "keep\n",
+          "dotdot-in/AGENTS.md": "KEEP\n",
+          "dotdot-in/deep/AGENTS.md": "deep\n",
+          "dotdot-in/deep/er/keep.txt": "keep\n",
           "absolute/.claude/settings.local.json": "{}",
         },
         {
@@ -714,6 +719,11 @@ describe("ContextPackService", () => {
           // `..` in a hop applies after the OS resolves the hop's directory, here a linked one.
           "linked-dir/.cursor": "config/cursor",
           "linked-dir/config/cursor/rules/context-pack.mdc": "../../AGENTS.md",
+          // `..` inside a link's own text applies after the segment before it is followed.
+          "dotdot-out/esc": "../dotfiles/a/b",
+          "dotdot-out/CLAUDE.md": "esc/../victim.md",
+          "dotdot-in/sub": "deep/er",
+          "dotdot-in/CLAUDE.md": "sub/../AGENTS.md",
           "skills-dir/.claude/skills": "../../dotfiles",
           "dotdot/.claude/skills": "../../project/../dotfiles",
           "instructions/CLAUDE.md": "../dotfiles/CLAUDE.md",
@@ -742,6 +752,7 @@ describe("ContextPackService", () => {
           "cycle",
           "skills-dir",
           "dotdot",
+          "dotdot-out",
           "absolute",
           "instructions",
           "mcp",
@@ -767,6 +778,8 @@ describe("ContextPackService", () => {
       expect(yield* dir.exists(dir.at("dotfiles/missing-chain.md"))).toBe(false);
       expect(yield* dir.exists(dir.at("dotfiles/missing-chain.json"))).toBe(false);
       expect(yield* dir.exists(dir.at("dotfiles/new-scripts"))).toBe(false);
+      expect(yield* dir.exists(dir.at("dotfiles/a/victim.md"))).toBe(false);
+      expect(yield* dir.read("dotdot-out/victim.md")).toBe("KEEP\n");
       expect(yield* dir.isLink("dotfiles/deploy")).toBe(true);
       expect(yield* dir.read("pack/instructions.md")).toContain("Run the tests.");
       expect(yield* dir.read("pack/mcp.json")).toBe(packed);
@@ -774,10 +787,13 @@ describe("ContextPackService", () => {
       for (const merge of [false, true]) {
         yield* service.import(dir.at("pack"), dir.at("inside-chain"), "claude", merge);
         yield* service.import(dir.at("pack"), dir.at("linked-dir"), "cursor", merge);
+        yield* service.import(dir.at("pack"), dir.at("dotdot-in"), "claude", merge);
       }
       expect(yield* dir.read("inside-chain/inner/CLAUDE.md")).toContain("Run the tests.");
       expect(yield* dir.read("linked-dir/AGENTS.md")).toBe("KEEP: the project's own AGENTS.md\n");
       expect(yield* dir.read("linked-dir/config/AGENTS.md")).toContain("Run the tests.");
+      expect(yield* dir.read("dotdot-in/AGENTS.md")).toBe("KEEP\n");
+      expect(yield* dir.read("dotdot-in/deep/AGENTS.md")).toContain("Run the tests.");
 
       // A skill name that escapes the pack by shape is refused by the manifest itself.
       const manifest = JSON.parse(yield* dir.read("pack/pack.json"));
