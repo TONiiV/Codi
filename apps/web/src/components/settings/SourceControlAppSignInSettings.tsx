@@ -113,7 +113,7 @@ export function SourceControlAppSignInSettings({
   const wait = useAtomCommand(sourceControlEnvironment.waitForSignIn, { reportFailure: false });
   const cancel = useAtomCommand(sourceControlEnvironment.cancelSignIn, { reportFailure: false });
   const updateSettings = useAtomCommand(serverEnvironment.updateSettings, {
-    label: t("settings.text.signOutOfAppname", { appName: appSignIn.appName }),
+    label: `sign out of ${appSignIn.appName}`,
   });
   const { copyToClipboard, isCopied } = useCopyToClipboard({
     timeout: 1500,

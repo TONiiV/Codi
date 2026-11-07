@@ -27,7 +27,7 @@ export function SourceControlHostSettings({
     (settings) => settings.sourceControlHosts[definition.kind],
   );
   const updateSettings = useAtomCommand(serverEnvironment.updateSettings, {
-    label: t("settings.text.saveLabelSettings", { label: definition.label }),
+    label: `save ${definition.label} settings`,
   });
   const [saving, setSaving] = useState(false);
   const formDefinition = { settingsSchema: definition.settings };

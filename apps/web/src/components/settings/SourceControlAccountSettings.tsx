@@ -58,7 +58,7 @@ export function SourceControlAccountSettings({
   const { label } = definition;
   const { cliName } = credentials;
   const updateSettings = useAtomCommand(serverEnvironment.updateSettings, {
-    label: t("settings.text.saveLabelAccountSettings", { label }),
+    label: `save ${label} account settings`,
   });
   const [saving, setSaving] = useState(false);
   const [revealed, setRevealed] = useState(false);

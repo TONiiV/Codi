@@ -40,7 +40,7 @@ export function SourceControlTokenSettings({
     readHostCredentialSettings(settings, definition.kind),
   );
   const updateSettings = useAtomCommand(serverEnvironment.updateSettings, {
-    label: t("settings.text.saveLabelToken", { label: definition.label }),
+    label: `save ${definition.label} token`,
   });
   const defaultHost = definition.publicHost ?? "";
   const [host, setHost] = useState(defaultHost);
@@ -97,7 +97,10 @@ export function SourceControlTokenSettings({
               cli: credentials.cliName,
               label: definition.label,
               cliLabel: credentials.cliLabel,
-              access: credentials.tokenAccess,
+              access:
+                definition.kind === "github"
+                  ? t("settings.parallelA.scTokenAccessGithub")
+                  : credentials.tokenAccess,
             }}
             components={{ code: <code className="rounded bg-muted px-1 py-px text-2xs" /> }}
           />{" "}
