@@ -109,7 +109,6 @@ import {
 
 import {
   SettingsUnavailableGroup,
-  SettingResetButton,
   TranslatedSettingResetButton,
   SettingsPageContainer,
   SettingsRow,
@@ -120,6 +119,9 @@ import { AdvancedSettings } from "./AdvancedSettings";
 import { useSettingsScope } from "./SettingsScopeContext";
 import { BrowserImportWizard, type WizardTarget } from "./BrowserImportWizard";
 import type { ImportOutcome } from "./browserImportWizard.logic";
+import i18n from "i18next";
+import type { TFunction } from "i18next";
+import { englishT } from "~/i18n/englishT";
 
 const FILL_VALUE = "fill";
 const RESPONSIVE_VALUE = "responsive";
@@ -139,11 +141,12 @@ export async function clearBrowserProfileData(
   environmentIds: ReadonlyArray<EnvironmentId>,
   profileId: string,
   server?: ServerProfileData,
+  t: TFunction = englishT,
 ): Promise<void> {
   const desktopEnvironmentIds = bridge === null ? [] : environmentIds;
   const serverEnvironmentIds = server?.environmentIds ?? [];
   if (desktopEnvironmentIds.length === 0 && serverEnvironmentIds.length === 0) {
-    throw new Error("Browser profile data is not available to clear.");
+    throw new Error(t("settings.text.browserProfileDataIsNotAvailable"));
   }
   await Promise.all([
     ...desktopEnvironmentIds.flatMap((environmentId) => [
@@ -167,10 +170,10 @@ const RESPONSIVE_SEED_SIZE = { width: 1280, height: 800 } as const;
 
 const NO_GROUPING: Intl.NumberFormatOptions = { useGrouping: false };
 
-const APPEARANCE_LABELS: Readonly<Record<PreviewAppearancePreference, string>> = {
-  system: "System",
-  light: "Light",
-  dark: "Dark",
+const APPEARANCE_LABEL_KEYS: Readonly<Record<PreviewAppearancePreference, string>> = {
+  system: "settings.text.system",
+  light: "settings.text.light",
+  dark: "settings.text.dark",
 };
 
 const zoomLabel = (zoomFactor: number) => `${Math.round(zoomFactor * 100)}%`;
@@ -182,7 +185,7 @@ class ProfileLimitReachedError extends Schema.TaggedError<ProfileLimitReachedErr
   {},
 ) {
   override get message(): string {
-    return "Browser profile limit reached.";
+    return i18n.t("settings.text.browserProfileLimitReached");
   }
 }
 
@@ -302,11 +305,14 @@ const viewportSelectValue = (viewport: PreviewViewportSetting): string => {
 };
 
 /** Inline options lack an items map; bare SelectValue would display the stored fill token. */
-const viewportSelectLabel = (viewport: PreviewViewportSetting): string => {
+const viewportSelectLabel = (viewport: PreviewViewportSetting, t: TFunction = englishT): string => {
   const value = viewportSelectValue(viewport);
-  if (value === FILL_VALUE) return "Fill panel";
-  if (value === RESPONSIVE_VALUE) return "Responsive";
-  return PREVIEW_VIEWPORT_PRESETS.find((preset) => preset.id === value)?.label ?? "Responsive";
+  if (value === FILL_VALUE) return t("settings.text.fillPanel");
+  if (value === RESPONSIVE_VALUE) return t("settings.text.responsive");
+  return (
+    PREVIEW_VIEWPORT_PRESETS.find((preset) => preset.id === value)?.label ??
+    t("settings.text.responsive")
+  );
 };
 
 const isValidDimension = (value: number) =>
@@ -323,6 +329,7 @@ const rotateViewport = (
 });
 
 function BrowserViewportSetting({ disabled }: { readonly disabled: boolean }) {
+  const { t } = useTranslation();
   const viewport = useClientSettings((settings) => settings.browserDefaultViewport);
   const updateSettings = useUpdatePrimarySettings();
 
@@ -370,12 +377,12 @@ function BrowserViewportSetting({ disabled }: { readonly disabled: boolean }) {
 
   return (
     <SettingsRow
-      {...searchableSetting("browser-default-viewport")}
-      description="Tab size for you and agents. Fill fits the panel; other sizes show the device toolbar."
+      {...searchableSetting("browser-default-viewport", t)}
+      description={t("settings.text.tabSizeForYouAndAgents")}
       resetAction={
         !disabled && viewport._tag !== DEFAULT_BROWSER_VIEWPORT._tag ? (
-          <SettingResetButton
-            label="default browser viewport"
+          <TranslatedSettingResetButton
+            label={t("settings.text.defaultBrowserViewport")}
             onClick={() => updateSettings({ browserDefaultViewport: DEFAULT_BROWSER_VIEWPORT })}
           />
         ) : null
@@ -390,15 +397,15 @@ function BrowserViewportSetting({ disabled }: { readonly disabled: boolean }) {
             <SelectTrigger
               size="sm"
               className="w-full min-w-0 sm:w-44"
-              aria-label="Default browser viewport"
+              aria-label={t("settings.text.defaultBrowserViewport2")}
             >
-              <SelectValue>{viewportSelectLabel(viewport)}</SelectValue>
+              <SelectValue>{viewportSelectLabel(viewport, t)}</SelectValue>
             </SelectTrigger>
             <SelectPopup align="end" alignItemWithTrigger={false}>
-              <SelectItem value={FILL_VALUE}>Fill panel</SelectItem>
-              <SelectItem value={RESPONSIVE_VALUE}>Responsive</SelectItem>
+              <SelectItem value={FILL_VALUE}>{t("settings.text.fillPanel")}</SelectItem>
+              <SelectItem value={RESPONSIVE_VALUE}>{t("settings.text.responsive")}</SelectItem>
               <SelectGroup>
-                <SelectGroupLabel>Standard</SelectGroupLabel>
+                <SelectGroupLabel>{t("settings.text.standard")}</SelectGroupLabel>
                 {PREVIEW_VIEWPORT_PRESETS.map((preset) => (
                   <SelectItem key={preset.id} value={preset.id}>
                     <span className="flex w-full items-center justify-between gap-5">
@@ -426,7 +433,7 @@ function BrowserViewportSetting({ disabled }: { readonly disabled: boolean }) {
                 onValueCommitted={(value) => commitDimension("width", value)}
               >
                 <NumberFieldGroup>
-                  <NumberFieldInput aria-label="Default viewport width" />
+                  <NumberFieldInput aria-label={t("settings.text.defaultViewportWidth")} />
                 </NumberFieldGroup>
               </NumberField>
               <span className="text-xs text-muted-foreground">×</span>
@@ -441,7 +448,7 @@ function BrowserViewportSetting({ disabled }: { readonly disabled: boolean }) {
                 onValueCommitted={(value) => commitDimension("height", value)}
               >
                 <NumberFieldGroup>
-                  <NumberFieldInput aria-label="Default viewport height" />
+                  <NumberFieldInput aria-label={t("settings.text.defaultViewportHeight")} />
                 </NumberFieldGroup>
               </NumberField>
               <Tooltip>
@@ -451,9 +458,11 @@ function BrowserViewportSetting({ disabled }: { readonly disabled: boolean }) {
                       size="icon-sm"
                       variant="ghost-muted"
                       disabled={disabled}
-                      aria-label={`Rotate to ${
-                        presentedSize.height >= presentedSize.width ? "landscape" : "portrait"
-                      }`}
+                      aria-label={t(
+                        presentedSize.height >= presentedSize.width
+                          ? "settings.text.rotateToLandscape"
+                          : "settings.text.rotateToPortrait",
+                      )}
                       onClick={() =>
                         updateSettings({ browserDefaultViewport: rotateViewport(sized) })
                       }
@@ -462,7 +471,7 @@ function BrowserViewportSetting({ disabled }: { readonly disabled: boolean }) {
                     </Button>
                   }
                 />
-                <TooltipPopup side="top">Rotate</TooltipPopup>
+                <TooltipPopup side="top">{t("settings.text.rotate")}</TooltipPopup>
               </Tooltip>
             </div>
           ) : null}
@@ -473,17 +482,18 @@ function BrowserViewportSetting({ disabled }: { readonly disabled: boolean }) {
 }
 
 function BrowserZoomSetting({ disabled }: { readonly disabled: boolean }) {
+  const { t } = useTranslation();
   const zoomFactor = useClientSettings((settings) => settings.browserDefaultZoomFactor);
   const updateSettings = useUpdatePrimarySettings();
 
   return (
     <SettingsRow
-      {...searchableSetting("browser-default-zoom")}
-      description="Page zoom applied to new browser tabs."
+      {...searchableSetting("browser-default-zoom", t)}
+      description={t("settings.text.pageZoomAppliedToNewBrowser")}
       resetAction={
         !disabled && zoomFactor !== DEFAULT_PREVIEW_ZOOM_FACTOR ? (
-          <SettingResetButton
-            label="default browser zoom"
+          <TranslatedSettingResetButton
+            label={t("settings.text.defaultBrowserZoom")}
             onClick={() =>
               updateSettings({ browserDefaultZoomFactor: DEFAULT_PREVIEW_ZOOM_FACTOR })
             }
@@ -499,7 +509,11 @@ function BrowserZoomSetting({ disabled }: { readonly disabled: boolean }) {
             if (next !== undefined) updateSettings({ browserDefaultZoomFactor: next });
           }}
         >
-          <SelectTrigger size="sm" className="w-full sm:w-40" aria-label="Default browser zoom">
+          <SelectTrigger
+            size="sm"
+            className="w-full sm:w-40"
+            aria-label={t("settings.text.defaultBrowserZoom2")}
+          >
             <SelectValue>{zoomLabel(zoomFactor)}</SelectValue>
           </SelectTrigger>
           <SelectPopup align="end" alignItemWithTrigger={false}>
@@ -516,17 +530,18 @@ function BrowserZoomSetting({ disabled }: { readonly disabled: boolean }) {
 }
 
 function BrowserAppearanceSetting({ disabled }: { readonly disabled: boolean }) {
+  const { t } = useTranslation();
   const appearance = useClientSettings((settings) => settings.browserDefaultAppearance);
   const updateSettings = useUpdatePrimarySettings();
 
   return (
     <SettingsRow
-      {...searchableSetting("browser-default-appearance")}
-      description="The color scheme pages are told to prefer. System follows your OS setting."
+      {...searchableSetting("browser-default-appearance", t)}
+      description={t("settings.text.theColorSchemePagesAreTold")}
       resetAction={
         !disabled && appearance !== DEFAULT_PREVIEW_APPEARANCE ? (
-          <SettingResetButton
-            label="default browser appearance"
+          <TranslatedSettingResetButton
+            label={t("settings.text.defaultBrowserAppearance")}
             onClick={() => updateSettings({ browserDefaultAppearance: DEFAULT_PREVIEW_APPEARANCE })}
           />
         ) : null
@@ -544,14 +559,14 @@ function BrowserAppearanceSetting({ disabled }: { readonly disabled: boolean }) 
           <SelectTrigger
             size="sm"
             className="w-full sm:w-40"
-            aria-label="Default browser appearance"
+            aria-label={t("settings.text.defaultBrowserAppearance2")}
           >
-            <SelectValue>{APPEARANCE_LABELS[appearance]}</SelectValue>
+            <SelectValue>{t(APPEARANCE_LABEL_KEYS[appearance])}</SelectValue>
           </SelectTrigger>
           <SelectPopup align="end" alignItemWithTrigger={false}>
-            {Object.entries(APPEARANCE_LABELS).map(([value, label]) => (
+            {Object.entries(APPEARANCE_LABEL_KEYS).map(([value, label]) => (
               <SelectItem hideIndicator key={value} value={value}>
-                {label}
+                {t(label)}
               </SelectItem>
             ))}
           </SelectPopup>
@@ -562,19 +577,20 @@ function BrowserAppearanceSetting({ disabled }: { readonly disabled: boolean }) 
 }
 
 function BrowserRecordingInputSettings({ disabled }: { readonly disabled: boolean }) {
+  const { t } = useTranslation();
   const showKeys = useClientSettings((settings) => settings.browserRecordingShowKeyPresses);
   const showMouse = useClientSettings((settings) => settings.browserRecordingShowMousePresses);
   const updateSettings = useUpdatePrimarySettings();
   return (
     <>
       <SettingsRow
-        {...searchableSetting("browser-recording-key-presses")}
-        description="Show pressed keys and shortcuts in new recordings. Password fields are excluded."
+        {...searchableSetting("browser-recording-key-presses", t)}
+        description={t("settings.text.showPressedKeysAndShortcutsIn")}
         control={
           <Switch
             disabled={disabled}
             checked={showKeys}
-            aria-label="Show key presses in recordings"
+            aria-label={t("settings.text.showKeyPressesInRecordings")}
             onCheckedChange={(checked) =>
               updateSettings({ browserRecordingShowKeyPresses: Boolean(checked) })
             }
@@ -582,13 +598,13 @@ function BrowserRecordingInputSettings({ disabled }: { readonly disabled: boolea
         }
       />
       <SettingsRow
-        {...searchableSetting("browser-recording-mouse-presses")}
-        description="Highlight mouse presses and held buttons in new recordings."
+        {...searchableSetting("browser-recording-mouse-presses", t)}
+        description={t("settings.text.highlightMousePressesAndHeldButtons")}
         control={
           <Switch
             disabled={disabled}
             checked={showMouse}
-            aria-label="Show mouse presses in recordings"
+            aria-label={t("settings.text.showMousePressesInRecordings")}
             onCheckedChange={(checked) =>
               updateSettings({ browserRecordingShowMousePresses: Boolean(checked) })
             }
@@ -600,17 +616,18 @@ function BrowserRecordingInputSettings({ disabled }: { readonly disabled: boolea
 }
 
 function BrowserRecordingFrameRateSetting({ disabled }: { readonly disabled: boolean }) {
+  const { t } = useTranslation();
   const frameRate = useClientSettings((settings) => settings.browserRecordingFrameRate);
   const updateSettings = useUpdatePrimarySettings();
 
   return (
     <SettingsRow
-      {...searchableSetting("browser-recording-frame-rate")}
-      description="Maximum recording rate. 30 fps saves CPU and storage; 60 fps is smoother."
+      {...searchableSetting("browser-recording-frame-rate", t)}
+      description={t("settings.text.maximumRecordingRate30FpsSaves")}
       resetAction={
         !disabled && frameRate !== DEFAULT_BROWSER_RECORDING_FRAME_RATE ? (
-          <SettingResetButton
-            label="browser recording frame rate"
+          <TranslatedSettingResetButton
+            label={t("settings.text.browserRecordingFrameRate")}
             onClick={() =>
               updateSettings({ browserRecordingFrameRate: DEFAULT_BROWSER_RECORDING_FRAME_RATE })
             }
@@ -631,14 +648,14 @@ function BrowserRecordingFrameRateSetting({ disabled }: { readonly disabled: boo
           <SelectTrigger
             size="sm"
             className="w-full sm:w-40"
-            aria-label="Browser recording frame rate"
+            aria-label={t("settings.text.browserRecordingFrameRate2")}
           >
-            <SelectValue>{frameRate} fps</SelectValue>
+            <SelectValue>{t("settings.text.framerateFps", { frameRate })}</SelectValue>
           </SelectTrigger>
           <SelectPopup align="end" alignItemWithTrigger={false}>
             {BROWSER_RECORDING_FRAME_RATES.map((rate) => (
               <SelectItem hideIndicator key={rate} value={String(rate)}>
-                {rate} fps
+                {t("settings.text.rateFps", { rate })}
               </SelectItem>
             ))}
           </SelectPopup>
@@ -648,23 +665,24 @@ function BrowserRecordingFrameRateSetting({ disabled }: { readonly disabled: boo
   );
 }
 
-const LINK_TARGET_LABELS: Readonly<Record<BrowserLinkTarget, string>> = {
-  system: "Your default browser",
-  app: "Codi",
-};
+const LINK_TARGETS: ReadonlyArray<BrowserLinkTarget> = ["system", "app"];
+
+const linkTargetLabel = (target: BrowserLinkTarget, t: TFunction): string =>
+  target === "app" ? "Codi" : t("settings.parallelSystem.linkTargetSystem");
 
 function BrowserLinkTargetSetting({ disabled }: { readonly disabled: boolean }) {
+  const { t } = useTranslation();
   const linkTarget = useClientSettings((settings) => settings.browserLinkTarget);
   const updateSettings = useUpdatePrimarySettings();
 
   return (
     <SettingsRow
-      {...searchableSetting("browser-link-target")}
-      description="Where links in the chat and terminal open. Hold ⌘ or Ctrl while clicking a link to open it in your default browser either way."
+      {...searchableSetting("browser-link-target", t)}
+      description={t("settings.text.whereLinksInTheChatAnd")}
       resetAction={
         !disabled && linkTarget !== DEFAULT_BROWSER_LINK_TARGET ? (
-          <SettingResetButton
-            label="link target"
+          <TranslatedSettingResetButton
+            label={t("settings.text.linkTarget")}
             onClick={() => updateSettings({ browserLinkTarget: DEFAULT_BROWSER_LINK_TARGET })}
           />
         ) : null
@@ -679,13 +697,17 @@ function BrowserLinkTargetSetting({ disabled }: { readonly disabled: boolean }) 
             }
           }}
         >
-          <SelectTrigger size="sm" className="w-full sm:w-40" aria-label="Open links in">
-            <SelectValue>{LINK_TARGET_LABELS[linkTarget]}</SelectValue>
+          <SelectTrigger
+            size="sm"
+            className="w-full sm:w-40"
+            aria-label={t("settings.text.openLinksIn")}
+          >
+            <SelectValue>{linkTargetLabel(linkTarget, t)}</SelectValue>
           </SelectTrigger>
           <SelectPopup align="end" alignItemWithTrigger={false}>
-            {(Object.keys(LINK_TARGET_LABELS) as ReadonlyArray<BrowserLinkTarget>).map((target) => (
+            {LINK_TARGETS.map((target) => (
               <SelectItem hideIndicator key={target} value={target}>
-                {LINK_TARGET_LABELS[target]}
+                {linkTargetLabel(target, t)}
               </SelectItem>
             ))}
           </SelectPopup>
@@ -695,17 +717,24 @@ function BrowserLinkTargetSetting({ disabled }: { readonly disabled: boolean }) 
   );
 }
 
-const SEARCH_ENGINE_LABELS: Readonly<Record<BrowserSearchEngine, string>> = {
+const SEARCH_ENGINE_LABELS: Readonly<Record<Exclude<BrowserSearchEngine, "custom">, string>> = {
   duckduckgo: "DuckDuckGo",
   google: "Google",
   bing: "Bing",
   brave: "Brave Search",
   kagi: "Kagi",
   ecosia: "Ecosia",
-  custom: "Custom",
 };
 
+// Built-in profile names are contract literals that cannot be renamed; only the label is translated.
+const browserProfileLabel = (profile: Pick<BrowserProfile, "id" | "name">, t: TFunction): string =>
+  profile.id === DEFAULT_BROWSER_PROFILE_ID ? t("settings.text.default") : profile.name;
+
+const searchEngineLabel = (engine: BrowserSearchEngine, t: TFunction): string =>
+  engine === "custom" ? t("settings.text.custom3") : SEARCH_ENGINE_LABELS[engine];
+
 function BrowserSearchEngineSetting() {
+  const { t } = useTranslation();
   const engine = useClientSettings((settings) => settings.browserSearchEngine);
   const customUrl = useClientSettings((settings) => settings.browserCustomSearchUrl);
   const updateSettings = useUpdatePrimarySettings();
@@ -713,12 +742,12 @@ function BrowserSearchEngineSetting() {
   return (
     <>
       <SettingsRow
-        {...searchableSetting("browser-search-engine")}
-        description="What the address bar searches when you type something that isn't a URL."
+        {...searchableSetting("browser-search-engine", t)}
+        description={t("settings.text.whatTheAddressBarSearchesWhen")}
         resetAction={
           engine !== DEFAULT_BROWSER_SEARCH_ENGINE || customUrl !== "" ? (
-            <SettingResetButton
-              label="search engine"
+            <TranslatedSettingResetButton
+              label={t("settings.text.searchEngine")}
               onClick={() =>
                 updateSettings({
                   browserSearchEngine: DEFAULT_BROWSER_SEARCH_ENGINE,
@@ -738,13 +767,17 @@ function BrowserSearchEngineSetting() {
               }
             }}
           >
-            <SelectTrigger size="sm" className="w-full sm:w-40" aria-label="Search engine">
-              <SelectValue>{SEARCH_ENGINE_LABELS[engine]}</SelectValue>
+            <SelectTrigger
+              size="sm"
+              className="w-full sm:w-40"
+              aria-label={t("settings.text.searchEngine2")}
+            >
+              <SelectValue>{searchEngineLabel(engine, t)}</SelectValue>
             </SelectTrigger>
             <SelectPopup align="end" alignItemWithTrigger={false}>
               {BrowserSearchEngine.literals.map((literal) => (
                 <SelectItem hideIndicator key={literal} value={literal}>
-                  {SEARCH_ENGINE_LABELS[literal]}
+                  {searchEngineLabel(literal, t)}
                 </SelectItem>
               ))}
             </SelectPopup>
@@ -753,19 +786,19 @@ function BrowserSearchEngineSetting() {
       />
       {engine === "custom" ? (
         <SettingsRow
-          title="Custom search URL"
-          description="Use %s where the search terms go."
+          title={t("settings.text.customSearchUrl")}
+          description={t("settings.text.useSWhereTheSearchTerms")}
           status={
             isValidSearchUrlTemplate(customUrl)
               ? undefined
-              : "Enter an http or https URL containing %s. Searches use DuckDuckGo until then."
+              : t("settings.parallelSystem.customSearchUrlHint")
           }
           control={
             <DraftInput
               nativeInput
               size="sm"
               className="w-full sm:w-64"
-              aria-label="Custom search URL"
+              aria-label={t("settings.text.customSearchUrl")}
               placeholder="https://example.com/search?q=%s"
               autoCapitalize="none"
               spellCheck={false}
@@ -1037,6 +1070,7 @@ function DeviceIntegrationControls({
 }
 
 function AgentBrowserAccessSetting() {
+  const { t } = useTranslation();
   const { scope } = useSettingsScope();
   const settings = useScopedSettings();
   const updateSettings = useUpdateScopedSettings();
@@ -1046,16 +1080,16 @@ function AgentBrowserAccessSetting() {
     <SettingsRow
       serverScoped
       settingKeys={["enableAgentBrowserAccess"]}
-      {...searchableSetting("agent-browser-access")}
+      {...searchableSetting("agent-browser-access", t)}
       description={
         isProjectScope
-          ? "Allow agents in this project to use the shared browser. Applies when the agent session next starts."
-          : "Allow agents to use the shared browser. Projects can override it."
+          ? t("settings.text.allowAgentsInThisProjectTo")
+          : t("settings.text.allowAgentsToUseTheShared")
       }
       resetAction={
         settings.enableAgentBrowserAccess !== DEFAULT_SERVER_SETTINGS.enableAgentBrowserAccess ? (
-          <SettingResetButton
-            label="default browser access"
+          <TranslatedSettingResetButton
+            label={t("settings.text.defaultBrowserAccess")}
             onClick={() =>
               updateSettings({
                 enableAgentBrowserAccess: DEFAULT_SERVER_SETTINGS.enableAgentBrowserAccess,
@@ -1067,7 +1101,7 @@ function AgentBrowserAccessSetting() {
       control={
         <ScopedSwitch
           settingKeys={["enableAgentBrowserAccess"]}
-          aria-label="Agent browser access"
+          aria-label={t("settings.text.agentBrowserAccess")}
           checked={settings.enableAgentBrowserAccess}
           onCheckedChange={(enabled) => updateSettings({ enableAgentBrowserAccess: enabled })}
         />
@@ -1077,17 +1111,18 @@ function AgentBrowserAccessSetting() {
 }
 
 function BrowserAutoShowFloatingPreviewSetting({ disabled }: { readonly disabled: boolean }) {
+  const { t } = useTranslation();
   const autoShow = useClientSettings((settings) => settings.browserAutoShowFloatingPreview);
   const updateSettings = useUpdatePrimarySettings();
 
   return (
     <SettingsRow
-      {...searchableSetting("browser-auto-show-floating-preview")}
-      description="Show the floating preview when an agent opens a browser or device unless the agent says otherwise."
+      {...searchableSetting("browser-auto-show-floating-preview", t)}
+      description={t("settings.text.showTheFloatingPreviewWhenAn")}
       resetAction={
         !disabled && autoShow !== DEFAULT_BROWSER_AUTO_SHOW_FLOATING_PREVIEW ? (
-          <SettingResetButton
-            label="auto-show floating preview"
+          <TranslatedSettingResetButton
+            label={t("settings.text.autoShowFloatingPreview")}
             onClick={() =>
               updateSettings({
                 browserAutoShowFloatingPreview: DEFAULT_BROWSER_AUTO_SHOW_FLOATING_PREVIEW,
@@ -1103,7 +1138,7 @@ function BrowserAutoShowFloatingPreviewSetting({ disabled }: { readonly disabled
           onCheckedChange={(checked) =>
             updateSettings({ browserAutoShowFloatingPreview: Boolean(checked) })
           }
-          aria-label="Auto-show floating preview"
+          aria-label={t("settings.text.autoShowFloatingPreview2")}
         />
       }
     />
@@ -1111,6 +1146,7 @@ function BrowserAutoShowFloatingPreviewSetting({ disabled }: { readonly disabled
 }
 
 function BrowserProfilesSetting({ disabled }: { readonly disabled: boolean }) {
+  const { t } = useTranslation();
   const userProfiles = useClientSettings((settings) => settings.browserProfiles);
   const defaultProfileId = useClientSettings((settings) => settings.browserDefaultProfileId);
   const settingsHydrated = useClientSettingsHydrated();
@@ -1194,8 +1230,8 @@ function BrowserProfilesSetting({ disabled }: { readonly disabled: boolean }) {
     if (!removalAvailable) {
       toastManager.add({
         type: "error",
-        title: `Could not clear ${name}'s data`,
-        description: "You're not connected to a server yet.",
+        title: t("settings.text.couldNotClearNameSData", { name }),
+        description: t("settings.text.youReNotConnectedToA"),
       });
       return;
     }
@@ -1204,19 +1240,26 @@ function BrowserProfilesSetting({ disabled }: { readonly disabled: boolean }) {
       environments.map((environment) => environment.environmentId),
       id,
       serverProfileData,
+      t,
     )
       .then(() => {
-        toastManager.add({ type: "success", title: `Cleared ${name}'s cookies and cache` });
+        toastManager.add({
+          type: "success",
+          title: t("settings.text.clearedNameSCookiesAndCache", { name }),
+        });
       })
       .catch(() => {
-        toastManager.add({ type: "error", title: `Could not clear ${name}'s data` });
+        toastManager.add({
+          type: "error",
+          title: t("settings.text.couldNotClearNameSData", { name }),
+        });
       });
   };
 
   const removeProfile = async (id: string) => {
     if (!settingsHydrated || importInFlightRef.current) return;
     if (!removalAvailable) {
-      setProfileRemovalError("Connect to an environment before removing this profile.");
+      setProfileRemovalError(t("settings.text.connectToAnEnvironmentBeforeRemoving"));
       return;
     }
     setProfileRemovalError(null);
@@ -1227,9 +1270,10 @@ function BrowserProfilesSetting({ disabled }: { readonly disabled: boolean }) {
         environmentsReady ? environments.map((environment) => environment.environmentId) : [],
         id,
         serverProfileData,
+        t,
       );
     } catch {
-      setProfileRemovalError("Profile data could not be deleted. Try again.");
+      setProfileRemovalError(t("settings.text.profileDataCouldNotBeDeleted"));
       setProfileRemovalInFlight(false);
       return;
     }
@@ -1300,8 +1344,8 @@ function BrowserProfilesSetting({ disabled }: { readonly disabled: boolean }) {
 
   return (
     <SettingsRow
-      {...searchableSetting("browser-profiles")}
-      description="Profiles separate cookies and logins. Incognito data is cleared when the app closes."
+      {...searchableSetting("browser-profiles", t)}
+      description={t("settings.text.profilesSeparateCookiesAndLoginsIncognito")}
       control={
         <Menu onOpenChange={(open) => open && loadSources()}>
           <MenuTrigger
@@ -1314,27 +1358,27 @@ function BrowserProfilesSetting({ disabled }: { readonly disabled: boolean }) {
             }
           >
             <PlusIcon />
-            Add profile
+            {t("settings.text.addProfile")}
           </MenuTrigger>
           <MenuPopup align="end">
             <MenuItem
               disabled={!settingsHydrated || atProfileLimit}
-              onClick={() => createProfile("New profile")}
+              onClick={() => createProfile(t("settings.text.newProfile"))}
             >
-              Blank profile
+              {t("settings.text.blankProfile")}
             </MenuItem>
             {atProfileLimit ? (
-              <MenuItem disabled>You&rsquo;ve reached the profile limit</MenuItem>
+              <MenuItem disabled>{t("settings.text.youVeReachedTheProfileLimit")}</MenuItem>
             ) : null}
             <MenuSeparator />
             <MenuGroup>
-              <MenuGroupLabel>Import from</MenuGroupLabel>
+              <MenuGroupLabel>{t("settings.text.importFrom")}</MenuGroupLabel>
               {cookieImportDenial !== undefined ? (
                 <MenuItem disabled>{cookieImportDenial}</MenuItem>
               ) : sources === null ? (
-                <MenuItem disabled>Looking for browsers…</MenuItem>
+                <MenuItem disabled>{t("settings.text.lookingForBrowsers")}</MenuItem>
               ) : importableSources.length === 0 ? (
-                <MenuItem disabled>No supported browsers found</MenuItem>
+                <MenuItem disabled>{t("settings.text.noSupportedBrowsersFound")}</MenuItem>
               ) : (
                 <>
                   {importableSources.map((source) => (
@@ -1358,7 +1402,9 @@ function BrowserProfilesSetting({ disabled }: { readonly disabled: boolean }) {
                     </MenuItem>
                   ))}
                   {primaryEnvironment == null ? (
-                    <MenuItem disabled>Connect to an environment to import cookies</MenuItem>
+                    <MenuItem disabled>
+                      {t("settings.text.connectToAnEnvironmentToImport")}
+                    </MenuItem>
                   ) : null}
                 </>
               )}
@@ -1387,14 +1433,14 @@ function BrowserProfilesSetting({ disabled }: { readonly disabled: boolean }) {
                       profileWritesDisabled && "opacity-64",
                     )}
                   >
-                    {profile.name}
+                    {browserProfileLabel(profile, t)}
                   </span>
                 ) : (
                   <DraftInput
                     nativeInput
                     size="sm"
                     className="w-full max-w-56"
-                    aria-label={`Rename ${profile.name}`}
+                    aria-label={t("settings.text.renameName", { name: profile.name })}
                     disabled={profileWritesDisabled || importInFlight}
                     maxLength={BROWSER_PROFILE_NAME_MAX_LENGTH}
                     value={profile.name}
@@ -1403,7 +1449,7 @@ function BrowserProfilesSetting({ disabled }: { readonly disabled: boolean }) {
                 )}
                 {isDefault ? (
                   <span className={cn("flex", profileWritesDisabled && "opacity-64")}>
-                    <Badge>Default</Badge>
+                    <Badge>{t("settings.text.default")}</Badge>
                   </span>
                 ) : null}
               </span>
@@ -1414,7 +1460,9 @@ function BrowserProfilesSetting({ disabled }: { readonly disabled: boolean }) {
                       size="icon-xs"
                       variant="ghost-muted"
                       disabled={profileWritesDisabled || importInFlight}
-                      aria-label={`${profile.name} options`}
+                      aria-label={t("settings.text.nameOptions", {
+                        name: browserProfileLabel(profile, t),
+                      })}
                     />
                   }
                 >
@@ -1429,17 +1477,17 @@ function BrowserProfilesSetting({ disabled }: { readonly disabled: boolean }) {
                       }
                     }}
                   >
-                    Set as default
+                    {t("settings.text.setAsDefault")}
                   </MenuItem>
                   <MenuItem
                     disabled={!settingsHydrated || !removalAvailable}
                     onClick={() => {
                       if (serverProfileData.environmentIds.length > 0) {
                         setProfilePendingClear(profile);
-                      } else clearProfileData(profile.id, profile.name);
+                      } else clearProfileData(profile.id, browserProfileLabel(profile, t));
                     }}
                   >
-                    Clear cookies and cache
+                    {t("settings.text.clearCookiesAndCache")}
                   </MenuItem>
                   {builtIn ? null : (
                     <MenuItem
@@ -1449,7 +1497,7 @@ function BrowserProfilesSetting({ disabled }: { readonly disabled: boolean }) {
                         if (settingsHydrated) setProfilePendingRemoval(profile);
                       }}
                     >
-                      Remove profile and data
+                      {t("settings.text.removeProfileAndData")}
                     </MenuItem>
                   )}
                   {!removalAvailable ? (
@@ -1457,8 +1505,8 @@ function BrowserProfilesSetting({ disabled }: { readonly disabled: boolean }) {
                       <MenuSeparator />
                       <MenuItem disabled>
                         {environmentsReady
-                          ? "Connect to an environment to clear profile data"
-                          : "Checking environments…"}
+                          ? t("settings.text.connectToAnEnvironmentToClear")
+                          : t("settings.text.checkingEnvironments")}
                       </MenuItem>
                     </>
                   ) : null}
@@ -1479,10 +1527,11 @@ function BrowserProfilesSetting({ disabled }: { readonly disabled: boolean }) {
       >
         <AlertDialogPopup>
           <AlertDialogHeader>
-            <AlertDialogTitle>Remove “{profilePendingRemoval?.name}”?</AlertDialogTitle>
+            <AlertDialogTitle>
+              {t("settings.text.removeName", { name: profilePendingRemoval?.name })}
+            </AlertDialogTitle>
             <AlertDialogDescription>
-              Its cookies and logins are deleted. Desktop tabs already open in this profile stay
-              open until you close them; server browser tabs close now.
+              {t("settings.text.itsCookiesAndLoginsAreDeleted")}
             </AlertDialogDescription>
             {profileRemovalError ? (
               <p aria-live="polite" className="text-sm text-destructive">
@@ -1491,7 +1540,7 @@ function BrowserProfilesSetting({ disabled }: { readonly disabled: boolean }) {
             ) : null}
             {!removalAvailable ? (
               <p className="text-sm text-muted-foreground">
-                Connect to an environment to remove this profile and its data.
+                {t("settings.text.connectToAnEnvironmentToRemove")}
               </p>
             ) : null}
           </AlertDialogHeader>
@@ -1500,7 +1549,7 @@ function BrowserProfilesSetting({ disabled }: { readonly disabled: boolean }) {
               disabled={profileRemovalInFlight}
               render={<Button variant="outline" disabled={profileRemovalInFlight} />}
             >
-              Cancel
+              {t("settings.text.cancel")}
             </AlertDialogClose>
             <Button
               variant="destructive"
@@ -1511,7 +1560,9 @@ function BrowserProfilesSetting({ disabled }: { readonly disabled: boolean }) {
                 }
               }}
             >
-              {profileRemovalInFlight ? "Removing…" : "Remove profile"}
+              {profileRemovalInFlight
+                ? t("settings.text.removing")
+                : t("settings.text.removeProfile")}
             </Button>
           </AlertDialogFooter>
         </AlertDialogPopup>
@@ -1525,23 +1576,30 @@ function BrowserProfilesSetting({ disabled }: { readonly disabled: boolean }) {
         <AlertDialogPopup>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              Clear “{profilePendingClear?.name}”’s cookies and cache?
+              {t("settings.text.clearNameSCookiesAndCache", {
+                name: profilePendingClear ? browserProfileLabel(profilePendingClear, t) : undefined,
+              })}
             </AlertDialogTitle>
             <AlertDialogDescription>
-              You are signed out of its sites. Server browser tabs open in this profile close now.
+              {t("settings.text.youAreSignedOutOfIts")}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogClose render={<Button variant="outline" />}>Cancel</AlertDialogClose>
+            <AlertDialogClose render={<Button variant="outline" />}>
+              {t("settings.text.cancel")}
+            </AlertDialogClose>
             <Button
               variant="destructive"
               onClick={() => {
                 if (profilePendingClear)
-                  clearProfileData(profilePendingClear.id, profilePendingClear.name);
+                  clearProfileData(
+                    profilePendingClear.id,
+                    browserProfileLabel(profilePendingClear, t),
+                  );
                 setProfilePendingClear(null);
               }}
             >
-              Clear data
+              {t("settings.text.clearData")}
             </Button>
           </AlertDialogFooter>
         </AlertDialogPopup>
@@ -1550,7 +1608,10 @@ function BrowserProfilesSetting({ disabled }: { readonly disabled: boolean }) {
         <BrowserImportWizard
           source={importSession.source}
           destinationEnvironmentName={importSession.environmentName}
-          targetProfiles={listedProfiles.map((profile) => ({ id: profile.id, name: profile.name }))}
+          targetProfiles={listedProfiles.map((profile) => ({
+            id: profile.id,
+            name: browserProfileLabel(profile, t),
+          }))}
           canCreateProfile={settingsHydrated && !atProfileLimit}
           onImport={(input) =>
             runWizardImport(importSession.source, importSession.environmentId, input)
@@ -1567,8 +1628,8 @@ function BrowserProfilesSetting({ disabled }: { readonly disabled: boolean }) {
               .catch(() => {
                 toastManager.add({
                   type: "error",
-                  title: "Could not open System Settings",
-                  description: "Open Privacy & Security → Full Disk Access manually.",
+                  title: t("settings.text.couldNotOpenSystemSettings"),
+                  description: t("settings.text.openPrivacySecurityFullDiskAccess"),
                 });
               });
           }}
@@ -1580,15 +1641,18 @@ function BrowserProfilesSetting({ disabled }: { readonly disabled: boolean }) {
 }
 
 export function BrowserSettingsPanel() {
+  const { t } = useTranslation();
   const desktopOnly = !isElectron;
-  const desktopOnlyMessage = desktopOnly ? "Only available in the desktop app." : undefined;
+  const desktopOnlyMessage = desktopOnly
+    ? t("settings.text.onlyAvailableInTheDesktopApp")
+    : undefined;
 
   return (
     <SettingsPageContainer>
-      <SettingsSection id="browser-agent-access" title="Agent access">
+      <SettingsSection id="browser-agent-access" title={t("settings.text.agentAccess")}>
         <AgentBrowserAccessSetting />
       </SettingsSection>
-      <SettingsSection id="browser" title="Browsing">
+      <SettingsSection id="browser" title={t("settings.text.browsing")}>
         <SettingsUnavailableGroup message={desktopOnlyMessage}>
           <BrowserProfilesSetting disabled={desktopOnly} />
           <BrowserLinkTargetSetting disabled={desktopOnly} />
@@ -1598,9 +1662,9 @@ export function BrowserSettingsPanel() {
         <BrowserSearchEngineSetting />
         <AdvancedSettings
           targetIds={[
-            searchableSetting("browser-default-viewport").id,
-            searchableSetting("browser-default-zoom").id,
-            searchableSetting("browser-default-appearance").id,
+            searchableSetting("browser-default-viewport", t).id,
+            searchableSetting("browser-default-zoom", t).id,
+            searchableSetting("browser-default-appearance", t).id,
           ]}
         >
           <SettingsUnavailableGroup message={desktopOnlyMessage}>
@@ -1610,7 +1674,7 @@ export function BrowserSettingsPanel() {
           </SettingsUnavailableGroup>
         </AdvancedSettings>
       </SettingsSection>
-      <SettingsSection id="browser-recordings" title="Recordings">
+      <SettingsSection id="browser-recordings" title={t("settings.text.recordings")}>
         <SettingsUnavailableGroup message={desktopOnlyMessage}>
           <BrowserRecordingFrameRateSetting disabled={desktopOnly} />
           <BrowserRecordingInputSettings disabled={desktopOnly} />
