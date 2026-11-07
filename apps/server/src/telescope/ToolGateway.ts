@@ -38,8 +38,10 @@ const TOOL_POWERS: Readonly<Record<Telescope.GatewayTool, Telescope.GrantPower |
   memory_write: null,
 };
 const SECRET_KEY = /token|secret|password|passphrase|api.?key|authorization|cookie|credential/i;
+const AUTH_HEADER_VALUE =
+  /(\bauthorization["']?[ \t]*:[ \t]*["']?)(?:(?:bearer|basic)[ \t]+)?[^\s'"`]+/gi;
 // Known credential shapes only: auth headers, JWTs, private keys and common provider key prefixes.
-// An auth header's token needs a digit or a later capital, so "Basic validation" stays prose.
+// A bare Bearer or Basic token needs a digit or a later capital, so "Basic validation" stays prose.
 const SECRET_VALUE =
   /\b(?:Bearer|Basic)\s+(?=[\w.~+/=-]*\d|[\w.~+/=-]+[A-Z])[\w.~+/=-]{8,}|\beyJ[\w-]{8,}\.[\w-]{8,}\.[\w-]*|-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?(?:-----END [A-Z ]*PRIVATE KEY-----|$)|\bsk-[\w-]{16,}|\b(?:[sr]k_(?:live|test)_|gh[pousr]_|github_pat_|glpat-|xox[abpr]-|AIza)[\w-]{16,}|\bAKIA[0-9A-Z]{16}\b/g;
 
@@ -124,7 +126,7 @@ const toKillSwitch = (row: typeof KillSwitchRow.Type): Telescope.KillSwitch => (
 
 const redact = (value: Schema.Json): Schema.Json =>
   typeof value === "string"
-    ? value.replace(SECRET_VALUE, "[redacted]")
+    ? value.replace(AUTH_HEADER_VALUE, "$1[redacted]").replace(SECRET_VALUE, "[redacted]")
     : Array.isArray(value)
       ? value.map(redact)
       : typeof value === "object" && value !== null

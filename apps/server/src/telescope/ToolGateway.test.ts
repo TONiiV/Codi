@@ -189,6 +189,13 @@ it.layer(layer)("Telescope tool gateway", (it) => {
         "Fix: Basic validation rejects empty briefs.",
         "Bearer authentication.",
       ];
+      const headers = [
+        "curl -H 'Authorization: Bearer supersecrettoken' https://api.example.com",
+        "Authorization: Bearer correct-horse-battery-staple",
+        "authorization: basic Changemeplease",
+        "AUTHORIZATION: supersecrettoken",
+        `{"Authorization": "Bearer supersecrettoken"}`,
+      ];
       const inText = (text: (shape: string) => string) =>
         Object.fromEntries(Object.entries(shapes).map(([name, shape]) => [name, text(shape)]));
       const caller = yield* call("open_ticket", {
@@ -199,6 +206,7 @@ it.layer(layer)("Telescope tool gateway", (it) => {
         ],
         shapes: inText((shape) => `use ${shape} now`),
         prose,
+        headers,
       });
       assert.deepStrictEqual(caller, {
         workspaceId,
@@ -233,6 +241,13 @@ it.layer(layer)("Telescope tool gateway", (it) => {
         nested: [{ brief: "curl -H 'Authorization: [redacted]' [redacted]" }],
         shapes: inText(() => "use [redacted] now"),
         prose,
+        headers: [
+          "curl -H 'Authorization: [redacted]' https://api.example.com",
+          "Authorization: [redacted]",
+          "authorization: [redacted]",
+          "AUTHORIZATION: [redacted]",
+          `{"Authorization": "[redacted]"}`,
+        ],
       });
       assert.deepStrictEqual(entries[1]?.onBehalfOf, [beaId]);
       assert.strictEqual(entries[1]?.projectId, web);
