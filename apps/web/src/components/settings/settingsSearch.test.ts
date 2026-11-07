@@ -230,6 +230,9 @@ describe("searchSettings", () => {
       expect(words(localized.searchTerms), item.id).toEqual(
         words([item.title, ...(item.searchTerms ?? []), SETTINGS_SECTION_LABELS[item.to]]),
       );
+      expect(localizeSettingsSearchItem(item, zh.t).searchTerms, item.id).toContain(
+        SETTINGS_SECTION_LABELS[item.to],
+      );
       if (found(item.title, items, item.id)) {
         expect(found(item.title, zhItems, item.id), item.id).toBe(true);
       }
