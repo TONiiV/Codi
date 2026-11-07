@@ -2,6 +2,7 @@ import {
   createEnvironmentRpcCommand,
   createEnvironmentRpcQueryAtomFamily,
 } from "@t3tools/client-runtime/state/runtime";
+import { createTelescopeBoardAtoms } from "@t3tools/client-runtime/telescope/taskBoard";
 import { Telescope } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 
@@ -9,14 +10,8 @@ import { connectionAtomRuntime } from "../../connection/runtime";
 
 const { WS_METHODS } = Telescope;
 
-const decisions = createEnvironmentRpcQueryAtomFamily(connectionAtomRuntime, {
-  label: "telescope:decision:list",
-  tag: WS_METHODS.decisionList,
-});
-const tasks = createEnvironmentRpcQueryAtomFamily(connectionAtomRuntime, {
-  label: "telescope:task:list",
-  tag: WS_METHODS.taskList,
-});
+// The shared reads refresh on board notices; a local query family here would not.
+const { decisions, tasks } = createTelescopeBoardAtoms(connectionAtomRuntime);
 
 export const telescopeBoard = {
   workspaces: createEnvironmentRpcQueryAtomFamily(connectionAtomRuntime, {

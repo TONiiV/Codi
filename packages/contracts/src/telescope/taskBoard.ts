@@ -13,7 +13,7 @@ import {
   Text,
   WorkspaceId,
 } from "./common.ts";
-import { Decision, ForgeIssueRef, Task, TaskCommit, TaskStatus } from "./board.ts";
+import { Decision, ForgeIssueRef, Lease, Task, TaskCommit, TaskStatus } from "./board.ts";
 
 const InWorkspace = { workspaceId: WorkspaceId };
 
@@ -87,6 +87,26 @@ export const CommitListResult = Schema.Struct({ commits: Schema.Array(TaskCommit
 /** The lease holder is the caller's author: its agent, else the member. */
 export const LeaseAcquireInput = Schema.Struct({ ...InWorkspace, taskId: TaskId });
 export const LeaseScopedInput = Schema.Struct({ ...InWorkspace, leaseId: LeaseId });
+/** The task's unexpired lease; absent while nobody holds it. */
+export const LeaseGetResult = Schema.Struct({ lease: Schema.optionalKey(Lease) });
+
+/**
+ * A committed write to one board item, by its new version. It never carries the item: a watcher
+ * re-reads what it shows. A lease change reaches its task this way through the task's `leaseId`.
+ */
+export const BoardChange = Schema.Struct({
+  kind: Schema.Literals(["task", "decision"]),
+  workspaceId: WorkspaceId,
+  id: BoardItemId,
+  version: Count,
+});
+export type BoardChange = typeof BoardChange.Type;
+/** `synchronized` opens every subscription; a write committed before it is not sent. */
+export const BoardWatchItem = Schema.Union([
+  BoardChange,
+  Schema.Struct({ kind: Schema.Literal("synchronized") }),
+]);
+export type BoardWatchItem = typeof BoardWatchItem.Type;
 
 export class StaleTaskVersionError extends Schema.TaggedError<StaleTaskVersionError>()(
   "TelescopeStaleTaskVersionError",

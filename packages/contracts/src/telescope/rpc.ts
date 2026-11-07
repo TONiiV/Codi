@@ -9,9 +9,17 @@ import {
   AgentGetResult,
   AgentListResult,
   AgentUpdateInput,
+  RoutingRule,
 } from "./agent.ts";
 import {
+  MemoryPinInput,
+  MemorySearchInput,
+  MemorySearchResult,
+  MemoryWriteInput,
+} from "./memory.ts";
+import {
   AgentRun,
+  Memory,
   RunCallsResult,
   RunListInput,
   RunListResult,
@@ -40,12 +48,20 @@ import {
   WorkspaceScopedInput,
 } from "./workspace.ts";
 import {
+  WorkspaceBusyError,
+  WorkspaceDeleteInput,
+  WorkspaceDeleteManifest,
+  WorkspaceExportResult,
+} from "./workspaceData.ts";
+import {
+  BoardWatchItem,
   CommitListInput,
   CommitListResult,
   DecisionCreateInput,
   DecisionListResult,
   FreeTextLimitError,
   LeaseAcquireInput,
+  LeaseGetResult,
   LeaseScopedInput,
   StaleTaskVersionError,
   TaskCreateInput,
@@ -57,17 +73,41 @@ import {
 } from "./taskBoard.ts";
 import { Decision, Lease, Task } from "./board.ts";
 import { TokenSaverReport, TokenSaverRunInput } from "./tokenSaver.ts";
+import {
+  Budget,
+  BudgetSetInput,
+  GovernanceState,
+  KillSwitch,
+  KillSwitchSetInput,
+} from "./governance.ts";
+import {
+  GrantAuditListInput,
+  GrantAuditListResult,
+  GrantExplainInput,
+  GrantExplainResult,
+} from "./grant.ts";
+import { DashboardSummary } from "./dashboard.ts";
+import {
+  RoutingResolution,
+  RoutingResolveInput,
+  RoutingRuleDeleteInput,
+  RoutingRuleListResult,
+  RoutingRuleSetInput,
+} from "./routing.ts";
 
 export const WS_METHODS = {
   workspaceCreate: "telescope.workspace.create",
   workspaceList: "telescope.workspace.list",
   workspaceGet: "telescope.workspace.get",
+  workspaceExport: "telescope.workspace.export",
+  workspaceDelete: "telescope.workspace.delete",
   memberInvite: "telescope.member.invite",
   memberLinkCode: "telescope.member.linkCode",
   memberAccept: "telescope.member.accept",
   memberList: "telescope.member.list",
   memberSetRole: "telescope.member.setRole",
   memberRevoke: "telescope.member.revoke",
+  memberRestore: "telescope.member.restore",
   projectBind: "telescope.project.bind",
   projectUnbind: "telescope.project.unbind",
   projectListBindings: "telescope.project.listBindings",
@@ -79,6 +119,7 @@ export const WS_METHODS = {
   decisionCreate: "telescope.decision.create",
   decisionList: "telescope.decision.list",
   commitList: "telescope.commit.list",
+  boardWatch: "telescope.board.watch",
   agentListMine: "telescope.agent.listMine",
   agentGet: "telescope.agent.get",
   agentCreateCustom: "telescope.agent.createCustom",
@@ -91,8 +132,22 @@ export const WS_METHODS = {
   leaseAcquire: "telescope.lease.acquire",
   leaseHeartbeat: "telescope.lease.heartbeat",
   leaseRelease: "telescope.lease.release",
+  leaseGet: "telescope.lease.get",
   wakeList: "telescope.wake.list",
   tokenSaverRun: "telescope.tokensaver.run",
+  grantExplain: "telescope.grant.explain",
+  grantAuditList: "telescope.grant.audit.list",
+  budgetSet: "telescope.budget.set",
+  killSwitchSet: "telescope.killSwitch.set",
+  governanceGet: "telescope.governance.get",
+  memorySearch: "telescope.memory.search",
+  memoryWrite: "telescope.memory.write",
+  memoryPin: "telescope.memory.pin",
+  dashboardSummary: "telescope.dashboard.summary",
+  routingList: "telescope.routing.list",
+  routingSet: "telescope.routing.set",
+  routingDelete: "telescope.routing.delete",
+  routingResolve: "telescope.routing.resolve",
 } as const;
 
 const error = Schema.Union([WorkspaceError, EnvironmentAuthorizationError]);
@@ -106,12 +161,19 @@ export const WorkspaceRpcs = [
   make(WS_METHODS.workspaceCreate, WorkspaceCreateInput, Workspace),
   make(WS_METHODS.workspaceList, WorkspaceListInput, WorkspaceListResult),
   make(WS_METHODS.workspaceGet, WorkspaceScopedInput, WorkspaceGetResult),
+  make(WS_METHODS.workspaceExport, WorkspaceScopedInput, WorkspaceExportResult),
+  Rpc.make(WS_METHODS.workspaceDelete, {
+    payload: WorkspaceDeleteInput,
+    success: WorkspaceDeleteManifest,
+    error: Schema.Union([WorkspaceError, WorkspaceBusyError, EnvironmentAuthorizationError]),
+  }),
   make(WS_METHODS.memberInvite, MemberInviteInput, Invitation),
   make(WS_METHODS.memberLinkCode, MemberLinkCodeInput, Invitation),
   make(WS_METHODS.memberAccept, MemberAcceptInput, Member),
   make(WS_METHODS.memberList, WorkspaceScopedInput, MemberListResult),
   make(WS_METHODS.memberSetRole, MemberSetRoleInput, Member),
   make(WS_METHODS.memberRevoke, MemberRevokeInput, Member),
+  make(WS_METHODS.memberRestore, MemberRevokeInput, Member),
   make(WS_METHODS.projectBind, ProjectBinding, ProjectBinding),
   make(WS_METHODS.projectUnbind, ProjectUnbindInput, Schema.Struct({})),
   make(WS_METHODS.projectListBindings, WorkspaceScopedInput, ProjectListBindingsResult),
@@ -138,9 +200,16 @@ export const TaskBoardRpcs = [
   makeBoard(WS_METHODS.decisionCreate, DecisionCreateInput, Decision),
   makeBoard(WS_METHODS.decisionList, WorkspaceScopedInput, DecisionListResult),
   makeBoard(WS_METHODS.commitList, CommitListInput, CommitListResult),
+  Rpc.make(WS_METHODS.boardWatch, {
+    payload: WorkspaceScopedInput,
+    success: BoardWatchItem,
+    error,
+    stream: true,
+  }),
   makeBoard(WS_METHODS.leaseAcquire, LeaseAcquireInput, Lease),
   makeBoard(WS_METHODS.leaseHeartbeat, LeaseScopedInput, Lease),
   makeBoard(WS_METHODS.leaseRelease, LeaseScopedInput, Schema.Struct({})),
+  makeBoard(WS_METHODS.leaseGet, TaskGetInput, LeaseGetResult),
 ] as const;
 
 export const AgentRpcs = [
@@ -162,4 +231,29 @@ export const WakeRpcs = [make(WS_METHODS.wakeList, WorkspaceScopedInput, WakeLis
 
 export const TokenSaverRpcs = [
   makeBoard(WS_METHODS.tokenSaverRun, TokenSaverRunInput, TokenSaverReport),
+] as const;
+
+export const GrantRpcs = [
+  make(WS_METHODS.grantExplain, GrantExplainInput, GrantExplainResult),
+  make(WS_METHODS.grantAuditList, GrantAuditListInput, GrantAuditListResult),
+  make(WS_METHODS.budgetSet, BudgetSetInput, Budget),
+  make(WS_METHODS.killSwitchSet, KillSwitchSetInput, KillSwitch),
+  make(WS_METHODS.governanceGet, WorkspaceScopedInput, GovernanceState),
+] as const;
+
+export const MemoryRpcs = [
+  make(WS_METHODS.memorySearch, MemorySearchInput, MemorySearchResult),
+  make(WS_METHODS.memoryWrite, MemoryWriteInput, Memory),
+  make(WS_METHODS.memoryPin, MemoryPinInput, Memory),
+] as const;
+
+export const DashboardRpcs = [
+  make(WS_METHODS.dashboardSummary, WorkspaceScopedInput, DashboardSummary),
+] as const;
+
+export const RoutingRpcs = [
+  make(WS_METHODS.routingList, WorkspaceScopedInput, RoutingRuleListResult),
+  make(WS_METHODS.routingSet, RoutingRuleSetInput, RoutingRule),
+  make(WS_METHODS.routingDelete, RoutingRuleDeleteInput, Schema.Struct({})),
+  make(WS_METHODS.routingResolve, RoutingResolveInput, RoutingResolution),
 ] as const;

@@ -79,17 +79,33 @@ describe("RPC authorization scopes", () => {
       Telescope.WS_METHODS.runGet,
       Telescope.WS_METHODS.runCalls,
       Telescope.WS_METHODS.wakeList,
+      Telescope.WS_METHODS.grantExplain,
+      Telescope.WS_METHODS.memorySearch,
+      Telescope.WS_METHODS.memoryWrite,
+      Telescope.WS_METHODS.memoryPin,
+      Telescope.WS_METHODS.dashboardSummary,
+      Telescope.WS_METHODS.routingList,
+      Telescope.WS_METHODS.routingResolve,
     ]) {
       expect(requiredScopeForRpcMethod(method)).toBe(AuthTelescopeMemberScope);
     }
     for (const method of [
+      Telescope.WS_METHODS.workspaceExport,
+      Telescope.WS_METHODS.workspaceDelete,
       Telescope.WS_METHODS.memberInvite,
       Telescope.WS_METHODS.memberLinkCode,
       Telescope.WS_METHODS.memberSetRole,
       Telescope.WS_METHODS.memberRevoke,
+      Telescope.WS_METHODS.memberRestore,
       Telescope.WS_METHODS.projectBind,
       Telescope.WS_METHODS.projectUnbind,
       Telescope.WS_METHODS.agentUpdateCompany,
+      Telescope.WS_METHODS.grantAuditList,
+      Telescope.WS_METHODS.budgetSet,
+      Telescope.WS_METHODS.killSwitchSet,
+      Telescope.WS_METHODS.governanceGet,
+      Telescope.WS_METHODS.routingSet,
+      Telescope.WS_METHODS.routingDelete,
     ]) {
       expect(requiredScopeForRpcMethod(method)).toBe(AuthTelescopeAdminScope);
     }
@@ -101,9 +117,11 @@ describe("RPC authorization scopes", () => {
       Telescope.WS_METHODS.decisionCreate,
       Telescope.WS_METHODS.decisionList,
       Telescope.WS_METHODS.commitList,
+      Telescope.WS_METHODS.boardWatch,
       Telescope.WS_METHODS.leaseAcquire,
       Telescope.WS_METHODS.leaseHeartbeat,
       Telescope.WS_METHODS.leaseRelease,
+      Telescope.WS_METHODS.leaseGet,
       Telescope.WS_METHODS.tokenSaverRun,
     ]) {
       expect(requiredScopeForRpcMethod(method)).toBe(AuthTelescopeMemberScope);

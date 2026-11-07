@@ -372,10 +372,15 @@ export const make = Effect.gen(function* () {
           Effect.tap((replacedIds) =>
             replacedIds.length === 0
               ? Effect.void
-              : // A Telescope member linked to a replaced session id stays linked to the device.
+              : // Telescope links follow the device to its new session. The new key holds one link per
+                // workspace, so when several replaced sessions shared one, the leftovers are dropped.
                 sql`UPDATE OR IGNORE telescope_member_sessions
                   SET device_key = ${input.session.sessionId}
-                  WHERE ${sql.in("device_key", replacedIds)}`,
+                  WHERE ${sql.in("device_key", replacedIds)}`.pipe(
+                  Effect.andThen(
+                    sql`DELETE FROM telescope_member_sessions WHERE ${sql.in("device_key", replacedIds)}`,
+                  ),
+                ),
           ),
         ),
       )

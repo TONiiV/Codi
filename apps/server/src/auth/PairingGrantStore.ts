@@ -1,4 +1,5 @@
 import {
+  AuthDesktopBootstrapSubject,
   AuthStandardClientScopes,
   type AuthEnvironmentScope,
   type AuthPairingLink,
@@ -326,7 +327,7 @@ const make = Effect.gen(function* () {
     yield* seedGrant(config.desktopBootstrapToken, {
       method: "desktop-bootstrap",
       scopes: AuthStandardClientScopes,
-      subject: "desktop-bootstrap",
+      subject: AuthDesktopBootstrapSubject,
       expiresAt: DateTime.add(now, {
         milliseconds: Duration.toMillis(DESKTOP_BOOTSTRAP_TTL_HOURS),
       }),
@@ -447,7 +448,7 @@ const make = Effect.gen(function* () {
         return {
           method: "desktop-bootstrap",
           scopes: AuthStandardClientScopes,
-          subject: "desktop-bootstrap",
+          subject: AuthDesktopBootstrapSubject,
           expiresAt: DateTime.add(now, {
             milliseconds: DESKTOP_BOOTSTRAP_TOKEN_WINDOW_MS,
           }),

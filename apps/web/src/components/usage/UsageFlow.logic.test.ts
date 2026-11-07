@@ -2,7 +2,7 @@ import { EnvironmentId, ProjectId, type UsageProviderKind } from "@t3tools/contr
 import type { ProjectProviderTotals } from "@t3tools/shared/usageMerge";
 import { describe, expect, it } from "vite-plus/test";
 
-import { buildUsageFlow, fitLabel, OUTSIDE_CODI_LABEL, type FlowUnit } from "./usageFlow";
+import { buildUsageFlow, fitLabel, OUTSIDE_CODI_LABEL, type FlowUnit } from "./UsageFlow.logic";
 
 const environmentId = EnvironmentId.make("env-1");
 

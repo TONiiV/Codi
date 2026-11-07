@@ -1,7 +1,7 @@
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, it } from "@effect/vitest";
-import { AuthSessionId, Telescope } from "@t3tools/contracts";
+import { AuthSessionId, EnvironmentId, Telescope } from "@t3tools/contracts";
 import * as NetService from "@t3tools/shared/Net";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
@@ -11,8 +11,10 @@ import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import * as TestConsole from "effect/testing/TestConsole";
 import { Command } from "effect/cli";
+import * as CliError from "effect/cli/CliError";
 
 import { cli } from "../binCli.ts";
+import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
 import * as SqlitePersistence from "../persistence/Sqlite.ts";
 import * as WorkspaceService from "../telescope/WorkspaceService.ts";
 
@@ -50,6 +52,11 @@ const makeHome = Effect.gen(function* () {
           Layer.provide(
             SqlitePersistence.layerFromPath(path.join(baseDir, "userdata", "statev2.sqlite")),
           ),
+          Layer.provide(
+            Layer.succeed(ServerEnvironment.ServerEnvironmentIdentity, {
+              getEnvironmentId: Effect.succeed(EnvironmentId.make("env-unused")),
+            }),
+          ),
         ),
       ),
     );
@@ -59,7 +66,11 @@ const makeHome = Effect.gen(function* () {
 const failureOf = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(
     Effect.flip,
-    Effect.map((error) => String(error instanceof Error ? error.message : error)),
+    Effect.map((error) =>
+      CliError.isCliError(error) && error._tag === "ShowHelp"
+        ? error.errors.map((cause) => cause.message).join("\n")
+        : String(error instanceof Error ? error.message : error),
+    ),
   );
 
 const layer = Layer.mergeAll(
@@ -86,7 +97,69 @@ it.layer(layer)("telescope CLI", (it) => {
     }),
   );
 
-  it.effect("member invite prints a code, member list and revoke manage members", () =>
+  it.effect("org export and org delete write their files and never overwrite a user's", () =>
+    Effect.gen(function* () {
+      const { t3, baseDir } = yield* makeHome;
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const org = yield* t3("org", "init", "--name", "Acme", "--kind", "enterprise");
+      const out = path.join(baseDir, "export", "acme");
+      yield* t3("org", "export", org, "--out", out);
+      assert.deepEqual((yield* fs.readDirectory(out)).toSorted(), [
+        "README.md",
+        "decisions.md",
+        "memory.md",
+        "runs.md",
+        "tasks.md",
+        "workspace.json",
+      ]);
+      assert.match(yield* fs.readFileString(path.join(out, "README.md")), /^# Acme\n/);
+      const project = path.join(baseDir, "project");
+      yield* fs.makeDirectory(project);
+      yield* fs.writeFileString(path.join(project, "README.md"), "# Project\n");
+      assert.include(
+        yield* failureOf(t3("org", "export", org, "--out", project)),
+        `${project} is not empty.`,
+      );
+      assert.strictEqual(yield* fs.readFileString(path.join(project, "README.md")), "# Project\n");
+
+      const file = path.join(baseDir, "manifest.json");
+      yield* fs.writeFileString(file, "an earlier manifest\n");
+      assert.include(
+        yield* failureOf(t3("org", "delete", org, "--confirm", "acme", "--manifest", file)),
+        "does not match",
+      );
+      assert.strictEqual(yield* fs.readFileString(file), "an earlier manifest\n");
+      const fresh = path.join(baseDir, "fresh-manifest.json");
+      assert.include(
+        yield* failureOf(t3("org", "delete", org, "--confirm", "acme", "--manifest", fresh)),
+        "does not match",
+      );
+      assert.isFalse(yield* fs.exists(fresh));
+      const unwritable = path.join(baseDir, "missing", "manifest.json");
+      const fileError = yield* Effect.flip(
+        t3("org", "delete", org, "--confirm", "Acme", "--manifest", unwritable),
+      );
+      assert.instanceOf(fileError, CliError.UserError);
+      assert.include(fileError.message, unwritable);
+      assert.match(
+        yield* t3("org", "delete", org, "--confirm", "Acme", "--manifest", file),
+        /^Deleted Acme \(.+\)\.\nTABLE\s+ROWS\n/,
+      );
+      const manifest = yield* fs
+        .readFileString(file)
+        .pipe(Effect.flatMap(decodeJson(Telescope.WorkspaceDeleteManifest)));
+      assert.deepEqual(manifest.tables.find(({ table }) => table === "telescope_workspaces")?.ids, [
+        org,
+      ]);
+      const { workspaces } = yield* t3("org", "list", "--json").pipe(
+        Effect.flatMap(decodeJson(Telescope.WorkspaceListResult)),
+      );
+      assert.deepEqual(workspaces, []);
+    }),
+  );
+
+  it.effect("member invite prints a code, member list, revoke and restore manage members", () =>
     Effect.gen(function* () {
       const { t3, join } = yield* makeHome;
       const org = yield* t3("org", "init", "--name", "Acme", "--kind", "personal");
@@ -127,6 +200,29 @@ it.layer(layer)("telescope CLI", (it) => {
         Effect.flatMap(decodeJson(Telescope.MemberListResult)),
       );
       assert.isDefined(members.find((member) => member.subjectId === bob.subjectId)?.revokedAt);
+      assert.strictEqual(
+        yield* t3("member", "restore", "--org", org, "--member", bob.subjectId),
+        `Restored Bob (${bob.subjectId}) as project_lead.`,
+      );
+      assert.match(
+        yield* t3("member", "list", "--org", org),
+        new RegExp(`${bob.subjectId}\\s+project_lead\\s+\\S+\\s+active\\s+Bob$`, "m"),
+      );
+      assert.include(
+        yield* failureOf(t3("member", "restore", "--org", org, "--member", bob.subjectId)),
+        "That person is already an active member.",
+      );
+      assert.include(
+        yield* failureOf(t3("member", "restore", "--org", org, "--member", "nobody")),
+        "That person was never a member of this workspace.",
+      );
+      for (const expires of ["0s", "0ms", "Infinity"])
+        assert.include(
+          yield* failureOf(
+            t3("member", "invite", "--org", org, "--role", "member", "--expires", expires),
+          ),
+          "Invitation codes always expire.",
+        );
 
       assert.include(
         yield* failureOf(t3("member", "revoke", "--org", org, "--member", "owner")),

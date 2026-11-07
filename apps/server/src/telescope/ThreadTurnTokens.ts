@@ -24,11 +24,12 @@ export const layer = Layer.effectDiscard(
       const turn = event.payload;
       const usage = turn.turnTokenUsage;
       if (!TERMINAL.has(turn.status) || usage === undefined || usage.localCommand === true) return;
+      // Subagent and compaction work the provider reported beside the main agent is the run's too.
       const tokens = {
-        input: usage.inputTokens ?? 0,
+        input: (usage.inputTokens ?? 0) + (usage.otherUsage?.inputTokens ?? 0),
         cachedInput: usage.cachedInputTokens ?? 0,
         cacheCreation: usage.cacheCreationTokens ?? 0,
-        output: usage.outputTokens ?? 0,
+        output: (usage.outputTokens ?? 0) + (usage.otherUsage?.outputTokens ?? 0),
       };
       if (tokens.input + tokens.cachedInput + tokens.cacheCreation + tokens.output === 0) return;
       if (counted.has(turn.id)) return;

@@ -81,12 +81,19 @@ import * as PeerForwarding from "./peer/PeerForwarding.ts";
 import * as RemoteDelegation from "./peer/RemoteDelegation.ts";
 import * as PeerLinkRequests from "./peer/PeerLinkRequests.ts";
 import * as TelescopeWorkspaces from "./telescope/WorkspaceService.ts";
+import * as TelescopeWorkspaceData from "./telescope/WorkspaceDataService.ts";
 import * as TelescopeBoard from "./telescope/TaskBoardService.ts";
+import * as TelescopeBoardChanges from "./telescope/BoardChanges.ts";
 import * as TelescopeAgents from "./telescope/AgentService.ts";
 import * as TelescopeRuns from "./telescope/RunRecordService.ts";
+import * as TelescopeGrants from "./telescope/GrantService.ts";
+import * as TelescopeToolGateway from "./telescope/ToolGateway.ts";
 import * as TelescopeThreadTurnTokens from "./telescope/ThreadTurnTokens.ts";
 import * as TelescopeWakeQueue from "./telescope/WakeQueueService.ts";
+import * as TelescopeAttribution from "./telescope/AttributionService.ts";
 import * as TelescopeTokenSaver from "./telescope/tokensaver/TokenSaverService.ts";
+import * as TelescopeMemory from "./telescope/MemoryService.ts";
+import * as TelescopeRouting from "./telescope/RoutingService.ts";
 import * as PeerLinks from "./peer/PeerLinks.ts";
 import * as PeerMcpClient from "./peer/PeerMcpClient.ts";
 import * as McpSessionRegistry from "./mcp/McpSessionRegistry.ts";
@@ -804,7 +811,7 @@ const layerMakeRoutes = Layer.mergeAll(
     RemoteDelegation.RemoteDelegation.pipe(Effect.flatMap((remote) => remote.start())),
   ),
   TelescopeWakeQueue.layerWorker,
-  TelescopeTokenSaver.layerWeekly,
+  Layer.merge(TelescopeTokenSaver.layerWeekly, TelescopeRuns.layerRetention),
 ).pipe(
   Layer.provide(
     PullRequestReviewGuideService.layer.pipe(Layer.provide(PullRequestReviewGuides.layer)),
@@ -815,9 +822,20 @@ const layerMakeRoutes = Layer.mergeAll(
   Layer.provide(PeerLinkRequests.layer),
   Layer.provide(TelescopeWakeQueue.layer),
   Layer.provide(TelescopeWorkspaces.layer),
-  Layer.provide(TelescopeBoard.layer),
+  // The same notice hub TaskBoardService publishes to, by layer memoization.
+  Layer.provide(Layer.merge(TelescopeBoard.layer, TelescopeBoardChanges.layer)),
   Layer.provide(TelescopeAgents.layer),
-  Layer.provide(TelescopeRuns.layer),
+  Layer.provide(
+    Layer.mergeAll(
+      TelescopeRuns.layer,
+      TelescopeGrants.layer,
+      TelescopeMemory.layer,
+      TelescopeToolGateway.layer,
+      TelescopeAttribution.layer,
+      TelescopeRouting.layer,
+      TelescopeWorkspaceData.layer,
+    ),
+  ),
   Layer.provide(TelescopeTokenSaver.layer.pipe(Layer.provide(UsageProjectResolver.layer))),
   // Share the service so HTTP/WS clients single-flight reads and invalidate each other's cached patches.
   Layer.provide(layerPullRequestService),

@@ -1,7 +1,9 @@
 import {
   AuthAccessTokenType,
   AuthAccessWriteScope,
+  AuthAdministrativeBootstrapSubject,
   AuthOrchestrationOperateScope,
+  AuthReusableDevTokenChildSubject,
   AuthStandardClientScopes,
   type AuthAccessTokenResult,
   type AuthBrowserSessionResult,
@@ -51,7 +53,7 @@ import * as ManagedPolicy from "../policy/ManagedPolicy.ts";
 import { requestUrl } from "../requestUrl.ts";
 
 const DEFAULT_SESSION_SUBJECT = "cli-issued-session";
-export const INTERNAL_ADMINISTRATIVE_BOOTSTRAP_SUBJECT = "administrative-bootstrap";
+export const INTERNAL_ADMINISTRATIVE_BOOTSTRAP_SUBJECT = AuthAdministrativeBootstrapSubject;
 
 export interface IssuedPairingLink {
   readonly id: string;
@@ -947,7 +949,7 @@ export const make = Effect.gen(function* () {
           ({
             method: "reusable-dev-token",
             scopes: session.scopes,
-            subject: "reusable-dev-token-child",
+            subject: AuthReusableDevTokenChildSubject,
           }) satisfies ResolvedBootstrapGrant,
       ),
     );

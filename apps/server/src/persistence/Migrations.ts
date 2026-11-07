@@ -90,6 +90,10 @@ import Migration0084 from "./Migrations/084_TelescopeRunIndexes.ts";
 import Migration0086 from "./Migrations/086_TelescopeTaskConflict.ts";
 import Migration0087 from "./Migrations/087_TelescopeWakeMergedInto.ts";
 import Migration0088 from "./Migrations/088_TelescopeDecisionConflict.ts";
+import Migration0089 from "./Migrations/089_TelescopeGrants.ts";
+import Migration0090 from "./Migrations/090_TelescopeBudgetCalls.ts";
+import Migration0092 from "./Migrations/092_TelescopeDelegationThreads.ts";
+import Migration0093 from "./Migrations/093_TelescopeRouting.ts";
 
 const migrationEntries = [
   [1, "OrchestrationEvents", Migration0001],
@@ -180,6 +184,10 @@ const migrationEntries = [
   [86, "TelescopeTaskConflict", Migration0086],
   [87, "TelescopeWakeMergedInto", Migration0087],
   [88, "TelescopeDecisionConflict", Migration0088],
+  [89, "TelescopeGrants", Migration0089],
+  [90, "TelescopeBudgetCalls", Migration0090],
+  [92, "TelescopeDelegationThreads", Migration0092],
+  [93, "TelescopeRouting", Migration0093],
 ] as const;
 
 export const migrationManifest = migrationEntries.map(([id, name]) => [id, name] as const);
