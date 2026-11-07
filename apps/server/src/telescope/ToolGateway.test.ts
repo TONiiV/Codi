@@ -14,6 +14,7 @@ import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import type * as SqlClient from "effect/sql/SqlClient";
 import * as TestClock from "effect/testing/TestClock";
+import * as Tracer from "effect/Tracer";
 
 import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
 import { runMigrations } from "../persistence/Migrations.ts";
@@ -486,33 +487,76 @@ it.layer(layer)("Telescope tool gateway", (it) => {
 });
 
 // Its own database file, so another connection can write between the gateway's steps.
-it.effect("decides on the run as it stands when the call is audited", () =>
+const onFile = <E>(
+  test: (other: NodeSqlite.DatabaseSync) => Effect.Effect<void, E, Layer.Success<typeof layer>>,
+) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const filename = path.join(yield* fs.makeTempDirectoryScoped(), "state.sqlite");
-    yield* Effect.gen(function* () {
-      const { threadId, runId, gateway, audit, usedCount } = yield* setup;
+    yield* Effect.suspend(() => {
       const other = new NodeSqlite.DatabaseSync(filename);
-      const end = other.prepare("UPDATE telescope_runs SET finished_at = ? WHERE run_id = ?");
-      // Another connection ends the run while the gateway reads the call's arguments.
-      const args = {
-        get title() {
-          end.run("2026-11-07T00:00:00.000Z", runId);
-          return "Fix";
-        },
-      };
-      const outcome = yield* gateway
-        .call(threadId, "open_ticket", args, () => Effect.succeed("ran"))
-        .pipe(
-          Effect.catchTags({
-            TelescopeToolGatewayDenied: (error) => Effect.succeed(error.reason),
-          }),
-        );
-      other.close();
-      assert.strictEqual(outcome, "no_run");
-      assert.strictEqual(usedCount(), 0);
-      assert.lengthOf(yield* audit, 0);
+      return test(other).pipe(Effect.ensuring(Effect.sync(() => other.close())));
     }).pipe(Effect.provide(servicesOn(NodeSqliteClient.layer({ filename }))));
-  }).pipe(Effect.provide(NodeServices.layer)),
+  }).pipe(Effect.provide(NodeServices.layer));
+
+/** As the gateway finishes the span named `step`, the other connection tries to end the run. */
+const endRunAfter = (other: NodeSqlite.DatabaseSync, runId: string, step: string) => {
+  const end = other.prepare("UPDATE telescope_runs SET finished_at = ? WHERE run_id = ?");
+  const attempt: { result?: string } = {};
+  const tracer = Tracer.make({
+    span: (options) => {
+      const span = new Tracer.NativeSpan(options);
+      if (options.name !== step || attempt.result !== undefined) return span;
+      const close = span.end.bind(span);
+      span.end = (endTime, exit) => {
+        close(endTime, exit);
+        try {
+          end.run("2026-11-07T00:00:00.000Z", runId);
+          attempt.result = "ended";
+        } catch (error) {
+          attempt.result = error instanceof Error ? error.message : String(error);
+        }
+      };
+      return span;
+    },
+  });
+  return { tracer, attempt };
+};
+
+it.effect.each([
+  ["TelescopeDb.latestRunForThread", ["ended", "no_run", []]],
+  ["GrantService.compute", ["database is locked", "ran", ["allowed"]]],
+] as const)(
+  "allows and audits a call only on a run that stays open: ended after %s",
+  ([step, expected]) =>
+    onFile((other) =>
+      Effect.gen(function* () {
+        const { threadId, runId, gateway, audit } = yield* setup;
+        const { tracer, attempt } = endRunAfter(other, runId, step);
+        const outcome = yield* gateway
+          .call(threadId, "open_ticket", {}, () => Effect.succeed("ran"))
+          .pipe(
+            Effect.withTracer(tracer),
+            Effect.catchTags({
+              TelescopeToolGatewayDenied: (error) => Effect.succeed(error.reason),
+            }),
+          );
+        const outcomes = (yield* audit).map((entry) => entry.outcome);
+        assert.deepStrictEqual([attempt.result, outcome, outcomes], expected);
+      }),
+    ),
+);
+
+it.effect("takes no write lock for a dispatch on a thread without a run", () =>
+  onFile((other) =>
+    Effect.gen(function* () {
+      const { gateway } = yield* setup;
+      other.exec("BEGIN IMMEDIATE");
+      const plain = ThreadId.make("thread-without-run");
+      const exit = yield* gateway.callIfRun(plain, "dispatch_worker", {}, Effect.succeed("ran"));
+      other.exec("ROLLBACK");
+      assert.deepStrictEqual(exit, Exit.succeed("ran"));
+    }),
+  ),
 );

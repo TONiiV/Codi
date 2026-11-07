@@ -350,6 +350,8 @@ const make = Effect.gen(function* () {
     use: (caller: ToolCaller) => Effect.Effect<A, E, R>,
     refusalOf: RefusalOf,
   ) {
+    // No open run means no audit row to pair it with, so no write lock; `decide` reads again under it.
+    if ((yield* db.latestRunForThread(threadId, decodeRuns)).length === 0) return undefined;
     const argsRedacted = redact(args);
     const decided = yield* db.transaction(decide(threadId, tool, argsRedacted, refusalOf));
     if (decided === undefined) return undefined;
