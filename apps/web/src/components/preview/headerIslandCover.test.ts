@@ -3,37 +3,68 @@ import { describe, expect, it } from "vite-plus/test";
 import { isHeaderIslandCovered } from "./headerIslandCover";
 
 describe("isHeaderIslandCovered", () => {
-  const islandRight = 748;
+  const island = { right: 748, bottom: 52 };
 
   it.each([
-    { name: "a panel well clear of the island", panelLeft: 900, covered: false, expected: false },
-    { name: "an edge that reaches the island", panelLeft: 740, covered: false, expected: true },
-    { name: "a maximized panel", panelLeft: 0, covered: false, expected: true },
+    {
+      name: "a panel well clear of the island",
+      left: 900,
+      top: 0,
+      covered: false,
+      expected: false,
+    },
+    { name: "an edge that reaches the island", left: 740, top: 0, covered: false, expected: true },
+    { name: "a maximized panel", left: 0, top: 0, covered: false, expected: true },
+    {
+      name: "an edge exactly the clearance away",
+      left: 796,
+      top: 0,
+      covered: false,
+      expected: false,
+    },
+    {
+      name: "a panel that starts at the island's bottom",
+      left: 0,
+      top: 52,
+      covered: false,
+      expected: false,
+    },
+    {
+      name: "a panel that starts below the island",
+      left: 0,
+      top: 121,
+      covered: false,
+      expected: false,
+    },
     {
       name: "an edge whose header button would touch the island",
-      panelLeft: 790,
+      left: 790,
+      top: 0,
       covered: false,
       expected: true,
     },
     {
       name: "a shown island the edge hovers near",
-      panelLeft: 800,
+      left: 800,
+      top: 0,
       covered: false,
       expected: false,
     },
     {
       name: "a covered island the edge barely left",
-      panelLeft: 800,
+      left: 800,
+      top: 0,
       covered: true,
       expected: true,
     },
     {
       name: "a covered island the edge left for good",
-      panelLeft: 820,
+      left: 820,
+      top: 0,
       covered: true,
       expected: false,
     },
-  ])("$name", ({ panelLeft, covered, expected }) => {
-    expect(isHeaderIslandCovered(panelLeft, islandRight, covered)).toBe(expected);
+  ])("$name", ({ left, top, covered, expected }) => {
+    expect(isHeaderIslandCovered({ left, top }, island, covered)).toBe(expected);
   });
 });
