@@ -37,6 +37,7 @@ import { CodexProviderCapabilitiesV2 } from "../orchestration-v2/Adapters/CodexA
 import * as CommandReceiptStore from "../orchestration-v2/CommandReceiptStore.ts";
 import * as EffectOutbox from "../orchestration-v2/EffectOutbox.ts";
 import * as EventStore from "../orchestration-v2/EventStore.ts";
+import * as Orchestrator from "../orchestration-v2/Orchestrator.ts";
 import * as ProjectionStore from "../orchestration-v2/ProjectionStore.ts";
 import * as ProjectStore from "../orchestration-v2/ProjectStore.ts";
 import * as ProviderAdapterRegistry from "../orchestration-v2/ProviderAdapterRegistry.ts";
@@ -646,7 +647,7 @@ it.effect.each([
   { worker: "ended its turn", started: true },
   { worker: "never got its thread", started: false },
 ] as const)(
-  "a restart finishes the runs left open while it was down, where the Worker $worker, and wakes the Chief once for its task; settling again changes nothing",
+  "a restart finishes the runs left open while it was down, where the Worker $worker, past a later turn on the Chief's thread, and wakes the Chief once for its task; settling again changes nothing",
   ({ started }) =>
     withHarness(
       (harness) =>
@@ -675,10 +676,22 @@ it.effect.each([
           }
           yield* harness.complete(turn);
           yield* Fiber.join(runner);
+          yield* (yield* Orchestrator.OrchestratorV2).dispatch({
+            type: "message.dispatch",
+            commandId: CommandId.make("member-asks"),
+            threadId: turn.threadId,
+            messageId: MessageId.make("member-asks"),
+            text: "进度如何？",
+            attachments: [],
+            dispatchMode: { type: "start_immediately" },
+            createdBy: "user",
+            creationSource: "web",
+          });
+          yield* Queue.take(harness.started);
 
           const restarted = yield* AgentThreadRuns.makeHandler;
           yield* restarted.settleOrphans;
-          const ended = [yield* Queue.take(harness.finished), yield* Queue.take(harness.finished)];
+          const ended = yield* Queue.clear(harness.finished);
           assert.sameMembers(
             ended.map((run) => run.threadId),
             [turn.threadId, worker.threadId],
@@ -698,6 +711,30 @@ it.effect.each([
         }),
       false,
     ),
+);
+
+it.effect("the startup pass leaves a run opened after it read the open runs", () =>
+  withHarness(
+    (harness) =>
+      Effect.gen(function* () {
+        const seeded = yield* seed;
+        const db = yield* TelescopeDb.TelescopeDb;
+        const delegations = yield* DelegationService.DelegationService;
+        const { delegation, call } = yield* chiefWorking(harness, seeded);
+        const started = yield* AgentThreadRuns.makeHandler;
+        yield* Ref.set(harness.hook, (step) =>
+          step === "create" ? Effect.die("thread not created yet") : Effect.void,
+        );
+        yield* Effect.exit(call("dispatch_worker", { delegationId: delegation.id, brief }));
+        const worker = (yield* delegations.listForAgent(seeded.workspaceId, seeded.chief)).find(
+          (row) => row.hop === "worker",
+        )!;
+        yield* started.settleOrphans;
+        assert.strictEqual(yield* Queue.size(harness.finished), 0);
+        assert.lengthOf(yield* db.openRunsOnThread(worker.threadId!), 1);
+      }),
+    false,
+  ),
 );
 
 it.effect.each([
