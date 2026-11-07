@@ -141,6 +141,11 @@ export class WakeQueueService extends Context.Service<
       wake: Telescope.Wake,
       status: "done" | "failed" | "interrupted",
     ) => Effect.Effect<void, Failure>;
+    /** Keeps the queued wake with this coalesce key from starting; a running one is left alone. */
+    readonly drop: (
+      workspaceId: Telescope.WorkspaceId,
+      coalesceKey: string,
+    ) => Effect.Effect<void, Failure>;
     /** Marks wakes left running by a previous process as interrupted. */
     readonly interruptRunning: Effect.Effect<void, Failure>;
     /** 1-based place among queued wakes on this machine, caps and holds ignored. */
@@ -349,6 +354,18 @@ const make = Effect.gen(function* () {
     yield* work.open;
   });
 
+  const drop = Effect.fn("WakeQueueService.drop")(function* (
+    workspaceId: Telescope.WorkspaceId,
+    coalesceKey: string,
+  ) {
+    yield* db.update(
+      workspaceId,
+      "wakes",
+      { status: "interrupted", finished_at: yield* now },
+      { coalesce_key: coalesceKey, status: "queued" },
+    );
+  }, lock.withPermit);
+
   const interruptRunning = Effect.gen(function* () {
     const finishedAt = yield* now;
     const ids = yield* db.workspaceIdsWithActiveWakes;
@@ -398,6 +415,7 @@ const make = Effect.gen(function* () {
     dequeue,
     take,
     finish,
+    drop,
     interruptRunning,
     position,
     list,
