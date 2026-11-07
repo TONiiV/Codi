@@ -762,6 +762,22 @@ describe("sideChatSourceBlock", () => {
       "subagent",
     ],
     ["a delegated thread", { lineage: root, delegatedFrom }, ready, true, "subagent"],
+    // Family rows, read for threads the shell omits, leave `delegatedFrom` out instead of null.
+    ["a main thread from its family", { lineage: root }, ready, true, null],
+    [
+      "a side chat from its family",
+      { lineage: { ...child, relationshipToParent: "fork" as const, sideChat: true } },
+      ready,
+      true,
+      "sideChat",
+    ],
+    [
+      "an idle subagent from its family",
+      { lineage: { ...child, relationshipToParent: "subagent" as const } },
+      ready,
+      true,
+      "subagent",
+    ],
     ["a server without side chats", main, { sideChats: false }, true, "unsupported"],
     ["a server older than side chats", main, {}, true, "unsupported"],
     ["a server not loaded yet", main, null, true, "loading"],
