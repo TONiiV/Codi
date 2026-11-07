@@ -19,21 +19,29 @@ export const make = Effect.gen(function* () {
   // The decision id names the command, so re-sending after a restart replays the same message.
   const sendTo = (decisionId: string) => (threadId: ThreadId, text: string) =>
     threads.getThreadShell(threadId).pipe(
-      Effect.flatMap(Effect.fromNullishOr),
       Effect.flatMap((thread) =>
-        threads.sendToThread({
-          projectId: thread.projectId,
-          commandId: CommandId.make(`telescope-answer:${decisionId}`),
-          threadId,
-          messageId: MessageId.make(`telescope-answer:${decisionId}`),
-          text,
-          attachments: [],
-          mode: "queue",
-          createdBy: "agent",
-          creationSource: "server",
-        }),
+        thread === null
+          ? Effect.succeed(false)
+          : threads
+              .sendToThread({
+                projectId: thread.projectId,
+                commandId: CommandId.make(`telescope-answer:${decisionId}`),
+                threadId,
+                messageId: MessageId.make(`telescope-answer:${decisionId}`),
+                text,
+                attachments: [],
+                mode: "queue",
+                createdBy: "agent",
+                creationSource: "server",
+              })
+              .pipe(
+                Effect.as(true),
+                Effect.catchTags({
+                  ThreadManagementThreadArchivedError: () => Effect.succeed(false),
+                  ThreadManagementThreadNotFoundError: () => Effect.succeed(false),
+                }),
+              ),
       ),
-      Effect.asVoid,
     );
   const deliver = (ref: {
     readonly workspaceId: Telescope.WorkspaceId;

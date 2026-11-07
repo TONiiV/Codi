@@ -288,6 +288,7 @@ it.effect("a terminal report wakes the from-agent once, by delegation id", () =>
       state: "INPUT_REQUIRED",
       report: { result: "", decisions: [], blockedOn: "用哪种电机", needsFrom: "ann" },
       question: "用哪种电机",
+      options: ["A 电机"],
     });
     assert.strictEqual(question.state, "INPUT_REQUIRED");
     assert.strictEqual(
@@ -514,18 +515,24 @@ const question = (
 const decisions = TaskBoardService.TaskBoardService.use((board) =>
   board.listDecisions({ caller: session("ann") }, { workspaceId: ws }),
 ).pipe(Effect.map((result) => result.decisions));
-const decide = (proposal: Telescope.Decision, chosen: string, text = proposal.text) =>
+const decide = (
+  proposal: Telescope.Decision,
+  chosen: string,
+  text = proposal.text,
+  by = "ann",
+  status: "decided" | "proposed" = "decided",
+) =>
   TaskBoardService.TaskBoardService.use((board) =>
     board.createDecision(
-      { caller: session("ann") },
+      { caller: session(by) },
       {
         workspaceId: ws,
         title: proposal.title,
         text,
-        status: "decided",
+        status,
         supersedes: proposal.id,
         ...(proposal.options === undefined ? {} : { options: proposal.options }),
-        chosen,
+        ...(status === "decided" ? { chosen } : {}),
       },
     ),
   );
@@ -534,7 +541,7 @@ const recordSends = Effect.map(
   (sent) => ({
     sent,
     send: (threadId: ThreadId, text: string) =>
-      Ref.update(sent, (all) => [...all, [threadId, text] as const]),
+      Ref.update(sent, (all) => [...all, [threadId, text] as const]).pipe(Effect.as(true)),
   }),
 );
 
@@ -543,13 +550,25 @@ it.effect("INPUT_REQUIRED opens one proposed decision with the agent's options",
     const delegations = yield* setup;
     const task = yield* delegations.delegate(actor(pa), { toAgentId: chief, brief });
     yield* delegations.start({ workspaceId: ws, delegationId: task.id });
-    const unasked = delegations.report(actor(chief), {
-      delegationId: task.id,
-      state: "INPUT_REQUIRED",
-      report: done,
-    });
-    assert.strictEqual(yield* failure(unasked), "invalid");
+    const refused = [
+      {},
+      { question: "新仓库叫什么名字" },
+      { question: "新仓库叫什么名字", options: [] },
+    ];
+    for (const asking of refused) {
+      const unasked = delegations.report(actor(chief), {
+        delegationId: task.id,
+        state: "INPUT_REQUIRED",
+        report: done,
+        ...asking,
+      });
+      assert.strictEqual(yield* failure(unasked), "invalid");
+    }
     assert.deepStrictEqual(yield* decisions, []);
+    assert.strictEqual(
+      (yield* delegations.get({ workspaceId: ws, delegationId: task.id })).state,
+      "WORKING",
+    );
 
     const asked = yield* question("INPUT_REQUIRED");
     const [proposal, ...others] = yield* decisions;
@@ -619,9 +638,14 @@ it.effect("an agent cannot settle its own question (D57)", () =>
   }).pipe(Effect.provide(layer)),
 );
 
-it.effect.each(["worker", "agent"] as const)(
-  "an answer moves the delegation to WORKING and delivers once to the asking %s hop",
-  (hop) =>
+it.effect.each([
+  { hop: "worker", by: "ann", counter: false },
+  { hop: "agent", by: "ann", counter: false },
+  { hop: "worker", by: "ann", counter: true },
+  { hop: "agent", by: "bea", counter: false },
+] as const)(
+  "an answer moves the delegation to WORKING and delivers once to the asking $hop hop (by $by, counter-proposal $counter)",
+  ({ hop, by, counter }) =>
     Effect.gen(function* () {
       const delegations = yield* setup;
       const asked = yield* question("INPUT_REQUIRED", hop);
@@ -629,11 +653,13 @@ it.effect.each(["worker", "agent"] as const)(
       if (proposal === undefined) return assert.fail("no proposal");
       const { send, sent } = yield* recordSends;
       const ref = { workspaceId: ws, decisionId: proposal.id };
+      const replaced = counter ? yield* decide(proposal, "", "换个说法", by, "proposed") : proposal;
       assert.isUndefined(yield* delegations.answer(ref, send));
 
-      yield* decide(proposal, "2", "预算够，用 B");
+      yield* decide(replaced, "2", "预算够，用 B", by);
       const answered = yield* delegations.answer(ref, send);
-      const text = 'Your member answered "用哪种电机": B 电机\n预算够，用 B';
+      const who = by === "ann" ? "Your member" : "A workspace member";
+      const text = `${who} answered "用哪种电机": B 电机\n预算够，用 B`;
       assert.deepStrictEqual(
         [answered?.id, answered?.state, answered?.decisionId],
         [asked.id, "WORKING", undefined],
@@ -784,46 +810,73 @@ it.effect("a member lists, reads and cancels only delegations of its own chain (
 );
 
 /** The listener with a fake orchestrator that records each message sent to a thread. */
-const listen = Effect.gen(function* () {
-  const sends = yield* Queue.unbounded<ThreadManagementService.ThreadManagementSendInput>();
-  const answers = yield* DelegationAnswers.make.pipe(
-    Effect.provide(
-      Layer.mock(ThreadManagementService.ThreadManagementService)({
-        getThreadShell: () => Effect.succeed({ projectId: "project-gripper" } as never),
-        sendToThread: (input) => Queue.offer(sends, input).pipe(Effect.as({} as never)),
-      }),
-    ),
-  );
-  return { ...answers, sends };
-});
-
-it.effect("the restart re-scan delivers a missed answer once", () =>
+const listen = (thread: "open" | "archived" | "deleted" = "open") =>
   Effect.gen(function* () {
-    const delegations = yield* setup;
-    const asked = yield* question("INPUT_REQUIRED", "worker");
-    const [proposal] = yield* decisions;
-    if (proposal === undefined) return assert.fail("no proposal");
-    yield* decide(proposal, "1");
+    const sends = yield* Queue.unbounded<ThreadManagementService.ThreadManagementSendInput>();
+    const answers = yield* DelegationAnswers.make.pipe(
+      Effect.provide(
+        Layer.mock(ThreadManagementService.ThreadManagementService)({
+          getThreadShell: () =>
+            Effect.succeed(
+              thread === "deleted" ? null : ({ projectId: "project-gripper" } as never),
+            ),
+          sendToThread: (input) =>
+            Queue.offer(sends, input).pipe(
+              Effect.andThen(
+                thread === "archived"
+                  ? Effect.fail(
+                      new ThreadManagementService.ThreadManagementThreadArchivedError({
+                        threadId: input.threadId,
+                      }),
+                    )
+                  : Effect.succeed({} as never),
+              ),
+            ),
+        }),
+      ),
+    );
+    return { ...answers, sends };
+  });
 
-    const { catchUp, sends } = yield* listen;
-    yield* catchUp;
-    yield* catchUp;
-    const sent = yield* Queue.takeAll(sends);
-    assert.deepStrictEqual(
-      sent.map((input) => [input.threadId, input.commandId, input.text]),
-      [
-        [
-          workerThread,
-          `telescope-answer:${proposal.id}`,
-          'Your member answered "用哪种电机": A 电机',
-        ],
-      ],
-    );
-    assert.strictEqual(
-      (yield* delegations.get({ workspaceId: ws, delegationId: asked.id })).state,
-      "WORKING",
-    );
-  }).pipe(Effect.scoped, Effect.provide(layer)),
+it.effect.each(["open", "archived", "deleted"] as const)(
+  "the restart re-scan delivers a missed answer once (Worker thread %s)",
+  (thread) =>
+    Effect.gen(function* () {
+      const delegations = yield* setup;
+      const asked = yield* question("INPUT_REQUIRED", "worker");
+      const [proposal] = yield* decisions;
+      if (proposal === undefined) return assert.fail("no proposal");
+      yield* decide(proposal, "1");
+
+      const { catchUp, sends } = yield* listen(thread);
+      yield* catchUp;
+      yield* catchUp;
+      const sent = yield* Queue.clear(sends);
+      const attempt = [
+        workerThread,
+        `telescope-answer:${proposal.id}`,
+        'Your member answered "用哪种电机": A 电机',
+      ];
+      assert.deepStrictEqual(
+        sent.map((input) => [input.threadId, input.commandId, input.text]),
+        thread === "deleted" ? [] : [attempt],
+      );
+      const after = yield* delegations.get({ workspaceId: ws, delegationId: asked.id });
+      const reported = yield* wakes({ coalesce_key: `delegation:${asked.id}:report` });
+      if (thread === "open") {
+        assert.strictEqual(after.state, "WORKING");
+        assert.deepStrictEqual(reported, []);
+      } else {
+        assert.deepStrictEqual(
+          [after.state, after.report?.blockedOn],
+          ["FAILED", "The Worker thread was archived or deleted."],
+        );
+        assert.deepStrictEqual(
+          reported.map((wake) => [wake.agent_id, wake.status, wake.payload_json]),
+          [[chief, "queued", { kind: "report", delegationId: asked.id }]],
+        );
+      }
+    }).pipe(Effect.scoped, Effect.provide(layer)),
 );
 
 it.effect("a member's decision goes to the asking Worker thread and no other", () =>
@@ -831,7 +884,7 @@ it.effect("a member's decision goes to the asking Worker thread and no other", (
     const delegations = yield* setup;
     const other = yield* question("INPUT_REQUIRED", "worker", ThreadId.make("thread-other"));
     const asked = yield* question("INPUT_REQUIRED", "worker");
-    const { follow, sends } = yield* listen;
+    const { follow, sends } = yield* listen();
     const following = yield* Effect.forkScoped(follow);
     const proposal = (yield* decisions).find((decision) => decision.id === asked.decisionId);
     if (proposal === undefined) return assert.fail("no proposal");
@@ -840,7 +893,7 @@ it.effect("a member's decision goes to the asking Worker thread and no other", (
     assert.strictEqual((yield* Queue.take(sends)).threadId, workerThread);
     // `answer` holds the service lock, so this waits for the delivery in flight to finish.
     const ref = { workspaceId: ws, decisionId: proposal.id };
-    assert.isUndefined(yield* delegations.answer(ref, () => Effect.void));
+    assert.isUndefined(yield* delegations.answer(ref, () => Effect.succeed(true)));
     yield* Fiber.interrupt(following);
     assert.strictEqual(yield* Queue.size(sends), 0);
     const states = yield* Effect.forEach([asked, other], ({ id }) =>

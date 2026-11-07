@@ -42,6 +42,7 @@ const AgentRow = Schema.Struct({
 });
 
 const DecisionRow = Schema.Struct({
+  item_id: Schema.String,
   title: Schema.String,
   text: Schema.NullOr(Schema.String),
   chosen: Schema.NullOr(Schema.String),
@@ -121,6 +122,7 @@ const APPROVAL = [
   { id: "deny", label: "不批准" },
 ];
 const STOPPED = "agent stopped";
+const THREAD_GONE = "The Worker thread was archived or deleted.";
 const LIST_LIMIT = 50;
 
 /** An agent's run acting for a member; `onBehalfOf` is the run's chain, outermost first. */
@@ -213,11 +215,12 @@ export class DelegationService extends Context.Service<
     ) => Out<ReadonlyArray<Telescope.Delegation>>;
     /**
      * Once a member decides a question, its delegation is WORKING again with the answer as a user
-     * message: `send` gives it to a Worker hop's thread first; an agent hop gets a wake.
+     * message: `send` gives it to a Worker hop's thread first (false: the thread is archived or
+     * gone, and the hop fails); an agent hop gets a wake.
      */
     readonly answer: <E>(
       ref: { readonly workspaceId: WorkspaceId; readonly decisionId: Telescope.DecisionId },
-      send: (threadId: ThreadId, text: string) => Effect.Effect<void, E>,
+      send: (threadId: ThreadId, text: string) => Effect.Effect<boolean, E>,
     ) => Effect.Effect<Telescope.Delegation | undefined, E | Effect.Error<Out<never>>>;
     /** Every delegation waiting on a member, by its decision: a restart re-reads them. */
     readonly waiting: Out<
@@ -430,6 +433,8 @@ const make = Effect.gen(function* () {
     const asking = QUESTION_STATES.includes(input.state);
     if (asking && question === undefined)
       return yield* fail("invalid", "Name the question the member must decide in `question`.");
+    if (input.state === "INPUT_REQUIRED" && (input.options ?? []).length === 0)
+      return yield* fail("invalid", "Give the member at least one choice in `options`.");
     const options =
       input.state === "AUTH_REQUIRED"
         ? APPROVAL
@@ -489,7 +494,7 @@ const make = Effect.gen(function* () {
     const working = waits ? yield* move(row, "WORKING", "agent", {}) : row;
     const report = { result: "", decisions: [], blockedOn };
     const failed = yield* move(working, "FAILED", "agent", { report }, { report_json: report });
-    if (failed.hop === "agent") yield* wakeFromAgent(failed, memberId);
+    yield* wakeFromAgent(failed, memberId);
     return toDelegation(failed);
   });
   const abandon = Effect.fn("DelegationService.abandon")(function* (
@@ -618,9 +623,13 @@ const make = Effect.gen(function* () {
         decision_id: decisionId,
       })).find((candidate) => QUESTION_STATES.includes(candidate.state));
       const [asked] = yield* decisions({ item_id: decisionId });
-      const decided = (yield* decisions({ supersedes: decisionId })).find(
-        (reply) => reply.decided_by !== null,
-      );
+      // A member may first counter-propose: the decision then supersedes the question indirectly.
+      let decided: typeof DecisionRow.Type | undefined;
+      for (let ids: ReadonlyArray<string> = [decisionId]; !decided && ids.length > 0;) {
+        const replies = (yield* Effect.forEach(ids, (id) => decisions({ supersedes: id }))).flat();
+        decided = replies.find((reply) => reply.decided_by !== null);
+        ids = replies.map((reply) => reply.item_id);
+      }
       if (row === undefined || asked === undefined || decided === undefined) return undefined;
       const target = yield* agent(workspaceId, row.to_agent_id);
       const owner = target?.owner_subject_id ?? "";
@@ -628,10 +637,12 @@ const make = Effect.gen(function* () {
       const options = decided.options_json ?? asked.options_json ?? [];
       const label = options.find((option) => option.id === decided.chosen)?.label ?? decided.chosen;
       const note = decided.text !== asked.text && decided.text ? decided.text : undefined;
-      const text = [`Your member answered "${asked.title}": ${label ?? "(no option)"}`, note]
+      const who = decided.decided_by === owner ? "Your member" : "A workspace member";
+      const text = [`${who} answered "${asked.title}": ${label ?? "(no option)"}`, note]
         .filter((line) => line !== undefined)
         .join("\n");
-      if (row.hop === "worker" && row.thread_id !== null) yield* send(row.thread_id, text);
+      if (row.hop === "worker" && row.thread_id !== null && !(yield* send(row.thread_id, text)))
+        return yield* failRow(row, owner, THREAD_GONE);
       const parts: ReadonlyArray<Part> = [
         { kind: "data", data: { state: "WORKING", decisionId } },
         { kind: "text", text },
