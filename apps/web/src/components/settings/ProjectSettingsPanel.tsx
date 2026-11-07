@@ -22,7 +22,6 @@ import { persistClientSettingsUpdate, useClientSettings } from "../../hooks/useS
 import { readLocalApi } from "../../localApi";
 import { derivePhysicalProjectKey } from "@t3tools/client-runtime/state/project-grouping";
 import {
-  PROJECT_GROUPING_MODE_LABELS,
   withProjectGroupingOverride,
   type SidebarProjectGroupMember,
   type SidebarProjectSnapshot,
@@ -61,6 +60,7 @@ import { readUnloadedThreadCount } from "../../state/olderSettledShelf";
 import { settingsScopeEnvironmentLabels } from "./settingsScopeAxis";
 import { ProjectWorkspaceRow } from "../telescope/TelescopeProjectWorkspace";
 import { useTranslation } from "react-i18next";
+import { projectGroupingModeText, projectIconColorText } from "./SettingsPanels.enumLabels";
 
 const ProjectIconPickerDialog = lazy(() =>
   import("./ProjectIconPickerDialog").then((module) => ({
@@ -79,6 +79,7 @@ function isGroupingSelection(value: unknown): value is SidebarProjectGroupingMod
 
 // Grouping overrides are client settings, so they stay editable without project write access.
 function CheckoutGroupingSelect({ member }: { member: SidebarProjectGroupMember }) {
+  const { t } = useTranslation();
   const overrideKey = derivePhysicalProjectKey(member);
   const globalMode = useClientSettings((settings) => settings.sidebarProjectGroupingMode);
   const selection = useClientSettings(
@@ -101,8 +102,9 @@ function CheckoutGroupingSelect({ member }: { member: SidebarProjectGroupMember 
           toastManager.add(
             stackedThreadToast({
               type: "error",
-              title: "Could not save grouping rule",
-              description: error instanceof Error ? error.message : "An error occurred.",
+              title: t("settings.merge.couldNotSaveGroupingRule"),
+              description:
+                error instanceof Error ? error.message : t("settings.text.anErrorOccurred"),
             }),
           );
         });
@@ -110,30 +112,31 @@ function CheckoutGroupingSelect({ member }: { member: SidebarProjectGroupMember 
     >
       <SelectTrigger
         size="sm"
-        aria-label={`Grouping rule for ${member.workspaceRoot} on ${
-          member.environmentLabel
+        aria-label={t("settings.merge.groupingRuleAria", {
+          path: member.workspaceRoot,
+          environment: member.environmentLabel
             ? `${member.environmentLabel} (${member.environmentId})`
-            : member.environmentId
-        }`}
+            : member.environmentId,
+        })}
       >
         <SelectValue>
           {selection === "inherit"
-            ? `Default (${PROJECT_GROUPING_MODE_LABELS[globalMode]})`
-            : PROJECT_GROUPING_MODE_LABELS[selection]}
+            ? t("settings.merge.groupingDefault", { mode: projectGroupingModeText(globalMode, t) })
+            : projectGroupingModeText(selection, t)}
         </SelectValue>
       </SelectTrigger>
       <SelectPopup align="end" alignItemWithTrigger={false}>
         <SelectItem hideIndicator value="inherit">
-          Use global default
+          {t("settings.merge.useGlobalDefault")}
         </SelectItem>
         <SelectItem hideIndicator value="repository">
-          {PROJECT_GROUPING_MODE_LABELS.repository}
+          {projectGroupingModeText("repository", t)}
         </SelectItem>
         <SelectItem hideIndicator value="repository_path">
-          {PROJECT_GROUPING_MODE_LABELS.repository_path}
+          {projectGroupingModeText("repository_path", t)}
         </SelectItem>
         <SelectItem hideIndicator value="separate">
-          {PROJECT_GROUPING_MODE_LABELS.separate}
+          {projectGroupingModeText("separate", t)}
         </SelectItem>
       </SelectPopup>
     </Select>
@@ -571,9 +574,9 @@ function ProjectDetail({
             title={t("settings.text.projectIcon")}
             description={
               projectIcon?.kind === "lucide"
-                ? `${projectIcon.name} · ${projectIcon.color}`
+                ? `${projectIcon.name} · ${projectIconColorText(projectIcon.color, t).toLowerCase()}`
                 : projectIcon?.kind === "monogram"
-                  ? `${projectIcon.text} · ${projectIcon.color}`
+                  ? `${projectIcon.text} · ${projectIconColorText(projectIcon.color, t).toLowerCase()}`
                   : projectIcon?.kind === "emoji"
                     ? projectIcon.emoji
                     : (faviconPath ?? t("settings.text.automatic"))

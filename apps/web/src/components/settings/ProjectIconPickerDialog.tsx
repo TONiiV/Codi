@@ -30,6 +30,7 @@ import { Input } from "../ui/input";
 import { ScrollArea } from "../ui/scroll-area";
 import { Toggle, ToggleGroup } from "../ui/toggle-group";
 import { useTranslation } from "react-i18next";
+import { projectIconColorText } from "./SettingsPanels.enumLabels";
 
 const DEFAULT_ICON = "folder-code";
 const isMonogramText = Schema.is(ProjectMonogramText);
@@ -152,7 +153,7 @@ function ProjectIconPickerBody({
                 <button
                   key={option.value}
                   type="button"
-                  aria-label={option.label}
+                  aria-label={projectIconColorText(option.value, t)}
                   aria-pressed={color === option.value}
                   className={cn(
                     "flex size-6 items-center justify-center rounded-full border border-transparent outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",

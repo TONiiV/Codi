@@ -822,6 +822,26 @@
       "monogram": "Monogram",
       "color": "Color",
       "iconColor": "Icon color",
+      "iconColorNames": {
+        "gray": "Gray",
+        "red": "Red",
+        "orange": "Orange",
+        "amber": "Amber",
+        "yellow": "Yellow",
+        "lime": "Lime",
+        "green": "Green",
+        "emerald": "Emerald",
+        "teal": "Teal",
+        "cyan": "Cyan",
+        "sky": "Sky",
+        "blue": "Blue",
+        "indigo": "Indigo",
+        "violet": "Violet",
+        "purple": "Purple",
+        "fuchsia": "Fuchsia",
+        "pink": "Pink",
+        "rose": "Rose"
+      },
       "searchLucideIcons": "Search Lucide icons",
       "searchAllLucideIcons": "Search all Lucide icons",
       "noIconsFound": "No icons found.",
@@ -2259,6 +2279,9 @@
       "submodulesRecursive": "Recursive",
       "submodulesTopLevel": "Top level only",
       "submodulesNone": "Skip",
+      "groupingRepository": "Group by repository",
+      "groupingRepositoryPath": "Group by repository path",
+      "groupingSeparate": "Keep separate",
       "mergeMethodMerge": "Merge",
       "mergeMethodSquash": "Squash and merge",
       "mergeMethodRebase": "Rebase and merge",
@@ -2486,7 +2509,11 @@
     },
     "merge": {
       "checkoutGroupingDescription": "Grouping rule decides how each checkout joins project groups in the sidebar. Changing it can move a checkout to a different project.",
-      "removeCheckout": "Remove checkout {{path}}"
+      "removeCheckout": "Remove checkout {{path}}",
+      "useGlobalDefault": "Use global default",
+      "groupingDefault": "Default ({{mode}})",
+      "groupingRuleAria": "Grouping rule for {{path}} on {{environment}}",
+      "couldNotSaveGroupingRule": "Could not save grouping rule"
     }
   }
 }

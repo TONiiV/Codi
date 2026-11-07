@@ -822,6 +822,26 @@
       "monogram": "字母图标",
       "color": "颜色",
       "iconColor": "图标颜色",
+      "iconColorNames": {
+        "gray": "灰色",
+        "red": "红色",
+        "orange": "橙色",
+        "amber": "琥珀色",
+        "yellow": "黄色",
+        "lime": "青柠色",
+        "green": "绿色",
+        "emerald": "翠绿色",
+        "teal": "蓝绿色",
+        "cyan": "青色",
+        "sky": "天蓝色",
+        "blue": "蓝色",
+        "indigo": "靛蓝色",
+        "violet": "紫罗兰色",
+        "purple": "紫色",
+        "fuchsia": "紫红色",
+        "pink": "粉色",
+        "rose": "玫瑰色"
+      },
       "searchLucideIcons": "搜索 Lucide 图标",
       "searchAllLucideIcons": "搜索所有 Lucide 图标",
       "noIconsFound": "未找到图标。",
@@ -2259,6 +2279,9 @@
       "submodulesRecursive": "递归",
       "submodulesTopLevel": "仅顶层",
       "submodulesNone": "跳过",
+      "groupingRepository": "按仓库分组",
+      "groupingRepositoryPath": "按仓库路径分组",
+      "groupingSeparate": "保持独立",
       "mergeMethodMerge": "合并",
       "mergeMethodSquash": "压缩并合并",
       "mergeMethodRebase": "变基并合并",
@@ -2485,8 +2508,12 @@
       "unavailableSuffix": "（不可用）"
     },
     "merge": {
-      "checkoutGroupingDescription": "?????????????????????????????????????????",
-      "removeCheckout": "???? {{path}}"
+      "checkoutGroupingDescription": "分组规则决定每个检出目录如何加入侧边栏中的项目分组。更改它可能会把检出目录移到另一个项目。",
+      "removeCheckout": "移除检出目录 {{path}}",
+      "useGlobalDefault": "使用全局默认值",
+      "groupingDefault": "默认（{{mode}}）",
+      "groupingRuleAria": "{{environment}} 上 {{path}} 的分组规则",
+      "couldNotSaveGroupingRule": "无法保存分组规则"
     }
   }
 }
