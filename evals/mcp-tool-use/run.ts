@@ -56,7 +56,7 @@ import { EnvironmentToolkit } from "../../apps/server/src/mcp/toolkits/environme
 import { HtmlToolkit } from "../../apps/server/src/mcp/toolkits/html/tools.ts";
 import { MemoryToolkit } from "../../apps/server/src/mcp/toolkits/memory/tools.ts";
 import { TelescopeToolkit } from "../../apps/server/src/mcp/toolkits/telescope/tools.ts";
-import { renderTurn } from "../../apps/server/src/telescope/AgentInstructions.ts";
+import { renderPreamble, renderTurn } from "../../apps/server/src/telescope/AgentInstructions.ts";
 import { boardItem, renderContextFile } from "../../apps/server/src/telescope/ContextBudget.ts";
 import { OrchestratorToolkit } from "../../apps/server/src/mcp/toolkits/orchestrator/tools.ts";
 import { PreviewToolkit } from "../../apps/server/src/mcp/toolkits/preview/tools.ts";
@@ -1059,12 +1059,12 @@ export const buildMessages = (sample: Sample) => {
   const agentKind = testCase.setup.telescopeAgent;
   const userText =
     agentKind !== undefined
-      ? renderTurn(
-          { kind: agentKind, name: "Alice's agent" },
-          [{ kind: "message", text: testCase.prompt }],
-          {
-            firstTurn: true,
-          },
+      ? withInlineContext(
+          renderPreamble(
+            { kind: agentKind, name: "Alice's agent" },
+            { role: true, contextFile: "/home/user/.t3/userdata/telescope/context/run-1.md" },
+          ),
+          renderTurn([{ kind: "message", text: testCase.prompt }]),
         )
       : testCase.promptContext === undefined
         ? testCase.prompt

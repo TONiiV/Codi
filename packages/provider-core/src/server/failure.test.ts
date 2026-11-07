@@ -88,14 +88,18 @@ it("does not expose arbitrary cause messages and preserves explicit messages", (
 });
 
 it("preserves actionable T3 errors wrapped by turn startup", () => {
-  for (const error of [
-    new ContextHandoffBudgetError(),
-    new ContextHandoffBackgroundWorkError(),
-    new ProviderSetupError({
-      instanceId: ProviderInstanceId.make("codex"),
-      operation: "runtime",
-      detail: "Codex 0.144.3 does not work with this Codi release.",
-    }),
+  const refusal = "The target provider instance is unavailable.";
+  for (const [error, message] of [
+    ...[
+      new ContextHandoffBudgetError(),
+      new ContextHandoffBackgroundWorkError(),
+      new ProviderSetupError({
+        instanceId: ProviderInstanceId.make("codex"),
+        operation: "runtime",
+        detail: "Codex 0.144.3 does not work with this Codi release.",
+      }),
+    ].map((error) => [error, error.message] as const),
+    [{ _tag: "ProviderSwitchPlanError", cause: refusal }, refusal] as const,
   ]) {
     const cause = new ProviderAdapter.ProviderAdapterTurnStartError({
       driver: ProviderDriverKind.make("codex"),
@@ -104,7 +108,7 @@ it("preserves actionable T3 errors wrapped by turn startup", () => {
       runId: RunId.make("run:handoff-error"),
       cause: error,
     });
-    assert.equal(makeProviderFailure({ cause: Cause.fail(cause) }).message, error.message);
+    assert.equal(makeProviderFailure({ cause: Cause.fail(cause) }).message, message);
   }
 });
 

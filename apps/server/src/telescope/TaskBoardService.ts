@@ -151,6 +151,11 @@ export class TaskBoardService extends Context.Service<
     readonly heartbeatLease: Method<"telescope.lease.heartbeat">;
     readonly releaseLease: Method<"telescope.lease.release">;
     readonly getLease: Method<"telescope.lease.get">;
+    /** Server-side: renews every lease these agents hold, each for its own span. */
+    readonly renewHeldBy: (
+      workspaceId: Telescope.WorkspaceId,
+      agentIds: ReadonlyArray<Telescope.AgentId>,
+    ) => Effect.Effect<void, Failure>;
   }
 >()("t3/telescope/TaskBoardService") {}
 
@@ -640,14 +645,34 @@ const make = Effect.gen(function* () {
     const time = yield* DateTime.now;
     const at = DateTime.formatIso(time);
     return yield* transact(
+      heldLease(member, input, at).pipe(Effect.flatMap((lease) => renew(lease, time))),
+    );
+  });
+
+  // A renewal keeps the holder's span, whoever renews (D59).
+  const renew = Effect.fn("TaskBoardService.renew")(function* (
+    lease: Telescope.Lease,
+    time: DateTime.Utc,
+  ) {
+    const at = DateTime.formatIso(time);
+    const milliseconds = Date.parse(lease.expiresAt) - Date.parse(lease.heartbeatAt);
+    const expiresAt = DateTime.formatIso(DateTime.add(time, { milliseconds }));
+    const set = { heartbeat_at: at, expires_at: expiresAt };
+    yield* db.update(lease.workspaceId, "leases", set, { lease_id: lease.id });
+    return { ...lease, heartbeatAt: at, expiresAt };
+  });
+
+  const renewHeldBy = Effect.fn("TaskBoardService.renewHeldBy")(function* (
+    workspaceId: Telescope.WorkspaceId,
+    agentIds: ReadonlyArray<Telescope.AgentId>,
+  ) {
+    const time = yield* DateTime.now;
+    const at = DateTime.formatIso(time);
+    yield* transact(
       Effect.gen(function* () {
-        const lease = yield* heldLease(member, input, at);
-        // A renewal keeps the holder's span, whoever renews (D59).
-        const milliseconds = Date.parse(lease.expiresAt) - Date.parse(lease.heartbeatAt);
-        const expiresAt = DateTime.formatIso(DateTime.add(time, { milliseconds }));
-        const set = { heartbeat_at: at, expires_at: expiresAt };
-        yield* db.update(input.workspaceId, "leases", set, { lease_id: lease.id });
-        return { ...lease, heartbeatAt: at, expiresAt };
+        for (const lease of yield* db.select(workspaceId, "leases", decodeLeases))
+          if (agentIds.includes(lease.holderAgentId) && !isExpired(lease, at))
+            yield* renew(lease, time);
       }),
     );
   });
@@ -687,6 +712,7 @@ const make = Effect.gen(function* () {
     heartbeatLease,
     releaseLease,
     getLease,
+    renewHeldBy,
   });
 });
 

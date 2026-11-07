@@ -7,6 +7,7 @@ import type {
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 
+import * as ProjectionStore from "../orchestration-v2/ProjectionStore.ts";
 import { PROMPT_VERSION } from "./AgentInstructions.ts";
 import * as DelegationService from "./DelegationService.ts";
 import * as RunRecordService from "./RunRecordService.ts";
@@ -70,11 +71,28 @@ export const makeHandler = Effect.gen(function* () {
   const db = yield* TelescopeDb.TelescopeDb;
   const runs = yield* RunRecordService.RunRecordService;
   const delegations = yield* DelegationService.DelegationService;
+  const projections = yield* ProjectionStore.ProjectionStoreV2;
   const wakes = yield* WakeQueueService.WakeQueueService;
   // A Codi run is updated many times; open for it once. A repeated terminal event finds no open run.
   const opened = new Set<string>();
   // The Codi run each agent thread's provider turns belong to, for their tokens.
   const serving = new Map<ThreadId, string>();
+
+  // A failed Codi run, such as a queued one Codi refused to start (D118), says why it failed.
+  const failureOf = Effect.fn("AgentThreadRuns.failureOf")(function* (run: OrchestrationV2Run) {
+    const message = yield* projections
+      .getThreadRecords(run.threadId, ["turnItems"], {
+        turnItemRunIds: [run.id],
+        turnItemTypes: ["error"],
+      })
+      .pipe(
+        Effect.map(({ turnItems }) =>
+          turnItems.flatMap((item) => (item.type === "error" ? [item.failure.message] : [])).at(-1),
+        ),
+        Effect.orElseSucceed(() => undefined),
+      );
+    return message ?? UNREPORTED;
+  });
 
   // A Worker thread is no agent's own; its run serves its Worker task, which wakes the Chief once.
   const wakeChief = Effect.fn("AgentThreadRuns.wakeChief")(function* (done: Telescope.AgentRun) {
@@ -157,12 +175,14 @@ export const makeHandler = Effect.gen(function* () {
       );
     });
     const memberId = owner.ownerSubjectId;
-    const abandon = (delegationId: Telescope.DelegationId) =>
-      delegations.abandon({ workspaceId: owner.workspaceId, delegationId, memberId }, UNREPORTED);
+    const blockedOn = run.status === "failed" ? yield* failureOf(run) : UNREPORTED;
+    const abandon = (delegationId: Telescope.DelegationId, reason: string) =>
+      delegations.abandon({ workspaceId: owner.workspaceId, delegationId, memberId }, reason);
     for (const { id } of unreported) {
       if (yield* live(id)) continue;
-      for (const worker of workers) if (worker.parentId === id) yield* abandon(worker.id);
-      yield* abandon(id);
+      for (const worker of workers)
+        if (worker.parentId === id) yield* abandon(worker.id, UNREPORTED);
+      yield* abandon(id, blockedOn);
     }
   });
   return {
