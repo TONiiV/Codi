@@ -1712,6 +1712,7 @@
       "argumentNumber": "Argument {{number}}",
       "changeAccentColorFor": "Change accent color for {{name}}",
       "checkedAgo": "Checked <value>{{value}}</value> ago",
+      "choiceValuePlaceholder": "value",
       "compatibleAgentsFound": "{{count}} compatible agents found.",
       "compatibleAgentsFound_one": "{{count}} compatible agent found.",
       "connectingEllipsis": "Connecting…",

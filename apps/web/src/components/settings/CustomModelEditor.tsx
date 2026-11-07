@@ -140,7 +140,7 @@ export function CustomModelEditor({
         size="compact"
         value={choice.id}
         onChange={(event) => updateChoice(descriptor.key, choice.key, { id: event.target.value })}
-        placeholder={t("settings.text.value")}
+        placeholder={t("settings.parallelProviders.choiceValuePlaceholder")}
         font="mono"
         className="w-28"
         spellCheck={false}
