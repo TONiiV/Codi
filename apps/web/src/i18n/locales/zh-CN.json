@@ -944,7 +944,7 @@
       "listening": "监听中",
       "notScheduled": "未安排",
       "enableTitle": "启用 {{title}}",
-      "actionsForTitle": "{{title}}的操作",
+      "actionsForTitle": "{{title}} 的操作",
       "deliveries": "投递记录",
       "runNow": "立即运行",
       "deliveriesTitle": "投递记录 · {{title}}",
