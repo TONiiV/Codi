@@ -11,11 +11,16 @@ import { runMigrations } from "../persistence/Migrations.ts";
 import * as SqlitePersistence from "../persistence/Sqlite.ts";
 import * as DelegationService from "./DelegationService.ts";
 import * as TelescopeDb from "./TelescopeDb.ts";
+import * as WakeQueueService from "./WakeQueueService.ts";
 
 const database = Layer.effectDiscard(runMigrations()).pipe(
   Layer.provideMerge(SqlitePersistence.layerMemory),
 );
-const layer = Layer.merge(DelegationService.layer, TelescopeDb.layer).pipe(
+const layer = Layer.mergeAll(
+  DelegationService.layer,
+  TelescopeDb.layer,
+  WakeQueueService.layer,
+).pipe(
   Layer.provideMerge(Layer.merge(database, NodeCrypto.layer)),
   Layer.provide(
     Layer.succeed(ServerEnvironment.ServerEnvironmentIdentity, {
@@ -66,6 +71,14 @@ const failure = <A, E extends { readonly _tag: string }, R>(effect: Effect.Effec
 
 const setup = Effect.gen(function* () {
   const db = yield* TelescopeDb.TelescopeDb;
+  const sql = yield* SqlClient.SqlClient;
+  yield* sql`INSERT INTO telescope_workspaces ${sql.insert({
+    workspace_id: ws,
+    kind: "team",
+    name: "A",
+    created_at: at,
+    created_by: "ann",
+  })}`;
   const agent = (id: string, owner: string, kind: Telescope.AgentKind, projectId: string | null) =>
     db.insert(ws, "agents", {
       agent_id: id,
@@ -335,6 +348,16 @@ it.effect("cancel cascades to descendants and reports CANCELED up one level", ()
     const bea = { workspaceId: ws, memberId: "bea" };
     assert.strictEqual(yield* failure(delegations.cancel(bea, task.id)), "forbidden");
 
+    const queue = yield* WakeQueueService.WakeQueueService;
+    assert.strictEqual((yield* queue.dequeue)?.coalesceKey, `delegation:${task.id}`);
+    yield* queue.enqueue(ws, {
+      reason: "dispatch",
+      agentId: chief,
+      priority: 2,
+      payload: {},
+      subjectId: "ann",
+      coalesceKey: `delegation:${task.id}`,
+    });
     const cancelled = yield* delegations.cancel(ann, task.id);
     assert.deepStrictEqual(
       cancelled.map((row) => [row.id, row.state]),
@@ -353,6 +376,7 @@ it.effect("cancel cascades to descendants and reports CANCELED up one level", ()
     assert.deepStrictEqual(
       (yield* wakes()).map((wake) => [wake.coalesce_key, wake.status]),
       [
+        [`delegation:${task.id}`, "running"],
         [`delegation:${task.id}`, "interrupted"],
         [`delegation:${task.id}:report`, "queued"],
       ],
