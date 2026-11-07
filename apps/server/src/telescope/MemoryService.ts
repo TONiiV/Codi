@@ -98,7 +98,7 @@ export interface ThreadAgent {
   };
 }
 /** A member acting directly through their auth session, or an agent run. */
-type MemoryCaller = { readonly session: WorkspaceService.Caller } | ThreadAgent;
+type MemoryCaller = { readonly session: WorkspaceService.SessionCaller } | ThreadAgent;
 export type Failure = Telescope.WorkspaceError | PersistenceSqlError | PersistenceDecodeError;
 type Rpcs = (typeof Telescope.MemoryRpcs)[number];
 type In<Tag extends Rpcs["_tag"]> = Rpc.Payload<Rpc.ExtractTag<Rpcs, Tag>>;

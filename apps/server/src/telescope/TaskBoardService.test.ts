@@ -146,12 +146,13 @@ it.layer(layer)("Telescope task board", (it) => {
         status: "proposed",
         supersedes: first.id,
       });
-      const second = yield* board.createDecision(agent, {
-        workspaceId: a,
-        title: "SQLite",
-        text: "One engine.",
-        supersedes: first.id,
-      });
+      const sqlite = { workspaceId: a, title: "SQLite", text: "One engine.", supersedes: first.id };
+      // D57: a decision that an open proposal would replace waits for a member.
+      assert.strictEqual(
+        reasonOf(yield* Effect.flip(board.createDecision(agent, sqlite))),
+        "forbidden",
+      );
+      const second = yield* board.createDecision(alice, sqlite);
       const late = yield* board
         .createDecision(alice, {
           workspaceId: a,
@@ -174,15 +175,24 @@ it.layer(layer)("Telescope task board", (it) => {
         .createDecision(alice, { workspaceId: a, title: "MySQL", text: "", supersedes: first.id })
         .pipe(Effect.flip);
       assert.strictEqual(reasonOf(again), "conflict");
-      assert.strictEqual(second.authorId, "agent-cos");
+      yield* board.createDecision(agent, {
+        ...sqlite,
+        title: "SQLite, WAL",
+        supersedes: second.id,
+      });
 
       const { commits } = yield* board.listCommits(alice, { workspaceId: a, taskId: first.id });
       assert.deepStrictEqual(
         commits.map((c) => [c.baseVersion, c.authorId, c.onBehalfOf, c.parentId, c.changedFields]),
         [
           [0, aliceId, undefined, undefined, { title: "Postgres", text: "", status: "decided" }],
-          [1, "agent-cos", [aliceId, "agent-cos"], commits[0]?.id, { status: "superseded" }],
+          [1, aliceId, undefined, commits[0]?.id, { status: "superseded" }],
         ],
+      );
+      const replaced = yield* board.listCommits(alice, { workspaceId: a, taskId: second.id });
+      assert.deepStrictEqual(
+        replaced.commits.map((c) => [c.authorId, c.onBehalfOf, c.changedFields]).at(-1),
+        ["agent-cos", [aliceId, "agent-cos"], { status: "superseded" }],
       );
       const proposed = yield* board.listCommits(alice, { workspaceId: a, taskId: proposal.id });
       assert.deepStrictEqual(
@@ -312,7 +322,7 @@ it.layer(layer)("Telescope task board", (it) => {
 
   it.effect("gives a task one lease holder, kept by heartbeats and released on expiry", () =>
     Effect.gen(function* () {
-      const { workspaces, board, a, aliceId } = yield* setup;
+      const { workspaces, board, a, aliceId, agent } = yield* setup;
       const task = yield* board.createTask(alice, { workspaceId: a, title: "Contested" });
       const bob = { caller: session("bob") };
       const { code } = yield* workspaces.invite(alice.caller, { workspaceId: a, role: "member" });
@@ -380,12 +390,22 @@ it.layer(layer)("Telescope task board", (it) => {
       yield* write(bob, "Bob's");
       const kept = yield* write(alice, "Alice's");
       assert.deepStrictEqual([kept.title, kept.version], ["Alice's", 8]);
+
+      // An agent renews only between tool calls, so its lease lasts 15 minutes (D59).
+      const build = yield* board.createTask(alice, { workspaceId: a, title: "Long build" });
+      const long = yield* board.acquireLease(agent, { workspaceId: a, taskId: build.id });
+      yield* TestClock.adjust("14 minutes");
+      const longer = yield* board.heartbeatLease(agent, { workspaceId: a, leaseId: long.id });
+      assert.strictEqual(
+        Date.parse(longer.expiresAt) - Date.parse(longer.heartbeatAt),
+        15 * 60_000,
+      );
     }),
   );
 
   it.effect("merges stale writes by rule and sends unsettled conflicts to a decision", () =>
     Effect.gen(function* () {
-      const { workspaces, board, a } = yield* setup;
+      const { workspaces, board, a, agent } = yield* setup;
       const bob = { caller: session("bob") };
       const { code } = yield* workspaces.invite(alice.caller, { workspaceId: a, role: "member" });
       yield* workspaces.accept(bob.caller, { code, displayName: "Bob" });
@@ -482,10 +502,12 @@ it.layer(layer)("Telescope task board", (it) => {
         'rebased from version 4; title: lease holder wins, kept "Holder\'s race"',
       );
 
-      yield* write(alice, 6, { status: "needs_decision" });
+      yield* write(agent, 6, { status: "needs_decision" });
       const held = yield* write(bob, 6, { status: "in_progress" });
       assert.deepStrictEqual([held.status, held.version], ["needs_decision", 8]);
       assert.strictEqual((yield* raceCommit)?.mergeLevel, 1);
+      const moved = yield* Effect.flip(write(agent, 8, { status: "in_progress" }));
+      assert.strictEqual(reasonOf(moved), "forbidden");
       const { decisions } = yield* board.listDecisions(alice, { workspaceId: a });
       assert.strictEqual(decisions.length, 1);
     }),
@@ -538,17 +560,19 @@ it.layer(layer)("Telescope task board", (it) => {
       const agentSettle = { workspaceId: a, title: "Settle", text: "", supersedes: d2 };
       const refused = yield* Effect.all([
         Effect.flip(update(agent, version, { conflictDecisionId: null })),
+        Effect.flip(update(agent, version, { title: "Agent plan" })),
         Effect.flip(board.createDecision(agent, { ...agentSettle, chosen: "incoming" })),
+        Effect.flip(board.createDecision(agent, { ...agentSettle, status: "proposed" })),
       ]);
-      assert.deepStrictEqual(refused.map(reasonOf), ["forbidden", "forbidden"]);
-      yield* board.createDecision(agent, { ...agentSettle, status: "proposed" });
+      assert.deepStrictEqual(refused.map(reasonOf), Array(4).fill("forbidden"));
+      yield* update(agent, version, { status: "in_review" });
       assert.strictEqual((yield* current).conflictDecisionId, d2);
 
       yield* decide(d2, "incoming");
       const applied = yield* current;
       assert.deepStrictEqual(
         [applied.title, applied.conflictDecisionId, applied.version],
-        ["Plan C", undefined, 6],
+        ["Plan C", undefined, 7],
       );
       yield* decide(first.conflict?.decisionId, "incoming");
       assert.strictEqual((yield* current).title, "Plan C");
@@ -558,7 +582,7 @@ it.layer(layer)("Telescope task board", (it) => {
       const kept = yield* current;
       assert.deepStrictEqual(
         [kept.title, kept.conflictDecisionId, kept.version],
-        ["Plan C", undefined, 8],
+        ["Plan C", undefined, 9],
       );
     }),
   );

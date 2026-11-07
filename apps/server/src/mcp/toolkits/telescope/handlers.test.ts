@@ -3,6 +3,7 @@ import { assert, it } from "@effect/vitest";
 import {
   AuthSessionId,
   EnvironmentId,
+  ProjectId,
   ProviderInstanceId,
   Telescope,
   ThreadId,
@@ -11,12 +12,14 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
 import type { Tool } from "effect/ai";
+import * as SqlClient from "effect/sql/SqlClient";
 
 import * as ServerEnvironment from "../../../environment/ServerEnvironment.ts";
 import { runMigrations } from "../../../persistence/Migrations.ts";
 import * as SqlitePersistence from "../../../persistence/Sqlite.ts";
 import * as AgentService from "../../../telescope/AgentService.ts";
 import * as GrantService from "../../../telescope/GrantService.ts";
+import type * as MemoryService from "../../../telescope/MemoryService.ts";
 import * as RunRecordService from "../../../telescope/RunRecordService.ts";
 import * as TaskBoardService from "../../../telescope/TaskBoardService.ts";
 import * as TelescopeDb from "../../../telescope/TelescopeDb.ts";
@@ -53,7 +56,7 @@ const layer = McpToolAccess.HandlersLayer.layer(TelescopeHandlers.layer).pipe(
   Layer.provideMerge(Layer.mergeAll(services, liveThreadsLayer)),
 );
 
-const session = (name: string): WorkspaceService.Caller => ({
+const session = (name: string): WorkspaceService.SessionCaller => ({
   sessionId: AuthSessionId.make(`session-${name}`),
   subject: "one-time-token",
 });
@@ -137,7 +140,7 @@ const deniedWith = (results: ReadonlyArray<unknown>, message: string) => {
     assert.deepInclude(result, {
       _tag: "OrchestratorMcpFailure",
       code: "capability_denied",
-      message,
+      message: `${message} Do not retry; tell your member.`,
     });
 };
 
@@ -197,15 +200,10 @@ it.effect("works the board as the run's agent through every Telescope tool", () 
     })) as typeof Telescope.TaskUpdateResult.Type;
     const conflictId = stale.conflict?.decisionId;
     assert.isDefined(conflictId);
-    const memberOnly = (message: string) => ({ code: "capability_denied", message });
-    assert.deepInclude(
-      yield* call("ticket_update", {
-        taskId,
-        baseVersion: stale.version,
-        set: { conflictDecisionId: null },
-      }),
-      memberOnly("Only a member can clear a conflict marker."),
-    );
+    const memberOnly = {
+      code: "capability_denied",
+      message: "Only a member settles or replaces a proposal. Leave a note or tell your member.",
+    };
     assert.deepInclude(
       yield* call("decision_record", {
         title: "Take the agent's title",
@@ -213,7 +211,7 @@ it.effect("works the board as the run's agent through every Telescope tool", () 
         supersedes: conflictId,
         chosen: "incoming",
       }),
-      memberOnly("Only a member can settle a proposal."),
+      memberOnly,
     );
     assert.deepInclude(
       yield* call("decision_record", {
@@ -222,7 +220,7 @@ it.effect("works the board as the run's agent through every Telescope tool", () 
         status: "proposed",
         supersedes: conflictId,
       }),
-      { status: "proposed", authorId: chief.id },
+      memberOnly,
     );
     yield* board.createDecision(member, {
       workspaceId,
@@ -239,7 +237,13 @@ it.effect("works the board as the run's agent through every Telescope tool", () 
       entries.map((entry) => entry.outcome).toSorted(),
       Array.from({ length: entries.length }, () => "allowed"),
     );
-    assert.strictEqual(entries.length, TOOL_COUNT + 5, "every call is audited");
+    assert.strictEqual(entries.length, TOOL_COUNT + 4, "every call is audited");
+
+    yield* (yield* SqlClient.SqlClient)`DROP TABLE telescope_tasks`;
+    assert.deepInclude(yield* call("ticket_list", {}), {
+      code: "orchestration_error",
+      message: "The Telescope board is unavailable.",
+    });
   }).pipe(Effect.provide(layer)),
 );
 
@@ -328,3 +332,30 @@ it.effect("never reaches another workspace's board", () =>
     assert.isFalse(foreignAgents.some((agent) => visible.has(agent.id)));
   }).pipe(Effect.provide(layer)),
 );
+
+// `@ts-expect-error` fails the build if a run caller ever compiles here. Never called.
+export const runsRefusedAtCompileTime = (
+  run: ToolGateway.ToolCaller,
+  grants: GrantService.GrantService["Service"],
+  agents: AgentService.AgentService["Service"],
+  memory: MemoryService.MemoryService["Service"],
+) => {
+  const { workspaceId, agentId } = run;
+  const projectId = ProjectId.make("project-x");
+  const powers = { openTickets: true, dispatchWorkers: true, answerMembers: true, mergePRs: true };
+  return [
+    agents.listMine(run, { workspaceId }),
+    // @ts-expect-error a run reads the audit
+    grants.auditList(run, { workspaceId }),
+    // @ts-expect-error a run caps a project's powers
+    grants.setProjectRule(run, { workspaceId, projectId, powers }),
+    // @ts-expect-error a run creates an agent
+    agents.createCustom(run, { workspaceId, name: "Helper" }),
+    // @ts-expect-error a run raises its own agent's powers
+    agents.update(run, { workspaceId, agentId, standingPowers: powers }),
+    // @ts-expect-error a run configures a company agent
+    agents.updateCompany(run, { workspaceId, agentId, name: "HR" }),
+    // @ts-expect-error a run passes for a member's session
+    memory.search({ session: run }, { workspaceId, query: "plan" }),
+  ];
+};

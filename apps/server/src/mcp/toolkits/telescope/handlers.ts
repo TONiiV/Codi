@@ -21,7 +21,10 @@ type Failure =
 const toFailure = (error: Failure) => {
   switch (error._tag) {
     case "TelescopeToolGatewayDenied":
-      return new OrchestratorMcpFailure({ code: "capability_denied", message: error.message });
+      return new OrchestratorMcpFailure({
+        code: "capability_denied",
+        message: `${error.message} Do not retry; tell your member.`,
+      });
     case "TelescopeWorkspaceError":
       if (error.reason !== "storage")
         return new OrchestratorMcpFailure({

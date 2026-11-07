@@ -86,11 +86,20 @@ const sameJson = (a: unknown, b: unknown) =>
   JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
 
 const LEASE_TTL = { minutes: 2 };
+// An agent renews only between tool calls, so its lease outlasts a long step (D59).
+const AGENT_LEASE_TTL = { minutes: 15 };
+const leaseExpiry = (time: DateTime.Utc, author: Pick<Actor, "onBehalfOf">) =>
+  DateTime.formatIso(
+    DateTime.add(time, author.onBehalfOf === undefined ? LEASE_TTL : AGENT_LEASE_TTL),
+  );
 const isExpired = (lease: Telescope.Lease, at: string) =>
   Date.parse(lease.expiresAt) <= Date.parse(at);
 
 const fail = (reason: Telescope.WorkspaceError["reason"], message: string) =>
   Effect.fail(new Telescope.WorkspaceError({ reason, message }));
+/** D57: what waits for a member is not an agent's to change. */
+const forMember = (message: string) =>
+  fail("forbidden", `${message} Leave a note or tell your member.`);
 
 /**
  * Who writes. `caller` is the auth session; `WorkspaceService` resolves it to the member it acts
@@ -263,6 +272,17 @@ const make = Effect.gen(function* () {
       if (key === "conflictDecisionId" && input.baseVersion !== current.version) continue;
       if (key in set && !sameJson(set[key], current[key])) mine[key] = set[key] ?? null;
     }
+    if (author.onBehalfOf !== undefined) {
+      const open =
+        current.conflictDecisionId === undefined
+          ? undefined
+          : yield* findDecision(current.workspaceId, current.conflictDecisionId);
+      const held = Object.keys(open?.status === "proposed" ? (open.conflict?.incoming ?? {}) : {});
+      if (current.status === "needs_decision") held.push("status");
+      const blocked = held.filter((key) => key in mine);
+      if (blocked.length > 0)
+        return yield* forMember(`A member must decide ${blocked.join(", ")} first.`);
+    }
     const at = yield* now;
     const notes =
       input.note === undefined ? [] : [{ authorId: author.authorId, text: input.note, at }];
@@ -374,7 +394,7 @@ const make = Effect.gen(function* () {
   ) {
     const author = yield* requireMember(actor, input.workspaceId);
     if (actor.onBehalfOf !== undefined && "conflictDecisionId" in (input.set ?? {}))
-      return yield* fail("forbidden", "Only a member can clear a conflict marker.");
+      return yield* forMember("Only a member can clear a conflict marker.");
     return yield* db.transaction(
       findTask(input.workspaceId, input.taskId).pipe(
         Effect.flatMap((current) => commitTask(author, input, current)),
@@ -458,9 +478,14 @@ const make = Effect.gen(function* () {
       // Two decisions replacing the same one is a conflict for a person to settle.
       if (old.status === "superseded")
         return yield* fail("conflict", "That decision has already been superseded.");
+      if (author.onBehalfOf !== undefined) {
+        if (old.status === "proposed")
+          return yield* forMember("Only a member settles or replaces a proposal.");
+        const where = { kind: "decision", supersedes: old.id, status: "proposed" };
+        if ((yield* db.count(workspaceId, "tasks", where)) > 0)
+          return yield* forMember("A proposal to replace this decision waits for a member.");
+      }
       if (status === "decided") {
-        if (old.status === "proposed" && author.onBehalfOf !== undefined)
-          return yield* fail("forbidden", "Only a member can settle a proposal.");
         // Deciding a proposal also retires what it proposed to replace: one step, no recursion.
         const target =
           old.status === "proposed" && old.supersedes !== undefined
@@ -562,7 +587,7 @@ const make = Effect.gen(function* () {
           holderSubjectId: author.memberId,
           acquiredAt: at,
           heartbeatAt: at,
-          expiresAt: DateTime.formatIso(DateTime.add(time, LEASE_TTL)),
+          expiresAt: leaseExpiry(time, author),
         };
         yield* db.insert(workspaceId, "leases", toColumns(lease, "lease_id"));
         yield* applyCommit(author, task, { leaseId: lease.id }, [], at);
@@ -597,7 +622,7 @@ const make = Effect.gen(function* () {
     return yield* db.transaction(
       Effect.gen(function* () {
         const lease = yield* heldLease(member, input, at);
-        const expiresAt = DateTime.formatIso(DateTime.add(time, LEASE_TTL));
+        const expiresAt = leaseExpiry(time, member);
         const set = { heartbeat_at: at, expires_at: expiresAt };
         yield* db.update(input.workspaceId, "leases", set, { lease_id: lease.id });
         return { ...lease, heartbeatAt: at, expiresAt };
