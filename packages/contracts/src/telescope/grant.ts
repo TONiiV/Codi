@@ -26,6 +26,15 @@ export const GatewayTool = Schema.Literals([
   "dispatch_worker",
   "answer_member",
   "merge_pr",
+  "ticket_list",
+  "ticket_get",
+  "ticket_update",
+  "ticket_lease",
+  "ticket_lease_renew",
+  "ticket_lease_release",
+  "decision_list",
+  "decision_record",
+  "agent_list",
 ]);
 export type GatewayTool = typeof GatewayTool.Type;
 

@@ -55,6 +55,7 @@ import { DeviceToolkit } from "../../apps/server/src/mcp/toolkits/device/tools.t
 import { EnvironmentToolkit } from "../../apps/server/src/mcp/toolkits/environment/tools.ts";
 import { HtmlToolkit } from "../../apps/server/src/mcp/toolkits/html/tools.ts";
 import { MemoryToolkit } from "../../apps/server/src/mcp/toolkits/memory/tools.ts";
+import { TelescopeToolkit } from "../../apps/server/src/mcp/toolkits/telescope/tools.ts";
 import { OrchestratorToolkit } from "../../apps/server/src/mcp/toolkits/orchestrator/tools.ts";
 import { PreviewToolkit } from "../../apps/server/src/mcp/toolkits/preview/tools.ts";
 import { PreviewControlsToolkit } from "../../apps/server/src/mcp/toolkits/previewControls/tools.ts";
@@ -288,7 +289,7 @@ export const McpToolUseCase = Schema.Struct({
     harness: Schema.optional(Schema.Literals(["claude", "codex"])),
     /** The Linked environments beta is on, so T3 lists its link tools. */
     linkedEnvironments: Schema.optional(Schema.Boolean),
-    /** The thread belongs to an open Telescope run, so T3 lists its memory tools. */
+    /** The thread belongs to an open Telescope run, so T3 lists its memory and board tools. */
     telescopeRun: Schema.optional(Schema.Boolean),
     /** delegate_task `role` for a delegated child. T3 builds the child's first message from it. */
     delegateRole: Schema.optional(OrchestratorMcpTaskRole),
@@ -438,6 +439,7 @@ const t3SourceTools: ReadonlyArray<Tool.Any> = [
   DeviceToolkit,
   HtmlToolkit,
   MemoryToolkit,
+  TelescopeToolkit,
 ].flatMap((toolkit): ReadonlyArray<Tool.Any> => Object.values(toolkit.tools));
 // McpHttpServer decodes arguments with each tool's JSON codec, which drops undeclared keys.
 const t3InputDecoders = new Map(
@@ -487,7 +489,9 @@ const hiddenFromSubagents = enabledWhen(McpInvocationContext.hiddenFromSubagents
 const hiddenWhileLinksOff = enabledWhen(McpInvocationContext.hiddenWhileLinksOff);
 // McpHttpServer lists these only on threads with an open Telescope run.
 const telescopeOnly = new Set(
-  Object.keys(MemoryToolkit.tools).map((name) => `${T3_PREFIX}${name}`),
+  [MemoryToolkit, TelescopeToolkit].flatMap((toolkit) =>
+    Object.keys(toolkit.tools).map((name) => `${T3_PREFIX}${name}`),
+  ),
 );
 const visibleT3Tools = (options: {
   readonly subagent?: boolean;

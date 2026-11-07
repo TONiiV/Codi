@@ -80,6 +80,8 @@ import * as HtmlHandlers from "./toolkits/html/handlers.ts";
 import * as MemoryHandlers from "./toolkits/memory/handlers.ts";
 import * as MemoryService from "../telescope/MemoryService.ts";
 import { MemoryToolkit } from "./toolkits/memory/tools.ts";
+import * as TelescopeHandlers from "./toolkits/telescope/handlers.ts";
+import { TelescopeToolkit } from "./toolkits/telescope/tools.ts";
 import { HtmlPreviewTool, HtmlPreviewToolkit, HtmlRenderToolkit } from "./toolkits/html/tools.ts";
 import { requestUrl } from "../requestUrl.ts";
 
@@ -1225,6 +1227,11 @@ export const layerMemoryToolkit = toolkitRegistration(MemoryToolkit, MemoryHandl
   Layer.provide(visibleToTelescopeRuns.layer),
 );
 
+export const layerTelescopeToolkit = toolkitRegistration(
+  TelescopeToolkit,
+  TelescopeHandlers.layer,
+).pipe(Layer.provide(visibleToTelescopeRuns.layer));
+
 /**
  * `McpServer` for in-process calls, which provide `McpInvocationContext`
  * around `callTool` as the auth middleware does for each /mcp request.
@@ -1256,7 +1263,7 @@ export const layerMcpTransport = <RA, RE, RR>(registrations: Layer.Layer<RA, RE,
 
 /**
  * Every tool an ordinary thread sees; AgentContextBudget.test.ts measures this set.
- * `layer` adds `layerMemoryToolkit` for threads with an open Telescope run.
+ * `layer` adds the memory and Telescope toolkits for threads with an open Telescope run.
  */
 export const layerTools = Layer.mergeAll(
   layerPreviewToolkit,
@@ -1272,4 +1279,6 @@ export const layerTools = Layer.mergeAll(
   layerHtmlToolkit,
 );
 
-export const layer = layerMcpTransport(Layer.merge(layerTools, layerMemoryToolkit));
+export const layer = layerMcpTransport(
+  Layer.mergeAll(layerTools, layerMemoryToolkit, layerTelescopeToolkit),
+);

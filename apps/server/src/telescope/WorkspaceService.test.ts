@@ -39,12 +39,12 @@ const layer = Layer.mergeAll(
   ),
 );
 
-const session = (name: string, proofKeyThumbprint?: string): WorkspaceService.Caller => ({
+const session = (name: string, proofKeyThumbprint?: string): WorkspaceService.SessionCaller => ({
   sessionId: AuthSessionId.make(`session-${name}`),
   subject: "one-time-token",
   ...(proofKeyThumbprint === undefined ? {} : { proofKeyThumbprint }),
 });
-const desktop = (name: string, subject = "desktop-bootstrap"): WorkspaceService.Caller => ({
+const desktop = (name: string, subject = "desktop-bootstrap"): WorkspaceService.SessionCaller => ({
   sessionId: AuthSessionId.make(`session-${name}`),
   subject,
 });

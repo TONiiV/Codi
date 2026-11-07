@@ -87,14 +87,23 @@ const toBinding = (row: typeof BindingRow.Type): Telescope.ProjectBinding => ({
 const fail = (reason: Telescope.WorkspaceError["reason"], message: string) =>
   Effect.fail(new Telescope.WorkspaceError({ reason, message }));
 
-export interface Caller {
+export interface SessionCaller {
   readonly sessionId: AuthSessionId;
   readonly subject: string;
   readonly proofKeyThumbprint?: string;
 }
-const isOwner = (caller: Caller) => OWNER_SUBJECTS.has(caller.subject);
+/** An agent run acting for its member; the run, never tool input, names the workspace. */
+interface RunCaller {
+  readonly runId: Telescope.AgentRunId;
+  readonly workspaceId: Telescope.WorkspaceId;
+  readonly memberId: string;
+}
+export type Caller = SessionCaller | RunCaller;
+const isOwner = (caller: Caller) => "subject" in caller && OWNER_SUBJECTS.has(caller.subject);
 // A proof key outlives its hourly sessions and re-pairing; a cookie session moves on replacement.
-const deviceKey = (caller: Caller) => caller.proofKeyThumbprint ?? caller.sessionId;
+// A run's key is linked to no member, so a run never reaches a workspace through a device link.
+const deviceKey = (caller: Caller) =>
+  "runId" in caller ? `run:${caller.runId}` : (caller.proofKeyThumbprint ?? caller.sessionId);
 type Failure = Telescope.WorkspaceError | PersistenceSqlError | PersistenceDecodeError;
 type Rpcs = (typeof Telescope.WorkspaceRpcs)[number];
 type In<Tag extends Rpcs["_tag"]> = Rpc.Payload<Rpc.ExtractTag<Rpcs, Tag>>;
@@ -144,22 +153,28 @@ const make = Effect.gen(function* () {
     caller: Caller,
   ) {
     if (isOwner(caller)) return yield* memberById(workspaceId, OWNER_MEMBER_ID);
+    if ("runId" in caller)
+      return caller.workspaceId === workspaceId
+        ? yield* memberById(workspaceId, caller.memberId)
+        : undefined;
     const [link] = yield* db.select(workspaceId, "member_sessions", decodeSessionLinks, {
       device_key: deviceKey(caller),
     });
     return link === undefined ? undefined : yield* memberById(workspaceId, link.member_id);
   });
 
-  const linkDevice = (workspaceId: Telescope.WorkspaceId, memberId: string, caller: Caller) =>
-    now.pipe(
-      Effect.flatMap((at) =>
-        db.insert(workspaceId, "member_sessions", {
-          member_id: memberId,
-          device_key: deviceKey(caller),
-          linked_at: at,
-        }),
-      ),
-    );
+  const linkDevice = Effect.fn("WorkspaceService.linkDevice")(function* (
+    workspaceId: Telescope.WorkspaceId,
+    memberId: string,
+    caller: Caller,
+  ) {
+    if ("runId" in caller) return yield* fail("forbidden", "Agent runs cannot join workspaces.");
+    yield* db.insert(workspaceId, "member_sessions", {
+      member_id: memberId,
+      device_key: deviceKey(caller),
+      linked_at: yield* now,
+    });
+  });
 
   // Missing workspaces and foreign ones answer alike, so ids cannot be probed.
   const requireMember = Effect.fn("WorkspaceService.requireMember")(function* (

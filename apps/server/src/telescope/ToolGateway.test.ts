@@ -142,6 +142,7 @@ it.layer(layer)("Telescope tool gateway", (it) => {
         runId,
         agentId: chiefId,
         memberId: beaId,
+        onBehalfOf: [beaId],
         projectId: web,
       });
       assert.strictEqual(yield* denial("merge_pr"), "forbidden");
