@@ -27,6 +27,7 @@ import { Spinner } from "../ui/spinner";
 import { toastManager } from "../ui/toast";
 import { ErrorNote } from "./TelescopeAccountDialogs";
 import { telescope, telescopeBoard, useTelescopeWorkspaces } from "./telescopeState";
+import { telescopeSearch } from "./telescopeViews";
 
 export interface BoardTarget {
   readonly environmentId: EnvironmentId;
@@ -53,7 +54,7 @@ export function StatusBadge({ status }: { status: Telescope.TaskStatus }) {
 
 const decisionLink = (hash: Telescope.DecisionId) => ({
   to: TELESCOPE_PATH,
-  search: { view: "decisions" as const },
+  search: telescopeSearch("tasks", "decisions"),
   hash,
 });
 
