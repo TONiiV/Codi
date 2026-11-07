@@ -301,8 +301,8 @@ const linkChainTarget = Effect.fnUntraced(function* (file: string) {
   for (let hop = 0; hop < LINK_HOPS; hop++) {
     const link = yield* fs.readLink(current).pipe(Effect.orElseSucceed(() => undefined));
     if (link === undefined) return current;
-    // A relative link target is relative to the directory the link itself lives in.
-    current = path.resolve(path.dirname(current), link);
+    // A relative target is relative to the link's directory as the OS resolves it, links included.
+    current = path.resolve(yield* plannedRealPath(path.dirname(current)), link);
   }
   return undefined;
 });

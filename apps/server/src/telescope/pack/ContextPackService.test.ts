@@ -310,6 +310,10 @@ describe("ContextPackService", () => {
           'bearer_token_env_var = "REMOTE_TOKEN"',
           // Hand-edited spelling of the marker export writes as `# transport = "sse"`.
           "  # transport = 'sse'",
+          // A table after the block must not take the marker with its leading comments.
+          "# profiles",
+          "[profiles.fast]",
+          'model = "mini"',
         ].join("\n"),
         "opencode/AGENTS.md": "OpenCode rules\n",
         "opencode/.opencode/skills/greet/SKILL.md": "Say hi.\n",
@@ -675,6 +679,7 @@ describe("ContextPackService", () => {
           "chain-skill/.claude/skills/deploy/notes.md": "keep\n",
           "chain-dir/.claude/skills/deploy/notes.md": "keep\n",
           "inside-chain/inner/keep.txt": "keep\n",
+          "linked-dir/AGENTS.md": "KEEP: the project's own AGENTS.md\n",
           "absolute/.claude/settings.local.json": "{}",
         },
         {
@@ -706,6 +711,9 @@ describe("ContextPackService", () => {
           // A chain that stays inside the project is still written through.
           "inside-chain/CLAUDE.md": "hop2",
           "inside-chain/hop2": "inner/CLAUDE.md",
+          // `..` in a hop applies after the OS resolves the hop's directory, here a linked one.
+          "linked-dir/.cursor": "config/cursor",
+          "linked-dir/config/cursor/rules/context-pack.mdc": "../../AGENTS.md",
           "skills-dir/.claude/skills": "../../dotfiles",
           "dotdot/.claude/skills": "../../project/../dotfiles",
           "instructions/CLAUDE.md": "../dotfiles/CLAUDE.md",
@@ -765,8 +773,11 @@ describe("ContextPackService", () => {
 
       for (const merge of [false, true]) {
         yield* service.import(dir.at("pack"), dir.at("inside-chain"), "claude", merge);
+        yield* service.import(dir.at("pack"), dir.at("linked-dir"), "cursor", merge);
       }
       expect(yield* dir.read("inside-chain/inner/CLAUDE.md")).toContain("Run the tests.");
+      expect(yield* dir.read("linked-dir/AGENTS.md")).toBe("KEEP: the project's own AGENTS.md\n");
+      expect(yield* dir.read("linked-dir/config/AGENTS.md")).toContain("Run the tests.");
 
       // A skill name that escapes the pack by shape is refused by the manifest itself.
       const manifest = JSON.parse(yield* dir.read("pack/pack.json"));
