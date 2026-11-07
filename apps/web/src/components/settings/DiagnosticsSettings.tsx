@@ -466,7 +466,11 @@ function ResourceHistoryProcessNameCell({
     <div
       className="grid min-w-0 grid-cols-[1.25rem_0.375rem_minmax(0,1fr)] items-center gap-2"
       style={{ paddingLeft: `${Math.min(visualDepth, 6) * 10}px` }}
-      aria-label={`${process.isServerRoot ? t("settings.text.root") : t("settings.text.child")} process ${name}`}
+      aria-label={
+        process.isServerRoot
+          ? t("settings.text.rootProcessName", { name })
+          : t("settings.text.childProcessName", { name })
+      }
     >
       <span className="size-5 shrink-0" aria-hidden="true" />
       <span
@@ -1388,7 +1392,7 @@ function DiagnosticsSettingsBody() {
               t("settings.text.count"),
               t("settings.text.failures"),
               t("settings.text.average"),
-              "Max",
+              t("settings.text.max"),
             ]}
             minTableWidth="min-w-[760px]"
             columnWidths={["w-[48%]", "w-[13%]", "w-[13%]", "w-[13%]", "w-[13%]"]}
