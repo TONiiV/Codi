@@ -104,10 +104,8 @@ const writeServers = (existing: string | undefined, servers: McpServers, merge: 
 };
 
 export const codex = makeHarness({
-  instructions: markdownInstructions("AGENTS.md"),
-  skillsDirs: [".agents/skills"],
+  instructions: markdownInstructions,
   mcp: {
-    file: ".codex/config.toml",
     read: (text) =>
       Object.fromEntries(
         [...splitServers(text).blocks].map(([n, lines]) => [n, parseServer(lines)]),
