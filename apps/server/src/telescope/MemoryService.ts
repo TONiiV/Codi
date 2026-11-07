@@ -164,6 +164,8 @@ const make = Effect.gen(function* () {
     agentId: string,
   ) {
     const self = yield* actingMember(caller, workspaceId);
+    if (WorkspaceService.isReadOnly(self.role))
+      return yield* fail("forbidden", "Read-only members cannot change memories.");
     const agent = (yield* agentsOf(workspaceId)).get(Telescope.AgentId.make(agentId));
     if (agent === undefined) return yield* fail("not_found", "Agent not found.");
     const allowed =

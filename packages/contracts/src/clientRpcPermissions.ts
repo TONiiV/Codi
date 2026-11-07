@@ -85,6 +85,12 @@ export const CLIENT_GUARDED_RPC_SCOPES = {
   [TELESCOPE_WS_METHODS.agentUpdateCompany]: AuthTelescopeAdminScope,
   // Creates a Codi thread, as thread.create does; the service lets only the agent's owner.
   [TELESCOPE_WS_METHODS.agentOpenThread]: AuthOrchestrationOperateScope,
+  // An invite joins one workspace; a new one runs agents here, so it needs this machine's scope.
+  [TELESCOPE_WS_METHODS.workspaceCreate]: AuthOrchestrationOperateScope,
+  // Scans this machine's agent transcripts, as agent session scan does.
+  [TELESCOPE_WS_METHODS.tokenSaverRun]: AuthOrchestrationReadScope,
+  // Reads this machine's providers and settings, as server config does.
+  [TELESCOPE_WS_METHODS.routingResolve]: AuthOrchestrationReadScope,
   [TELESCOPE_WS_METHODS.grantAuditList]: AuthTelescopeAdminScope,
   [TELESCOPE_WS_METHODS.budgetSet]: AuthTelescopeAdminScope,
   [TELESCOPE_WS_METHODS.killSwitchSet]: AuthTelescopeAdminScope,

@@ -16,27 +16,58 @@ import * as TestClock from "effect/testing/TestClock";
 
 import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
 import * as ProjectStore from "../orchestration-v2/ProjectStore.ts";
+import * as ProviderAdapterRegistry from "../orchestration-v2/ProviderAdapterRegistry.ts";
+import * as ThreadManagementService from "../orchestration-v2/ThreadManagementService.ts";
 import * as AuthSessions from "../persistence/AuthSessions.ts";
 import { runMigrations } from "../persistence/Migrations.ts";
 import * as SqlitePersistence from "../persistence/Sqlite.ts";
+import * as ManagedProjectFolders from "../project/ManagedProjectFolders.ts";
+import * as ServerSettings from "../serverSettings.ts";
+import * as AgentRuntime from "./AgentRuntime.ts";
+import * as AgentService from "./AgentService.ts";
+import * as DelegationService from "./DelegationService.ts";
+import * as GrantService from "./GrantService.ts";
+import * as MemoryService from "./MemoryService.ts";
+import * as RoutingService from "./RoutingService.ts";
+import * as RunRecordService from "./RunRecordService.ts";
+import * as TaskBoardService from "./TaskBoardService.ts";
 import * as TelescopeDb from "./TelescopeDb.ts";
+import * as WorkerDispatch from "./WorkerDispatch.ts";
 import * as WorkspaceService from "./WorkspaceService.ts";
 
 const database = Layer.effectDiscard(runMigrations()).pipe(
   Layer.provideMerge(SqlitePersistence.layerMemory),
 );
 const LOCAL_ENVIRONMENT = EnvironmentId.make("env-local");
-const layer = Layer.mergeAll(
+const services = Layer.mergeAll(
   WorkspaceService.layer,
   TelescopeDb.layer,
   AuthSessions.layer,
   ProjectStore.layer,
+  TaskBoardService.layer,
+  AgentService.layer,
+  MemoryService.layer,
+  RunRecordService.layer,
+  DelegationService.layer,
+  GrantService.layer,
 ).pipe(
   Layer.provideMerge(Layer.merge(database, NodeCrypto.layer)),
   Layer.provide(
     Layer.succeed(ServerEnvironment.ServerEnvironmentIdentity, {
       getEnvironmentId: Effect.succeed(LOCAL_ENVIRONMENT),
     }),
+  ),
+);
+const layer = Layer.merge(WorkerDispatch.layer, AgentRuntime.layer).pipe(
+  Layer.provideMerge(services),
+  Layer.provide(
+    Layer.mergeAll(
+      Layer.mock(RoutingService.RoutingService)({}),
+      Layer.mock(ThreadManagementService.ThreadManagementService)({}),
+      Layer.mock(ManagedProjectFolders.ManagedProjectFolders)({ namedProjectsRoot: "/unused" }),
+      Layer.mock(ProviderAdapterRegistry.ProviderAdapterRegistryV2)({}),
+      ServerSettings.layerTest(),
+    ),
   ),
 );
 
@@ -484,5 +515,125 @@ it.layer(layer)("WorkspaceService", (it) => {
         for (const { device_key } of keys) assert.notInclude(folded, device_key);
       }
     }),
+  );
+
+  it.effect(
+    "a viewer reads the board and is refused every write; admins switch member and viewer",
+    () =>
+      Effect.gen(function* () {
+        const service = yield* WorkspaceService.WorkspaceService;
+        const board = yield* TaskBoardService.TaskBoardService;
+        const agents = yield* AgentService.AgentService;
+        const memory = yield* MemoryService.MemoryService;
+        const runs = yield* RunRecordService.RunRecordService;
+        const workers = yield* WorkerDispatch.WorkerDispatch;
+        const runtime = yield* AgentRuntime.AgentRuntime;
+        const grants = yield* GrantService.GrantService;
+        const db = yield* TelescopeDb.TelescopeDb;
+        const [owner, v] = [desktop("owner"), session("viewer")];
+        const { id: workspaceId } = yield* service.create(owner, {
+          kind: "enterprise",
+          name: "Acme",
+          displayName: "Olive",
+        });
+        const { code } = yield* service.invite(owner, { workspaceId, role: "viewer" });
+        const viewer = yield* service.accept(v, { code, displayName: "Vic" });
+        assert.strictEqual(viewer.role, "viewer");
+        const as = { caller: v };
+        const target = { workspaceId, subjectId: viewer.subjectId };
+        yield* service.setRole(owner, { ...target, role: "member" });
+        const task = yield* board.createTask(as, { workspaceId, title: "夹爪" });
+        const lease = yield* board.acquireLease(as, { workspaceId, taskId: task.id });
+        const free = yield* board.createTask({ caller: owner }, { workspaceId, title: "螺丝" });
+        yield* service.setRole(owner, { ...target, role: "viewer" });
+        const { version } = yield* board.getTask(as, { workspaceId, taskId: task.id });
+        // An agent made for this member before invites stopped creating them.
+        const agentId = Telescope.AgentId.make("vic-pa");
+        yield* db.insert(workspaceId, "agents", {
+          agent_id: agentId,
+          owner_subject_id: viewer.subjectId,
+          kind: "chief_of_staff",
+          name: "Vic PA",
+          standing_powers_json: JSON.stringify({
+            openTickets: true,
+            dispatchWorkers: true,
+            answerMembers: true,
+            mergePRs: false,
+          }),
+          exposure: "hidden",
+          sync_with_board: 0,
+          dispatch_mode: "inbox",
+          channels_json: "[]",
+          created_at: "2026-01-01T00:00:00.000Z",
+          updated_at: "2026-01-01T00:00:00.000Z",
+        });
+        const leaseRef = { workspaceId, leaseId: lease.id };
+        const writes = [
+          ["task.create", board.createTask(as, { workspaceId, title: "新任务" })],
+          [
+            "task.update",
+            board.updateTask(as, { workspaceId, taskId: task.id, baseVersion: version }),
+          ],
+          ["decision.create", board.createDecision(as, { workspaceId, title: "定", text: "是" })],
+          ["lease.acquire", board.acquireLease(as, { workspaceId, taskId: free.id })],
+          ["lease.heartbeat", board.heartbeatLease(as, leaseRef)],
+          ["lease.release", board.releaseLease(as, leaseRef)],
+          ["agent.createCustom", agents.createCustom(v, { workspaceId, name: "Helper" })],
+          ["agent.update", agents.update(v, { workspaceId, agentId, name: "Renamed" })],
+          ["agent.openThread", runtime.openThread(v, { workspaceId, agentId })],
+          [
+            "memory.write",
+            memory.write({ session: v }, { workspaceId, agentId, op: "add", text: "记住" }),
+          ],
+          [
+            "run.start",
+            runs.start(v, workspaceId, {
+              agentId,
+              inputSnapshot: {
+                promptVersion: "p1",
+                skillsVersions: {},
+                powersVersion: "w1",
+                model: "replay",
+                contextManifest: [],
+              },
+            }),
+          ],
+          [
+            "delegation.cancel",
+            workers.cancelForMember(v, {
+              workspaceId,
+              delegationId: Telescope.DelegationId.make("d-1"),
+            }),
+          ],
+          [
+            "agent run task.update",
+            board.updateTask(
+              { caller: runOf(workspaceId, viewer.subjectId) },
+              { workspaceId, taskId: task.id, baseVersion: version, note: "进展" },
+            ),
+          ],
+        ] as const;
+        const refusals: Array<readonly [string, unknown]> = [];
+        for (const [write, effect] of writes)
+          refusals.push([write, yield* reasonOf(effect).pipe(Effect.orElseSucceed(() => "ok"))]);
+        assert.deepStrictEqual(
+          refusals,
+          writes.map(([write]) => [write, "forbidden"] as const),
+        );
+        const grant = yield* grants.effectiveGrant(workspaceId, {
+          agentId,
+          onBehalfOf: [viewer.subjectId],
+        });
+        assert.deepStrictEqual(Object.values(grant.powers), [false, false, false, false]);
+
+        const { tasks } = yield* board.listTasks(as, { workspaceId });
+        assert.deepStrictEqual(tasks.map((t) => t.title).toSorted(), ["夹爪", "螺丝"].toSorted());
+        assert.strictEqual(
+          yield* reasonOf(
+            service.setRole(owner, { workspaceId, subjectId: OWNER, role: "viewer" }),
+          ),
+          "conflict",
+        );
+      }),
   );
 });

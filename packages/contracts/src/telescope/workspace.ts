@@ -4,11 +4,13 @@ import { EnvironmentId, ProjectId } from "../baseSchemas.ts";
 import { InvitationId, SubjectId, Text, Timestamp, WorkspaceId } from "./common.ts";
 
 export const WorkspaceKind = Schema.Literals(["enterprise", "personal"]);
+/** `viewer` (只读) reads what a member reads and writes nothing. */
 export const WorkspaceRole = Schema.Literals([
   "admin",
   "department_lead",
   "project_lead",
   "member",
+  "viewer",
 ]);
 export type WorkspaceRole = typeof WorkspaceRole.Type;
 
@@ -80,6 +82,25 @@ export const MemberInviteInput = Schema.Struct({
   ...InWorkspace,
   role: WorkspaceRole,
   expiresInSeconds: Schema.optionalKey(CodeTtlSeconds),
+});
+/**
+ * A one-time pairing credential with Telescope scopes only (`telescope:member`, plus
+ * `telescope:admin` for an admin invite): an invite never gives machine access. Only a session
+ * that may create pairing links gets one (`owner_only` otherwise).
+ */
+export const InvitePairingLink = Schema.Union([
+  Schema.Struct({
+    status: Schema.Literal("issued"),
+    id: Text,
+    credential: Text,
+    expiresAt: Timestamp,
+  }),
+  Schema.Struct({ status: Schema.Literals(["owner_only", "policy_refused"]) }),
+]);
+export type InvitePairingLink = typeof InvitePairingLink.Type;
+export const MemberInviteResult = Schema.Struct({
+  ...Invitation.fields,
+  pairingLink: InvitePairingLink,
 });
 export const MemberLinkCodeInput = Schema.Struct({
   ...InWorkspace,

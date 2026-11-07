@@ -185,7 +185,7 @@ const make = Effect.gen(function* () {
     caller: WorkspaceService.SessionCaller,
     input: typeof Telescope.AgentGetInput.Type,
   ) {
-    const { self } = yield* workspaces.get(caller, { workspaceId: input.workspaceId });
+    const { self } = yield* workspaces.getForWrite(caller, { workspaceId: input.workspaceId });
     const { agent } = yield* agents.powersOf(input.workspaceId, input.agentId);
     if (agent.ownerSubjectId !== self.subjectId)
       return yield* new Telescope.WorkspaceError({

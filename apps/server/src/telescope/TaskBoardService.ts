@@ -167,8 +167,10 @@ const make = Effect.gen(function* () {
   const now = DateTime.now.pipe(Effect.map(DateTime.formatIso));
   /** Every board write: its notices reach a watcher together once it commits. */
   const transact = <A, E, R>(write: Effect.Effect<A, E, R>) => db.transaction(changes.batch(write));
-  const requireMember = (actor: Actor, workspaceId: Telescope.WorkspaceId) =>
-    workspaces.get(actor.caller, { workspaceId }).pipe(
+  const requireMember = (actor: Actor, workspaceId: Telescope.WorkspaceId, write?: "write") =>
+    (write === undefined ? workspaces.get : workspaces.getForWrite)(actor.caller, {
+      workspaceId,
+    }).pipe(
       Effect.map(({ self }): Author => ({
         ...actor,
         authorId: actor.authorId ?? self.subjectId,
@@ -389,7 +391,7 @@ const make = Effect.gen(function* () {
     actor: Actor,
     { workspaceId, ...set }: In<"telescope.task.create">,
   ) {
-    const author = yield* requireMember(actor, workspaceId);
+    const author = yield* requireMember(actor, workspaceId, "write");
     const taskId = Telescope.TaskId.make(yield* random.uuidV4());
     const at = yield* now;
     const blank: Telescope.Task = {
@@ -411,7 +413,7 @@ const make = Effect.gen(function* () {
     actor: Actor,
     input: In<"telescope.task.update">,
   ) {
-    const author = yield* requireMember(actor, input.workspaceId);
+    const author = yield* requireMember(actor, input.workspaceId, "write");
     if (actor.onBehalfOf !== undefined && "conflictDecisionId" in (input.set ?? {}))
       return yield* forMember("Only a member can clear a conflict marker.");
     return yield* transact(
@@ -538,7 +540,7 @@ const make = Effect.gen(function* () {
     actor: Actor,
     { workspaceId, ...input }: In<"telescope.decision.create">,
   ) {
-    const author = yield* requireMember(actor, workspaceId);
+    const author = yield* requireMember(actor, workspaceId, "write");
     return yield* transact(writeDecision(author, workspaceId, input, yield* now));
   });
 
@@ -593,7 +595,7 @@ const make = Effect.gen(function* () {
     actor: Actor,
     { workspaceId, taskId }: In<"telescope.lease.acquire">,
   ) {
-    const author = yield* requireMember(actor, workspaceId);
+    const author = yield* requireMember(actor, workspaceId, "write");
     const time = yield* DateTime.now;
     const at = DateTime.formatIso(time);
     return yield* transact(
@@ -641,7 +643,7 @@ const make = Effect.gen(function* () {
     actor: Actor,
     input: In<"telescope.lease.heartbeat">,
   ) {
-    const member = yield* requireMember(actor, input.workspaceId);
+    const member = yield* requireMember(actor, input.workspaceId, "write");
     const time = yield* DateTime.now;
     const at = DateTime.formatIso(time);
     return yield* transact(
@@ -681,7 +683,7 @@ const make = Effect.gen(function* () {
     actor: Actor,
     input: In<"telescope.lease.release">,
   ) {
-    const member = yield* requireMember(actor, input.workspaceId);
+    const member = yield* requireMember(actor, input.workspaceId, "write");
     const at = yield* now;
     yield* transact(
       heldLease(member, input, at).pipe(Effect.flatMap((lease) => dropLease(member, lease, at))),

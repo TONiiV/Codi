@@ -375,7 +375,7 @@ const make = Effect.gen(function* () {
     caller: Caller,
     { workspaceId, name, ...extra }: In<"telescope.agent.createCustom">,
   ) {
-    const { self } = yield* workspaces.get(caller, { workspaceId });
+    const { self } = yield* workspaces.getForWrite(caller, { workspaceId });
     const bound = yield* boundProjectIds(caller, workspaceId);
     if (extra.projectId !== undefined && !bound.includes(extra.projectId))
       return yield* fail("not_found", "That project is not bound to this workspace.");
@@ -388,7 +388,7 @@ const make = Effect.gen(function* () {
     caller: Caller,
     input: In<"telescope.agent.update">,
   ) {
-    const { workspace, self } = yield* workspaces.get(caller, input);
+    const { workspace, self } = yield* workspaces.getForWrite(caller, input);
     return yield* db.transaction(
       Effect.gen(function* () {
         const agent = yield* findAgent(input.workspaceId, input.agentId);
