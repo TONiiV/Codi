@@ -156,7 +156,7 @@ describe("telescope needs-you", () => {
 
 describe("telescope delegation queries", () => {
   it.effect(
-    "re-read on a delegation notice, when the decision list changes and after a cancel, not on its first answer",
+    "re-read once per delegation notice, an own cancel included, not on their first answer",
     () =>
       Effect.gen(function* () {
         const env = EnvironmentId.make("local");
@@ -184,15 +184,8 @@ describe("telescope delegation queries", () => {
               Stream.provideService(stream, EnvironmentSupervisor, supervisor),
           } as EnvironmentRegistry["Service"]),
         );
-        const board = Atom.make<
-          AsyncResult.AsyncResult<typeof Telescope.DecisionListResult.Type, unknown>
-        >(AsyncResult.initial());
         const notices = Atom.make(0);
-        const delegations = createTelescopeDelegationAtoms(
-          runtime,
-          () => board,
-          () => notices,
-        );
+        const delegations = createTelescopeDelegationAtoms(runtime, () => notices);
         const registry = AtomRegistry.make();
         yield* Effect.addFinalizer(() => Effect.sync(() => registry.dispose()));
         registry.mount(sessions(env));
@@ -210,19 +203,18 @@ describe("telescope delegation queries", () => {
             permissions: [AuthTelescopeMemberScope],
           }),
         );
-        registry.mount(board);
         const query = delegations.list({ environmentId: env, input: { workspaceId, agentId: pa } });
         registry.mount(query);
         const read = () => AtomRegistry.getResult(registry, query, { suspendOnWaiting: true });
         yield* read();
-        registry.set(board, AsyncResult.success({ decisions: [] }));
-        yield* read();
         expect(list).toHaveBeenCalledTimes(1);
 
-        registry.set(board, AsyncResult.success({ decisions: [decision("q", "proposed", 1)] }));
+        // A question sends its delegation notice: one read.
+        registry.set(notices, 1);
         yield* read();
         expect(list).toHaveBeenCalledTimes(2);
 
+        // An own cancel comes back as its notice: one read.
         const delegationId = Telescope.DelegationId.make("d");
         const canceled = yield* Effect.promise(() =>
           delegations.cancel.run(registry, {
@@ -231,12 +223,9 @@ describe("telescope delegation queries", () => {
           }),
         );
         expect(canceled._tag).toBe("Success");
+        registry.set(notices, 2);
         yield* read();
         expect(list).toHaveBeenCalledTimes(3);
-
-        registry.set(notices, 1);
-        yield* read();
-        expect(list).toHaveBeenCalledTimes(4);
       }),
   );
 });

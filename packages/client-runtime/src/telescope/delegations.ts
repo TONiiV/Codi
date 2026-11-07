@@ -1,7 +1,5 @@
 import { type EnvironmentId, Telescope } from "@t3tools/contracts";
-import * as Effect from "effect/Effect";
-import * as Option from "effect/Option";
-import { AsyncResult, Atom } from "effect/reactivity";
+import type { Atom } from "effect/reactivity";
 
 import type { EnvironmentRegistry } from "../connection/registry.ts";
 import {
@@ -75,43 +73,22 @@ interface WorkspaceTarget {
   readonly environmentId: EnvironmentId;
   readonly input: { readonly workspaceId: Telescope.WorkspaceId };
 }
-type DecisionsQuery = (
-  target: WorkspaceTarget,
-) => Atom.Atom<AsyncResult.AsyncResult<typeof Telescope.DecisionListResult.Type, unknown>>;
 
 export function createTelescopeDelegationAtoms<R, E>(
   runtime: Atom.AtomRuntime<EnvironmentRegistry | R, E>,
-  decisions: DecisionsQuery,
   delegationNotices: (target: WorkspaceTarget) => Atom.Atom<number>,
 ) {
-  const cancels = Atom.make(0).pipe(Atom.keepAlive);
-  // A delegation notice, a changed decision list (a question or an answer), or a cancel from here
-  // re-reads them; the first decision list does not.
-  const signal = Atom.family((key: string) => {
-    const [environmentId, workspaceId]: [EnvironmentId, Telescope.WorkspaceId] = JSON.parse(key);
-    const board = decisions({ environmentId, input: { workspaceId } });
-    const seen = Atom.make((get) => {
-      const list = Option.getOrUndefined(AsyncResult.value(get(board)));
-      const previous = Option.getOrUndefined(get.self<{ list: typeof list; reads: number }>());
-      const moved = previous?.list !== undefined && previous.list !== list;
-      return { list, reads: (previous?.reads ?? 0) + (moved ? 1 : 0) };
-    });
-    const notices = delegationNotices({ environmentId, input: { workspaceId } });
-    return Atom.make((get) => get(seen).reads + get(cancels) + get(notices));
-  });
-  const list = createEnvironmentRpcQueryAtomFamily(runtime, {
-    label: "telescope:delegation:list",
-    tag: WS_METHODS.delegationList,
-    refreshTrigger: ({ environmentId, input }) =>
-      signal(JSON.stringify([environmentId, input.workspaceId])),
-  });
   return {
-    list,
+    // Every committed delegation write, an own cancel included, comes back as a notice.
+    list: createEnvironmentRpcQueryAtomFamily(runtime, {
+      label: "telescope:delegation:list",
+      tag: WS_METHODS.delegationList,
+      refreshTrigger: ({ environmentId, input }) =>
+        delegationNotices({ environmentId, input: { workspaceId: input.workspaceId } }),
+    }),
     cancel: createEnvironmentRpcCommand(runtime, {
       label: "telescope:delegation:cancel",
       tag: WS_METHODS.delegationCancel,
-      onSettled: (_target, registry) =>
-        Effect.sync(() => registry.set(cancels, registry.get(cancels) + 1)),
     }),
   };
 }

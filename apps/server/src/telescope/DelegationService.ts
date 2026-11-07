@@ -568,7 +568,11 @@ const make = Effect.gen(function* () {
     const rows = [root, ...(yield* openDescendants(root))];
     const by_ = byAgent ? { agentId: by.agentId } : { memberId: by.memberId };
     const cancelled = yield* db.transaction(
-      Effect.forEach(rows, (row) => move(row, "CANCELED", byAgent ? "agent" : "user", { by: by_ })),
+      changes.batch(
+        Effect.forEach(rows, (row) =>
+          move(row, "CANCELED", byAgent ? "agent" : "user", { by: by_ }),
+        ),
+      ),
     );
     yield* Effect.forEach(cancelled, (row) =>
       wakes.drop(by.workspaceId, wakeKey(row.delegation_id)),

@@ -465,7 +465,7 @@ it.effect("cancel cascades to descendants and reports CANCELED up one level", ()
 );
 
 it.effect(
-  "each committed delegation write sends one delegation notice, none when it rolls back",
+  "each committed delegation write sends one delegation notice, a cascade one item, none on rollback",
   () =>
     Effect.gen(function* () {
       const delegations = yield* setup;
@@ -501,6 +501,26 @@ it.effect(
         notice(3),
         { kind: "task", workspaceId: ws, id: sentinel.id, version: 1 },
       ]);
+
+      // A cascade commits as one write, so it takes one place in a watch's backlog.
+      const root = yield* delegations.delegate(actor(pa), { toAgentId: chief, brief });
+      yield* delegations.start({ workspaceId: ws, delegationId: root.id });
+      for (let index = 0; index < BoardChanges.WATCH_BACKLOG; index++)
+        yield* delegations.recordWorker(actor(chief), {
+          parentId: root.id,
+          threadId: ThreadId.make(`thread-w${index}`),
+          brief,
+        });
+      const pull = yield* Stream.toPull(
+        (yield* BoardChanges.BoardChanges).watch(session("ann"), { workspaceId: ws }),
+      );
+      assert.deepStrictEqual(yield* pull, [{ kind: "synchronized" }]);
+      yield* delegations.cancel(ann, root.id);
+      const [cascade] = yield* pull;
+      assert.strictEqual(
+        cascade?.kind === "changes" && cascade.changes.length,
+        BoardChanges.WATCH_BACKLOG + 1,
+      );
     }).pipe(Effect.scoped, Effect.provide(layer)),
 );
 

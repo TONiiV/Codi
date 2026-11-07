@@ -25,7 +25,6 @@ import { telescope, telescopeBoard } from "./telescopeState";
 
 const telescopeDelegations = createTelescopeDelegationAtoms(
   connectionAtomRuntime,
-  telescopeBoard.decisions,
   telescopeBoard.delegationNotices,
 );
 
@@ -168,7 +167,11 @@ export function TelescopeNeedsYou({
                       : setArmed(delegation.id)
                   }
                 >
-                  {armed === delegation.id ? "确认取消，Worker 会停下" : "取消"}
+                  {armed !== delegation.id
+                    ? "取消"
+                    : delegation.hop === "worker"
+                      ? "确认取消，Worker 会停下"
+                      : "确认取消"}
                 </Button>
               ) : null}
             </div>
