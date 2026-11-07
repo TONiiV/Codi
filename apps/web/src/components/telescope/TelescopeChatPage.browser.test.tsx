@@ -65,6 +65,7 @@ describe("TelescopeChatPage", () => {
       </SidebarProvider>,
     );
     const openList = screen.getByRole("button", { name: "打开 agent 列表" });
+    await expect.element(openList).toBeVisible();
 
     await userEvent.click(openList);
     await expect.element(openList).not.toBeInTheDocument();
