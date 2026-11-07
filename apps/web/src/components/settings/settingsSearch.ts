@@ -1341,9 +1341,9 @@ export const SETTINGS_SEARCH_ITEMS = [
   },
   {
     id: "telescope-routing",
-    title: "路由规则",
+    title: "Routing rules",
     to: "/settings/telescope",
-    searchTerms: ["telescope routing rules harness model task type priority 路由 模型 优先级"],
+    searchTerms: ["telescope routing rules harness model task type priority"],
   },
   {
     id: "archive",
