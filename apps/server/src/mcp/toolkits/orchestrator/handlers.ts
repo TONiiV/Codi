@@ -110,14 +110,10 @@ const handlers = {
           if (scheduledTaskId === undefined) return yield* Effect.die("unreachable");
           const scope = yield* McpInvocationContext.McpInvocationContext;
           const service = yield* OrchestratorMcpService.OrchestratorMcpService;
-          return yield* service.updateScheduledTask(scope, {
-            scheduledTaskId,
-            prompt,
-            title,
-            schedule,
-            enabled,
-            bindToCurrentThread,
-          });
+          const update = { scheduledTaskId, prompt, title, schedule, enabled, bindToCurrentThread };
+          return yield* service
+            .updateScheduledTask(scope, update)
+            .pipe(gatedIfRun("dispatch_worker", update));
         }),
     ),
   ),
