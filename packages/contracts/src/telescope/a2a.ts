@@ -1,4 +1,5 @@
 import * as Schema from "effect/Schema";
+import * as Struct from "effect/Struct";
 
 import { ThreadId } from "../baseSchemas.ts";
 import {
@@ -93,3 +94,20 @@ export const Delegation = Schema.Struct({
   updatedAt: Timestamp,
 });
 export type Delegation = typeof Delegation.Type;
+
+/** A delegation without its message log, for lists. */
+export const DelegationSummary = Delegation.mapFields(Struct.omit(["messages"]));
+export const DelegationListInput = Schema.Struct({
+  workspaceId: WorkspaceId,
+  agentId: Schema.optionalKey(AgentId),
+  state: Schema.optionalKey(A2ATaskState),
+  limit: Schema.optionalKey(Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 200 }))),
+});
+/** Newest first. */
+export const DelegationListResult = Schema.Struct({ delegations: Schema.Array(DelegationSummary) });
+export const DelegationGetInput = Schema.Struct({
+  workspaceId: WorkspaceId,
+  delegationId: DelegationId,
+});
+export const DelegationCancelInput = DelegationGetInput;
+export const DelegationCancelResult = Schema.Struct({ canceled: Schema.Array(DelegationId) });

@@ -4,13 +4,16 @@ import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import type * as Rpc from "effect/rpc/Rpc";
 import * as Schema from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
 import * as Struct from "effect/Struct";
 
 import type { PersistenceDecodeError, PersistenceSqlError } from "../persistence/Errors.ts";
+import * as TaskBoardService from "./TaskBoardService.ts";
 import * as TelescopeDb from "./TelescopeDb.ts";
 import * as WakeQueueService from "./WakeQueueService.ts";
+import * as WorkspaceService from "./WorkspaceService.ts";
 
 const DelegationRow = Schema.Struct({
   delegation_id: Telescope.DelegationId,
@@ -38,8 +41,22 @@ const AgentRow = Schema.Struct({
   project_id: Schema.NullOr(ProjectId),
 });
 
+const DecisionRow = Schema.Struct({
+  title: Schema.String,
+  text: Schema.NullOr(Schema.String),
+  chosen: Schema.NullOr(Schema.String),
+  decided_by: Schema.NullOr(Schema.String),
+  options_json: Schema.NullOr(
+    Schema.fromJsonString(Schema.Array(Schema.Struct({ id: Schema.String, label: Schema.String }))),
+  ),
+});
+
 const decodeRows = Schema.decodeUnknownEffect(Schema.Array(DelegationRow));
 const decodeAgents = Schema.decodeUnknownEffect(Schema.Array(AgentRow));
+const decodeDecisions = Schema.decodeUnknownEffect(Schema.Array(DecisionRow));
+const decodeStops = Schema.decodeUnknownEffect(
+  Schema.Array(Schema.Struct({ agent_id: Schema.String, state: Schema.String })),
+);
 // The repository writes workspace_id itself and refuses rows that carry it.
 const encodeRow = Schema.encodeSync(DelegationRow.mapFields(Struct.omit(["workspace_id"])));
 
@@ -97,6 +114,14 @@ const REPORT_STATES = [
   "REJECTED",
 ] as const satisfies ReadonlyArray<State>;
 type ReportState = (typeof REPORT_STATES)[number];
+/** Plan 2.5: these reports ask a member through a proposed decision (需要你定). */
+const QUESTION_STATES: ReadonlyArray<State> = ["INPUT_REQUIRED", "AUTH_REQUIRED"];
+const APPROVAL = [
+  { id: "approve", label: "批准" },
+  { id: "deny", label: "不批准" },
+];
+const STOPPED = "agent stopped";
+const LIST_LIMIT = 50;
 
 /** An agent's run acting for a member; `onBehalfOf` is the run's chain, outermost first. */
 export interface Actor {
@@ -125,7 +150,15 @@ interface ReportInput {
   readonly state: ReportState;
   readonly report: typeof Telescope.DelegationReport.Type;
   readonly artifacts?: ReadonlyArray<Telescope.A2AArtifact>;
+  /** For INPUT_REQUIRED and AUTH_REQUIRED: the decision's title and, for input, its options. */
+  readonly question?: string;
+  readonly options?: ReadonlyArray<string>;
 }
+type Rpcs = (typeof Telescope.DelegationRpcs)[number];
+type MemberMethod<Tag extends Rpcs["_tag"]> = (
+  caller: WorkspaceService.Caller,
+  input: Rpc.Payload<Rpc.ExtractTag<Rpcs, Tag>>,
+) => Out<Rpc.Success<Rpc.ExtractTag<Rpcs, Tag>>>;
 
 /**
  * A2A tasks between agents (D07): briefs down, reports up, by task id. Every read and write is
@@ -153,7 +186,10 @@ export class DelegationService extends Context.Service<
       ref: DelegationRef & { readonly memberId: string },
       blockedOn: string,
     ) => Out<Telescope.Delegation>;
-    /** Only the to-agent reports; a terminal agent-hop report wakes the from-agent once. */
+    /**
+     * Only the to-agent reports; a terminal agent-hop report wakes the from-agent once. A question
+     * opens one proposed decision by the agent, which only a member settles (D57).
+     */
     readonly report: (actor: Actor, input: ReportInput) => Out<Telescope.Delegation>;
     /**
      * D70: an agent cancels only what it sent; a member only a chain holding one of its agents.
@@ -175,12 +211,33 @@ export class DelegationService extends Context.Service<
       workspaceId: WorkspaceId,
       agentId: Telescope.AgentId,
     ) => Out<ReadonlyArray<Telescope.Delegation>>;
+    /**
+     * Once a member decides a question, its delegation is WORKING again with the answer as a user
+     * message: `send` gives it to a Worker hop's thread first; an agent hop gets a wake.
+     */
+    readonly answer: <E>(
+      ref: { readonly workspaceId: WorkspaceId; readonly decisionId: Telescope.DecisionId },
+      send: (threadId: ThreadId, text: string) => Effect.Effect<void, E>,
+    ) => Effect.Effect<Telescope.Delegation | undefined, E | Effect.Error<Out<never>>>;
+    /** Every delegation waiting on a member, by its decision: a restart re-reads them. */
+    readonly waiting: Out<
+      ReadonlyArray<{
+        readonly workspaceId: WorkspaceId;
+        readonly decisionId: Telescope.DecisionId;
+      }>
+    >;
+    /** A member sees and cancels the delegations of a chain holding one of its agents (D70). */
+    readonly listForMember: MemberMethod<"telescope.delegation.list">;
+    readonly getForMember: MemberMethod<"telescope.delegation.get">;
+    readonly cancelForMember: MemberMethod<"telescope.delegation.cancel">;
   }
 >()("t3/telescope/DelegationService") {}
 
 const make = Effect.gen(function* () {
   const db = yield* TelescopeDb.TelescopeDb;
   const wakes = yield* WakeQueueService.WakeQueueService;
+  const board = yield* TaskBoardService.TaskBoardService;
+  const workspaces = yield* WorkspaceService.WorkspaceService;
   const random = yield* SecureRandom.SecureRandom;
   // Moves read a row and write it back; one at a time keeps a report and a cancel from crossing.
   const lock = yield* Semaphore.make(1);
@@ -369,46 +426,98 @@ const make = Effect.gen(function* () {
     const row = yield* loadAsParty(actor, input.delegationId);
     if (row.to_agent_id !== actor.agentId)
       return yield* fail("forbidden", "Only the agent a task was delegated to reports on it.");
-    const moved = yield* move(
-      row,
-      input.state,
-      "agent",
-      { report: input.report },
-      {
-        report_json: input.report,
-        artifacts_json: [...row.artifacts_json, ...(input.artifacts ?? [])],
-      },
+    const { question, report } = input;
+    const asking = QUESTION_STATES.includes(input.state);
+    if (asking && question === undefined)
+      return yield* fail("invalid", "Name the question the member must decide in `question`.");
+    const options =
+      input.state === "AUTH_REQUIRED"
+        ? APPROVAL
+        : (input.options ?? []).map((label, index) => ({ id: String(index + 1), label }));
+    const ask = board
+      .createDecision(
+        {
+          caller: { runId: actor.runId, workspaceId: actor.workspaceId, memberId: actor.memberId },
+          authorId: actor.agentId,
+          onBehalfOf: actor.onBehalfOf,
+        },
+        {
+          workspaceId: actor.workspaceId,
+          title: question ?? "",
+          text: [report.blockedOn, report.needsFrom]
+            .filter((line) => line !== undefined)
+            .join("\n"),
+          status: "proposed",
+          ...(options.length === 0 ? {} : { options }),
+        },
+      )
+      .pipe(
+        Effect.catchTags({
+          TelescopeStaleTaskVersionError: (error) => fail("conflict", error.message),
+          TelescopeFreeTextLimitError: (error) => fail("conflict", error.message),
+        }),
+      );
+    // A refused move rolls the question's decision back with it.
+    const moved = yield* db.transaction(
+      Effect.gen(function* () {
+        const decisionId = asking ? (yield* ask).id : undefined;
+        const asked = decisionId === undefined ? {} : { decisionId };
+        return yield* move(
+          row,
+          input.state,
+          "agent",
+          { report, ...asked },
+          {
+            ...(decisionId === undefined ? {} : { decision_id: decisionId }),
+            report_json: report,
+            artifacts_json: [...row.artifacts_json, ...(input.artifacts ?? [])],
+          },
+        );
+      }),
     );
     if (isTerminal(moved.state) && moved.hop === "agent")
       yield* wakeFromAgent(moved, actor.memberId);
     return toDelegation(moved);
   }, lock.withPermit);
 
+  const failRow = Effect.fn("DelegationService.failRow")(function* (
+    row: DelegationRow,
+    memberId: string,
+    blockedOn: string,
+  ) {
+    const waits = row.state === "SUBMITTED" || QUESTION_STATES.includes(row.state);
+    const working = waits ? yield* move(row, "WORKING", "agent", {}) : row;
+    const report = { result: "", decisions: [], blockedOn };
+    const failed = yield* move(working, "FAILED", "agent", { report }, { report_json: report });
+    if (failed.hop === "agent") yield* wakeFromAgent(failed, memberId);
+    return toDelegation(failed);
+  });
   const abandon = Effect.fn("DelegationService.abandon")(function* (
     ref: DelegationRef & { readonly memberId: string },
     blockedOn: string,
   ) {
-    const row = yield* load(ref);
-    const working = row.state === "SUBMITTED" ? yield* move(row, "WORKING", "agent", {}) : row;
-    const report = { result: "", decisions: [], blockedOn };
-    const failed = yield* move(working, "FAILED", "agent", { report }, { report_json: report });
-    if (failed.hop === "agent") yield* wakeFromAgent(failed, ref.memberId);
-    return toDelegation(failed);
+    return yield* failRow(yield* load(ref), ref.memberId, blockedOn);
   }, lock.withPermit);
 
-  const chainOwnedBy = Effect.fn("DelegationService.chainOwnedBy")(function* (
-    row: DelegationRow,
-    memberId: string,
-  ) {
+  /** Every agent the delegation and its ancestors name, the delegation's own first. */
+  const chainAgents = Effect.fn("DelegationService.chainAgents")(function* (row: DelegationRow) {
+    const found = new Set<Telescope.AgentId>();
     for (let at: DelegationRow | undefined = row; at !== undefined;) {
-      for (const agentId of [at.from_agent_id, at.to_agent_id]) {
-        if ((yield* agent(row.workspace_id, agentId))?.owner_subject_id === memberId) return true;
-      }
+      found.add(at.from_agent_id).add(at.to_agent_id);
       const delegationId: Telescope.DelegationId | null = at.parent_id;
       at =
         delegationId === null
           ? undefined
           : yield* load({ workspaceId: row.workspace_id, delegationId });
+    }
+    return found;
+  });
+  const chainOwnedBy = Effect.fn("DelegationService.chainOwnedBy")(function* (
+    row: DelegationRow,
+    memberId: string,
+  ) {
+    for (const agentId of yield* chainAgents(row)) {
+      if ((yield* agent(row.workspace_id, agentId))?.owner_subject_id === memberId) return true;
     }
     return false;
   });
@@ -436,13 +545,10 @@ const make = Effect.gen(function* () {
     const root = yield* byAgent
       ? loadAsParty(by, delegationId)
       : load({ workspaceId: by.workspaceId, delegationId });
-    if (byAgent ? root.from_agent_id !== by.agentId : !(yield* chainOwnedBy(root, by.memberId)))
-      return yield* fail(
-        "forbidden",
-        byAgent
-          ? "Only the agent that sent a task cancels it."
-          : "Only the owner of an agent in the chain cancels it.",
-      );
+    // D98: to a member outside the chain, as to an agent outside it, the task does not exist.
+    if (!byAgent && !(yield* chainOwnedBy(root, by.memberId))) return yield* notFound("Delegation");
+    if (byAgent && root.from_agent_id !== by.agentId)
+      return yield* fail("forbidden", "Only the agent that sent a task cancels it.");
     const rows = [root, ...(yield* openDescendants(root))];
     const by_ = byAgent ? { agentId: by.agentId } : { memberId: by.memberId };
     const cancelled = yield* db.transaction(
@@ -495,6 +601,116 @@ const make = Effect.gen(function* () {
       .map(toDelegation);
   });
 
+  const stopped = Effect.fn("DelegationService.stopped")(function* (row: DelegationRow) {
+    const chain = yield* chainAgents(row);
+    const stops = yield* db.select(row.workspace_id, "kill_switches", decodeStops);
+    return stops.some(
+      (stop) => chain.has(Telescope.AgentId.make(stop.agent_id)) && stop.state !== "running",
+    );
+  });
+
+  const answer: DelegationService["Service"]["answer"] = Effect.fn("DelegationService.answer")(
+    function* (ref, send) {
+      const { workspaceId, decisionId } = ref;
+      const decisions = (where: Record<string, string>) =>
+        db.select(workspaceId, "tasks", decodeDecisions, { kind: "decision", ...where });
+      const row = (yield* db.select(workspaceId, "delegations", decodeRows, {
+        decision_id: decisionId,
+      })).find((candidate) => QUESTION_STATES.includes(candidate.state));
+      const [asked] = yield* decisions({ item_id: decisionId });
+      const decided = (yield* decisions({ supersedes: decisionId })).find(
+        (reply) => reply.decided_by !== null,
+      );
+      if (row === undefined || asked === undefined || decided === undefined) return undefined;
+      const target = yield* agent(workspaceId, row.to_agent_id);
+      const owner = target?.owner_subject_id ?? "";
+      if (yield* stopped(row)) return yield* failRow(row, owner, STOPPED);
+      const options = decided.options_json ?? asked.options_json ?? [];
+      const label = options.find((option) => option.id === decided.chosen)?.label ?? decided.chosen;
+      const note = decided.text !== asked.text && decided.text ? decided.text : undefined;
+      const text = [`Your member answered "${asked.title}": ${label ?? "(no option)"}`, note]
+        .filter((line) => line !== undefined)
+        .join("\n");
+      if (row.hop === "worker" && row.thread_id !== null) yield* send(row.thread_id, text);
+      const parts: ReadonlyArray<Part> = [
+        { kind: "data", data: { state: "WORKING", decisionId } },
+        { kind: "text", text },
+      ];
+      const moved = yield* db.transaction(
+        Effect.gen(function* () {
+          const next = yield* append(row, "user", parts, { state: "WORKING", decision_id: null });
+          if (row.hop === "agent")
+            yield* wakes.enqueue(workspaceId, {
+              reason: "dispatch",
+              priority: 2,
+              agentId: row.to_agent_id,
+              subjectId: owner,
+              ...(target?.project_id == null ? {} : { projectId: target.project_id }),
+              coalesceKey: `${wakeKey(row.delegation_id)}:answer`,
+              payload: { kind: "answer", delegationId: row.delegation_id },
+            });
+          return next;
+        }),
+      );
+      return toDelegation(moved);
+    },
+    lock.withPermit,
+  );
+
+  const waiting = Effect.gen(function* () {
+    const found: Array<{ workspaceId: WorkspaceId; decisionId: Telescope.DecisionId }> = [];
+    for (const workspaceId of yield* db.allWorkspaceIds) {
+      for (const state of QUESTION_STATES) {
+        for (const row of yield* db.select(workspaceId, "delegations", decodeRows, { state }))
+          if (row.decision_id !== null) found.push({ workspaceId, decisionId: row.decision_id });
+      }
+    }
+    return found;
+  }).pipe(Effect.withSpan("DelegationService.waiting"));
+
+  const memberOf = (caller: WorkspaceService.Caller, workspaceId: WorkspaceId) =>
+    workspaces
+      .get(caller, { workspaceId })
+      .pipe(Effect.map(({ self }): MemberActor => ({ workspaceId, memberId: self.subjectId })));
+
+  const listForMember: DelegationService["Service"]["listForMember"] = Effect.fn(
+    "DelegationService.listForMember",
+  )(function* (caller, input) {
+    const member = yield* memberOf(caller, input.workspaceId);
+    const mine = yield* db.select(input.workspaceId, "agents", decodeAgents, {
+      owner_subject_id: member.memberId,
+    });
+    const agentIds = mine
+      .map((row) => row.agent_id)
+      .filter((agentId) => input.agentId === undefined || agentId === input.agentId);
+    const rows = new Map<Telescope.DelegationId, Telescope.Delegation>();
+    for (const agentId of agentIds)
+      for (const row of yield* listForAgent(input.workspaceId, agentId)) rows.set(row.id, row);
+    const delegations = [...rows.values()]
+      .filter((row) => input.state === undefined || row.state === input.state)
+      .toSorted((a, b) => a.createdAt.localeCompare(b.createdAt))
+      .toReversed()
+      .slice(0, input.limit ?? LIST_LIMIT)
+      .map((row) => Struct.omit(row, ["messages"]));
+    return { delegations };
+  });
+  const getForMember: DelegationService["Service"]["getForMember"] = Effect.fn(
+    "DelegationService.getForMember",
+  )(function* (caller, input) {
+    const { memberId } = yield* memberOf(caller, input.workspaceId);
+    const row = yield* load(input);
+    // D98: the same answer for a stranger as for an unknown id.
+    if (!(yield* chainOwnedBy(row, memberId))) return yield* notFound("Delegation");
+    return toDelegation(row);
+  });
+  const cancelForMember: DelegationService["Service"]["cancelForMember"] = Effect.fn(
+    "DelegationService.cancelForMember",
+  )(function* (caller, input) {
+    const member = yield* memberOf(caller, input.workspaceId);
+    const cancelled = yield* cancel(member, input.delegationId);
+    return { canceled: cancelled.map((row) => row.id) };
+  });
+
   return DelegationService.of({
     delegate,
     recordWorker,
@@ -506,9 +722,21 @@ const make = Effect.gen(function* () {
     get,
     byThread,
     listForAgent,
+    answer,
+    waiting,
+    listForMember,
+    getForMember,
+    cancelForMember,
   });
 });
 
 export const layer = Layer.effect(DelegationService, make).pipe(
-  Layer.provide(Layer.merge(TelescopeDb.layer, WakeQueueService.layer)),
+  Layer.provide(
+    Layer.mergeAll(
+      TelescopeDb.layer,
+      WakeQueueService.layer,
+      TaskBoardService.layer,
+      WorkspaceService.layer,
+    ),
+  ),
 );

@@ -85,6 +85,7 @@ import * as TelescopeMemory from "./telescope/MemoryService.ts";
 import * as TelescopeAttribution from "./telescope/AttributionService.ts";
 import * as TelescopeRouting from "./telescope/RoutingService.ts";
 import * as TelescopeWorkspaceData from "./telescope/WorkspaceDataService.ts";
+import * as TelescopeDelegations from "./telescope/DelegationService.ts";
 import * as PeerLinks from "./peer/PeerLinks.ts";
 import * as PortScanner from "./preview/PortScanner.ts";
 import * as PreviewManager from "./preview/Manager.ts";
@@ -819,6 +820,7 @@ const layerUnusedConfigRpcServices = Layer.mergeAll(
   Layer.mock(TelescopeAttribution.AttributionService)({}),
   Layer.mock(TelescopeRouting.RoutingService)({}),
   Layer.mock(TelescopeWorkspaceData.WorkspaceDataService)({}),
+  Layer.mock(TelescopeDelegations.DelegationService)({}),
   Layer.mock(PortScanner.PortDiscovery)({ trackAgent: () => () => undefined }),
   Layer.mock(PreviewManager.PreviewManager)({}),
   Layer.mock(ProcessDiagnostics.ProcessDiagnostics)({}),
