@@ -10,6 +10,7 @@ import {
   MemorySearchQuery,
   MemoryWrite,
   MemoryWriteInput,
+  RoutingRuleSetInput,
   TaskCommit,
 } from "./index.ts";
 
@@ -23,6 +24,7 @@ const decodeMemoryWrite = Schema.decodeUnknownSync(MemoryWrite);
 const decodeMemoryWriteInput = Schema.decodeUnknownSync(MemoryWriteInput);
 const decodeMemorySearch = Schema.decodeUnknownSync(MemorySearchQuery);
 const decodeMemorySearchInput = Schema.decodeUnknownSync(MemorySearchInput);
+const decodeRoutingSet = Schema.decodeUnknownSync(RoutingRuleSetInput);
 
 describe("telescope contracts", () => {
   it("decodes the shapes later tasks persist and rejects values outside the contract", () => {
@@ -133,6 +135,7 @@ describe("telescope contracts", () => {
     const write = { op: "add", text: "t" };
     const search = { query: "交付" };
     const inWorkspace = { workspaceId: "w", agentId: "a" };
+    const rule = { workspaceId: "w", taskType: "t", harness: "codex", model: "m", priority: 0 };
     for (const [decode, base, field, max] of [
       [decodeMemoryWrite, write, "id", 128],
       [decodeMemoryWrite, write, "kind", 64],
@@ -146,6 +149,7 @@ describe("telescope contracts", () => {
       [decodeMemorySearch, search, "projectId", 128],
       [decodeMemorySearch, search, "aboutSubjectId", 128],
       [decodeMemorySearchInput, { ...search, workspaceId: "w" }, "query", 200],
+      [decodeRoutingSet, rule, "taskType", 64],
     ] as const) {
       expect(decode({ ...base, [field]: "长".repeat(max) })).toHaveProperty(field);
       expect(() => decode({ ...base, [field]: "长".repeat(max + 1) }), field).toThrow();

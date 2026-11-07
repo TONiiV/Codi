@@ -278,6 +278,7 @@ it.layer(layer)("Telescope routing rules", (it) => {
         yield* reasonOf(routing.set(as.ann, { ...input, projectId: ProjectId.make("unbound") })),
         "not_found",
       );
+      yield* TestClock.adjust("1 second");
       const updated = yield* routing.set(as.ann, { ...input, id: created.id, model: "big" });
       assert.deepStrictEqual(updated, { ...created, model: "big" });
       assert.deepStrictEqual(
@@ -325,6 +326,30 @@ it.layer(layer)("Telescope routing rules", (it) => {
       const staff = mine.find((agent) => agent.kind === "chief_of_staff");
       assert.isDefined(chief);
       assert.isDefined(staff);
+      const db = yield* TelescopeDb.TelescopeDb;
+      const ruleB = Telescope.RoutingRuleId.make("rule-b");
+      const ruleA = Telescope.RoutingRuleId.make("rule-a");
+      const seed = (ruleId: Telescope.RoutingRuleId, createdAt: string) =>
+        db.insert(workspaceId, "routing_rules", {
+          rule_id: ruleId,
+          project_id: null,
+          task_type: "docs",
+          harness: codex,
+          model: "small",
+          priority: 0,
+          created_at: createdAt,
+        });
+      yield* seed(ruleB, "2026-11-07T00:00:00.000Z");
+      yield* seed(ruleA, "2026-11-07T00:00:01.000Z");
+      assert.deepStrictEqual(
+        (yield* routing.list(as.bea, { workspaceId })).rules.map((rule) => rule.id),
+        [ruleB, ruleA],
+        "equal rules tie in creation order, not by id",
+      );
+      assert.strictEqual(
+        (yield* routing.resolve(workspaceId, { agentId: staff.id, taskType: "docs" })).ruleId,
+        ruleB,
+      );
       const sonnet = { instanceId: claude, model: "sonnet" };
       yield* agents.update(as.bea, { workspaceId, agentId: chief.id, modelSelection: sonnet });
       const off = yield* routing.set(as.ann, {
@@ -365,7 +390,7 @@ it.layer(layer)("Telescope routing rules", (it) => {
         "another member's hidden agent is not resolved",
       );
 
-      const projectRule = { workspaceId, projectId: web, powers: ALL };
+      const projectRule = { workspaceId, projectId: web, powers: ALL, routing: null };
       yield* grants.setProjectRule(as.ann, { ...projectRule, routing: { harnesses: [claude] } });
       assert.deepStrictEqual(yield* routing.resolve(workspaceId, bugfix), {
         source: "agent_default",
@@ -375,6 +400,13 @@ it.layer(layer)("Telescope routing rules", (it) => {
           { ruleId: off.id, reason: "harness_not_allowed" },
         ],
       });
+      const elsewhere = { ...bugfix, projectId: api };
+      assert.strictEqual(
+        yield* reasonOf(routing.resolve(workspaceId, elsewhere)),
+        "conflict",
+        "naming another project does not step around the allowlist",
+      );
+      assert.strictEqual(yield* reasonOf(routing.resolveFor(as.bea, elsewhere)), "conflict");
       yield* grants.setProjectRule(as.ann, projectRule);
       assert.strictEqual(
         (yield* routing.resolve(workspaceId, bugfix)).ruleId,

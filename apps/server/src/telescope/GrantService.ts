@@ -100,8 +100,8 @@ export interface ProjectRuleInput {
   readonly workspaceId: Telescope.WorkspaceId;
   readonly projectId: ProjectId;
   readonly powers: Telescope.StandingPowers;
-  /** The harnesses and models routing may choose here; absent allows any. */
-  readonly routing?: Telescope.RoutingAllowlist;
+  /** The harnesses and models routing may choose here; `null` allows any. */
+  readonly routing: Telescope.RoutingAllowlist | null;
 }
 export interface AuditInput {
   readonly runId?: Telescope.AgentRunId;
@@ -332,7 +332,7 @@ const make = Effect.gen(function* () {
     const row = {
       project_id: projectId,
       powers_json: encodePowers(input.powers),
-      routing_json: input.routing === undefined ? null : encodeRouting(input.routing),
+      routing_json: input.routing === null ? null : encodeRouting(input.routing),
       updated_by: self.subjectId,
       updated_at: yield* now,
     };

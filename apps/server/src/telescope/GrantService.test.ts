@@ -186,7 +186,12 @@ it.layer(layer)("Telescope grants", (it) => {
       const { workspaceId, beaId, grants, setPowers, mine } = yield* setup;
       const webAgent = find(yield* mine(as.ann), "chief_agent", web);
       yield* setPowers(webAgent.id, ALL);
-      const rule = { workspaceId, projectId: web, powers: { ...ALL, mergePRs: false } };
+      const rule = {
+        workspaceId,
+        projectId: web,
+        powers: { ...ALL, mergePRs: false },
+        routing: null,
+      };
 
       assert.strictEqual(yield* reasonOf(grants.setProjectRule(as.bea, rule)), "forbidden");
       assert.strictEqual(

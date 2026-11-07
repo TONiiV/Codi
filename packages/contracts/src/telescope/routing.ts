@@ -4,21 +4,28 @@ import { ProjectId } from "../baseSchemas.ts";
 import { ModelSelection } from "../modelSelection.ts";
 import { ProviderInstanceId } from "../providerInstance.ts";
 import { RoutingRule } from "./agent.ts";
-import { AgentId, RoutingRuleId, Strings, Text, WorkspaceId } from "./common.ts";
+import { AgentId, RoutingRuleId, Text, WorkspaceId } from "./common.ts";
 
 /** A rule with this task type matches every task type, after the rules naming it exactly. */
 export const ANY_TASK_TYPE = "*";
 
+/** As on memory inputs, the caps only stop huge values being stored. */
+const TaskType = Text.check(Schema.isMaxLength(64));
+const Model = Text.check(Schema.isMaxLength(128));
+const allowlistLength = Schema.isMaxLength(64);
+
 /** A project rule's narrowing of routing. An empty or absent list allows any. */
 export const RoutingAllowlist = Schema.Struct({
-  harnesses: Schema.optionalKey(Schema.Array(ProviderInstanceId)),
-  models: Schema.optionalKey(Strings),
+  harnesses: Schema.optionalKey(Schema.Array(ProviderInstanceId).check(allowlistLength)),
+  models: Schema.optionalKey(Schema.Array(Model).check(allowlistLength)),
 });
 export type RoutingAllowlist = typeof RoutingAllowlist.Type;
 
 /** Without `id` this creates a rule; with one it replaces that rule. */
 export const RoutingRuleSetInput = Schema.Struct({
   ...RoutingRule.fields,
+  taskType: TaskType,
+  model: Model,
   id: Schema.optionalKey(RoutingRuleId),
 });
 export const RoutingRuleDeleteInput = Schema.Struct({
@@ -31,9 +38,9 @@ export const RoutingRuleListResult = Schema.Struct({ rules: Schema.Array(Routing
 export const RoutingResolveInput = Schema.Struct({
   workspaceId: WorkspaceId,
   agentId: AgentId,
-  /** Defaults to the agent's own project. */
+  /** Defaults to the agent's own project; for a project-bound agent any other is a `conflict`. */
   projectId: Schema.optionalKey(ProjectId),
-  taskType: Text,
+  taskType: TaskType,
 });
 
 /** `harness_unavailable`: not configured, or disabled, on this server. */

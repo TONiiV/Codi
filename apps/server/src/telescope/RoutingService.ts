@@ -119,7 +119,7 @@ type Method<Tag extends Rpcs["_tag"]> = (
 
 export interface RouteRequest {
   readonly agentId: Telescope.AgentId;
-  /** Defaults to the agent's own project, so its project's allowlist always applies. */
+  /** Defaults to the agent's own project; for a project-bound agent any other is a `conflict`. */
   readonly projectId?: ProjectId;
   readonly taskType: string;
 }
@@ -225,6 +225,8 @@ const make = Effect.gen(function* () {
     agent: Telescope.Agent,
     { projectId = agent.projectId, taskType }: Omit<RouteRequest, "agentId">,
   ) {
+    if (agent.projectId !== undefined && projectId !== agent.projectId)
+      return yield* fail("conflict", "The agent works in another project.");
     const allowlist =
       projectId === undefined ? undefined : yield* grants.routingAllowlist(workspaceId, projectId);
     const instances = yield* providers.listInstances;
