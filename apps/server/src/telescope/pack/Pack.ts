@@ -115,12 +115,13 @@ export interface HarnessPaths {
 export interface HarnessSpec {
   readonly instructions: {
     readonly read: (dir: string, file: string) => HarnessEffect<string | undefined>;
-    readonly write: (
+    // The file to write and its new text.
+    readonly render: (
       dir: string,
       file: string,
       text: string,
       merge: boolean,
-    ) => HarnessEffect<void>;
+    ) => HarnessEffect<readonly [string, string]>;
   };
   readonly mcp: {
     readonly read: (text: string) => McpServers;
@@ -165,9 +166,15 @@ export const makeHarness = (spec: HarnessSpec) => (paths: HarnessPaths) => {
     }),
     write: Effect.fnUntraced(function* (pack: Pack, dir: string, merge: boolean) {
       const path = yield* Path.Path;
-      yield* writeSkills(pack.skills, path.join(dir, paths.skillsDirs[0]), false, dir);
+      const plan = yield* planSkills(pack.skills, path.join(dir, paths.skillsDirs[0]), false, dir);
       if (instructionsFile !== undefined) {
-        yield* spec.instructions.write(dir, instructionsFile, pack.instructions, merge);
+        const [file, text] = yield* spec.instructions.render(
+          dir,
+          instructionsFile,
+          pack.instructions,
+          merge,
+        );
+        plan.push(textWrite(file, text));
       } else if (pack.instructions.trim() !== "") {
         yield* Effect.logWarning(
           `Left out the instructions: this harness keeps them in its own settings, not in ${dir}. Add them there.`,
@@ -175,9 +182,11 @@ export const makeHarness = (spec: HarnessSpec) => (paths: HarnessPaths) => {
       }
       const mcpFile = path.join(dir, paths.mcp);
       const existing = yield* readOptionalText(mcpFile);
-      if (existing === undefined && Object.keys(pack.mcp).length === 0) return;
-      const text = yield* parse(mcpFile, () => spec.mcp.write(existing, pack.mcp, merge));
-      yield* writeText(dir, mcpFile, text);
+      if (existing !== undefined || Object.keys(pack.mcp).length > 0) {
+        const text = yield* parse(mcpFile, () => spec.mcp.write(existing, pack.mcp, merge));
+        plan.push(textWrite(mcpFile, text));
+      }
+      yield* runPlan(dir, plan);
     }),
   };
 };
@@ -186,9 +195,9 @@ export const markdownInstructions: HarnessSpec["instructions"] = {
   read: Effect.fnUntraced(function* (dir, file) {
     return yield* readOptionalText((yield* Path.Path).join(dir, file));
   }),
-  write: Effect.fnUntraced(function* (dir, file, text, merge) {
+  render: Effect.fnUntraced(function* (dir, file, text, merge) {
     const target = (yield* Path.Path).join(dir, file);
-    yield* writeText(dir, target, mergeInstructions(yield* readOptionalText(target), text, merge));
+    return [target, mergeInstructions(yield* readOptionalText(target), text, merge)] as const;
   }),
 };
 
@@ -243,11 +252,35 @@ const readOptionalText = Effect.fnUntraced(function* (file: string) {
   return (yield* fs.exists(file)) ? yield* fs.readFileString(file) : undefined;
 });
 
-export const writeText = Effect.fnUntraced(function* (root: string, file: string, text: string) {
-  const fs = yield* FileSystem.FileSystem;
-  const target = yield* writeTargetInside(root, file);
-  yield* fs.makeDirectory((yield* Path.Path).dirname(target), { recursive: true });
-  yield* fs.writeFileString(target, text);
+// `run` receives the checked real path of `target`.
+interface PlannedWrite {
+  readonly target: string;
+  // The entry this step deletes; later steps resolve it as the plain folder written in its place.
+  readonly removes?: string;
+  readonly run: (
+    real: string,
+  ) => Effect.Effect<void, PlatformError, FileSystem.FileSystem | Path.Path>;
+}
+
+const textWrite = (target: string, text: string): PlannedWrite => ({
+  target,
+  run: Effect.fnUntraced(function* (real: string) {
+    const fs = yield* FileSystem.FileSystem;
+    yield* fs.makeDirectory((yield* Path.Path).dirname(real), { recursive: true });
+    yield* fs.writeFileString(real, text);
+  }),
+});
+
+// Every target is checked before the first write, against the tree as the steps before it leave
+// it, so a refusal writes nothing. Each write checks its own target again, since the directory can
+// change in between.
+const runPlan = Effect.fnUntraced(function* (root: string, plan: ReadonlyArray<PlannedWrite>) {
+  const removed: Array<string> = [];
+  for (const step of plan) {
+    yield* writeTargetInside(root, step.target, removed);
+    if (step.removes !== undefined) removed.push(step.removes);
+  }
+  for (const step of plan) yield* step.run(yield* writeTargetInside(root, step.target));
 });
 
 const BLOCK = /<!-- context-pack:begin -->[\s\S]*?<!-- context-pack:end -->/;
@@ -296,7 +329,7 @@ const LINK_HOPS = 40;
 // The path the OS writes for `file`, undefined once the hop cap is spent. It walks segment by
 // segment because a `..` applies to the directory a link resolved to, which `path.resolve` and
 // the JS `realpath` both skip by normalizing the text first.
-const linkChainTarget = Effect.fnUntraced(function* (file: string) {
+const linkChainTarget = Effect.fnUntraced(function* (file: string, removed: ReadonlyArray<string>) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   let hops = 0;
@@ -310,7 +343,9 @@ const linkChainTarget = Effect.fnUntraced(function* (file: string) {
           continue;
         }
         const next = path.join(current, part);
-        const link = yield* fs.readLink(next).pipe(Effect.orElseSucceed(() => undefined));
+        const link = removed.some((entry) => isInside(path, entry, next))
+          ? undefined
+          : yield* fs.readLink(next).pipe(Effect.orElseSucceed(() => undefined));
         if (link === undefined) current = next;
         else if (++hops > LINK_HOPS) return undefined;
         else {
@@ -327,11 +362,18 @@ const linkChainTarget = Effect.fnUntraced(function* (file: string) {
 
 // A write follows every link in its target, so what must stay inside the directory being written
 // to is the end of that chain, including the path a dangling link names.
-const writeTargetInside = Effect.fnUntraced(function* (root: string, file: string) {
+const writeTargetInside = Effect.fnUntraced(function* (
+  root: string,
+  file: string,
+  removed: ReadonlyArray<string> = [],
+) {
   const path = yield* Path.Path;
   const realRoot = yield* plannedRealPath(root);
-  const named = yield* linkChainTarget(file);
-  const real = named === undefined ? undefined : yield* plannedRealPath(named);
+  const named = yield* linkChainTarget(file, removed);
+  const real =
+    named === undefined || removed.some((entry) => isInside(path, entry, named))
+      ? named
+      : yield* plannedRealPath(named);
   if (real === undefined || !isInside(path, realRoot, real)) {
     // One directory spelled two ways in one sentence reads like a tool bug, so the refused path is
     // resolved through its parents, without following the link itself.
@@ -371,31 +413,34 @@ const readSkills = Effect.fnUntraced(function* (skillsDir: string, root: string)
 });
 
 // Copies file contents, never links: a link is followed only while it stays inside the skill.
-const copyTree: (
+const planTree: (
   from: string,
   to: string,
   root: string,
   ancestors: ReadonlyArray<string>,
-  destRoot: string,
-) => Effect.Effect<void, PlatformError | ContextPackPathError, FileSystem.FileSystem | Path.Path> =
-  Effect.fnUntraced(function* (from, to, root, ancestors, destRoot) {
+) => Effect.Effect<Array<PlannedWrite>, PlatformError, FileSystem.FileSystem | Path.Path> =
+  Effect.fnUntraced(function* (from, to, root, ancestors) {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
-    yield* fs.makeDirectory(yield* writeTargetInside(destRoot, to), { recursive: true });
+    const plan: Array<PlannedWrite> = [
+      { target: to, run: (real) => fs.makeDirectory(real, { recursive: true }) },
+    ];
     for (const name of (yield* fs.readDirectory(from)).toSorted()) {
       const real = yield* realPathInside(root, path.join(from, name));
       if (real === undefined || ancestors.includes(real)) continue;
       const info = yield* fs.stat(real);
       if (info.type === "Directory") {
-        yield* copyTree(real, path.join(to, name), root, [...ancestors, real], destRoot);
+        plan.push(...(yield* planTree(real, path.join(to, name), root, [...ancestors, real])));
       } else if (info.type === "File") {
-        const target = yield* writeTargetInside(destRoot, path.join(to, name));
-        yield* fs.writeFile(target, yield* fs.readFile(real));
+        const run = (target: string) =>
+          Effect.flatMap(fs.readFile(real), (bytes) => fs.writeFile(target, bytes));
+        plan.push({ target: path.join(to, name), run });
       }
     }
+    return plan;
   });
 
-const writeSkills = Effect.fnUntraced(function* (
+const planSkills = Effect.fnUntraced(function* (
   skills: Pack["skills"],
   skillsDir: string,
   replace: boolean,
@@ -413,14 +458,18 @@ const writeSkills = Effect.fnUntraced(function* (
   }
   // A skills dir that is itself a link out of the project would carry every skill with it.
   const dir = yield* writeTargetInside(destRoot, skillsDir);
+  const plan: Array<PlannedWrite> = [];
   for (const skill of skills) {
     const target = path.join(dir, skill.name);
     // An import never deletes project files: it writes over a same-name skill, unlinking only a link.
     if (replace || (yield* Effect.isSuccess(fs.readLink(target)))) {
-      yield* fs.remove(target, { recursive: true, force: true });
+      const run = (real: string) =>
+        fs.remove(path.join(real, skill.name), { recursive: true, force: true });
+      plan.push({ target: dir, removes: target, run });
     }
-    yield* copyTree(skill.dir, target, skill.dir, [skill.dir], destRoot);
+    plan.push(...(yield* planTree(skill.dir, target, skill.dir, [skill.dir])));
   }
+  return plan;
 });
 
 export const writePackDir = Effect.fn("ContextPack.writePackDir")(function* (
@@ -437,20 +486,24 @@ export const writePackDir = Effect.fn("ContextPack.writePackDir")(function* (
   ) {
     return yield* new ContextPackOutDirError({ path: outDir });
   }
-  yield* writeSkills(pack.skills, path.join(outDir, "skills"), true, outDir);
+  const plan = yield* planSkills(pack.skills, path.join(outDir, "skills"), true, outDir);
   const manifest: typeof Manifest.Type = {
     version: 1,
     ...meta,
     skills: pack.skills.map((skill) => skill.name),
   };
-  yield* writeText(
-    outDir,
-    path.join(outDir, PACK_FILES.manifest),
-    yield* encodeManifest(manifest).pipe(Effect.orDie),
+  plan.push(
+    textWrite(
+      path.join(outDir, PACK_FILES.manifest),
+      yield* encodeManifest(manifest).pipe(Effect.orDie),
+    ),
+    textWrite(path.join(outDir, PACK_FILES.instructions), pack.instructions),
+    textWrite(
+      path.join(outDir, PACK_FILES.mcp),
+      yield* encodeMcpFile({ servers: pack.mcp }).pipe(Effect.orDie),
+    ),
   );
-  yield* writeText(outDir, path.join(outDir, PACK_FILES.instructions), pack.instructions);
-  const mcp = yield* encodeMcpFile({ servers: pack.mcp }).pipe(Effect.orDie);
-  yield* writeText(outDir, path.join(outDir, PACK_FILES.mcp), mcp);
+  yield* runPlan(outDir, plan);
 });
 
 // A pack is untrusted input: every file it supplies must resolve inside the pack.

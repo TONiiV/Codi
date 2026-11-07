@@ -38,8 +38,42 @@ const fixture = Effect.fn(function* (
   const read = (rel: string) => fs.readFileString(path.join(root, rel));
   const isLink = (rel: string) =>
     Effect.map(Effect.exit(fs.readLink(path.join(root, rel))), (exit) => exit._tag === "Success");
-  return { root, at: (rel: string) => path.join(root, rel), read, isLink, exists: fs.exists };
+  // Every path under `rel` with its contents or link target, never following a link.
+  const tree = Effect.fnUntraced(function* (rel: string) {
+    const lines: Array<string> = [];
+    for (const entry of (yield* fs.readDirectory(path.join(root, rel), {
+      recursive: true,
+    })).toSorted()) {
+      const at = path.join(root, rel, entry);
+      const link = yield* fs.readLink(at).pipe(Effect.option);
+      if (link._tag === "Some") lines.push(`${entry} -> ${link.value}`);
+      else if ((yield* fs.stat(at)).type === "Directory") lines.push(`${entry}/`);
+      else lines.push(`${entry}: ${yield* fs.readFileString(at)}`);
+    }
+    return lines;
+  });
+  return { root, at: (rel: string) => path.join(root, rel), read, isLink, tree, exists: fs.exists };
 });
+
+// Each harness's skills base and its instructions and MCP files, relative to the project.
+const relinkPaths = {
+  claude: [".claude", "CLAUDE.md", ".mcp.json"],
+  codex: [".agents", "AGENTS.md", ".codex/config.toml"],
+  cursor: [".cursor", ".cursor/rules/context-pack.mdc", ".cursor/mcp.json"],
+  opencode: [".agents", "AGENTS.md", "opencode.json"],
+} as const;
+// A refused row with merge off would remove the link the merge row needs, so each has its own.
+const relinkRows = Object.entries(relinkPaths).flatMap(([harness, [base, instructions, mcp]]) =>
+  [false, true].flatMap((merge) =>
+    [instructions, mcp].map((file, i) => ({
+      target: `relink-${harness}-${i === 0 ? "instructions" : "mcp"}-${merge}`,
+      harness: harness as keyof typeof relinkPaths,
+      merge,
+      base,
+      file,
+    })),
+  ),
+);
 
 const claudeProject = {
   "project/CLAUDE.md": "@AGENTS.md\n",
@@ -686,6 +720,15 @@ describe("ContextPackService", () => {
           "dotdot-in/deep/AGENTS.md": "deep\n",
           "dotdot-in/deep/er/keep.txt": "keep\n",
           "absolute/.claude/settings.local.json": "{}",
+          "out-mcp/pack.json": "{}",
+          "segment/d1/OLD.md": "old skill\n",
+          ...Object.fromEntries(
+            relinkRows.map(({ target }) => [`${target}/d1/d2/d3/d4/OLD.md`, "old skill\n"]),
+          ),
+          "out-relink-mcp/pack.json": "{}",
+          "out-relink-mcp/d1/d2/d3/OLD.md": "old skill\n",
+          "out-relink-instructions/pack.json": "{}",
+          "out-relink-instructions/d1/d2/d3/OLD.md": "old skill\n",
         },
         {
           // A file and a directory linked out of a same-name skill: `cp -r` would write through both.
@@ -731,6 +774,32 @@ describe("ContextPackService", () => {
           // The pack itself is the target an import must not rewrite.
           "into-pack/CLAUDE.md": "../pack/instructions.md",
           "into-pack/.mcp.json": "../pack/mcp.json",
+          // Each harness refused at its last write, after the skills and the instructions.
+          "codex-agents/AGENTS.md": "../dotfiles/missing-agents.md",
+          "codex-mcp/.codex/config.toml": "../../dotfiles/missing.toml",
+          "cursor-rules/.cursor/rules/context-pack.mdc": "../../../dotfiles/missing.mdc",
+          "cursor-mcp/.cursor/mcp.json": "../../dotfiles/missing-cursor.json",
+          "opencode-agents/AGENTS.md": "../dotfiles/missing-agents.md",
+          "opencode-mcp/opencode.json": "../dotfiles/missing-opencode.json",
+          "out-mcp/mcp.json": "../dotfiles/missing-out.json",
+          // A removed `deploy` covers only itself, never a sibling whose name starts with it.
+          "segment/.claude/skills/deploy": "../../d1",
+          "segment/.claude/skills/deploy.md": "../../../dotfiles/missing-segment.json",
+          "segment/.mcp.json": ".claude/skills/deploy.md",
+          // Inside the project through the same-name skill link, outside once it is removed.
+          ...Object.fromEntries(
+            relinkRows.flatMap(({ target, base, file }) => [
+              [`${target}/${base}/skills/deploy`, "../../d1/d2/d3/d4"],
+              [
+                `${target}/${file}`,
+                `${"../".repeat(file.split("/").length - 1)}${base}/skills/deploy/../../../../x`,
+              ],
+            ]),
+          ),
+          "out-relink-mcp/skills/deploy": "../d1/d2/d3",
+          "out-relink-mcp/mcp.json": "skills/deploy/../../../x.json",
+          "out-relink-instructions/skills/deploy": "../d1/d2/d3",
+          "out-relink-instructions/instructions.md": "skills/deploy/../../../x.md",
         },
       );
       const fs = yield* FileSystem.FileSystem;
@@ -738,30 +807,48 @@ describe("ContextPackService", () => {
       yield* service.export(dir.at("project"), dir.at("pack"));
       const packed = yield* dir.read("pack/mcp.json");
 
+      // A refused import or export leaves its target exactly as it found it.
+      const outside = yield* dir.tree("dotfiles");
+      const changed: Array<string> = [];
       for (const merge of [false, true]) {
-        for (const target of [
-          "nested-file",
-          "nested-dir",
-          "new-dir",
-          "dangling",
-          "chain-file",
-          "chain-mcp",
-          "chain-skill",
-          "chain-dir",
-          "chain3",
-          "cycle",
-          "skills-dir",
-          "dotdot",
-          "dotdot-out",
-          "absolute",
-          "instructions",
-          "mcp",
-          "into-pack",
-        ]) {
+        for (const [target, harness] of [
+          ...[
+            "nested-file",
+            "nested-dir",
+            "new-dir",
+            "dangling",
+            "chain-file",
+            "chain-mcp",
+            "chain-skill",
+            "chain-dir",
+            "chain3",
+            "cycle",
+            "skills-dir",
+            "dotdot",
+            "dotdot-out",
+            "absolute",
+            "instructions",
+            "mcp",
+            "into-pack",
+            "segment",
+          ].map((target) => [target, "claude"] as const),
+          ["codex-agents", "codex"],
+          ["codex-mcp", "codex"],
+          ["cursor-rules", "cursor"],
+          ["cursor-mcp", "cursor"],
+          ["opencode-agents", "opencode"],
+          ["opencode-mcp", "opencode"],
+          ...relinkRows
+            .filter((row) => row.merge === merge)
+            .map(({ target, harness }) => [target, harness] as const),
+        ] as const) {
+          const before = yield* dir.tree(target);
           const error = yield* Effect.flip(
-            service.import(dir.at("pack"), dir.at(target), "claude", merge),
+            service.import(dir.at("pack"), dir.at(target), harness, merge),
           );
           expect([target, error._tag]).toEqual([target, "ContextPackPathError"]);
+          const after = yield* dir.tree(target);
+          if (JSON.stringify(after) !== JSON.stringify(before)) changed.push(`${target} ${merge}`);
           if (target === "instructions") {
             const root = yield* fs.realPath(dir.at(target));
             expect(error.message).toContain(
@@ -770,6 +857,16 @@ describe("ContextPackService", () => {
           }
         }
       }
+      for (const out of ["out-mcp", "out-relink-mcp", "out-relink-instructions"]) {
+        const outBefore = yield* dir.tree(out);
+        const outError = yield* Effect.flip(service.export(dir.at("project"), dir.at(out)));
+        expect([out, outError._tag]).toEqual([out, "ContextPackPathError"]);
+        if (JSON.stringify(yield* dir.tree(out)) !== JSON.stringify(outBefore)) {
+          changed.push(`${out} export`);
+        }
+      }
+      expect(changed).toEqual([]);
+      expect(yield* dir.tree("dotfiles")).toEqual(outside);
       expect(yield* dir.read("dotfiles/deploy.md")).toBe("MY OWN SKILL\n");
       expect(yield* dir.read("dotfiles/scripts/run.sh")).toBe("echo mine\n");
       expect(yield* dir.read("dotfiles/CLAUDE.md")).toBe("my own instructions\n");
