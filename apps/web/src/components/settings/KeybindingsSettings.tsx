@@ -511,7 +511,11 @@ function WhenExpressionNodeEditor({
       )}
     >
       <div className="flex flex-wrap items-center gap-2">
-        <Select value={operator} onValueChange={(value) => setOperator(value as BooleanOperator)}>
+        <Select
+          value={operator}
+          items={{ and: t("settings.text.and"), or: t("settings.text.or") }}
+          onValueChange={(value) => setOperator(value as BooleanOperator)}
+        >
           <SelectTrigger size="compact" className="w-24">
             <SelectValue />
           </SelectTrigger>
