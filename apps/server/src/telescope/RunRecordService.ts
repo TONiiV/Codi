@@ -163,8 +163,15 @@ export class RunRecordService extends Context.Service<
     readonly recordCall: (run: RunRef, call: RunCallInput) => Out<Telescope.RunCall>;
     /** Adds the entries an assembled context gave an open run to its manifest, once each. */
     readonly recordContextManifest: (run: RunRef, entries: ContextManifest) => Out<void>;
-    /** Adds a finished provider turn's tokens to every open run attached to its thread. */
-    readonly recordThreadTurn: (threadId: ThreadId, tokens: Tokens) => Out<void>;
+    /**
+     * Adds a finished provider turn's tokens to the open runs on its thread; with `codiMessageId`,
+     * only to the runs serving that Codi run.
+     */
+    readonly recordThreadTurn: (
+      threadId: ThreadId,
+      tokens: Tokens,
+      codiMessageId?: string,
+    ) => Out<void>;
     readonly finish: (run: RunRef, input: RunFinishInput) => Out<Telescope.AgentRun>;
     readonly label: (run: RunRef, label: ResultLabel) => Out<Telescope.AgentRun>;
     readonly get: (caller: Caller, run: RunRef) => Out<Telescope.AgentRun>;
@@ -304,12 +311,15 @@ const make = Effect.gen(function* () {
   const recordThreadTurn = Effect.fn("RunRecordService.recordThreadTurn")(function* (
     threadId: ThreadId,
     tokens: Tokens,
+    codiMessageId?: string,
   ) {
     const open = (run: RunRef) =>
       db.transaction(
         runRow(run, "open").pipe(Effect.flatMap((row) => saveRun(withTokens(row, tokens)))),
       );
-    yield* Effect.forEach(yield* db.openRunsOnThread(threadId), open, { discard: true });
+    yield* Effect.forEach(yield* db.openRunsOnThread(threadId, codiMessageId), open, {
+      discard: true,
+    });
   });
 
   const exportSpan = (run: Telescope.AgentRun) =>

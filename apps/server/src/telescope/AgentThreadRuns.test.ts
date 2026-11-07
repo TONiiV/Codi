@@ -86,85 +86,84 @@ const event = (
 });
 
 it.layer(layer)("AgentThreadRuns", (it) => {
-  it.effect("terminal Codi run finishes every open Telescope run of that thread once", () =>
-    Effect.gen(function* () {
-      const db = yield* TelescopeDb.TelescopeDb;
-      const runs = yield* RunRecordService.RunRecordService;
-      const workspace = yield* (yield* WorkspaceService.WorkspaceService).create(alice, {
-        kind: "personal",
-        name: "Acme",
-        displayName: "Alice",
-      });
-      const agentId = Telescope.AgentId.make("agent-pa");
-      const addAgent = (id: string, threadId: ThreadId) =>
-        db.insert(workspace.id, "agents", {
-          agent_id: id,
+  it.effect(
+    "a Codi run on an agent thread opens its own Telescope run when it starts and finishes only it once",
+    () =>
+      Effect.gen(function* () {
+        const db = yield* TelescopeDb.TelescopeDb;
+        const runs = yield* RunRecordService.RunRecordService;
+        const workspace = yield* (yield* WorkspaceService.WorkspaceService).create(alice, {
+          kind: "personal",
+          name: "Acme",
+          displayName: "Alice",
+        });
+        const agentId = Telescope.AgentId.make("agent-pa");
+        yield* db.insert(workspace.id, "agents", {
+          agent_id: agentId,
           owner_subject_id: workspace.createdBy,
           kind: "chief_of_staff",
-          name: id,
+          name: agentId,
           standing_powers_json: "{}",
           exposure: "hidden",
           sync_with_board: 0,
           dispatch_mode: "inbox",
           channels_json: "[]",
-          resident_thread_id: threadId,
+          resident_thread_id: resident,
           created_at: "2026-11-07T00:00:00.000Z",
           updated_at: "2026-11-07T00:00:00.000Z",
         });
-      yield* addAgent(agentId, resident);
-      const started: Array<Telescope.AgentRun> = [];
-      const finished: Array<Telescope.AgentRunId> = [];
-      const handle = yield* AgentThreadRuns.makeHandler.pipe(
-        Effect.provideService(RunRecordService.RunRecordService, {
-          ...runs,
-          startFor: (workspaceId, memberId, input) =>
-            runs
-              .startFor(workspaceId, memberId, input)
-              .pipe(Effect.tap((run) => Effect.sync(() => started.push(run)))),
-          finish: (ref, input) =>
-            runs
-              .finish(ref, input)
-              .pipe(Effect.tap((run) => Effect.sync(() => finished.push(run.id)))),
-        }),
-      );
-      const play = (events: ReadonlyArray<OrchestrationV2DomainEvent>) =>
-        Effect.forEach(events, handle, { discard: true });
+        const started: Array<Telescope.AgentRun> = [];
+        const finished: Array<Telescope.AgentRunId> = [];
+        const handler = yield* AgentThreadRuns.makeHandler.pipe(
+          Effect.provideService(RunRecordService.RunRecordService, {
+            ...runs,
+            startFor: (workspaceId, memberId, input) =>
+              runs
+                .startFor(workspaceId, memberId, input)
+                .pipe(Effect.tap((run) => Effect.sync(() => started.push(run)))),
+            finish: (ref, input) =>
+              runs
+                .finish(ref, input)
+                .pipe(Effect.tap((run) => Effect.sync(() => finished.push(run.id)))),
+          }),
+        );
+        const play = (events: ReadonlyArray<OrchestrationV2DomainEvent>) =>
+          Effect.forEach(events, handler.handle, { discard: true });
+        const runtimeRun = yield* runs.startFor(workspace.id, workspace.createdBy, {
+          agentId,
+          threadId: resident,
+          inputSnapshot: { ...snapshot, codiMessageId: "message-codi-2" },
+        });
 
-      yield* play([
-        event("run.created", "codi-elsewhere", "queued", ThreadId.make("thread-plain")),
-        event("run.created", "codi-1", "queued"),
-      ]);
-      assert.lengthOf(started, 1);
-      const opened = started[0]!;
-      assert.deepStrictEqual(
-        [opened.agentId, opened.threadId, opened.onBehalfOf],
-        [agentId, resident, [workspace.createdBy]],
-      );
-      const runtimeRun = yield* runs.startFor(workspace.id, workspace.createdBy, {
-        agentId,
-        threadId: resident,
-        inputSnapshot: snapshot,
-      });
-      yield* play([event("run.updated", "codi-1", "completed")]);
-      assert.sameMembers(finished, [opened.id, runtimeRun.id]);
+        // A run queued behind the agent's turn opens nothing until it starts.
+        yield* play([
+          event("run.created", "codi-elsewhere", "running", ThreadId.make("thread-plain")),
+          event("run.created", "codi-1", "queued"),
+        ]);
+        assert.lengthOf(started, 0);
+        yield* play([event("run.updated", "codi-1", "running")]);
+        assert.lengthOf(started, 1);
+        const opened = started[0]!;
+        assert.deepStrictEqual(
+          [opened.agentId, opened.threadId, opened.onBehalfOf, opened.inputSnapshot.codiMessageId],
+          [agentId, resident, [workspace.createdBy], "message-codi-1"],
+        );
 
-      // A finished Codi run updated again leaves the next turn's run open.
-      const next = yield* runs.startFor(workspace.id, workspace.createdBy, {
-        agentId,
-        threadId: resident,
-        inputSnapshot: snapshot,
-      });
-      yield* play([
-        event("run.updated", "codi-1", "completed"),
-        event("run.updated", "codi-2", "running"),
-      ]);
-      assert.deepStrictEqual(
-        (yield* db.openRunsOnThread(resident)).map((run) => run.runId),
-        [next.id],
-      );
-      yield* play([event("run.updated", "codi-2", "interrupted")]);
-      assert.deepStrictEqual(finished.slice(2), [next.id]);
-      assert.lengthOf(started, 1);
-    }),
+        // The runtime's run serves codi-2: its start opens nothing, codi-1's end leaves it open.
+        yield* play([
+          event("run.updated", "codi-2", "running"),
+          event("run.updated", "codi-1", "running"),
+          event("run.updated", "codi-1", "completed"),
+          event("run.updated", "codi-1", "completed"),
+        ]);
+        assert.lengthOf(started, 1);
+        assert.deepStrictEqual(finished, [opened.id]);
+        assert.deepStrictEqual(
+          (yield* db.openRunsOnThread(resident)).map((run) => run.runId),
+          [runtimeRun.id],
+        );
+        yield* play([event("run.updated", "codi-2", "interrupted")]);
+        assert.deepStrictEqual(finished, [opened.id, runtimeRun.id]);
+      }),
   );
 });

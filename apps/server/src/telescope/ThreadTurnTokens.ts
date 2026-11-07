@@ -41,7 +41,11 @@ export const layer = Layer.effectDiscard(
       counted.add(turn.id);
       const oldest = counted.values().next();
       if (counted.size > REMEMBERED_TURNS && !oldest.done) counted.delete(oldest.value);
-      yield* runs.recordThreadTurn(event.threadId, tokens);
+      yield* runs.recordThreadTurn(
+        event.threadId,
+        tokens,
+        agentThreadRuns.servingOn(event.threadId),
+      );
     });
 
     yield* forkParked(
@@ -50,7 +54,7 @@ export const layer = Layer.effectDiscard(
           Effect.catchCause((cause) =>
             Effect.logWarning("recording turn tokens on a Telescope run failed", { cause }),
           ),
-          Effect.andThen(agentThreadRuns(event)),
+          Effect.andThen(agentThreadRuns.handle(event)),
         ),
       ).pipe(
         Effect.catchCause((cause) =>

@@ -11,6 +11,7 @@ import {
   ProviderThreadId,
   ProviderTurnId,
   Telescope,
+  ThreadId,
 } from "@t3tools/contracts";
 import * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
 import { checkpointWorkspace } from "@t3tools/provider-testing/replayWorkspace";
@@ -24,6 +25,7 @@ import * as Queue from "effect/Queue";
 import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
+import * as TestClock from "effect/testing/TestClock";
 
 import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
 import { CodexProviderCapabilitiesV2 } from "../orchestration-v2/Adapters/CodexAdapterV2.ts";
@@ -71,8 +73,9 @@ const decodeRuns = Schema.decodeUnknownEffect(
 /** A provider whose session start records the thread's open Telescope run, as tools/list would. */
 const makeHarness = Effect.fn("makeHarness")(function* (options: {
   readonly mcp: boolean;
-  readonly gate?: boolean;
+  readonly rejectCreate?: boolean;
   readonly rejectSend?: boolean;
+  readonly holdTokens?: boolean;
 }) {
   const cwd = yield* checkpointWorkspace(`telescope-agent-runtime-${options.mcp}`);
   const events = yield* Queue.unbounded<ProviderAdapter.ProviderAdapterV2Event>();
@@ -80,12 +83,12 @@ const makeHarness = Effect.fn("makeHarness")(function* (options: {
     readonly onBehalfOf?: string;
     readonly visible: boolean;
   }>();
-  const reads = yield* Queue.unbounded<Telescope.AgentId>();
-  const atScratch = yield* Queue.unbounded<void>();
-  const scratchGate = yield* Deferred.make<void>();
-  if (options.gate !== true) yield* Deferred.succeed(scratchGate, undefined);
   const started = yield* Queue.unbounded<ProviderAdapter.ProviderAdapterV2TurnInput>();
   const finished = yield* Queue.unbounded<Telescope.AgentRun>();
+  // With `holdTokens`, the listener waits for a permit at each turn's tokens, as a busy one lags.
+  const recorded = yield* Queue.unbounded<void>();
+  const permits = yield* Queue.unbounded<void>();
+  const waits = yield* Queue.unbounded<void>();
   const services = yield* Deferred.make<{
     readonly db: TelescopeDb.TelescopeDb["Service"];
     readonly memory: MemoryService.MemoryService["Service"];
@@ -236,43 +239,48 @@ const makeHarness = Effect.fn("makeHarness")(function* (options: {
       ...runs,
       finish: (ref, input) =>
         runs.finish(ref, input).pipe(Effect.tap((run) => Queue.offer(finished, run))),
-    })),
-  );
-  const signallingAgents = Layer.effect(
-    AgentService.AgentService,
-    Effect.map(AgentService.AgentService, (agents) => ({
-      ...agents,
-      powersOf: (workspaceId, agentId) =>
-        agents.powersOf(workspaceId, agentId).pipe(Effect.tap(() => Queue.offer(reads, agentId))),
+      recordThreadTurn: (...args) =>
+        options.holdTokens === true
+          ? Queue.offer(recorded, undefined).pipe(
+              Effect.andThen(Queue.take(permits)),
+              Effect.andThen(runs.recordThreadTurn(...args)),
+            )
+          : runs.recordThreadTurn(...args),
     })),
   );
   const threads = Layer.effect(
     ThreadManagementService.ThreadManagementService,
-    Effect.map(ThreadManagementService.ThreadManagementService, (service) =>
-      options.rejectSend === true
-        ? {
-            ...service,
-            sendToThread: (input) =>
-              Effect.fail(
-                new ThreadManagementService.ThreadManagementProviderInstanceDisabledError({
-                  projectId: input.projectId,
-                  instanceId,
-                }),
-              ),
-          }
-        : service,
-    ),
+    Effect.map(ThreadManagementService.ThreadManagementService, (service) => {
+      const disabled = (projectId: ProjectId) =>
+        Effect.fail(
+          new ThreadManagementService.ThreadManagementProviderInstanceDisabledError({
+            projectId,
+            instanceId,
+          }),
+        );
+      return {
+        ...service,
+        dispatch: (command) =>
+          options.rejectCreate === true && command.type === "thread.create"
+            ? disabled(command.projectId)
+            : service.dispatch(command),
+        sendToThread: (input) =>
+          options.rejectSend === true ? disabled(input.projectId) : service.sendToThread(input),
+        // Signals a wake waiting for a turn already on its resident thread.
+        waitForThread: (input) =>
+          (input.runId === undefined ? Queue.offer(waits, undefined) : Effect.void).pipe(
+            Effect.andThen(service.waitForThread(input)),
+          ),
+      };
+    }),
   );
   const runtime = Layer.merge(AgentRuntime.layer, ThreadTurnTokens.layer).pipe(
-    Layer.provide(Layer.mergeAll(recordingRuns, signallingAgents, threads)),
+    Layer.provide(Layer.merge(recordingRuns, threads)),
     Layer.provide(registry),
     Layer.provide(
       Layer.mock(ManagedProjectFolders.ManagedProjectFolders)({
         namedProjectsRoot: "/home/user/projects",
-        ensureScratchProject: Queue.offer(atScratch, undefined).pipe(
-          Effect.andThen(Deferred.await(scratchGate)),
-          Effect.as({ projectId: scratch }),
-        ),
+        ensureScratchProject: Effect.succeed({ projectId: scratch }),
       }),
     ),
     Layer.provideMerge(Layer.merge(telescope, orchestration)),
@@ -283,16 +291,16 @@ const makeHarness = Effect.fn("makeHarness")(function* (options: {
     sessions,
     started,
     finished,
+    recorded,
+    permits,
+    waits,
     complete,
-    reads,
-    atScratch,
-    scratchGate,
   };
 });
 type Harness = Effect.Success<ReturnType<typeof makeHarness>>;
 
 const withHarness = <A, E>(
-  options: { readonly mcp: boolean; readonly gate?: boolean; readonly rejectSend?: boolean },
+  options: Parameters<typeof makeHarness>[0],
   body: (harness: Harness) => Effect.Effect<A, E, Layer.Success<Harness["runtime"]> | Scope.Scope>,
 ) =>
   Effect.scoped(
@@ -350,22 +358,50 @@ const seed = Effect.gen(function* () {
 });
 type Seeded = Effect.Success<typeof seed>;
 
+const enqueueMessage = (seeded: Seeded, text: string) =>
+  WakeQueueService.WakeQueueService.pipe(
+    Effect.flatMap((wakes) =>
+      wakes.enqueue(seeded.workspaceId, {
+        reason: "message",
+        priority: 1,
+        agentId: seeded.pa,
+        subjectId: seeded.member,
+        coalesceKey: `message:${text}`,
+        payload: { kind: "message", text },
+      }),
+    ),
+  );
 const messageWake = (seeded: Seeded, text: string) =>
+  enqueueMessage(seeded, text).pipe(
+    Effect.andThen(WakeQueueService.WakeQueueService.pipe(Effect.flatMap((wakes) => wakes.take))),
+  );
+
+/** Runs the wake as the queue's worker does, which finishes it in the queue when it ends. */
+const runWake = (wake: WakeQueueService.WakeRun) =>
   Effect.gen(function* () {
+    const run = yield* WakeQueueService.WakeRunner;
     const wakes = yield* WakeQueueService.WakeQueueService;
-    yield* wakes.enqueue(seeded.workspaceId, {
-      reason: "message",
-      priority: 1,
-      agentId: seeded.pa,
-      subjectId: seeded.member,
-      coalesceKey: `message:${text}`,
-      payload: { kind: "message", text },
-    });
-    return yield* wakes.take;
+    return yield* Effect.forkScoped(
+      run(wake).pipe(Effect.ensuring(Effect.orDie(wakes.finish(wake.wake, "done")))),
+    );
   });
 
-const runWake = (wake: WakeQueueService.WakeRun) =>
-  WakeQueueService.WakeRunner.pipe(Effect.flatMap((run) => Effect.forkScoped(run(wake))));
+const memberTypes = (threadId: ThreadId, text: string, queue = false) =>
+  Orchestrator.OrchestratorV2.pipe(
+    Effect.flatMap((engine) =>
+      engine.dispatch({
+        type: "message.dispatch",
+        commandId: CommandId.make(`member-types:${text}`),
+        threadId,
+        messageId: MessageId.make(`message:${text}`),
+        text,
+        attachments: [],
+        dispatchMode: { type: queue ? "queue_after_active" : "start_immediately" },
+        createdBy: "user",
+        creationSource: "web",
+      }),
+    ),
+  );
 
 const residentOf = (seeded: Seeded, agentId: Telescope.AgentId) =>
   AgentService.AgentService.pipe(
@@ -390,6 +426,8 @@ it.effect(
         assert.include(turn.message.text, "样机哪天交付？");
         yield* harness.complete(turn, 100);
         yield* Fiber.join(runner);
+        yield* Queue.take(harness.finished);
+        assert.equal(yield* (yield* TelescopeDb.TelescopeDb).count(seeded.workspaceId, "runs"), 1);
       }),
     ),
 );
@@ -436,17 +474,7 @@ it.effect("a turn the member types into the resident thread gets its own run", (
       yield* Fiber.join(runner);
       const first = yield* Queue.take(harness.finished);
       const threadId = (yield* residentOf(seeded, seeded.pa))!;
-      yield* (yield* Orchestrator.OrchestratorV2).dispatch({
-        type: "message.dispatch",
-        commandId: CommandId.make("member-types"),
-        threadId,
-        messageId: MessageId.make("message:member-types"),
-        text: "顺便看看预算",
-        attachments: [],
-        dispatchMode: { type: "start_immediately" },
-        createdBy: "user",
-        creationSource: "web",
-      });
+      yield* memberTypes(threadId, "顺便看看预算");
       yield* harness.complete(yield* Queue.take(harness.started), 7);
       const second = yield* Queue.take(harness.finished);
       assert.notEqual(second.id, first.id);
@@ -481,25 +509,21 @@ it.effect("an archived resident thread is replaced on the next wake", () =>
   ),
 );
 
-it.effect("two wakes for one agent take turns on its one resident thread", () =>
-  withHarness({ mcp: true, gate: true }, (harness) =>
+it.effect("a second wake for a busy agent stays queued until its turn ends (D84)", () =>
+  withHarness({ mcp: true }, (harness) =>
     Effect.gen(function* () {
       const seeded = yield* seed;
-      const firstWake = yield* messageWake(seeded, "早");
-      const secondWake = yield* messageWake(seeded, "晚");
-      const first = yield* runWake(firstWake);
-      // The first wake waits for Scratch before it writes its resident thread.
-      yield* Queue.take(harness.atScratch);
-      yield* Queue.takeAll(harness.reads);
-      const second = yield* runWake(secondWake);
-      // The second wake has read the agent with no resident thread yet.
-      yield* Queue.take(harness.reads);
-      yield* Deferred.succeed(harness.scratchGate, undefined);
+      const wakes = yield* WakeQueueService.WakeQueueService;
+      yield* enqueueMessage(seeded, "早");
+      yield* enqueueMessage(seeded, "晚");
+      const first = yield* runWake(yield* wakes.take);
       const one = yield* Queue.take(harness.started);
+      assert.isUndefined(yield* wakes.dequeue);
       yield* harness.complete(one, 1);
+      yield* Fiber.join(first);
+      const second = yield* runWake(yield* wakes.take);
       const two = yield* Queue.take(harness.started);
       yield* harness.complete(two, 1);
-      yield* Fiber.join(first);
       yield* Fiber.join(second);
       assert.equal(two.threadId, one.threadId);
       assert.notInclude(two.message.text, "personal assistant");
@@ -600,10 +624,13 @@ it.effect(
     ),
 );
 
-it.effect(
-  "a turn that cannot be sent finishes its run as failed and fails the delegation (D81)",
-  () =>
-    withHarness({ mcp: true, rejectSend: true }, (harness) =>
+it.effect.each([
+  { step: "created", rejected: { rejectCreate: true } },
+  { step: "sent", rejected: { rejectSend: true } },
+] as const)(
+  "a turn whose thread cannot be $step finishes its run as failed and fails the delegation (D81)",
+  ({ rejected }) =>
+    withHarness({ mcp: true, ...rejected }, (harness) =>
       Effect.gen(function* () {
         const seeded = yield* seed;
         const db = yield* TelescopeDb.TelescopeDb;
@@ -616,12 +643,12 @@ it.effect(
         const exit = yield* Fiber.await(yield* runWake(yield* wakes.take));
         assert.isTrue(Exit.isFailure(exit));
         const threadId = (yield* residentOf(seeded, seeded.chief))!;
+        assert.deepStrictEqual(yield* db.openRunsOnThread(threadId), []);
         const finished = yield* Queue.takeAll(harness.finished);
         assert.lengthOf(finished, 1);
         assert.equal(finished[0]?.threadId, threadId);
         assert.isDefined(finished[0]?.finishedAt);
         assert.include(finished[0]?.outputSummary, "is disabled for project");
-        assert.deepStrictEqual(yield* db.openRunsOnThread(threadId), []);
         const failed = yield* delegations.get({
           workspaceId: seeded.workspaceId,
           delegationId: delegation.id,
@@ -629,6 +656,171 @@ it.effect(
         assert.equal(failed.state, "FAILED");
         assert.include(failed.report?.blockedOn, "is disabled for project");
         assert.equal((yield* wakes.take).wake.agentId, seeded.pa);
+      }),
+    ),
+);
+
+const chiefActor = (seeded: Seeded, runId: Telescope.AgentRunId): DelegationService.Actor => ({
+  workspaceId: seeded.workspaceId,
+  memberId: seeded.member,
+  agentId: seeded.chief,
+  onBehalfOf: [seeded.member, seeded.pa],
+  runId,
+});
+
+it.effect(
+  "a lagging listener finishes each delegation's run with its own turn and fails only the unreported delegation",
+  () =>
+    withHarness({ mcp: true, holdTokens: true }, (harness) =>
+      Effect.gen(function* () {
+        const seeded = yield* seed;
+        const delegations = yield* DelegationService.DelegationService;
+        const wakes = yield* WakeQueueService.WakeQueueService;
+        const ref = (delegation: Telescope.Delegation) => ({
+          workspaceId: seeded.workspaceId,
+          delegationId: delegation.id,
+        });
+        const d1 = yield* delegations.delegate(seeded.actor, { toAgentId: seeded.chief, brief });
+        // A later wake, so the queue takes d1's first.
+        yield* TestClock.adjust("1 millis");
+        const d2 = yield* delegations.delegate(seeded.actor, { toAgentId: seeded.chief, brief });
+        const first = yield* runWake(yield* wakes.take);
+        yield* harness.complete(yield* Queue.take(harness.started), 11);
+        // The listener holds turn 1's tokens while wake 2 starts turn 2 on the same thread.
+        yield* Queue.take(harness.recorded);
+        yield* Fiber.join(first);
+        const second = yield* runWake(yield* wakes.take);
+        const turn2 = yield* Queue.take(harness.started);
+        yield* Queue.offer(harness.permits, undefined);
+        const run1 = yield* Queue.take(harness.finished);
+        assert.equal(run1.tokens.input, 11);
+        const report = yield* wakes.take;
+        assert.deepStrictEqual(report.payloads, [{ kind: "report", delegationId: d1.id }]);
+        assert.equal((yield* delegations.get(ref(d1))).report?.blockedOn, "没有汇报");
+        assert.equal((yield* delegations.get(ref(d2))).state, "WORKING");
+        const [run2] = yield* (yield* TelescopeDb.TelescopeDb).openRunsOnThread(turn2.threadId);
+        yield* delegations.report(chiefActor(seeded, run2!.runId), {
+          delegationId: d2.id,
+          state: "COMPLETED",
+          report: { result: "样机能抓起 500g", decisions: [] },
+        });
+        yield* harness.complete(turn2, 55);
+        yield* Queue.take(harness.recorded);
+        yield* Queue.offer(harness.permits, undefined);
+        yield* Fiber.join(second);
+        const finished2 = yield* Queue.take(harness.finished);
+        assert.equal(finished2.id, run2!.runId);
+        assert.equal(finished2.tokens.input, 55);
+        assert.equal((yield* delegations.get(ref(d2))).state, "COMPLETED");
+      }),
+    ),
+);
+
+/** Leaves the Chief's next wake waiting for a turn the member typed into its resident thread. */
+const waitBehindMemberTurn = (harness: Harness, seeded: Seeded) =>
+  Effect.gen(function* () {
+    const delegations = yield* DelegationService.DelegationService;
+    const wakes = yield* WakeQueueService.WakeQueueService;
+    yield* delegations.delegate(seeded.actor, { toAgentId: seeded.chief, brief });
+    const first = yield* runWake(yield* wakes.take);
+    yield* harness.complete(yield* Queue.take(harness.started), 1);
+    yield* Fiber.join(first);
+    yield* Queue.take(harness.finished);
+    // The unreported first task's report wake, for the PA.
+    yield* wakes.take;
+    const threadId = (yield* residentOf(seeded, seeded.chief))!;
+    yield* memberTypes(threadId, "先看看电机");
+    const memberTurn = yield* Queue.take(harness.started);
+    const delegation = yield* delegations.delegate(seeded.actor, {
+      toAgentId: seeded.chief,
+      brief,
+    });
+    const waiting = yield* runWake(yield* wakes.take);
+    yield* Queue.take(harness.waits);
+    const release = harness
+      .complete(memberTurn, 1)
+      .pipe(
+        Effect.andThen(Queue.take(harness.finished)),
+        Effect.andThen(
+          Effect.raceFirst(
+            Fiber.await(waiting).pipe(Effect.as("ended without a turn")),
+            Queue.take(harness.started).pipe(Effect.as("started a turn")),
+          ),
+        ),
+      );
+    return { delegation, release };
+  });
+
+it.effect("a wake whose agent is stopped while it waits for the thread starts no run (D48)", () =>
+  withHarness({ mcp: true }, (harness) =>
+    Effect.gen(function* () {
+      const seeded = yield* seed;
+      const db = yield* TelescopeDb.TelescopeDb;
+      const delegations = yield* DelegationService.DelegationService;
+      const { delegation, release } = yield* waitBehindMemberTurn(harness, seeded);
+      yield* db.insert(seeded.workspaceId, "kill_switches", {
+        agent_id: seeded.chief,
+        state: "stopped",
+        by_subject_id: seeded.member,
+        at: "2026-11-07T00:00:00.000Z",
+      });
+      assert.equal(yield* release, "ended without a turn");
+      const failed = yield* delegations.get({
+        workspaceId: seeded.workspaceId,
+        delegationId: delegation.id,
+      });
+      assert.equal(failed.report?.blockedOn, "agent stopped");
+      assert.equal(yield* db.count(seeded.workspaceId, "runs"), 2);
+    }),
+  ),
+);
+
+it.effect("a wake whose delegation is cancelled while it waits for the thread starts no run", () =>
+  withHarness({ mcp: true }, (harness) =>
+    Effect.gen(function* () {
+      const seeded = yield* seed;
+      const db = yield* TelescopeDb.TelescopeDb;
+      const delegations = yield* DelegationService.DelegationService;
+      const { delegation, release } = yield* waitBehindMemberTurn(harness, seeded);
+      yield* delegations.cancel(seeded.actor, delegation.id);
+      assert.equal(yield* release, "ended without a turn");
+      const ref = { workspaceId: seeded.workspaceId, delegationId: delegation.id };
+      assert.equal((yield* delegations.get(ref)).state, "CANCELED");
+      assert.equal(yield* db.count(seeded.workspaceId, "runs"), 2);
+    }),
+  ),
+);
+
+it.effect(
+  "a message the member queues behind the agent's turn gets its own run when it starts",
+  () =>
+    withHarness({ mcp: true, holdTokens: true }, (harness) =>
+      Effect.gen(function* () {
+        const seeded = yield* seed;
+        const db = yield* TelescopeDb.TelescopeDb;
+        const runner = yield* runWake(yield* messageWake(seeded, "早"));
+        const turn = yield* Queue.take(harness.started);
+        yield* memberTypes(turn.threadId, "顺便看看预算", true);
+        yield* harness.complete(turn, 1);
+        yield* Queue.take(harness.recorded);
+        yield* Queue.offer(harness.permits, undefined);
+        yield* Fiber.join(runner);
+        const agentRun = yield* Queue.take(harness.finished);
+        const memberTurn = yield* Queue.take(harness.started);
+        assert.include(memberTurn.message.text, "顺便看看预算");
+        yield* harness.complete(memberTurn, 7);
+        // The listener has seen the member's run start and holds its turn's tokens.
+        yield* Queue.take(harness.recorded);
+        const open = yield* db.openRunsOnThread(turn.threadId);
+        assert.lengthOf(open, 1);
+        const [toolRun] = yield* db.latestRunForThread(turn.threadId, decodeRuns);
+        assert.equal(toolRun?.run_id, open[0]?.runId);
+        assert.notEqual(toolRun?.run_id, agentRun.id);
+        yield* Queue.offer(harness.permits, undefined);
+        const memberRun = yield* Queue.take(harness.finished);
+        assert.equal(memberRun.id, open[0]?.runId);
+        assert.deepStrictEqual(memberRun.onBehalfOf, [seeded.member]);
+        assert.equal(memberRun.tokens.input, 7);
       }),
     ),
 );

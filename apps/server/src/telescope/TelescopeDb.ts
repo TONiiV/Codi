@@ -132,7 +132,11 @@ export class TelescopeDb extends Context.Service<
       | undefined,
       PersistenceSqlError
     >;
-    readonly openRunsOnThread: (threadId: string) => Effect.Effect<
+    /** With `codiMessageId`, only the runs that serve that Codi run. */
+    readonly openRunsOnThread: (
+      threadId: string,
+      codiMessageId?: string,
+    ) => Effect.Effect<
       ReadonlyArray<{
         readonly workspaceId: Telescope.WorkspaceId;
         readonly runId: Telescope.AgentRunId;
@@ -379,10 +383,17 @@ const make = Effect.gen(function* () {
     `.pipe(Effect.mapError(toPersistenceSqlError("TelescopeDb.workspaceIdForInvitation")));
     return rows[0] === undefined ? undefined : Telescope.WorkspaceId.make(rows[0].workspace_id);
   });
-  const openRunsOnThread = Effect.fn("TelescopeDb.openRunsOnThread")(function* (threadId: string) {
+  const openRunsOnThread = Effect.fn("TelescopeDb.openRunsOnThread")(function* (
+    threadId: string,
+    codiMessageId?: string,
+  ) {
+    const served =
+      codiMessageId === undefined
+        ? sql``
+        : sql`AND json_extract(input_snapshot_json, '$.codiMessageId') = ${codiMessageId}`;
     const rows = yield* sql<{ readonly workspace_id: string; readonly run_id: string }>`
       SELECT workspace_id, run_id FROM telescope_runs
-      WHERE thread_id = ${threadId} AND finished_at IS NULL
+      WHERE thread_id = ${threadId} AND finished_at IS NULL ${served}
     `.pipe(Effect.mapError(toPersistenceSqlError("TelescopeDb.openRunsOnThread")));
     return rows.map((row) => ({
       workspaceId: Telescope.WorkspaceId.make(row.workspace_id),

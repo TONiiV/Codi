@@ -312,6 +312,17 @@ it.layer(layer)("Telescope run records", (it) => {
         inputSnapshot: snapshot([]),
       });
       const scoped = { workspaceId, runId: run.id };
+      yield* SqlClient.SqlClient.use(
+        (sql) =>
+          sql`INSERT INTO telescope_members ${sql.insert({
+            workspace_id: workspaceId,
+            subject_id: "revoked-subject",
+            display_name: "Rex",
+            role: "member",
+            joined_at: "2026-01-01T00:00:00.000Z",
+            revoked_at: "2026-01-02T00:00:00.000Z",
+          })}`,
+      );
       const reads: ReadonlyArray<Effect.Effect<object, { readonly _tag: string }>> = [
         runs.get(mallory, scoped),
         runs.calls(mallory, scoped),
@@ -320,6 +331,7 @@ it.layer(layer)("Telescope run records", (it) => {
         runs.memoriesForRun(mallory, scoped),
         runs.start(mallory, workspaceId, { agentId, inputSnapshot: snapshot([]) }),
         runs.startFor(workspaceId, "mallory-subject", { agentId, inputSnapshot: snapshot([]) }),
+        runs.startFor(workspaceId, "revoked-subject", { agentId, inputSnapshot: snapshot([]) }),
       ];
       for (const read of reads) {
         assert.strictEqual(reason(yield* Effect.flip(read)), "forbidden");
