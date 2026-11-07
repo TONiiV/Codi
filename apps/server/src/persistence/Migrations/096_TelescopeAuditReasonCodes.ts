@@ -1,7 +1,10 @@
 import * as Effect from "effect/Effect";
 import * as SqlClient from "effect/sql/SqlClient";
 
-/** Gateway refusals are audited by reason code; older rows held the message, matched by its start. */
+/**
+ * Gateway refusals are audited by reason code; older rows held the message, matched by its start.
+ * Messages have spaces and codes none, so a second run changes nothing.
+ */
 export default Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
 
@@ -14,5 +17,5 @@ export default Effect.gen(function* () {
     WHEN reason LIKE 'An agent''s own thread does not open%' THEN 'resident'
     WHEN reason LIKE 'A Worker reports through its thread%' THEN 'worker'
     WHEN reason LIKE 'Telescope agents cannot act on a linked environment%' THEN 'linked'
-  END WHERE reason IS NOT NULL`;
+  END WHERE reason LIKE '% %'`;
 });

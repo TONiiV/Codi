@@ -143,26 +143,28 @@ describe("runMigrations", () => {
         { discard: true },
       );
 
-      yield* runMigrations();
-
-      const rows = yield* sql<{ readonly reason: string | null }>`
+      const stored = sql<{ readonly reason: string | null }>`
         SELECT reason FROM telescope_audit ORDER BY audit_id
-      `;
-      assert.deepStrictEqual(
-        rows.map((row) => row.reason),
-        [
-          "budget",
-          "forbidden",
-          "stopped",
-          "project_only",
-          "no_project",
-          "resident",
-          "worker",
-          "linked",
-          null,
-          null,
-        ],
-      );
+      `.pipe(Effect.map((rows) => rows.map((row) => row.reason)));
+      const codes = [
+        "budget",
+        "forbidden",
+        "stopped",
+        "project_only",
+        "no_project",
+        "resident",
+        "worker",
+        "linked",
+        null,
+        null,
+      ];
+      yield* runMigrations();
+      assert.deepStrictEqual(yield* stored, codes);
+
+      // A database that ran it under another id runs it again.
+      yield* sql`DELETE FROM effect_sql_migrations WHERE name = 'TelescopeAuditReasonCodes'`;
+      yield* runMigrations();
+      assert.deepStrictEqual(yield* stored, codes);
     }).pipe(Effect.provide(NodeSqliteClient.layer({ filename: ":memory:" }))),
   );
 
