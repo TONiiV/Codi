@@ -792,7 +792,7 @@ export function ThemeEditorPanel({
           setError(
             t("settings.text.labelAlreadyHasACollisionPalette", {
               label: mergeTarget.label,
-              collision,
+              collision: themeModeWord(collision, t),
             }),
           );
           return;
@@ -1250,7 +1250,9 @@ export function ThemeEditorPanel({
               ) : mergeTarget ? (
                 <>
                   <PlusIcon />
-                  {t("settings.text.addActiveappearancePalette", { activeAppearance })}
+                  {t("settings.text.addActiveappearancePalette", {
+                    activeAppearance: themeModeWord(activeAppearance, t),
+                  })}
                 </>
               ) : (
                 <>
