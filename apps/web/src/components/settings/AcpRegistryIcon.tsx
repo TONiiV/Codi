@@ -9,6 +9,8 @@ import {
 
 import { cn } from "../../lib/utils";
 import { ACPRegistryIcon } from "../Icons";
+import type { TFunction } from "i18next";
+import { englishT } from "~/i18n/englishT";
 
 const ACP_REGISTRY_ICON_CACHE = "t3-acp-registry-icons-v1";
 const MAX_ICON_BYTES = 512 * 1_024;
@@ -16,22 +18,25 @@ const inFlightIcons = new Map<string, Promise<Blob>>();
 
 export { officialAcpRegistryIconUrlForAgentId, resolveOfficialAcpRegistryIconUrl };
 
-async function checkedIconBlob(response: Response): Promise<Blob> {
-  if (!response.ok || response.redirected) throw new Error("ACP registry icon request failed.");
+async function checkedIconBlob(response: Response, t: TFunction = englishT): Promise<Blob> {
+  if (!response.ok || response.redirected)
+    throw new Error(t("settings.text.acpRegistryIconRequestFailed"));
   const contentType = response.headers.get("content-type")?.split(";", 1)[0]?.trim() ?? "";
-  if (!contentType.startsWith("image/")) throw new Error("ACP registry icon was not an image.");
+  if (!contentType.startsWith("image/"))
+    throw new Error(t("settings.text.acpRegistryIconWasNotAn"));
   const contentLength = Number(response.headers.get("content-length"));
   if (Number.isFinite(contentLength) && contentLength > MAX_ICON_BYTES) {
-    throw new Error("ACP registry icon was too large.");
+    throw new Error(t("settings.text.acpRegistryIconWasTooLarge"));
   }
   const bytes = await response.arrayBuffer();
-  if (bytes.byteLength > MAX_ICON_BYTES) throw new Error("ACP registry icon was too large.");
+  if (bytes.byteLength > MAX_ICON_BYTES)
+    throw new Error(t("settings.text.acpRegistryIconWasTooLarge"));
   return new Blob([bytes], { type: contentType });
 }
 
-export function loadCachedAcpRegistryIcon(iconUrl: string): Promise<Blob> {
+export function loadCachedAcpRegistryIcon(iconUrl: string, t: TFunction = englishT): Promise<Blob> {
   if (resolveOfficialAcpRegistryIconUrl(iconUrl) !== iconUrl) {
-    return Promise.reject(new Error("ACP registry icon URL was not allowed."));
+    return Promise.reject(new Error(t("settings.text.acpRegistryIconUrlWasNot")));
   }
   const pending = inFlightIcons.get(iconUrl);
   if (pending) return pending;
@@ -47,7 +52,7 @@ export function loadCachedAcpRegistryIcon(iconUrl: string): Promise<Blob> {
     if (cache !== null) {
       try {
         const cached = await cache.match(iconUrl);
-        if (cached) return await checkedIconBlob(cached);
+        if (cached) return await checkedIconBlob(cached, t);
       } catch {}
     }
 
@@ -57,7 +62,7 @@ export function loadCachedAcpRegistryIcon(iconUrl: string): Promise<Blob> {
       referrerPolicy: "no-referrer",
     });
     const clone = response.clone();
-    const blob = await checkedIconBlob(response);
+    const blob = await checkedIconBlob(response, t);
     await cache?.put(iconUrl, clone).catch(() => undefined);
     return blob;
   })();

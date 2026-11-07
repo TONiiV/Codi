@@ -74,6 +74,7 @@ import * as RpcAuthorization from "./auth/RpcAuthorization.ts";
 import * as PeerLinkRequests from "./peer/PeerLinkRequests.ts";
 import * as TelescopeWorkspaces from "./telescope/WorkspaceService.ts";
 import * as TelescopeBoard from "./telescope/TaskBoardService.ts";
+import * as TelescopeBoardChanges from "./telescope/BoardChanges.ts";
 import * as TelescopeAgents from "./telescope/AgentService.ts";
 import * as TelescopeRuns from "./telescope/RunRecordService.ts";
 import * as TelescopeWakeQueue from "./telescope/WakeQueueService.ts";
@@ -805,6 +806,7 @@ const layerUnusedConfigRpcServices = Layer.mergeAll(
   Layer.mock(PeerLinkRequests.PeerLinkRequests)({}),
   Layer.mock(TelescopeWorkspaces.WorkspaceService)({}),
   Layer.mock(TelescopeBoard.TaskBoardService)({}),
+  Layer.mock(TelescopeBoardChanges.BoardChanges)({}),
   Layer.mock(TelescopeAgents.AgentService)({}),
   Layer.mock(TelescopeRuns.RunRecordService)({}),
   Layer.mock(TelescopeWakeQueue.WakeQueueService)({}),

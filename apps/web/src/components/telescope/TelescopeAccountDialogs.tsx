@@ -29,7 +29,7 @@ import { Label } from "../ui/label";
 import { Toggle, ToggleGroup } from "../ui/toggle-group";
 import { telescope } from "./telescopeState";
 
-const WORKSPACE_ROLE_LABEL = {
+export const WORKSPACE_ROLE_LABEL = {
   admin: "管理员",
   department_lead: "部门负责人",
   project_lead: "项目负责人",
@@ -238,6 +238,21 @@ export function JoinWorkspaceDialog(props: {
   );
 }
 
+/** Members of a workspace, re-read on mount: the query atom outlives every view that shows it. */
+export function useFreshMembers(environmentId: EnvironmentId, workspaceId: Telescope.WorkspaceId) {
+  const members = telescope.members({ environmentId, input: { workspaceId } });
+  const query = useEnvironmentQuery(members);
+  const registry = useContext(RegistryContext);
+  const { refresh } = query;
+  // A first mount is already fetching; only a kept value needs the refresh.
+  // Reads `waiting` directly, not the query's `isPending`: that helper is a new closure every render, so as an effect dep it would refresh on every render.
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- refreshes the registry's kept members query once per mount
+  useEffect(() => {
+    if (!registry.get(members).waiting) refresh();
+  }, [registry, members, refresh]);
+  return query;
+}
+
 export function MembersDialog(props: {
   environmentId: EnvironmentId;
   workspace: Telescope.Workspace;
@@ -245,17 +260,7 @@ export function MembersDialog(props: {
   onClose: () => void;
 }) {
   const target = { environmentId: props.environmentId, input: { workspaceId: props.workspace.id } };
-  const members = telescope.members(target);
-  const query = useEnvironmentQuery(members);
-  const registry = useContext(RegistryContext);
-  const { refresh } = query;
-  // The query atom outlives the dialog, so reopening would show members as of the last open.
-  // A first open is already fetching; only a kept value needs the refresh.
-  // Reads `waiting` directly, not the query's `isPending`: that helper is a new closure every render, so as an effect dep it would refresh on every render.
-  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- refreshes the registry's kept members query once per open
-  useEffect(() => {
-    if (!registry.get(members).waiting) refresh();
-  }, [registry, members, refresh]);
+  const query = useFreshMembers(props.environmentId, props.workspace.id);
   const mayInvite = useAtomValue(telescope.invite.permissionAtom(props.environmentId));
   const mayRevoke = useAtomValue(telescope.revoke.permissionAtom(props.environmentId));
   const isAdmin = props.self?.role === "admin";
@@ -267,7 +272,7 @@ export function MembersDialog(props: {
   const active = (query.data?.members ?? []).filter((member) => member.revokedAt === undefined);
   const remove = async (member: Telescope.Member) => {
     const confirmed = await (requestConfirmDialog(
-      `移除 ${member.displayName}？移除后对方不能再进入这个工作区，目前无法恢复。`,
+      `移除 ${member.displayName}？移除后对方不能再进入这个工作区，可以在设置的 Telescope 页恢复。`,
       { variant: "destructive" },
     ) ?? Promise.resolve(false));
     if (!confirmed) return;

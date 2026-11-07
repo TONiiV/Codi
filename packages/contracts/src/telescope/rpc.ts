@@ -47,12 +47,14 @@ import {
   WorkspaceScopedInput,
 } from "./workspace.ts";
 import {
+  BoardWatchItem,
   CommitListInput,
   CommitListResult,
   DecisionCreateInput,
   DecisionListResult,
   FreeTextLimitError,
   LeaseAcquireInput,
+  LeaseGetResult,
   LeaseScopedInput,
   StaleTaskVersionError,
   TaskCreateInput,
@@ -101,6 +103,7 @@ export const WS_METHODS = {
   decisionCreate: "telescope.decision.create",
   decisionList: "telescope.decision.list",
   commitList: "telescope.commit.list",
+  boardWatch: "telescope.board.watch",
   agentListMine: "telescope.agent.listMine",
   agentGet: "telescope.agent.get",
   agentCreateCustom: "telescope.agent.createCustom",
@@ -113,6 +116,7 @@ export const WS_METHODS = {
   leaseAcquire: "telescope.lease.acquire",
   leaseHeartbeat: "telescope.lease.heartbeat",
   leaseRelease: "telescope.lease.release",
+  leaseGet: "telescope.lease.get",
   wakeList: "telescope.wake.list",
   tokenSaverRun: "telescope.tokensaver.run",
   grantExplain: "telescope.grant.explain",
@@ -170,9 +174,16 @@ export const TaskBoardRpcs = [
   makeBoard(WS_METHODS.decisionCreate, DecisionCreateInput, Decision),
   makeBoard(WS_METHODS.decisionList, WorkspaceScopedInput, DecisionListResult),
   makeBoard(WS_METHODS.commitList, CommitListInput, CommitListResult),
+  Rpc.make(WS_METHODS.boardWatch, {
+    payload: WorkspaceScopedInput,
+    success: BoardWatchItem,
+    error,
+    stream: true,
+  }),
   makeBoard(WS_METHODS.leaseAcquire, LeaseAcquireInput, Lease),
   makeBoard(WS_METHODS.leaseHeartbeat, LeaseScopedInput, Lease),
   makeBoard(WS_METHODS.leaseRelease, LeaseScopedInput, Schema.Struct({})),
+  makeBoard(WS_METHODS.leaseGet, TaskGetInput, LeaseGetResult),
 ] as const;
 
 export const AgentRpcs = [

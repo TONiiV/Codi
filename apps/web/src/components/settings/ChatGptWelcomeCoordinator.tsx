@@ -13,6 +13,7 @@ import {
   DialogFooter,
 } from "../ui/dialog";
 import { ChatGptUsageButton } from "./ChatGptUsageButton";
+import { useTranslation } from "react-i18next";
 
 const STORAGE_KEY = "t3:chatgpt-sharing-welcome:v1";
 function readAcknowledgedProfiles(): string[] {
@@ -27,6 +28,7 @@ function readAcknowledgedProfiles(): string[] {
 }
 
 export function ChatGptWelcomeCoordinator() {
+  const { t } = useTranslation();
   const presentations = useAtomValue(environmentPresentations.presentationsAtom);
   const providersByEnvironment = useAtomValue(environmentPresentations.providersByEnvironmentAtom);
   const [acknowledged, setAcknowledged] = useState(readAcknowledgedProfiles);
@@ -64,18 +66,18 @@ export function ChatGptWelcomeCoordinator() {
       <DialogPopup>
         <DialogHeader>
           <OpenAI className="mb-2 size-8" aria-hidden="true" />
-          <DialogTitle>Your ChatGPT plan is connected</DialogTitle>
-          <DialogDescription>
-            Eligible usage in Codi uses your ChatGPT plan. Manage your shared usage and any credit
-            settings in ChatGPT.
-          </DialogDescription>
+          <DialogTitle>{t("settings.text.yourChatgptPlanIsConnected")}</DialogTitle>
+          <DialogDescription>{t("settings.text.eligibleUsageInCodiUsesYour")}</DialogDescription>
           <p className="text-xs text-muted-foreground">
-            {next?.providerName} on {next?.environmentLabel}
+            {t("settings.text.providernameOnEnvironmentlabel", {
+              providerName: next?.providerName,
+              environmentLabel: next?.environmentLabel,
+            })}
           </p>
         </DialogHeader>
         <DialogFooter>
           <ChatGptUsageButton />
-          <Button onClick={dismiss}>Continue</Button>
+          <Button onClick={dismiss}>{t("settings.text.continue")}</Button>
         </DialogFooter>
       </DialogPopup>
     </Dialog>
