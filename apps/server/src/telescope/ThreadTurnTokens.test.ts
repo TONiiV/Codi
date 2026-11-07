@@ -20,12 +20,14 @@ import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
 
 import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
+import * as ProjectionStore from "../orchestration-v2/ProjectionStore.ts";
 import * as Orchestrator from "../orchestration-v2/Orchestrator.ts";
 import { runMigrations } from "../persistence/Migrations.ts";
 import * as SqlitePersistence from "../persistence/Sqlite.ts";
 import * as DelegationService from "./DelegationService.ts";
 import * as RunRecordService from "./RunRecordService.ts";
 import * as TelescopeDb from "./TelescopeDb.ts";
+import * as WakeQueueService from "./WakeQueueService.ts";
 import * as ThreadTurnTokens from "./ThreadTurnTokens.ts";
 import * as WorkspaceService from "./WorkspaceService.ts";
 
@@ -37,6 +39,8 @@ const layer = Layer.mergeAll(
   WorkspaceService.layer,
   TelescopeDb.layer,
   DelegationService.layer,
+  Layer.mock(ProjectionStore.ProjectionStoreV2)({}),
+  WakeQueueService.layer,
 ).pipe(
   Layer.provideMerge(Layer.merge(database, NodeCrypto.layer)),
   Layer.provide(

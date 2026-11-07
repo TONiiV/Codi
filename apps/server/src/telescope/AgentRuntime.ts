@@ -44,8 +44,38 @@ const decodeStops = Schema.decodeUnknownEffect(
 const decodeResident = Schema.decodeUnknownEffect(
   Schema.Array(Schema.Struct({ resident_thread_id: Schema.NullOr(ThreadId) })),
 );
+const decodeMembers = Schema.decodeUnknownEffect(
+  Schema.Array(Schema.Struct({ subject_id: Schema.String })),
+);
 
 type Failure = Telescope.WorkspaceError | PersistenceSqlError | PersistenceDecodeError;
+
+/** D48: the agents a kill switch has stopped in this workspace. */
+const stoppedAgents = Effect.fn("AgentRuntime.stopped")(function* (
+  db: TelescopeDb.TelescopeDb["Service"],
+  workspaceId: Telescope.WorkspaceId,
+) {
+  const rows = yield* db.select(workspaceId, "kill_switches", decodeStops);
+  return new Set<string>(rows.flatMap((row) => (row.state === "running" ? [] : [row.agent_id])));
+});
+
+/**
+ * The gateway's rule (D48): a run is served while its member is active and no agent it acts
+ * through is stopped. `ToolGateway.decide` still reads it inline.
+ */
+export const servesRun = Effect.fn("AgentRuntime.servesRun")(function* (
+  db: TelescopeDb.TelescopeDb["Service"],
+  workspaceId: Telescope.WorkspaceId,
+) {
+  const stopped = yield* stoppedAgents(db, workspaceId);
+  const members = yield* db.select(workspaceId, "members", decodeMembers, { revoked_at: null });
+  const active = new Set(members.map((row) => row.subject_id));
+  return ({
+    agentId,
+    onBehalfOf: [member, ...via],
+  }: Pick<Telescope.AgentRun, "agentId" | "onBehalfOf">) =>
+    member !== undefined && active.has(member) && ![agentId, ...via].some((id) => stopped.has(id));
+});
 
 /** Runs each wake as a turn on its agent's resident thread (plan 2.3: run before session). */
 export class AgentRuntime extends Context.Service<
@@ -73,13 +103,8 @@ const make = Effect.gen(function* () {
   const settings = yield* ServerSettingsService;
   const random = yield* SecureRandom.SecureRandom;
 
-  const stopped = Effect.fn("AgentRuntime.stopped")(function* (
-    workspaceId: Telescope.WorkspaceId,
-    chain: ReadonlyArray<string>,
-  ) {
-    const rows = yield* db.select(workspaceId, "kill_switches", decodeStops);
-    return rows.some((row) => chain.includes(row.agent_id) && row.state !== "running");
-  });
+  const stopped = (workspaceId: Telescope.WorkspaceId, chain: ReadonlyArray<string>) =>
+    stoppedAgents(db, workspaceId).pipe(Effect.map((ids) => chain.some((id) => ids.has(id))));
 
   const prepare = Effect.fn("AgentRuntime.prepare")(function* (agent: Telescope.Agent) {
     const selection = agent.modelSelection ?? (yield* settings.getSettings).defaultModelSelection;
@@ -160,7 +185,7 @@ const make = Effect.gen(function* () {
     caller: WorkspaceService.SessionCaller,
     input: typeof Telescope.AgentGetInput.Type,
   ) {
-    const { self } = yield* workspaces.get(caller, { workspaceId: input.workspaceId });
+    const { self } = yield* workspaces.getForWrite(caller, { workspaceId: input.workspaceId });
     const { agent } = yield* agents.powersOf(input.workspaceId, input.agentId);
     if (agent.ownerSubjectId !== self.subjectId)
       return yield* new Telescope.WorkspaceError({
@@ -206,11 +231,17 @@ const make = Effect.gen(function* () {
         workspaceId: wake.workspaceId,
         delegationId: payload.delegationId,
       });
-      if (payload.kind === "report" || delegation.state === "SUBMITTED")
+      // An answer or a Worker's turn end serves a task in WORKING; a cancel since then drops it.
+      const live = payload.kind === "answer" || payload.kind === "worker" ? "WORKING" : "SUBMITTED";
+      if (payload.kind === "report" || delegation.state === live)
         items.push({ kind: payload.kind, delegation });
     }
     if (items.length === 0) return;
-    const held = items.flatMap((item) => (item.kind === "delegation" ? [item.delegation] : []));
+    const held = items.flatMap((item) =>
+      item.kind === "delegation" || item.kind === "worker" || item.kind === "answer"
+        ? [item.delegation]
+        : [],
+    );
     const via = held[0] === undefined ? [] : [held[0].fromAgentId];
     const abandonHeld = (blockedOn: string) =>
       Effect.forEach(held, (delegation) => abandon(wake, delegation, blockedOn), {
@@ -260,7 +291,7 @@ const make = Effect.gen(function* () {
         )
         .pipe(Effect.andThen(abandonHeld(error.message)));
     yield* Effect.forEach(
-      held,
+      held.filter((delegation) => delegation.state === "SUBMITTED"),
       (delegation) =>
         delegations.start({ workspaceId: wake.workspaceId, delegationId: delegation.id, threadId }),
       { discard: true },
@@ -276,10 +307,7 @@ const make = Effect.gen(function* () {
         threadId,
         messageId,
         modelSelection: selection,
-        // A thread the member opened from the chat page has had no turn yet.
-        text: AgentInstructions.renderTurn(agent, items, {
-          firstTurn: reuse === null || reuse.latestRunId === null,
-        }),
+        text: AgentInstructions.renderTurn(items),
         attachments: [],
         mode: "queue",
         ...PROVENANCE,

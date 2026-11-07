@@ -212,7 +212,6 @@ export const RPC_REQUIRED_SCOPES = {
   [WS_METHODS.subscribeServerConfig]: AuthOrchestrationReadScope,
   [WS_METHODS.subscribeServerLifecycle]: AuthOrchestrationReadScope,
   [WS_METHODS.subscribeAuthAccess]: AuthAccessReadScope,
-  [Telescope.WS_METHODS.workspaceCreate]: AuthTelescopeMemberScope,
   [Telescope.WS_METHODS.workspaceList]: AuthTelescopeMemberScope,
   [Telescope.WS_METHODS.workspaceGet]: AuthTelescopeMemberScope,
   [Telescope.WS_METHODS.memberAccept]: AuthTelescopeMemberScope,
@@ -241,14 +240,15 @@ export const RPC_REQUIRED_SCOPES = {
   [Telescope.WS_METHODS.leaseGet]: AuthTelescopeMemberScope,
   [Telescope.WS_METHODS.wakeList]: AuthTelescopeMemberScope,
   [Telescope.WS_METHODS.dashboardSummary]: AuthTelescopeMemberScope,
-  [Telescope.WS_METHODS.tokenSaverRun]: AuthTelescopeMemberScope,
   [Telescope.WS_METHODS.grantExplain]: AuthTelescopeMemberScope,
   [Telescope.WS_METHODS.projectRuleList]: AuthTelescopeMemberScope,
   [Telescope.WS_METHODS.memorySearch]: AuthTelescopeMemberScope,
   [Telescope.WS_METHODS.memoryWrite]: AuthTelescopeMemberScope,
   [Telescope.WS_METHODS.memoryPin]: AuthTelescopeMemberScope,
   [Telescope.WS_METHODS.routingList]: AuthTelescopeMemberScope,
-  [Telescope.WS_METHODS.routingResolve]: AuthTelescopeMemberScope,
+  [Telescope.WS_METHODS.delegationList]: AuthTelescopeMemberScope,
+  [Telescope.WS_METHODS.delegationGet]: AuthTelescopeMemberScope,
+  [Telescope.WS_METHODS.delegationCancel]: AuthTelescopeMemberScope,
 } as const satisfies Readonly<Record<WsRpcMethod, AuthEnvironmentScope>>;
 
 export function requiredScopeForRpcMethod(method: string): AuthEnvironmentScope {

@@ -131,6 +131,9 @@ export const AGENT_MODEL_REFUSALS = {
   no_model: "Choose a model for this agent or a default model in Settings.",
   no_mcp: "This agent's provider cannot use Codi's tools, so it cannot host the agent's thread.",
 } as const;
+/** The server's refusal when it has no scratch folder; agents read it, so changing it needs an eval pass. */
+export const AGENT_SCRATCH_REFUSAL =
+  "Threads without a project are not available on this environment.";
 export const AgentGetResult = Schema.Struct({
   agent: Agent,
   /** Stored powers capped by what the owner's current role still allows. */

@@ -105,7 +105,7 @@ type TraitsPersistence =
 // Labels come from provider data, user-typed option labels and client-runtime's " · "-joined
 // trigger text. A segment is translated only when it is a known phrase, or a known phrase plus the
 // On/Off or speed word the trigger appends; anything else passes through untouched.
-const TRAIT_PHRASE_KEYS: ReadonlyMap<string, string> = new Map([
+export const TRAIT_PHRASE_KEYS: ReadonlyMap<string, string> = new Map([
   ["Reasoning effort", "settings.parallelFinalUI.trait_reasoning_effort"],
   ["Service Tier", "settings.parallelFinalUI.trait_service_tier"],
   ["Extra High Effort", "settings.parallelFinalUI.trait_extra_high_effort"],

@@ -7,7 +7,8 @@ import {
 } from "@t3tools/client-runtime/telescope/taskBoard";
 import type { Telescope } from "@t3tools/contracts";
 import { useLocation } from "@tanstack/react-router";
-import { useState } from "react";
+import { GitBranchIcon } from "lucide-react";
+import { type ReactNode, useState } from "react";
 
 import { cn } from "../../lib/utils";
 import { useEnvironmentQuery } from "../../state/query";
@@ -22,16 +23,9 @@ import {
 } from "../ui/alert-dialog";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
-import { TelescopeEmptyState } from "./TelescopeShell";
+import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "../ui/empty";
 import { telescopeBoard } from "./telescopeState";
-import {
-  BoardFrame,
-  type BoardTarget,
-  NoWorkspace,
-  useBoardCommand,
-  useBoardNames,
-  useBoardTarget,
-} from "./TasksParts";
+import { BoardFrame, type BoardTarget, useBoardCommand, useBoardNames } from "./TasksParts";
 
 const GROUPS = {
   proposed: { label: "待决定", badge: "warning" },
@@ -54,6 +48,29 @@ function readableText(text: string) {
   } catch {
     return text;
   }
+}
+
+/** A proposal's options; choosing one goes through `useDecide`'s confirm step. */
+export function DecisionOptions(props: {
+  decision: Telescope.Decision;
+  busy: boolean;
+  onChoose: (option: DecisionOption) => void;
+}) {
+  return props.decision.options?.length ? (
+    <span className="flex flex-wrap gap-2 pt-1">
+      {props.decision.options.map((option) => (
+        <Button
+          key={option.id}
+          size="xs"
+          variant="outline"
+          disabled={props.busy}
+          onClick={() => props.onChoose(option)}
+        >
+          {option.label}
+        </Button>
+      ))}
+    </span>
+  ) : null;
 }
 
 function DecisionItem(props: {
@@ -87,20 +104,8 @@ function DecisionItem(props: {
           {readableText(decision.text)}
         </p>
       ) : null}
-      {props.onChoose && decision.options?.length ? (
-        <span className="flex flex-wrap gap-2 pt-1">
-          {decision.options.map((option) => (
-            <Button
-              key={option.id}
-              size="xs"
-              variant="outline"
-              disabled={props.busy}
-              onClick={() => props.onChoose?.(option)}
-            >
-              {option.label}
-            </Button>
-          ))}
-        </span>
+      {props.onChoose ? (
+        <DecisionOptions decision={decision} busy={props.busy} onChoose={props.onChoose} />
       ) : null}
     </li>
   );
@@ -136,14 +141,12 @@ function ConfirmDecision(props: {
   );
 }
 
-function DecisionsBody({ target }: { target: BoardTarget }) {
-  const input = { workspaceId: target.workspaceId };
-  const query = useEnvironmentQuery(
-    telescopeBoard.decisions({ environmentId: target.environmentId, input }),
-  );
-  const names = useBoardNames(target);
+/** Choose, confirm, then decide; the options stay off until the list read after it lands (D47). */
+export function useDecide(
+  target: BoardTarget,
+  query: { readonly isPending: boolean; readonly dataUpdatedAt: number },
+) {
   const decide = useBoardCommand(telescopeBoard.createDecision, decideFailureText);
-  const hash = useLocation({ select: (location) => location.hash.replace(/^#/, "") });
   const [choice, setChoice] = useState<Choice | null>(null);
   const [confirming, setConfirming] = useState(false);
   const [sentAt, setSentAt] = useState<number | null>(null);
@@ -152,17 +155,50 @@ function DecisionsBody({ target }: { target: BoardTarget }) {
     isPending: query.isPending,
     dataUpdatedAt: query.dataUpdatedAt,
   });
-  const decisions = sortDecisions(query.data?.decisions ?? []);
   const confirm = async ({ proposal, option }: Choice) => {
     setConfirming(false);
     setSentAt(Date.now());
     const input = decideInput(proposal, option.id);
     if (!(await decide({ environmentId: target.environmentId, input }))) setSentAt(null);
   };
+  const choose = (proposal: Telescope.Decision, option: DecisionOption) => {
+    setChoice({ proposal, option });
+    setConfirming(true);
+  };
+  const dialog = (
+    <ConfirmDecision
+      open={confirming}
+      choice={choice}
+      onCancel={() => setConfirming(false)}
+      onConfirm={(next) => void confirm(next)}
+    />
+  );
+  return { busy, choose, dialog };
+}
+
+export function DecisionsBody({ target, actions }: { target: BoardTarget; actions: ReactNode }) {
+  const input = { workspaceId: target.workspaceId };
+  const query = useEnvironmentQuery(
+    telescopeBoard.decisions({ environmentId: target.environmentId, input }),
+  );
+  const names = useBoardNames(target);
+  const hash = useLocation({ select: (location) => location.hash.replace(/^#/, "") });
+  const { busy, choose, dialog } = useDecide(target, query);
+  const decisions = sortDecisions(query.data?.decisions ?? []);
   return (
-    <BoardFrame query={query}>
+    <BoardFrame query={query} actions={actions}>
       {decisions.length === 0 ? (
-        <TelescopeEmptyState view="decisions" />
+        <Empty>
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <GitBranchIcon />
+            </EmptyMedia>
+            <EmptyTitle>还没有决定</EmptyTitle>
+            <EmptyDescription>
+              这个工作区还没有记下决定。你或 agents 拍板的事会连同理由记在这里，所有成员都查得到。
+            </EmptyDescription>
+          </EmptyHeader>
+        </Empty>
       ) : (
         <div className="flex max-w-3xl flex-col gap-6 p-4">
           {DECISION_STATUSES.map((status) => {
@@ -181,14 +217,7 @@ function DecisionsBody({ target }: { target: BoardTarget }) {
                       author={names(decision.decidedBy ?? decision.authorId) ?? "其他成员"}
                       highlighted={decision.id === hash}
                       busy={busy}
-                      onChoose={
-                        status === "proposed"
-                          ? (option) => {
-                              setChoice({ proposal: decision, option });
-                              setConfirming(true);
-                            }
-                          : null
-                      }
+                      onChoose={status === "proposed" ? (option) => choose(decision, option) : null}
                     />
                   ))}
                 </ul>
@@ -197,17 +226,7 @@ function DecisionsBody({ target }: { target: BoardTarget }) {
           })}
         </div>
       )}
-      <ConfirmDecision
-        open={confirming}
-        choice={choice}
-        onCancel={() => setConfirming(false)}
-        onConfirm={(next) => void confirm(next)}
-      />
+      {dialog}
     </BoardFrame>
   );
-}
-
-export function DecisionsPage() {
-  const target = useBoardTarget();
-  return target === null ? <NoWorkspace /> : <DecisionsBody target={target} />;
 }

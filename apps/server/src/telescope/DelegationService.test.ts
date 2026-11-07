@@ -1,15 +1,24 @@
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import { assert, it } from "@effect/vitest";
-import { EnvironmentId, Telescope, ThreadId } from "@t3tools/contracts";
+import { AuthSessionId, EnvironmentId, Telescope, ThreadId } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
+import * as Queue from "effect/Queue";
+import * as Ref from "effect/Ref";
 import * as Schema from "effect/Schema";
 import * as SqlClient from "effect/sql/SqlClient";
+import * as Stream from "effect/Stream";
 
 import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
 import { runMigrations } from "../persistence/Migrations.ts";
 import * as SqlitePersistence from "../persistence/Sqlite.ts";
+import * as ThreadManagementService from "../orchestration-v2/ThreadManagementService.ts";
+import * as BoardChanges from "./BoardChanges.ts";
+import * as DelegationAnswers from "./DelegationAnswers.ts";
 import * as DelegationService from "./DelegationService.ts";
+import * as RunRecordService from "./RunRecordService.ts";
+import * as TaskBoardService from "./TaskBoardService.ts";
 import * as TelescopeDb from "./TelescopeDb.ts";
 import * as WakeQueueService from "./WakeQueueService.ts";
 
@@ -18,8 +27,10 @@ const database = Layer.effectDiscard(runMigrations()).pipe(
 );
 const layer = Layer.mergeAll(
   DelegationService.layer,
+  BoardChanges.layer,
   TelescopeDb.layer,
   WakeQueueService.layer,
+  TaskBoardService.layer,
 ).pipe(
   Layer.provideMerge(Layer.merge(database, NodeCrypto.layer)),
   Layer.provide(
@@ -50,6 +61,10 @@ const actor = (agentId: Telescope.AgentId): DelegationService.Actor => ({
   runId: Telescope.AgentRunId.make(`run-${agentId}`),
 });
 const ann: DelegationService.MemberActor = { workspaceId: ws, memberId: "ann" };
+const session = (name: string) => ({
+  sessionId: AuthSessionId.make(`session-${name}`),
+  subject: name,
+});
 const done = { result: "样品已演示", decisions: [] };
 
 const WakeRow = Schema.Struct({
@@ -74,7 +89,7 @@ const setup = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
   yield* sql`INSERT INTO telescope_workspaces ${sql.insert({
     workspace_id: ws,
-    kind: "team",
+    kind: "enterprise",
     name: "A",
     created_at: at,
     created_by: "ann",
@@ -98,6 +113,20 @@ const setup = Effect.gen(function* () {
   yield* agent(pa, "ann", "chief_of_staff", null);
   yield* agent(chief, "ann", "chief_agent", "project-gripper");
   yield* agent(beaChief, "bea", "chief_agent", "project-gripper");
+  for (const name of ["ann", "bea"]) {
+    if (name === "ann")
+      yield* db.insert(ws, "members", {
+        subject_id: name,
+        display_name: name,
+        role: "member",
+        joined_at: at,
+      });
+    yield* db.insert(ws, "member_sessions", {
+      member_id: name,
+      device_key: `session-${name}`,
+      linked_at: at,
+    });
+  }
   yield* db.insert(ws, "members", {
     subject_id: "bea",
     display_name: "bea",
@@ -260,6 +289,8 @@ it.effect("a terminal report wakes the from-agent once, by delegation id", () =>
       delegationId: asking.id,
       state: "INPUT_REQUIRED",
       report: { result: "", decisions: [], blockedOn: "用哪种电机", needsFrom: "ann" },
+      question: "用哪种电机",
+      options: ["A 电机"],
     });
     assert.strictEqual(question.state, "INPUT_REQUIRED");
     assert.strictEqual(
@@ -364,7 +395,7 @@ it.effect("cancel cascades to descendants and reports CANCELED up one level", ()
     assert.strictEqual(yield* failure(delegations.cancel(actor(chief), task.id)), "forbidden");
     assert.strictEqual(yield* failure(delegations.cancel(actor(beaChief), task.id)), "not_found");
     const bea = { workspaceId: ws, memberId: "bea" };
-    assert.strictEqual(yield* failure(delegations.cancel(bea, task.id)), "forbidden");
+    assert.strictEqual(yield* failure(delegations.cancel(bea, task.id)), "not_found");
 
     const queue = yield* WakeQueueService.WakeQueueService;
     assert.strictEqual((yield* queue.dequeue)?.coalesceKey, `delegation:${task.id}`);
@@ -433,6 +464,66 @@ it.effect("cancel cascades to descendants and reports CANCELED up one level", ()
   }).pipe(Effect.provide(layer)),
 );
 
+it.effect(
+  "each committed delegation write sends one delegation notice, a cascade one item, none on rollback",
+  () =>
+    Effect.gen(function* () {
+      const delegations = yield* setup;
+      const sql = yield* SqlClient.SqlClient;
+      const heard = yield* (yield* BoardChanges.BoardChanges).changes;
+      // The sentinel task written last ends the listen.
+      const collected = yield* heard.pipe(
+        Stream.takeUntil((change) => change.kind === "task"),
+        Stream.runCollect,
+        Effect.forkScoped({ startImmediately: true }),
+      );
+      const task = yield* delegations.delegate(actor(pa), { toAgentId: chief, brief });
+      const ref = { workspaceId: ws, delegationId: task.id };
+      yield* delegations.start(ref);
+      const rolledBack = sql.withTransaction(
+        delegations.cancel(ann, task.id).pipe(Effect.andThen(Effect.fail("rollback"))),
+      );
+      assert.strictEqual(yield* Effect.flip(rolledBack), "rollback");
+      assert.strictEqual((yield* delegations.get(ref)).state, "WORKING");
+      yield* delegations.cancel(ann, task.id);
+      const sentinel = yield* TaskBoardService.TaskBoardService.use((board) =>
+        board.createTask({ caller: session("ann") }, { workspaceId: ws, title: "sentinel" }),
+      );
+      const notice = (version: number): Telescope.BoardChange => ({
+        kind: "delegation",
+        workspaceId: ws,
+        id: task.id,
+        version,
+      });
+      assert.deepStrictEqual(Array.from(yield* Fiber.join(collected)), [
+        notice(1),
+        notice(2),
+        notice(3),
+        { kind: "task", workspaceId: ws, id: sentinel.id, version: 1 },
+      ]);
+
+      // A cascade commits as one write, so it takes one place in a watch's backlog.
+      const root = yield* delegations.delegate(actor(pa), { toAgentId: chief, brief });
+      yield* delegations.start({ workspaceId: ws, delegationId: root.id });
+      for (let index = 0; index < BoardChanges.WATCH_BACKLOG; index++)
+        yield* delegations.recordWorker(actor(chief), {
+          parentId: root.id,
+          threadId: ThreadId.make(`thread-w${index}`),
+          brief,
+        });
+      const pull = yield* Stream.toPull(
+        (yield* BoardChanges.BoardChanges).watch(session("ann"), { workspaceId: ws }),
+      );
+      assert.deepStrictEqual(yield* pull, [{ kind: "synchronized" }]);
+      yield* delegations.cancel(ann, root.id);
+      const [cascade] = yield* pull;
+      assert.strictEqual(
+        cascade?.kind === "changes" && cascade.changes.length,
+        BoardChanges.WATCH_BACKLOG + 1,
+      );
+    }).pipe(Effect.scoped, Effect.provide(layer)),
+);
+
 it.effect("another workspace's delegation is not found", () =>
   Effect.gen(function* () {
     const delegations = yield* setup;
@@ -455,4 +546,437 @@ it.effect("another workspace's delegation is not found", () =>
     assert.deepStrictEqual(yield* delegations.listForAgent(otherWs, chief), []);
     assert.strictEqual((yield* delegations.get({ ...ref, workspaceId: ws })).state, "SUBMITTED");
   }).pipe(Effect.provide(layer)),
+);
+
+const question = (
+  state: "INPUT_REQUIRED" | "AUTH_REQUIRED",
+  hop: "agent" | "worker" = "agent",
+  threadId = workerThread,
+) =>
+  Effect.gen(function* () {
+    const delegations = yield* DelegationService.DelegationService;
+    const task = yield* delegations.delegate(actor(pa), { toAgentId: chief, brief });
+    yield* delegations.start({ workspaceId: ws, delegationId: task.id });
+    const asking =
+      hop === "agent"
+        ? task
+        : yield* delegations.recordWorker(actor(chief), {
+            parentId: task.id,
+            brief,
+            threadId,
+          });
+    if (hop === "worker") yield* delegations.start({ workspaceId: ws, delegationId: asking.id });
+    return yield* delegations.report(actor(chief), {
+      delegationId: asking.id,
+      state,
+      report: { result: "", decisions: [], blockedOn: "电机选型", needsFrom: "ann" },
+      question: "用哪种电机",
+      options: ["A 电机", "B 电机"],
+    });
+  });
+const decisions = TaskBoardService.TaskBoardService.use((board) =>
+  board.listDecisions({ caller: session("ann") }, { workspaceId: ws }),
+).pipe(Effect.map((result) => result.decisions));
+const decide = (
+  proposal: Telescope.Decision,
+  chosen: string,
+  text = proposal.text,
+  by = "ann",
+  status: "decided" | "proposed" = "decided",
+) =>
+  TaskBoardService.TaskBoardService.use((board) =>
+    board.createDecision(
+      { caller: session(by) },
+      {
+        workspaceId: ws,
+        title: proposal.title,
+        text,
+        status,
+        supersedes: proposal.id,
+        ...(proposal.options === undefined ? {} : { options: proposal.options }),
+        ...(status === "decided" ? { chosen } : {}),
+      },
+    ),
+  );
+const recordSends = Effect.map(
+  Ref.make<ReadonlyArray<readonly [ThreadId, string]>>([]),
+  (sent) => ({
+    sent,
+    send: (threadId: ThreadId, text: string) =>
+      Ref.update(sent, (all) => [...all, [threadId, text] as const]).pipe(Effect.as(true)),
+  }),
+);
+
+it.effect("INPUT_REQUIRED opens one proposed decision with the agent's options", () =>
+  Effect.gen(function* () {
+    const delegations = yield* setup;
+    const task = yield* delegations.delegate(actor(pa), { toAgentId: chief, brief });
+    yield* delegations.start({ workspaceId: ws, delegationId: task.id });
+    const refused = [
+      {},
+      { question: "新仓库叫什么名字" },
+      { question: "新仓库叫什么名字", options: [] },
+    ];
+    for (const asking of refused) {
+      const unasked = delegations.report(actor(chief), {
+        delegationId: task.id,
+        state: "INPUT_REQUIRED",
+        report: done,
+        ...asking,
+      });
+      assert.strictEqual(yield* failure(unasked), "invalid");
+    }
+    assert.deepStrictEqual(yield* decisions, []);
+    assert.strictEqual(
+      (yield* delegations.get({ workspaceId: ws, delegationId: task.id })).state,
+      "WORKING",
+    );
+
+    const asked = yield* question("INPUT_REQUIRED");
+    const [proposal, ...others] = yield* decisions;
+    assert.deepStrictEqual(others, []);
+    assert.strictEqual(asked.decisionId, proposal?.id);
+    assert.deepInclude(proposal, {
+      status: "proposed",
+      authorId: chief,
+      title: "用哪种电机",
+      text: "电机选型\nann",
+      options: [
+        { id: "1", label: "A 电机" },
+        { id: "2", label: "B 电机" },
+      ],
+    });
+    assert.deepStrictEqual(asked.messages.at(-1)?.parts[0], {
+      kind: "data",
+      data: {
+        state: "INPUT_REQUIRED",
+        report: { result: "", decisions: [], blockedOn: "电机选型", needsFrom: "ann" },
+        decisionId: proposal?.id ?? null,
+      },
+    });
+    assert.deepStrictEqual(yield* wakes({ agent_id: pa }), []);
+
+    const again = delegations.report(actor(chief), {
+      delegationId: asked.id,
+      state: "INPUT_REQUIRED",
+      report: done,
+      question: "用哪种电机,再问一次",
+      options: ["C 电机"],
+    });
+    assert.strictEqual(yield* failure(again), "conflict");
+    assert.deepStrictEqual(
+      (yield* decisions).map((decision) => decision.id),
+      [proposal?.id],
+    );
+  }).pipe(Effect.provide(layer)),
+);
+
+it.effect("AUTH_REQUIRED offers 批准/不批准", () =>
+  Effect.gen(function* () {
+    yield* setup;
+    const asked = yield* question("AUTH_REQUIRED");
+    const [proposal] = yield* decisions;
+    assert.strictEqual(asked.state, "AUTH_REQUIRED");
+    assert.deepStrictEqual(proposal?.options, [
+      { id: "approve", label: "批准" },
+      { id: "deny", label: "不批准" },
+    ]);
+  }).pipe(Effect.provide(layer)),
+);
+
+it.effect("an agent cannot settle its own question (D57)", () =>
+  Effect.gen(function* () {
+    const delegations = yield* setup;
+    const asked = yield* question("INPUT_REQUIRED");
+    const [proposal] = yield* decisions;
+    if (proposal === undefined) return assert.fail("no proposal");
+    const settle = TaskBoardService.TaskBoardService.use((board) =>
+      board.createDecision(
+        {
+          caller: { runId: actor(chief).runId, workspaceId: ws, memberId: "ann" },
+          authorId: chief,
+          onBehalfOf: actor(chief).onBehalfOf,
+        },
+        { workspaceId: ws, title: "用 A", text: "", supersedes: proposal.id, chosen: "1" },
+      ),
+    );
+    assert.strictEqual(yield* failure(settle), "forbidden");
+    const { send, sent } = yield* recordSends;
+    assert.isUndefined(
+      yield* delegations.answer({ workspaceId: ws, decisionId: proposal.id }, send),
+    );
+    assert.strictEqual(
+      (yield* delegations.get({ workspaceId: ws, delegationId: asked.id })).state,
+      "INPUT_REQUIRED",
+    );
+    assert.deepStrictEqual(yield* Ref.get(sent), []);
+  }).pipe(Effect.provide(layer)),
+);
+
+it.effect.each([
+  { hop: "worker", by: "ann", counter: false },
+  { hop: "agent", by: "ann", counter: false },
+  { hop: "worker", by: "ann", counter: true },
+  { hop: "agent", by: "bea", counter: false },
+] as const)(
+  "an answer moves the delegation to WORKING and delivers once to the asking $hop hop (by $by, counter-proposal $counter)",
+  ({ hop, by, counter }) =>
+    Effect.gen(function* () {
+      const delegations = yield* setup;
+      const asked = yield* question("INPUT_REQUIRED", hop);
+      const [proposal] = yield* decisions;
+      if (proposal === undefined) return assert.fail("no proposal");
+      const { send, sent } = yield* recordSends;
+      const ref = { workspaceId: ws, decisionId: proposal.id };
+      const replaced = counter ? yield* decide(proposal, "", "换个说法", by, "proposed") : proposal;
+      assert.isUndefined(yield* delegations.answer(ref, send));
+
+      yield* decide(replaced, "2", "预算够，用 B", by);
+      const answered = yield* delegations.answer(ref, send);
+      const who = by === "ann" ? "Your member" : "A workspace member";
+      const text = `${who} answered "用哪种电机": B 电机\n预算够，用 B`;
+      assert.deepStrictEqual(
+        [answered?.id, answered?.state, answered?.decisionId],
+        [asked.id, "WORKING", undefined],
+      );
+      const last = answered?.messages.at(-1);
+      assert.deepStrictEqual(
+        [last?.role, last?.parts],
+        [
+          "user",
+          [
+            { kind: "data", data: { state: "WORKING", decisionId: proposal.id } },
+            { kind: "text", text },
+          ],
+        ],
+      );
+      assert.isUndefined(yield* delegations.answer(ref, send));
+      const answerWakes = yield* wakes({ coalesce_key: `delegation:${asked.id}:answer` });
+      if (hop === "worker") {
+        assert.deepStrictEqual(yield* Ref.get(sent), [[workerThread, text]]);
+        assert.deepStrictEqual(answerWakes, []);
+      } else {
+        assert.deepStrictEqual(yield* Ref.get(sent), []);
+        assert.deepStrictEqual(answerWakes, [
+          {
+            agent_id: chief,
+            coalesce_key: `delegation:${asked.id}:answer`,
+            status: "queued",
+            project_id: "project-gripper",
+            payload_json: { kind: "answer", delegationId: asked.id },
+          },
+        ]);
+      }
+    }).pipe(Effect.provide(layer)),
+);
+
+it.effect("the answer to a cancelled delegation is not delivered", () =>
+  Effect.gen(function* () {
+    const delegations = yield* setup;
+    const asked = yield* question("INPUT_REQUIRED", "worker");
+    const [proposal] = yield* decisions;
+    if (proposal === undefined) return assert.fail("no proposal");
+    yield* delegations.cancel(ann, asked.id);
+    yield* decide(proposal, "1");
+    const { send, sent } = yield* recordSends;
+    assert.isUndefined(
+      yield* delegations.answer({ workspaceId: ws, decisionId: proposal.id }, send),
+    );
+    assert.strictEqual(
+      (yield* delegations.get({ workspaceId: ws, delegationId: asked.id })).state,
+      "CANCELED",
+    );
+    assert.deepStrictEqual(yield* Ref.get(sent), []);
+  }).pipe(Effect.provide(layer)),
+);
+
+it.effect("an answer for a stopped agent fails its delegation instead of a turn (D48)", () =>
+  Effect.gen(function* () {
+    const delegations = yield* setup;
+    const db = yield* TelescopeDb.TelescopeDb;
+    const asked = yield* question("INPUT_REQUIRED", "worker");
+    const [proposal] = yield* decisions;
+    if (proposal === undefined) return assert.fail("no proposal");
+    yield* decide(proposal, "1");
+    yield* db.insert(ws, "kill_switches", {
+      agent_id: pa,
+      state: "paused",
+      by_subject_id: "ann",
+      at,
+    });
+    const { send, sent } = yield* recordSends;
+    const failed = yield* delegations.answer({ workspaceId: ws, decisionId: proposal.id }, send);
+    assert.deepStrictEqual(
+      [failed?.id, failed?.state, failed?.report?.blockedOn],
+      [asked.id, "FAILED", "agent stopped"],
+    );
+    assert.deepStrictEqual(yield* Ref.get(sent), []);
+  }).pipe(Effect.provide(layer)),
+);
+
+it.effect("a member lists, reads and cancels only delegations of its own chain (D70, D98)", () =>
+  Effect.gen(function* () {
+    const delegations = yield* setup;
+    // The RPC's cancel is WorkerDispatch.cancelForMember, which resolves the member and calls this.
+    const cancelAs = (memberId: string, delegationId: Telescope.DelegationId) =>
+      delegations
+        .cancel({ workspaceId: ws, memberId }, delegationId)
+        .pipe(Effect.map((rows) => rows.map((row) => row.id)));
+    const task = yield* delegations.delegate(actor(pa), { toAgentId: chief, brief });
+    yield* delegations.start({ workspaceId: ws, delegationId: task.id });
+    const hop = yield* delegations.recordWorker(actor(chief), {
+      parentId: task.id,
+      brief,
+      threadId: workerThread,
+    });
+    const mine = { workspaceId: ws, delegationId: hop.id };
+
+    const listed = yield* delegations.listForMember(session("ann"), { workspaceId: ws });
+    assert.deepStrictEqual(
+      listed.delegations.map((row) => [row.id, "messages" in row]),
+      [
+        [hop.id, false],
+        [task.id, false],
+      ],
+    );
+    assert.deepStrictEqual(
+      (yield* delegations.listForMember(session("ann"), {
+        workspaceId: ws,
+        state: "SUBMITTED",
+        limit: 1,
+      })).delegations.map((row) => row.id),
+      [hop.id],
+    );
+    assert.deepStrictEqual(
+      (yield* delegations.listForMember(session("bea"), { workspaceId: ws })).delegations,
+      [],
+    );
+    assert.deepStrictEqual(
+      (yield* delegations.listForMember(session("bea"), { workspaceId: ws, agentId: chief }))
+        .delegations,
+      [],
+    );
+    assert.strictEqual((yield* delegations.getForMember(session("ann"), mine)).id, hop.id);
+    const unknown = { workspaceId: ws, delegationId: Telescope.DelegationId.make("nope") };
+    const attempts: ReadonlyArray<Effect.Effect<object, { readonly _tag: string }>> = [
+      delegations.getForMember(session("bea"), mine),
+      delegations.getForMember(session("bea"), unknown),
+      cancelAs("bea", mine.delegationId),
+      cancelAs("bea", unknown.delegationId),
+    ];
+    for (const attempt of attempts) {
+      assert.strictEqual(yield* failure(attempt), "not_found");
+    }
+    assert.strictEqual(
+      yield* failure(delegations.listForMember(session("mallory"), { workspaceId: ws })),
+      "forbidden",
+    );
+
+    // Bea owns the Chief now: the owner of either agent in the chain may cancel.
+    yield* TelescopeDb.TelescopeDb.use((db) =>
+      db.update(ws, "agents", { owner_subject_id: "bea" }, { agent_id: chief }),
+    );
+    assert.deepStrictEqual(yield* cancelAs("bea", mine.delegationId), [hop.id]);
+    assert.deepStrictEqual(yield* cancelAs("ann", task.id), [task.id]);
+  }).pipe(Effect.provide(layer)),
+);
+
+/** The listener with a fake orchestrator that records each message sent to a thread. */
+const listen = (thread: "open" | "archived" | "deleted" = "open") =>
+  Effect.gen(function* () {
+    const sends = yield* Queue.unbounded<ThreadManagementService.ThreadManagementSendInput>();
+    const answers = yield* DelegationAnswers.make.pipe(
+      Effect.provide(
+        Layer.mock(ThreadManagementService.ThreadManagementService)({
+          getThreadShell: () =>
+            Effect.succeed(
+              thread === "deleted" ? null : ({ projectId: "project-gripper" } as never),
+            ),
+          sendToThread: (input) =>
+            Queue.offer(sends, input).pipe(
+              Effect.andThen(
+                thread === "archived"
+                  ? Effect.fail(
+                      new ThreadManagementService.ThreadManagementThreadArchivedError({
+                        threadId: input.threadId,
+                      }),
+                    )
+                  : Effect.succeed({} as never),
+              ),
+            ),
+        }).pipe(
+          // No run on these threads, so no answer opens one.
+          Layer.merge(Layer.mock(RunRecordService.RunRecordService)({})),
+        ),
+      ),
+    );
+    return { ...answers, sends };
+  });
+
+it.effect.each(["open", "archived", "deleted"] as const)(
+  "the restart re-scan delivers a missed answer once (Worker thread %s)",
+  (thread) =>
+    Effect.gen(function* () {
+      const delegations = yield* setup;
+      const asked = yield* question("INPUT_REQUIRED", "worker");
+      const [proposal] = yield* decisions;
+      if (proposal === undefined) return assert.fail("no proposal");
+      yield* decide(proposal, "1");
+
+      const { catchUp, sends } = yield* listen(thread);
+      yield* catchUp;
+      yield* catchUp;
+      const sent = yield* Queue.clear(sends);
+      const attempt = [
+        workerThread,
+        `telescope-answer:${proposal.id}`,
+        'Your member answered "用哪种电机": A 电机',
+      ];
+      assert.deepStrictEqual(
+        sent.map((input) => [input.threadId, input.commandId, input.text]),
+        thread === "deleted" ? [] : [attempt],
+      );
+      const after = yield* delegations.get({ workspaceId: ws, delegationId: asked.id });
+      const reported = yield* wakes({ coalesce_key: `delegation:${asked.id}:report` });
+      if (thread === "open") {
+        assert.strictEqual(after.state, "WORKING");
+        assert.deepStrictEqual(reported, []);
+      } else {
+        assert.deepStrictEqual(
+          [after.state, after.report?.blockedOn],
+          ["FAILED", "The Worker thread was archived or deleted."],
+        );
+        assert.deepStrictEqual(
+          reported.map((wake) => [wake.agent_id, wake.status, wake.payload_json]),
+          [[chief, "queued", { kind: "report", delegationId: asked.id }]],
+        );
+      }
+    }).pipe(Effect.scoped, Effect.provide(layer)),
+);
+
+it.effect("a member's decision goes to the asking Worker thread and no other", () =>
+  Effect.gen(function* () {
+    const delegations = yield* setup;
+    const other = yield* question("INPUT_REQUIRED", "worker", ThreadId.make("thread-other"));
+    const asked = yield* question("INPUT_REQUIRED", "worker");
+    const { follow, sends } = yield* listen();
+    const following = yield* Effect.forkScoped(follow);
+    const proposal = (yield* decisions).find((decision) => decision.id === asked.decisionId);
+    if (proposal === undefined) return assert.fail("no proposal");
+    yield* decide(proposal, "2");
+
+    assert.strictEqual((yield* Queue.take(sends)).threadId, workerThread);
+    // `answer` holds the service lock, so this waits for the delivery in flight to finish.
+    const ref = { workspaceId: ws, decisionId: proposal.id };
+    assert.isUndefined(yield* delegations.answer(ref, () => Effect.succeed(true)));
+    yield* Fiber.interrupt(following);
+    assert.strictEqual(yield* Queue.size(sends), 0);
+    const states = yield* Effect.forEach([asked, other], ({ id }) =>
+      delegations.get({ workspaceId: ws, delegationId: id }),
+    );
+    assert.deepStrictEqual(
+      states.map((row) => row.state),
+      ["WORKING", "INPUT_REQUIRED"],
+    );
+  }).pipe(Effect.scoped, Effect.provide(layer)),
 );

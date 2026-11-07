@@ -1,5 +1,4 @@
 import { useNavigate } from "@tanstack/react-router";
-import { MicroscopeIcon } from "lucide-react";
 import type { CSSProperties, ReactNode } from "react";
 
 import { isElectron } from "../../env";
@@ -17,6 +16,7 @@ import {
 } from "../WorkspaceBreadcrumb";
 import { WorkspacePageHeader } from "../WorkspacePageHeader";
 import { BackgroundThreadContext } from "../chat/backgroundThread";
+import { MicroscopeGlyph } from "./ModeGlyphs";
 import { MyTeamsPage } from "./MyTeamsPage";
 import { TaskDrawer } from "./TaskDrawer";
 import { TelescopeAccountFooter } from "./TelescopeAccount";
@@ -57,7 +57,7 @@ function TelescopeRail({ view, collapsed }: { view: TelescopeView; collapsed: bo
                   if (isMobile) setOpenMobile(false);
                   void navigate({
                     to: TELESCOPE_PATH,
-                    search: { view: item.id, ...(layout === "board" ? { layout } : {}) },
+                    search: { view: item.id, ...(layout === "table" ? {} : { layout }) },
                   });
                 }}
               />
@@ -74,6 +74,7 @@ function TelescopeRail({ view, collapsed }: { view: TelescopeView; collapsed: bo
             <Button
               aria-label="回到 Code"
               className="mt-auto"
+              data-glyph-trigger=""
               size="icon"
               variant="ghost-muted"
               onClick={() => {
@@ -83,7 +84,7 @@ function TelescopeRail({ view, collapsed }: { view: TelescopeView; collapsed: bo
             />
           }
         >
-          <MicroscopeIcon />
+          <MicroscopeGlyph />
         </TooltipTrigger>
         <TooltipPopup side="right">回到 Code</TooltipPopup>
       </Tooltip>

@@ -16,6 +16,19 @@
   }
 }
 
+/* Mode glyphs (telescope/ModeGlyphs.tsx) play once per hover, focus, or mount; never at rest. */
+@custom-variant mode-glyph-run {
+  @media (prefers-reduced-motion: no-preference) {
+    &:where(
+      [data-glyph-trigger]:hover *,
+      [data-glyph-trigger]:focus-visible *,
+      [data-glyph-play] *
+    ) {
+      @slot;
+    }
+  }
+}
+
 /* On mobile, morph the expanded hero composer into the compact docked
    composer while it moves; the rest of the app remains visually stationary. */
 html[data-mobile-composer-route-transition="true"]::view-transition-old(root),
@@ -230,6 +243,13 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(t3-mobil
   --animate-stash-pulse-row: stash-pulse-row 1400ms;
   --animate-stash-pulse-row-alt: stash-pulse-row-alt 1400ms;
   --animate-stash-pulse-count: stash-pulse-count 1400ms step-start;
+  --animate-telescope-sweep: telescope-sweep 1.4s ease-in-out;
+  --animate-telescope-flare: telescope-flare 1.4s ease-out;
+  --animate-microscope-tube: microscope-tube 2.2s ease-in-out;
+  --animate-microscope-hide: microscope-hide 2.2s ease-in-out;
+  --animate-microscope-lens: microscope-lens 2.2s ease-in-out;
+  --animate-microscope-detail: microscope-detail 2.2s ease-out;
+  --animate-microscope-token: microscope-token 0.14s ease-out both;
   --color-warning-foreground: var(--warning-foreground);
   --color-warning: var(--warning);
   --color-warning-surface: var(--warning-surface);
@@ -357,6 +377,74 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(t3-mobil
     100% {
       opacity: 0;
       scale: 2;
+    }
+  }
+  @keyframes telescope-sweep {
+    22% {
+      rotate: 12deg;
+    }
+    50%,
+    62% {
+      rotate: -16deg;
+    }
+  }
+  @keyframes telescope-flare {
+    0%,
+    30% {
+      opacity: 0;
+      scale: 0.3;
+    }
+    50% {
+      opacity: 1;
+      scale: 1;
+    }
+    85%,
+    100% {
+      opacity: 0;
+      scale: 1.25;
+    }
+  }
+  @keyframes microscope-tube {
+    14%,
+    86% {
+      translate: 0 2.2px;
+    }
+  }
+  @keyframes microscope-hide {
+    24%,
+    74% {
+      opacity: 0;
+    }
+  }
+  @keyframes microscope-lens {
+    0%,
+    12%,
+    80%,
+    100% {
+      opacity: 0;
+      scale: 0.15;
+    }
+    24%,
+    58% {
+      opacity: 1;
+      scale: 1;
+    }
+  }
+  @keyframes microscope-detail {
+    from {
+      scale: 2;
+    }
+    24% {
+      scale: 1;
+    }
+  }
+  @keyframes microscope-token {
+    from {
+      opacity: 0;
+      scale: 0.3 1;
+    }
+    to {
+      opacity: 1;
     }
   }
 }

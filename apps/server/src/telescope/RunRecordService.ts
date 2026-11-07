@@ -62,7 +62,7 @@ const MemorySourceRow = Schema.Struct({
   source_json: Schema.fromJsonString(Telescope.Memory.fields.source),
 });
 
-const decodeRuns = Schema.decodeUnknownEffect(Schema.Array(RunRow));
+export const decodeRuns = Schema.decodeUnknownEffect(Schema.Array(RunRow));
 const decodeCalls = Schema.decodeUnknownEffect(Schema.Array(CallRow));
 const decodeMemorySources = Schema.decodeUnknownEffect(Schema.Array(MemorySourceRow));
 // The repository writes workspace_id itself and refuses rows that carry it.
@@ -162,7 +162,10 @@ export class RunRecordService extends Context.Service<
       workspaceId: WorkspaceId,
       input: RunStartInput,
     ) => Out<Telescope.AgentRun>;
-    /** For runs the server starts itself; `memberId` must be an active member. */
+    /**
+     * For runs the server starts itself; `memberId` must be an active member. With `threadId` and
+     * `codiMessageId`, the open run already serving that Codi run is returned instead.
+     */
     readonly startFor: (
       workspaceId: WorkspaceId,
       memberId: string,
@@ -225,6 +228,7 @@ const make = Effect.gen(function* () {
   const saveRun = (row: typeof RunRow.Type) =>
     db.update(row.workspace_id, "runs", encodeRun(row), { run_id: row.run_id });
 
+  // One transaction: the turn preamble and the run listener race to open a Codi run's run.
   const startFor = Effect.fn("RunRecordService.startFor")(function* (
     workspaceId: WorkspaceId,
     memberId: string,
@@ -235,6 +239,12 @@ const make = Effect.gen(function* () {
       revoked_at: null,
     });
     if (active === 0) return yield* fail("forbidden", "Runs act only for active members.");
+    const { codiMessageId } = input.inputSnapshot;
+    const [serving] =
+      input.threadId === undefined || codiMessageId === undefined
+        ? []
+        : yield* db.openRunsOnThread(input.threadId, codiMessageId);
+    if (serving !== undefined) return toRun(yield* runRow(serving));
     const row: typeof RunRow.Type = {
       run_id: Telescope.AgentRunId.make(yield* random.uuidV4()),
       workspace_id: workspaceId,
@@ -254,13 +264,13 @@ const make = Effect.gen(function* () {
     };
     yield* db.insert(workspaceId, "runs", encodeRun(row));
     return toRun(row);
-  });
+  }, db.transaction);
   const start = Effect.fn("RunRecordService.start")(function* (
     caller: Caller,
     workspaceId: WorkspaceId,
     input: RunStartInput,
   ) {
-    const { self } = yield* requireMember(workspaceId, caller);
+    const { self } = yield* workspaces.getForWrite(caller, { workspaceId });
     return yield* startFor(workspaceId, self.subjectId, input);
   });
 

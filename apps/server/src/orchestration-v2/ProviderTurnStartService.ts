@@ -57,6 +57,7 @@ import {
 } from "@t3tools/provider-core/server/failure";
 import * as RunExecutionService from "./RunExecutionService.ts";
 import * as RuntimePolicy from "./RuntimePolicy.ts";
+import * as TurnPreamble from "./TurnPreamble.ts";
 import {
   isRestartNoteContinuation,
   pendingRestartCancelledBackgroundWork,
@@ -145,6 +146,7 @@ export const layer: Layer.Layer<
   | ProviderSessionManager.ProviderSessionManagerV2
   | RunExecutionService.RunExecutionServiceV2
   | RuntimePolicy.RuntimePolicyV2
+  | TurnPreamble.TurnPreamble
 > = Layer.effect(
   ProviderTurnStartServiceV2,
   Effect.gen(function* () {
@@ -161,6 +163,7 @@ export const layer: Layer.Layer<
     const providerSessions = yield* ProviderSessionManager.ProviderSessionManagerV2;
     const runExecution = yield* RunExecutionService.RunExecutionServiceV2;
     const runtimePolicy = yield* RuntimePolicy.RuntimePolicyV2;
+    const turnPreamble = yield* TurnPreamble.TurnPreamble;
     const isManagedWorktreePath = yield* makeIsManagedWorktreePath;
 
     const resolveRecreateBase = Effect.fn("ProviderTurnStartService.resolveRecreateBase")(
@@ -1574,6 +1577,19 @@ export const layer: Layer.Layer<
           ],
         });
       });
+      const nativeThreadHasTurns =
+        nativeInputRunIds.size > 0 ||
+        (legacyInputRunIds.size > 0 &&
+          sameNativeThread &&
+          !acceptedAttempts.some((source) => source.nativeThreadId !== undefined));
+      const preamble = TurnPreamble.opensWithCommand(userText)
+        ? ""
+        : yield* turnPreamble.forTurn({
+            threadId: projection.thread.id,
+            messageId: message.id,
+            modelSelection: run.modelSelection,
+            freshConversation: !nativeThreadHasTurns,
+          });
       const startWithHandoffs = Effect.fn("ProviderTurnStartService.startWithHandoffs")(
         function* (turnInput: Parameters<typeof session.startTurn>[0], compact = false) {
           const delivery = yield* deliverContextHandoffs({
@@ -1600,7 +1616,7 @@ export const layer: Layer.Layer<
             sideChatHandoff === undefined || compact || goalCommand
               ? ""
               : sideChatHandoff.summaryText;
-          const context = [delivery.context, sideChatContext, restartNote]
+          const context = [preamble, delivery.context, sideChatContext, restartNote]
             .filter((part) => part !== "")
             .join("\n\n");
           const { restartContinuationOfRunId: _resumedRunId, ...promptedInput } = turnInput;
@@ -1668,6 +1684,7 @@ export const layer: Layer.Layer<
         retryHandoff.length === 0 &&
         sideChatHandoff === undefined &&
         restartNote === "" &&
+        preamble === "" &&
         !noteContinuation
           ? session
           : makeDeliverySession(session, startWithHandoffs);
@@ -1696,11 +1713,7 @@ export const layer: Layer.Layer<
               .filter((turn) => turn.providerThreadId === providerThread.id)
               .map((turn) => turn.ordinal),
           ) + 1,
-        nativeThreadHasTurns:
-          nativeInputRunIds.size > 0 ||
-          (legacyInputRunIds.size > 0 &&
-            sameNativeThread &&
-            !acceptedAttempts.some((source) => source.nativeThreadId !== undefined)),
+        nativeThreadHasTurns,
         shouldStartProviderTurn: runControls.shouldStartProviderTurn,
         shouldFinalizeRun: runControls.shouldFinalizeRun,
         hasUnpairedRunInterruptRequest: runControls.hasUnpairedRunInterruptRequest,

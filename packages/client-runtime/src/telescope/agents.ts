@@ -10,7 +10,7 @@ import {
   createEnvironmentRpcQueryAtomFamily,
   squashAtomCommandFailure,
 } from "../state/runtime.ts";
-import { failureText } from "./workspaces.ts";
+import { failureText, rereadRoleWhenForbidden } from "./workspaces.ts";
 
 const { WS_METHODS } = Telescope;
 const EXPOSURES = Telescope.AgentExposure.literals;
@@ -84,18 +84,21 @@ export function copilotAgents(
 const MODEL_REFUSALS: ReadonlyArray<string> = Object.values(Telescope.AGENT_MODEL_REFUSALS);
 const isWorkspaceError = Schema.is(Telescope.WorkspaceError);
 
-/** Points at the default model only when the model or its provider is why the chat cannot open. */
+/** Says what to do when the model, its provider, or a missing scratch folder is why the chat cannot open. */
 export function openThreadFailureText(result: AtomCommandResult<unknown, unknown>): string | null {
   const error = result._tag === "Failure" ? squashAtomCommandFailure(result) : null;
   if (!isWorkspaceError(error) || error.reason !== "invalid") return failureText(result);
-  return MODEL_REFUSALS.includes(error.message)
-    ? "现在开不了这个对话：它需要一个能用 Codi 工具的模型。请在 设置 → 会话 → 新会话 → 模型 里选一个默认模型。"
-    : `现在开不了这个对话：${error.message}`;
+  if (MODEL_REFUSALS.includes(error.message))
+    return "现在开不了这个对话：它需要一个能用 Codi 工具的模型。请在 设置 → 会话 → 新会话 → 模型 里选一个默认模型。";
+  if (error.message === Telescope.AGENT_SCRATCH_REFUSAL)
+    return "现在开不了这个对话：个人助理和其他不属于任何项目的 agent，都在 Codi 数据目录里用自己的文件夹工作，而 Codi 的数据目录在 Git 仓库里时不会建这个文件夹。请把 Codi 的数据目录放到 Git 仓库之外，再重启 Codi；或者去找项目的首席代理，它在自己的项目里工作。";
+  return `现在开不了这个对话：${error.message}`;
 }
 
 export function createTelescopeAgentAtoms<R, E>(
   runtime: Atom.AtomRuntime<EnvironmentRegistry | R, E>,
   bindingsRevision: Atom.Atom<number>,
+  workspaceGet: Parameters<typeof rereadRoleWhenForbidden>[0],
 ) {
   // The server creates a project's Chief Agent inside listMine, so a bind must re-read it.
   const listMine = createEnvironmentRpcQueryAtomFamily(runtime, {
@@ -165,6 +168,7 @@ export function createTelescopeAgentAtoms<R, E>(
       label: "telescope:agent:update-company",
       tag: WS_METHODS.agentUpdateCompany,
       onSuccess: (target, registry, agent) => refreshAgent(target, registry, agent),
+      onSettled: rereadRoleWhenForbidden(workspaceGet),
     }),
   };
 }

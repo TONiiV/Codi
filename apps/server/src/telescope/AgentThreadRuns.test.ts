@@ -17,12 +17,14 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 
 import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
+import * as ProjectionStore from "../orchestration-v2/ProjectionStore.ts";
 import { runMigrations } from "../persistence/Migrations.ts";
 import * as SqlitePersistence from "../persistence/Sqlite.ts";
 import * as AgentThreadRuns from "./AgentThreadRuns.ts";
 import * as DelegationService from "./DelegationService.ts";
 import * as RunRecordService from "./RunRecordService.ts";
 import * as TelescopeDb from "./TelescopeDb.ts";
+import * as WakeQueueService from "./WakeQueueService.ts";
 import * as WorkspaceService from "./WorkspaceService.ts";
 
 const database = Layer.effectDiscard(runMigrations()).pipe(
@@ -33,6 +35,8 @@ const layer = Layer.mergeAll(
   RunRecordService.layer,
   WorkspaceService.layer,
   DelegationService.layer,
+  Layer.mock(ProjectionStore.ProjectionStoreV2)({}),
+  WakeQueueService.layer,
 ).pipe(
   Layer.provideMerge(Layer.merge(database, NodeCrypto.layer)),
   Layer.provide(

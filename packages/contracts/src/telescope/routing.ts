@@ -10,9 +10,12 @@ import { AgentId, RoutingRuleId, Text, WorkspaceId } from "./common.ts";
 export const ANY_TASK_TYPE = "*";
 
 /** As on memory inputs, the caps only stop huge values being stored. */
-const TaskType = Text.check(Schema.isMaxLength(64));
-const Model = Text.check(Schema.isMaxLength(128));
-const allowlistLength = Schema.isMaxLength(64);
+export const ROUTING_TASK_TYPE_MAX = 64;
+export const ROUTING_MODEL_MAX = 128;
+export const ROUTING_ALLOWLIST_MAX = 64;
+const TaskType = Text.check(Schema.isMaxLength(ROUTING_TASK_TYPE_MAX));
+const Model = Text.check(Schema.isMaxLength(ROUTING_MODEL_MAX));
+const allowlistLength = Schema.isMaxLength(ROUTING_ALLOWLIST_MAX);
 
 /** A project rule's narrowing of routing. An empty or absent list allows any. */
 export const RoutingAllowlist = Schema.Struct({

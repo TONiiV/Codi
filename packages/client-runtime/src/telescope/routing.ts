@@ -5,6 +5,7 @@ import {
   Telescope,
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
+import type * as Exit from "effect/Exit";
 import type { Atom, AtomRegistry } from "effect/reactivity";
 
 import type { EnvironmentRegistry } from "../connection/registry.ts";
@@ -12,9 +13,18 @@ import {
   createEnvironmentRpcCommand,
   createEnvironmentRpcQueryAtomFamily,
 } from "../state/runtime.ts";
-import { WORKSPACE_ERROR_TEXT, type WorkspaceErrorText } from "./workspaces.ts";
+import {
+  rereadRoleWhenForbidden,
+  WORKSPACE_ERROR_TEXT,
+  type WorkspaceErrorText,
+} from "./workspaces.ts";
 
-const { WS_METHODS, ANY_TASK_TYPE } = Telescope;
+const {
+  WS_METHODS,
+  ANY_TASK_TYPE,
+  ROUTING_TASK_TYPE_MAX: TASK_TYPE_MAX,
+  ROUTING_MODEL_MAX: MODEL_MAX,
+} = Telescope;
 
 /** The groups in the order the resolver reads them (D58). */
 const ROUTING_GROUP_LABELS = [
@@ -63,9 +73,6 @@ export const ROUTING_ERROR_TEXT: WorkspaceErrorText = {
   conflict: "这个 agent 在另一个项目里工作。",
 };
 
-const TASK_TYPE_MAX = 64;
-const MODEL_MAX = 128;
-
 /** The contract's cap, as Chinese copy; null when the text is acceptable. */
 export function taskTypeProblem(text: string): string | null {
   const value = text.trim();
@@ -73,11 +80,20 @@ export function taskTypeProblem(text: string): string | null {
   return value.length > TASK_TYPE_MAX ? `任务类型最多 ${TASK_TYPE_MAX} 个字符。` : null;
 }
 
-/** Whether a 试一下 reply asked about the inputs on screen; surrounding spaces ask the same. */
+interface PreviewInputs {
+  readonly taskType: string;
+  /** The listed rules the reply names; a re-read list may have changed them. */
+  readonly rules: ReadonlyArray<Telescope.RoutingRule>;
+}
+
+/** Whether a 试一下 reply still answers what is on screen; surrounding spaces ask the same. */
 export const answersPreview = (
-  asked: { readonly agentId: Telescope.AgentId; readonly taskType: string },
-  current: { readonly agentId: Telescope.AgentId | undefined; readonly taskType: string },
-) => asked.agentId === current.agentId && asked.taskType.trim() === current.taskType.trim();
+  asked: PreviewInputs & { readonly agentId: Telescope.AgentId },
+  current: PreviewInputs & { readonly agentId: Telescope.AgentId | undefined },
+) =>
+  asked.agentId === current.agentId &&
+  asked.taskType.trim() === current.taskType.trim() &&
+  asked.rules === current.rules;
 
 export interface RoutingRuleDraft {
   readonly projectId: ProjectId | null;
@@ -106,11 +122,13 @@ export function parseRoutingRuleDraft(draft: RoutingRuleDraft) {
 
 export function createTelescopeRoutingAtoms<R, E>(
   runtime: Atom.AtomRuntime<EnvironmentRegistry | R, E>,
+  workspaceGet: Parameters<typeof rereadRoleWhenForbidden>[0],
 ) {
   const list = createEnvironmentRpcQueryAtomFamily(runtime, {
     label: "telescope:routing:list",
     tag: WS_METHODS.routingList,
   });
+  const rereadRole = rereadRoleWhenForbidden(workspaceGet);
   /** Also after a refusal: a rule another admin deleted must leave the list. */
   const refresh = (
     {
@@ -118,10 +136,11 @@ export function createTelescopeRoutingAtoms<R, E>(
       input,
     }: { environmentId: EnvironmentId; input: { workspaceId: Telescope.WorkspaceId } },
     registry: AtomRegistry.AtomRegistry,
+    exit: Exit.Exit<unknown, unknown>,
   ) =>
     Effect.sync(() =>
       registry.refresh(list({ environmentId, input: { workspaceId: input.workspaceId } })),
-    );
+    ).pipe(Effect.andThen(rereadRole({ environmentId, input }, registry, exit)));
   return {
     list,
     set: createEnvironmentRpcCommand(runtime, {

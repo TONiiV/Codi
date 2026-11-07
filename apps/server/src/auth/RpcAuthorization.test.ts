@@ -54,10 +54,15 @@ describe("RPC authorization scopes", () => {
     );
   });
 
-  it("keeps opening an agent's resident thread, which creates a thread, behind operate scope", () => {
-    expect(requiredScopeForRpcMethod(Telescope.WS_METHODS.agentOpenThread)).toBe(
-      AuthOrchestrationOperateScope,
-    );
+  it("keeps Telescope methods that reach this machine behind its own scopes, not telescope:member", () => {
+    for (const [method, scope] of [
+      [Telescope.WS_METHODS.tokenSaverRun, AuthOrchestrationReadScope],
+      [Telescope.WS_METHODS.routingResolve, AuthOrchestrationReadScope],
+      [Telescope.WS_METHODS.workspaceCreate, AuthOrchestrationOperateScope],
+      [Telescope.WS_METHODS.agentOpenThread, AuthOrchestrationOperateScope],
+    ] as const) {
+      expect(requiredScopeForRpcMethod(method)).toBe(scope);
+    }
   });
 
   it("separates passive terminal observation from operations that can change a shell", () => {
@@ -92,7 +97,9 @@ describe("RPC authorization scopes", () => {
       Telescope.WS_METHODS.memoryPin,
       Telescope.WS_METHODS.dashboardSummary,
       Telescope.WS_METHODS.routingList,
-      Telescope.WS_METHODS.routingResolve,
+      Telescope.WS_METHODS.delegationList,
+      Telescope.WS_METHODS.delegationGet,
+      Telescope.WS_METHODS.delegationCancel,
     ]) {
       expect(requiredScopeForRpcMethod(method)).toBe(AuthTelescopeMemberScope);
     }
@@ -130,7 +137,6 @@ describe("RPC authorization scopes", () => {
       Telescope.WS_METHODS.leaseHeartbeat,
       Telescope.WS_METHODS.leaseRelease,
       Telescope.WS_METHODS.leaseGet,
-      Telescope.WS_METHODS.tokenSaverRun,
     ]) {
       expect(requiredScopeForRpcMethod(method)).toBe(AuthTelescopeMemberScope);
     }

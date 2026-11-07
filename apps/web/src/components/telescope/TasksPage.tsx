@@ -1,7 +1,7 @@
 import { Telescope } from "@t3tools/contracts";
 import { useNavigate } from "@tanstack/react-router";
-import { Columns3Icon, PlusIcon, TableIcon } from "lucide-react";
-import { useState } from "react";
+import { Columns3Icon, GitBranchIcon, PlusIcon, TableIcon } from "lucide-react";
+import { type ReactNode, useState } from "react";
 
 import { useEnvironmentQuery } from "../../state/query";
 import { Button } from "../ui/button";
@@ -16,6 +16,7 @@ import {
 } from "../ui/dialog";
 import { TELESCOPE_PATH } from "../sidebar/mainAppLocation";
 import { Input } from "../ui/input";
+import { DecisionsBody } from "./DecisionsPage";
 import { TelescopeEmptyState } from "./TelescopeShell";
 import { telescopeBoard } from "./telescopeState";
 import {
@@ -74,16 +75,9 @@ function NewTaskDialog({ target }: { target: BoardTarget }) {
   );
 }
 
-function TasksBody({ target }: { target: BoardTarget }) {
-  const layout = useTasksLayout();
+function TasksTabs({ layout }: { layout: TasksLayout }) {
   const navigate = useNavigate();
-  const input = { workspaceId: target.workspaceId };
-  const query = useEnvironmentQuery(
-    telescopeBoard.tasks({ environmentId: target.environmentId, input }),
-  );
-  const tasks = query.data?.tasks ?? [];
-  const View = layout === "table" ? TasksTable : TasksBoard;
-  const layoutButton = (id: TasksLayout, label: string, Icon: typeof TableIcon) => (
+  const tab = (id: TasksLayout, label: string, Icon: typeof TableIcon) => (
     <Button
       size="xs"
       variant={layout === id ? "secondary" : "ghost-muted"}
@@ -100,12 +94,28 @@ function TasksBody({ target }: { target: BoardTarget }) {
     </Button>
   );
   return (
+    <>
+      {tab("table", "表格", TableIcon)}
+      {tab("board", "按状态", Columns3Icon)}
+      {tab("decisions", "决定", GitBranchIcon)}
+    </>
+  );
+}
+
+function TasksBody(props: { target: BoardTarget; layout: TasksLayout; tabs: ReactNode }) {
+  const { target, layout } = props;
+  const input = { workspaceId: target.workspaceId };
+  const query = useEnvironmentQuery(
+    telescopeBoard.tasks({ environmentId: target.environmentId, input }),
+  );
+  const tasks = query.data?.tasks ?? [];
+  const View = layout === "table" ? TasksTable : TasksBoard;
+  return (
     <BoardFrame
       query={query}
       actions={
         <>
-          {layoutButton("table", "表格", TableIcon)}
-          {layoutButton("board", "按状态", Columns3Icon)}
+          {props.tabs}
           <NewTaskDialog target={target} />
         </>
       }
@@ -121,5 +131,12 @@ function TasksBody({ target }: { target: BoardTarget }) {
 
 export function TasksPage() {
   const target = useBoardTarget();
-  return target === null ? <NoWorkspace /> : <TasksBody target={target} />;
+  const layout = useTasksLayout();
+  if (target === null) return <NoWorkspace />;
+  const tabs = <TasksTabs layout={layout} />;
+  return layout === "decisions" ? (
+    <DecisionsBody target={target} actions={tabs} />
+  ) : (
+    <TasksBody target={target} layout={layout} tabs={tabs} />
+  );
 }

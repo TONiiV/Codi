@@ -32,6 +32,7 @@ import {
   Member,
   MemberAcceptInput,
   MemberInviteInput,
+  MemberInviteResult,
   MemberLinkCodeInput,
   MemberListResult,
   MemberRevokeInput,
@@ -91,6 +92,14 @@ import {
   ProjectRuleSetInput,
 } from "./grant.ts";
 import { DashboardSummary } from "./dashboard.ts";
+import {
+  Delegation,
+  DelegationCancelInput,
+  DelegationCancelResult,
+  DelegationGetInput,
+  DelegationListInput,
+  DelegationListResult,
+} from "./a2a.ts";
 import {
   RoutingResolution,
   RoutingResolveInput,
@@ -155,6 +164,9 @@ export const WS_METHODS = {
   routingSet: "telescope.routing.set",
   routingDelete: "telescope.routing.delete",
   routingResolve: "telescope.routing.resolve",
+  delegationList: "telescope.delegation.list",
+  delegationGet: "telescope.delegation.get",
+  delegationCancel: "telescope.delegation.cancel",
 } as const;
 
 const error = Schema.Union([WorkspaceError, EnvironmentAuthorizationError]);
@@ -174,7 +186,7 @@ export const WorkspaceRpcs = [
     success: WorkspaceDeleteManifest,
     error: Schema.Union([WorkspaceError, WorkspaceBusyError, EnvironmentAuthorizationError]),
   }),
-  make(WS_METHODS.memberInvite, MemberInviteInput, Invitation),
+  make(WS_METHODS.memberInvite, MemberInviteInput, MemberInviteResult),
   make(WS_METHODS.memberLinkCode, MemberLinkCodeInput, Invitation),
   make(WS_METHODS.memberAccept, MemberAcceptInput, Member),
   make(WS_METHODS.memberList, WorkspaceScopedInput, MemberListResult),
@@ -266,4 +278,10 @@ export const RoutingRpcs = [
   make(WS_METHODS.routingSet, RoutingRuleSetInput, RoutingRule),
   make(WS_METHODS.routingDelete, RoutingRuleDeleteInput, Schema.Struct({})),
   make(WS_METHODS.routingResolve, RoutingResolveInput, RoutingResolution),
+] as const;
+
+export const DelegationRpcs = [
+  make(WS_METHODS.delegationList, DelegationListInput, DelegationListResult),
+  make(WS_METHODS.delegationGet, DelegationGetInput, Delegation),
+  make(WS_METHODS.delegationCancel, DelegationCancelInput, DelegationCancelResult),
 ] as const;

@@ -52,6 +52,8 @@ export const SETTINGS_DEVICE_ONLY_PATHS: ReadonlySet<string> = new Set([
   "/settings/connections",
   // Access picks its environment on the page itself.
   "/settings/access",
+  // Telescope acts on the primary environment's current workspace, whatever the scope.
+  "/settings/telescope",
   "/settings/about",
 ]);
 

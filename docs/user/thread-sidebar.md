@@ -38,7 +38,9 @@ of its first message, and a short id, like
 `2026-09-25-convert-these-pngs-to-webp-a1b2c3d4`. Deleting a thread keeps its
 folder, so the files the agent wrote stay until you delete them. Branch, worktree, and diff controls stay hidden because
 these folders are not Git repositories. This is unavailable when the data
-directory itself sits inside a Git checkout.
+directory itself sits inside a Git checkout, and then Telescope agents without a
+project, such as the personal assistant, cannot open their chat either. After
+moving the data directory out of the checkout, restart Codi.
 
 When the work grows into something real, pick **Turn into project** from the
 thread's menu. The thread's folder becomes a project where it is, so nothing
