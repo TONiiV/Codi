@@ -187,11 +187,13 @@ const DelegationListTool = boardTool("delegation_list", {
 const DelegationReportTool = boardTool("delegation_report", {
   title: "Report on a delegation",
   description:
-    "Report on a delegation sent to you, once its work is done (COMPLETED) or cannot be done (FAILED, say why in `report.blockedOn`). The agent that sent it reads the report. `report.result`: the outcome in a few lines plus the link of each Worker thread; never paste a Worker's transcript. `decisions`: what you decided on the way.",
+    "Report on a delegation sent to you, once its work is done (COMPLETED) or cannot be done (FAILED, say why in `report.blockedOn`). The agent that sent it reads the report. `report.result`: the outcome in a few lines plus the link of each Worker thread; never paste a Worker's transcript. `decisions`: what you decided on the way. When the work needs your member to choose (INPUT_REQUIRED: `question` plus at least one choice in `options`) or to approve something beyond your powers (AUTH_REQUIRED: `question`), put what blocks it in `report.blockedOn`: it becomes a 需要你定 item, and the answer comes back to you on this delegation id. Raise a Worker's question on the Worker's delegation.",
   parameters: Schema.Struct({
     ...DelegationIdInput,
-    state: Schema.Literals(["COMPLETED", "FAILED"]),
+    state: Schema.Literals(["COMPLETED", "FAILED", "INPUT_REQUIRED", "AUTH_REQUIRED"]),
     report: Telescope.DelegationReport,
+    question: Schema.optionalKey(Telescope.DecisionCreateInput.fields.title),
+    options: Schema.optionalKey(Schema.Array(Telescope.Text)),
   }),
   success: DelegationSummary,
   readonly: false,

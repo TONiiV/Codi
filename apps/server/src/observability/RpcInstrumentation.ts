@@ -257,6 +257,7 @@ const RPC_AGGREGATES = {
   [Telescope.WS_METHODS.agentUpdate]: "telescope",
   [Telescope.WS_METHODS.agentListCompany]: "telescope",
   [Telescope.WS_METHODS.agentUpdateCompany]: "telescope",
+  [Telescope.WS_METHODS.agentOpenThread]: "telescope",
   [Telescope.WS_METHODS.runList]: "telescope",
   [Telescope.WS_METHODS.runGet]: "telescope",
   [Telescope.WS_METHODS.runCalls]: "telescope",
@@ -281,6 +282,9 @@ const RPC_AGGREGATES = {
   [Telescope.WS_METHODS.routingSet]: "telescope",
   [Telescope.WS_METHODS.routingDelete]: "telescope",
   [Telescope.WS_METHODS.routingResolve]: "telescope",
+  [Telescope.WS_METHODS.delegationList]: "telescope",
+  [Telescope.WS_METHODS.delegationGet]: "telescope",
+  [Telescope.WS_METHODS.delegationCancel]: "telescope",
 } as const satisfies Readonly<Record<WsRpcMethod, string>>;
 
 const RPC_SPAN_PREFIX = "ws.rpc";

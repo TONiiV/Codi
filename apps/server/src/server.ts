@@ -91,6 +91,7 @@ import * as TelescopeGrants from "./telescope/GrantService.ts";
 import * as TelescopeToolGateway from "./telescope/ToolGateway.ts";
 import * as TelescopeThreadTurnTokens from "./telescope/ThreadTurnTokens.ts";
 import * as TelescopeAgentRuntime from "./telescope/AgentRuntime.ts";
+import * as TelescopeDelegationAnswers from "./telescope/DelegationAnswers.ts";
 import * as TelescopeDb from "./telescope/TelescopeDb.ts";
 import * as TelescopeWakeQueue from "./telescope/WakeQueueService.ts";
 import * as TelescopeAttribution from "./telescope/AttributionService.ts";
@@ -693,6 +694,9 @@ const layerRuntimeCoreDependenciesBase = Layer.mergeAll(
       ),
     ),
   ),
+  TelescopeDelegationAnswers.layer.pipe(
+    Layer.provide(Layer.merge(TelescopeDelegations.layer, TelescopeBoardChanges.layer)),
+  ),
   ProviderUsageLimitsIngestion.layer,
   layerProviderInstallationRefresh,
   ReplayMarkers.layer,
@@ -823,10 +827,7 @@ const layerMakeRoutes = Layer.mergeAll(
   Layer.effectDiscard(
     RemoteDelegation.RemoteDelegation.pipe(Effect.flatMap((remote) => remote.start())),
   ),
-  TelescopeWakeQueue.layerWorker.pipe(
-    Layer.provide(TelescopeAgentRuntime.layer),
-    Layer.provide(ProviderAdapterRegistry.layerFromProviderInstanceRegistry),
-  ),
+  TelescopeWakeQueue.layerWorker.pipe(Layer.provide(TelescopeAgentRuntime.layerWakeRunner)),
   Layer.merge(TelescopeTokenSaver.layerWeekly, TelescopeRuns.layerRetention),
 ).pipe(
   Layer.provide(
@@ -840,7 +841,17 @@ const layerMakeRoutes = Layer.mergeAll(
   Layer.provide(TelescopeWorkspaces.layer),
   // The same notice hub TaskBoardService publishes to, by layer memoization.
   Layer.provide(Layer.merge(TelescopeBoard.layer, TelescopeBoardChanges.layer)),
-  Layer.provide(TelescopeAgents.layer),
+  Layer.provide(
+    TelescopeAgentRuntime.layer.pipe(
+      Layer.provide(
+        Layer.merge(
+          ProviderAdapterRegistry.layerFromProviderInstanceRegistry,
+          TelescopeWorkspaces.layer,
+        ),
+      ),
+      Layer.provideMerge(TelescopeAgents.layer),
+    ),
+  ),
   Layer.provide(
     Layer.mergeAll(
       TelescopeRuns.layer,

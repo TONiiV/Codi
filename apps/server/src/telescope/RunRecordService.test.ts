@@ -53,6 +53,7 @@ const session = (name: string): WorkspaceService.Caller => ({
   subject: "one-time-token",
 });
 const alice = session("alice");
+const bob = session("bob");
 const mallory = session("mallory");
 
 const setup = Effect.gen(function* () {
@@ -126,6 +127,27 @@ it.layer(layer)("Telescope run records", (it) => {
         ],
       );
       assert.deepStrictEqual(calls[0]?.args, { query: "[redacted]" });
+
+      // Arguments reach only the run's own member and admins; other members get the rows.
+      const workspaces = yield* WorkspaceService.WorkspaceService;
+      const { code } = yield* workspaces.invite(alice, { workspaceId, role: "member" });
+      yield* workspaces.accept(bob, { code, displayName: "Bob" });
+      const ofBob = yield* runs.start(bob, workspaceId, { agentId, inputSnapshot: snapshot([]) });
+      yield* runs.recordCall(
+        { workspaceId, runId: ofBob.id },
+        { tool: "delegate", argsRedacted: { goal: "g" }, grantCheck: "allowed", durationMs: 3 },
+      );
+      const argsSeen = (caller: WorkspaceService.Caller, runId: Telescope.AgentRunId) =>
+        runs
+          .calls(caller, { workspaceId, runId })
+          .pipe(Effect.map(({ calls }) => calls.map((call) => [call.tool, call.args])));
+      assert.deepStrictEqual(yield* argsSeen(bob, ofBob.id), [["delegate", { goal: "g" }]]);
+      assert.deepStrictEqual(yield* argsSeen(alice, ofBob.id), [["delegate", { goal: "g" }]]);
+      assert.deepStrictEqual(yield* argsSeen(bob, started.id), [
+        ["memory.search", undefined],
+        ["board.read", undefined],
+        ["board.commit", undefined],
+      ]);
 
       // A finished run takes no more calls, context or thread tokens.
       const late = yield* runs

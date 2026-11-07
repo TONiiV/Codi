@@ -75,6 +75,7 @@ import * as PeerLinkRequests from "./peer/PeerLinkRequests.ts";
 import * as TelescopeWorkspaces from "./telescope/WorkspaceService.ts";
 import * as TelescopeBoard from "./telescope/TaskBoardService.ts";
 import * as TelescopeBoardChanges from "./telescope/BoardChanges.ts";
+import * as TelescopeAgentRuntime from "./telescope/AgentRuntime.ts";
 import * as TelescopeAgents from "./telescope/AgentService.ts";
 import * as TelescopeRuns from "./telescope/RunRecordService.ts";
 import * as TelescopeWakeQueue from "./telescope/WakeQueueService.ts";
@@ -85,6 +86,7 @@ import * as TelescopeMemory from "./telescope/MemoryService.ts";
 import * as TelescopeAttribution from "./telescope/AttributionService.ts";
 import * as TelescopeRouting from "./telescope/RoutingService.ts";
 import * as TelescopeWorkspaceData from "./telescope/WorkspaceDataService.ts";
+import * as TelescopeDelegations from "./telescope/DelegationService.ts";
 import * as PeerLinks from "./peer/PeerLinks.ts";
 import * as PortScanner from "./preview/PortScanner.ts";
 import * as PreviewManager from "./preview/Manager.ts";
@@ -810,6 +812,7 @@ const layerUnusedConfigRpcServices = Layer.mergeAll(
   Layer.mock(TelescopeBoard.TaskBoardService)({}),
   Layer.mock(TelescopeBoardChanges.BoardChanges)({}),
   Layer.mock(TelescopeAgents.AgentService)({}),
+  Layer.mock(TelescopeAgentRuntime.AgentRuntime)({}),
   Layer.mock(TelescopeRuns.RunRecordService)({}),
   Layer.mock(TelescopeWakeQueue.WakeQueueService)({}),
   Layer.mock(TelescopeTokenSaver.TokenSaverService)({}),
@@ -819,6 +822,7 @@ const layerUnusedConfigRpcServices = Layer.mergeAll(
   Layer.mock(TelescopeAttribution.AttributionService)({}),
   Layer.mock(TelescopeRouting.RoutingService)({}),
   Layer.mock(TelescopeWorkspaceData.WorkspaceDataService)({}),
+  Layer.mock(TelescopeDelegations.DelegationService)({}),
   Layer.mock(PortScanner.PortDiscovery)({ trackAgent: () => () => undefined }),
   Layer.mock(PreviewManager.PreviewManager)({}),
   Layer.mock(ProcessDiagnostics.ProcessDiagnostics)({}),

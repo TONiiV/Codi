@@ -285,10 +285,11 @@ const makeHarness = Effect.gen(function* () {
   );
   const services = Layer.mergeAll(recordingRuns, threads, hookedDelegations);
   const runtime = Layer.mergeAll(
-    AgentRuntime.layer,
+    AgentRuntime.layerWakeRunner,
     ThreadTurnTokens.layer,
     McpToolAccess.HandlersLayer.layer(TelescopeHandlers.layer),
   ).pipe(
+    Layer.provideMerge(AgentRuntime.layer),
     Layer.provideMerge(WorkerDispatch.layer.pipe(Layer.provide(routing))),
     Layer.provideMerge(services),
     Layer.provide(registry),
@@ -377,6 +378,16 @@ const runWake = (wake: WakeQueueService.WakeRun) =>
       run(wake).pipe(Effect.ensuring(Effect.orDie(wakes.finish(wake.wake, "done")))),
     );
   });
+
+/** Each queued wake's agent and payload; a FAILED Worker hop also reports up to its Chief. */
+const queued = (seeded: Seeded) =>
+  Effect.flatMap(WakeQueueService.WakeQueueService, (wakes) =>
+    wakes.list(alice, { workspaceId: seeded.workspaceId }),
+  ).pipe(
+    Effect.map(({ wakes }) =>
+      wakes.flatMap((wake) => (wake.status === "queued" ? [[wake.agentId, wake.payload]] : [])),
+    ),
+  );
 
 type Tools = (typeof TelescopeToolkit)["tools"];
 /** Calls a Telescope tool in-process as the agent on `threadId`, as `/mcp` would. */
@@ -549,9 +560,10 @@ it.effect.each([
         assert.deepStrictEqual(missingTools(followUp.message.text), []);
         yield* harness.complete(followUp);
         yield* Fiber.join(next);
-        const report = yield* wakes.take;
-        assert.equal(report.wake.agentId, seeded.pa);
-        assert.deepStrictEqual(report.payloads, [{ kind: "report", delegationId: delegation.id }]);
+        assert.sameDeepMembers(yield* queued(seeded), [
+          [seeded.pa, { kind: "report", delegationId: delegation.id }],
+          [seeded.chief, { kind: "report", delegationId: opened.delegationId }],
+        ]);
         for (const delegationId of [delegation.id, opened.delegationId]) {
           const failed = yield* delegations.get({ workspaceId: seeded.workspaceId, delegationId });
           assert.deepInclude(failed, { state: "FAILED" });
@@ -605,8 +617,11 @@ it.effect(
         assert.deepStrictEqual(yield* state(first.opened.delegationId), ["WORKING", undefined]);
 
         yield* followUp;
-        const report = yield* wakes.take;
-        assert.deepStrictEqual(report.payloads, [{ kind: "report", delegationId: delegation.id }]);
+        assert.sameDeepMembers(yield* queued(seeded), [
+          [seeded.pa, { kind: "report", delegationId: delegation.id }],
+          [seeded.chief, { kind: "report", delegationId: first.opened.delegationId }],
+          [seeded.chief, { kind: "report", delegationId: second.opened.delegationId }],
+        ]);
         for (const delegationId of [
           delegation.id,
           first.opened.delegationId,

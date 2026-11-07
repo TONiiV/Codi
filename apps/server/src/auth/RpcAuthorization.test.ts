@@ -54,6 +54,12 @@ describe("RPC authorization scopes", () => {
     );
   });
 
+  it("keeps opening an agent's resident thread, which creates a thread, behind operate scope", () => {
+    expect(requiredScopeForRpcMethod(Telescope.WS_METHODS.agentOpenThread)).toBe(
+      AuthOrchestrationOperateScope,
+    );
+  });
+
   it("separates passive terminal observation from operations that can change a shell", () => {
     for (const method of [WS_METHODS.terminalObserve, WS_METHODS.subscribeTerminalMetadata]) {
       expect(requiredScopeForRpcMethod(method)).toBe(AuthTerminalReadScope);
@@ -87,6 +93,9 @@ describe("RPC authorization scopes", () => {
       Telescope.WS_METHODS.dashboardSummary,
       Telescope.WS_METHODS.routingList,
       Telescope.WS_METHODS.routingResolve,
+      Telescope.WS_METHODS.delegationList,
+      Telescope.WS_METHODS.delegationGet,
+      Telescope.WS_METHODS.delegationCancel,
     ]) {
       expect(requiredScopeForRpcMethod(method)).toBe(AuthTelescopeMemberScope);
     }

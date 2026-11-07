@@ -135,11 +135,13 @@ import * as TelescopeTokenSaver from "./telescope/tokensaver/TokenSaverService.t
 import * as TelescopeGrants from "./telescope/GrantService.ts";
 import * as TelescopeToolGateway from "./telescope/ToolGateway.ts";
 import { PersistenceDecodeError, PersistenceSqlError } from "./persistence/Errors.ts";
+import * as TelescopeAgentRuntime from "./telescope/AgentRuntime.ts";
 import * as TelescopeAgents from "./telescope/AgentService.ts";
 import * as TelescopeWakeQueue from "./telescope/WakeQueueService.ts";
 import * as TelescopeMemory from "./telescope/MemoryService.ts";
 import * as TelescopeAttribution from "./telescope/AttributionService.ts";
 import * as TelescopeRouting from "./telescope/RoutingService.ts";
+import * as TelescopeDelegations from "./telescope/DelegationService.ts";
 import * as SecretRequests from "./secrets/SecretRequests.ts";
 import * as GuestShareService from "./guest/GuestShareService.ts";
 import {
@@ -1479,6 +1481,7 @@ export const layerWsRpc = (
       const telescope = yield* TelescopeWorkspaces.WorkspaceService;
       const telescopeData = yield* TelescopeWorkspaceData.WorkspaceDataService;
       const telescopeAgents = yield* TelescopeAgents.AgentService;
+      const telescopeAgentRuntime = yield* TelescopeAgentRuntime.AgentRuntime;
       const telescopeRuns = yield* TelescopeRuns.RunRecordService;
       const telescopeWakes = yield* TelescopeWakeQueue.WakeQueueService;
       const telescopeGrants = yield* TelescopeGrants.GrantService;
@@ -1486,6 +1489,7 @@ export const layerWsRpc = (
       const telescopeMemory = yield* TelescopeMemory.MemoryService;
       const telescopeAttribution = yield* TelescopeAttribution.AttributionService;
       const telescopeRouting = yield* TelescopeRouting.RoutingService;
+      const telescopeDelegations = yield* TelescopeDelegations.DelegationService;
       const caller = currentSession;
       const board = yield* TelescopeBoard.TaskBoardService;
       const boardChanges = yield* TelescopeBoardChanges.BoardChanges;
@@ -2459,6 +2463,8 @@ export const layerWsRpc = (
           telescopeStorage(telescopeAgents.listCompany(caller, input)),
         [Telescope.WS_METHODS.agentUpdateCompany]: (input) =>
           telescopeStorage(telescopeAgents.updateCompany(caller, input)),
+        [Telescope.WS_METHODS.agentOpenThread]: (input) =>
+          telescopeStorage(telescopeAgentRuntime.openThread(caller, input)),
         [Telescope.WS_METHODS.runList]: (input) =>
           telescopeStorage(telescopeRuns.list(caller, input)),
         [Telescope.WS_METHODS.runGet]: (input) =>
@@ -2506,6 +2512,12 @@ export const layerWsRpc = (
           telescopeStorage(telescopeRouting.remove(caller, input)),
         [Telescope.WS_METHODS.routingResolve]: (input) =>
           telescopeStorage(telescopeRouting.resolveFor(caller, input)),
+        [Telescope.WS_METHODS.delegationList]: (input) =>
+          telescopeStorage(telescopeDelegations.listForMember(caller, input)),
+        [Telescope.WS_METHODS.delegationGet]: (input) =>
+          telescopeStorage(telescopeDelegations.getForMember(caller, input)),
+        [Telescope.WS_METHODS.delegationCancel]: (input) =>
+          telescopeStorage(telescopeDelegations.cancelForMember(caller, input)),
         [WS_METHODS.guestShareCreate]: (input) =>
           Effect.annotateCurrentSpan({ "orchestration_v2.thread_id": input.threadId }).pipe(
             Effect.andThen(guestShares.create(input)),
@@ -3664,6 +3676,7 @@ export const layer = Layer.unwrap(
     const telescopeWorkspaces = yield* TelescopeWorkspaces.WorkspaceService;
     const telescopeBoard = yield* TelescopeBoard.TaskBoardService;
     const telescopeAgents = yield* TelescopeAgents.AgentService;
+    const telescopeAgentRuntime = yield* TelescopeAgentRuntime.AgentRuntime;
     const telescopeRuns = yield* TelescopeRuns.RunRecordService;
     const telescopeWakes = yield* TelescopeWakeQueue.WakeQueueService;
     const telescopeTokenSaver = yield* TelescopeTokenSaver.TokenSaverService;
@@ -3674,6 +3687,7 @@ export const layer = Layer.unwrap(
     const telescopeRouting = yield* TelescopeRouting.RoutingService;
     const telescopeBoardChanges = yield* TelescopeBoardChanges.BoardChanges;
     const telescopeData = yield* TelescopeWorkspaceData.WorkspaceDataService;
+    const telescopeDelegations = yield* TelescopeDelegations.DelegationService;
     const sql = yield* SqlClient.SqlClient;
     return HttpRouter.add(
       "GET",
@@ -3767,7 +3781,12 @@ export const layer = Layer.unwrap(
                 Layer.succeed(TelescopeWorkspaces.WorkspaceService, telescopeWorkspaces),
               ),
               Layer.provide(Layer.succeed(TelescopeBoard.TaskBoardService, telescopeBoard)),
-              Layer.provide(Layer.succeed(TelescopeAgents.AgentService, telescopeAgents)),
+              Layer.provide(
+                Layer.merge(
+                  Layer.succeed(TelescopeAgents.AgentService, telescopeAgents),
+                  Layer.succeed(TelescopeAgentRuntime.AgentRuntime, telescopeAgentRuntime),
+                ),
+              ),
               Layer.provide(Layer.succeed(TelescopeRuns.RunRecordService, telescopeRuns)),
               Layer.provide(Layer.succeed(TelescopeWakeQueue.WakeQueueService, telescopeWakes)),
               Layer.provide(
@@ -3784,6 +3803,7 @@ export const layer = Layer.unwrap(
                   Layer.succeed(TelescopeToolGateway.ToolGateway, telescopeGateway),
                   Layer.succeed(TelescopeMemory.MemoryService, telescopeMemory),
                   Layer.succeed(TelescopeRouting.RoutingService, telescopeRouting),
+                  Layer.succeed(TelescopeDelegations.DelegationService, telescopeDelegations),
                 ),
               ),
               Layer.provide(
