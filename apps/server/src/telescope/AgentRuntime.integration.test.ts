@@ -100,9 +100,8 @@ const makeHarness = Effect.fn("makeHarness")(function* (options: {
   const recorded = yield* Queue.unbounded<void>();
   const permits = yield* Queue.unbounded<void>();
   const waits = yield* Queue.unbounded<void>();
-  // With `holdScratch`, each caller reaching Scratch waits for `scratchGate`.
-  const atScratch = yield* Queue.unbounded<void>();
-  const scratchGate = yield* Deferred.make<void>();
+  // With `holdScratch`, each caller reaching Scratch waits until the test opens its own gate.
+  const atScratch = yield* Queue.unbounded<Deferred.Deferred<void>>();
   const services = yield* Deferred.make<{
     readonly db: TelescopeDb.TelescopeDb["Service"];
     readonly memory: MemoryService.MemoryService["Service"];
@@ -312,10 +311,12 @@ const makeHarness = Effect.fn("makeHarness")(function* (options: {
         namedProjectsRoot: "/home/user/projects",
         ensureScratchProject:
           options.holdScratch === true
-            ? Queue.offer(atScratch, undefined).pipe(
-                Effect.andThen(Deferred.await(scratchGate)),
-                Effect.as({ projectId: scratch }),
-              )
+            ? Effect.gen(function* () {
+                const gate = yield* Deferred.make<void>();
+                yield* Queue.offer(atScratch, gate);
+                yield* Deferred.await(gate);
+                return { projectId: scratch };
+              })
             : Effect.succeed({ projectId: scratch }),
       }),
     ),
@@ -331,7 +332,6 @@ const makeHarness = Effect.fn("makeHarness")(function* (options: {
     permits,
     waits,
     atScratch,
-    scratchGate,
     complete,
   };
 });
@@ -1022,28 +1022,52 @@ it.effect.each([
     ),
 );
 
-it.effect(
-  "two openThread calls racing for one agent create exactly one resident thread (D88)",
-  () =>
+it.effect.each([
+  { rival: "a second openThread call", kind: "open" },
+  { rival: "a wake that replays its create", kind: "wake" },
+  { rival: "a wake refused at its run", kind: "refused" },
+] as const)(
+  "openThread and $rival, racing for one agent, leave exactly one resident thread (D88)",
+  ({ kind }) =>
     withHarness({ mcp: true, holdScratch: true }, (harness) =>
       Effect.gen(function* () {
         const seeded = yield* seed;
         const runtime = yield* AgentRuntime.AgentRuntime;
         const ref = { workspaceId: seeded.workspaceId, agentId: seeded.pa };
         const first = yield* Effect.forkScoped(runtime.openThread(alice, ref));
-        const second = yield* Effect.forkScoped(runtime.openThread(alice, ref));
+        const firstGate = yield* Queue.take(harness.atScratch);
+        const second: Fiber.Fiber<
+          unknown,
+          Effect.Error<ReturnType<typeof runtime.openThread>>
+        > = kind === "open"
+          ? yield* Effect.forkScoped(runtime.openThread(alice, ref))
+          : yield* runWake(yield* messageWake(seeded, "早"));
         // Both have read the agent with no resident thread before either writes one.
-        yield* Queue.take(harness.atScratch);
-        yield* Queue.take(harness.atScratch);
-        yield* Deferred.succeed(harness.scratchGate, undefined);
-        const one = yield* Fiber.join(first);
-        const two = yield* Fiber.join(second);
-        assert.equal(one.threadId, two.threadId);
-        assert.equal(yield* residentOf(seeded, seeded.pa), one.threadId);
-        const shell =
-          yield* (yield* ThreadManagementService.ThreadManagementService).getThreadShell(
-            one.threadId,
+        const secondGate = yield* Queue.take(harness.atScratch);
+        yield* Deferred.succeed(firstGate, undefined);
+        const { threadId } = yield* Fiber.join(first);
+        if (kind === "refused")
+          yield* (yield* TelescopeDb.TelescopeDb).update(
+            seeded.workspaceId,
+            "members",
+            { revoked_at: "2026-11-07T00:00:00.000Z" },
+            { subject_id: seeded.member },
           );
+        yield* Deferred.succeed(secondGate, undefined);
+        if (kind === "open") assert.deepStrictEqual(yield* Fiber.join(second), { threadId });
+        if (kind === "refused") assert.isTrue(Exit.isFailure(yield* Fiber.await(second)));
+        if (kind === "wake") {
+          const turn = yield* Effect.raceFirst(
+            Queue.take(harness.started),
+            Fiber.await(second).pipe(Effect.as(null)),
+          );
+          assert.equal(turn?.threadId, threadId);
+          yield* harness.complete(turn!, 1);
+          yield* Fiber.join(second);
+        }
+        assert.equal(yield* residentOf(seeded, seeded.pa), threadId);
+        const shell =
+          yield* (yield* ThreadManagementService.ThreadManagementService).getThreadShell(threadId);
         assert.equal(shell?.projectId, scratch);
       }),
     ),

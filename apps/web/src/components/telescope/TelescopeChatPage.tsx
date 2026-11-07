@@ -1,7 +1,6 @@
 import { useAtomValue } from "@effect/atom-react";
 import { scopeThreadRef } from "@t3tools/client-runtime/environment";
-import { offersOpenThread } from "@t3tools/client-runtime/telescope/agents";
-import { failureText, WORKSPACE_ERROR_TEXT } from "@t3tools/client-runtime/telescope/workspaces";
+import { offersOpenThread, openThreadFailureText } from "@t3tools/client-runtime/telescope/agents";
 import type { EnvironmentId, Telescope, ThreadId } from "@t3tools/contracts";
 import { MessagesSquareIcon } from "lucide-react";
 import { useState } from "react";
@@ -42,12 +41,6 @@ function ChatEmpty(props: { title: string; description: string; children?: React
     </Empty>
   );
 }
-
-// The server refuses when no model is chosen or the provider cannot use Codi's tools.
-const OPEN_ERROR_TEXT = {
-  ...WORKSPACE_ERROR_TEXT,
-  invalid: "现在开不了这个对话。请在设置里给它选一个能用 Codi 工具的模型。",
-};
 
 const PICK_A_CHAT = (
   <ChatEmpty title="选一个对话" description="从左边选一个 agent，和它的对话会显示在这里。" />
@@ -116,7 +109,7 @@ function AgentChat({
     });
     setBusy(false);
     if (AsyncResult.isSuccess(result)) setOpened(result.value.threadId);
-    else setError(failureText(result, OPEN_ERROR_TEXT));
+    else setError(openThreadFailureText(result));
   };
   return (
     <ChatEmpty title={name} description="你们还没有对话。开始后，你在这里说的话会直接发给它。">

@@ -28,16 +28,12 @@ const NO_TOKENS = { input: 0, cachedInput: 0, cacheCreation: 0, output: 0 };
 const TURN_WAIT_MS = 6 * 60 * 60 * 1000;
 
 const AgentRuntimeErrorReason = Schema.Literals(["no_model", "no_mcp"]);
-const MESSAGES = {
-  no_model: "Choose a model for this agent or a default model in Settings.",
-  no_mcp: "This agent's provider cannot use Codi's tools, so it cannot host the agent's thread.",
-} as const;
 class AgentRuntimeError extends Schema.TaggedError<AgentRuntimeError>()(
   "TelescopeAgentRuntimeError",
   { reason: AgentRuntimeErrorReason, agentId: Telescope.AgentId },
 ) {
   override get message(): string {
-    return MESSAGES[this.reason];
+    return Telescope.AGENT_MODEL_REFUSALS[this.reason];
   }
 }
 

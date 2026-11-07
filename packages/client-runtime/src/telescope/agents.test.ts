@@ -5,6 +5,7 @@ import {
   Telescope,
   type AuthSessionState,
 } from "@t3tools/contracts";
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
@@ -22,6 +23,7 @@ import {
   cappedPowers,
   createTelescopeAgentAtoms,
   offersOpenThread,
+  openThreadFailureText,
   ownerCanMergePRs,
   selectableExposures,
 } from "./agents.ts";
@@ -159,6 +161,21 @@ describe("telescope agent chat", () => {
       expect(offersOpenThread(agent, self)).toBe(offered);
     },
   );
+
+  it.each([
+    { cause: "no model", message: Telescope.AGENT_MODEL_REFUSALS.no_model, shown: false },
+    {
+      cause: "a provider without tools",
+      message: Telescope.AGENT_MODEL_REFUSALS.no_mcp,
+      shown: false,
+    },
+    { cause: "no Scratch", message: "Threads without a project are not available.", shown: true },
+  ])("an openThread refusal for $cause shows the server's reason: $shown", ({ message, shown }) => {
+    const refused = AsyncResult.failure(
+      Cause.fail(new Telescope.WorkspaceError({ reason: "invalid", message })),
+    );
+    expect(openThreadFailureText(refused)?.includes(message)).toBe(shown);
+  });
 });
 
 describe("telescope agent queries", () => {
