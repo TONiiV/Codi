@@ -14,7 +14,7 @@ const stores = [
     Icon: AppleIcon,
   },
   {
-    label: "Android",
+    label: "settings.manual.mobile.android",
     store: "Google Play",
     url: "https://play.google.com/store/apps/details?id=com.t3tools.t3code",
     Icon: AndroidIcon,

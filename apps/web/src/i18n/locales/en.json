@@ -1931,7 +1931,6 @@
       "sessionsAtOnce": "Sessions at once",
       "sessionMinutes": "Session minutes",
       "idleMinutes": "Idle minutes",
-      "reorderRoutes": "Reorder routes",
       "thisConnectionCannotChangeDeviceSettings": "This connection cannot change device settings.",
       "connectToAnEnvironmentBeforeRemoving": "Connect to an environment before removing this profile.",
       "profileDataCouldNotBeDeleted": "Profile data could not be deleted. Try again.",
@@ -2253,7 +2252,17 @@
         "reconnecting": "Reconnecting",
         "reconnectingError": "Reconnecting: {{error}}",
         "failed": "Connection failed",
-        "failedError": "Connection failed: {{error}}"
+        "failedError": "Connection failed: {{error}}",
+        "restarting": "Restarting"
+      },
+      "connectionStatus": {
+        "reconnectingError": "Failed to connect. Reconnecting... Reason: {{error}}",
+        "failedError": "Connection failed. Reason: {{error}}"
+      },
+      "connectReachable": {
+        "tunnelConnected": "Tunnel connected",
+        "connections_one": "{{count}} connection",
+        "connections_other": "{{count}} connections"
       },
       "bgPause": {
         "hostLocked": "Pause when host is locked",
@@ -2262,7 +2271,8 @@
         "battery": "Pause on battery"
       },
       "mobile": {
-        "iphoneIpad": "iPhone and iPad"
+        "iphoneIpad": "iPhone and iPad",
+        "android": "Android"
       },
       "snapshotSetup": {
         "access": "Access",

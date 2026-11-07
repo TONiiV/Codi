@@ -11,7 +11,6 @@ import {
   AuthRelayWriteScope,
   type EnvironmentId,
   connectReachabilityHelpUrl,
-  formatConnectReachable,
   managedCapabilityDenial,
   resolveEnvironmentMachineKind,
 } from "@t3tools/contracts";
@@ -35,7 +34,7 @@ import {
 } from "./ConnectionDiagnosisDetails";
 import { usePreparedConnection } from "~/state/session";
 import { EnvironmentRow, environmentTransportLabel } from "./EnvironmentRow";
-import { connectionStatusLabel } from "./connectionLabels";
+import { connectReachableText, connectionStatusLabel } from "./connectionLabels";
 import { Menu, MenuItem, MenuPopup, MenuSeparator, MenuTrigger } from "../ui/menu";
 import { Switch } from "../ui/switch";
 import { stackedThreadToast, toastManager } from "../ui/toast";
@@ -222,7 +221,11 @@ export function SavedBackendListRow({
   const subtitleText = [
     environmentTransportLabel(environment, connectedTarget, t),
     // The headline below names the failure in full.
-    diagnosis ? null : resumingServerUpdate ? t("settings.text.restarting") : status.text,
+    diagnosis
+      ? null
+      : resumingServerUpdate
+        ? t("settings.manual.envStatus.restarting")
+        : status.text,
     enabled && versionMismatch ? serverVersion : null,
   ]
     .filter((value): value is string => value !== null)
@@ -605,7 +608,7 @@ function ConfiguredCloudLinkRow({
   const reachability = managedTunnelActive ? cloudLinkState.data?.reachability : undefined;
   const reachabilityStatus =
     reachability?.status === "reachable" ? (
-      formatConnectReachable(reachability)
+      connectReachableText(reachability, t)
     ) : reachability?.status === "unreachable" ? (
       <span className="block text-destructive">
         {[

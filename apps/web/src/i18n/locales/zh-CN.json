@@ -770,7 +770,7 @@
       "icon": "图标",
       "routesToLabelPreferredFirst": "通往 {{label}} 的路由，优先的排在前面",
       "inUse": "使用中",
-      "foundAutomatically": "· 自动发现",
+      "foundAutomatically": " · 自动发现",
       "reorderLabelPositionPosition": "重新排序 {{label}}，位置 {{position}}",
       "removeLabelRoute": "移除 {{label}} 路由",
       "removeRoute": "移除路由",
@@ -1931,7 +1931,6 @@
       "sessionsAtOnce": "同时会话数",
       "sessionMinutes": "会话分钟数",
       "idleMinutes": "空闲分钟数",
-      "reorderRoutes": "重新排序路由",
       "thisConnectionCannotChangeDeviceSettings": "此连接无法更改设备设置。",
       "connectToAnEnvironmentBeforeRemoving": "移除此配置文件前，请先连接到一个环境。",
       "profileDataCouldNotBeDeleted": "无法删除配置文件数据。请重试。",
@@ -2253,7 +2252,17 @@
         "reconnecting": "重新连接中",
         "reconnectingError": "重新连接中：{{error}}",
         "failed": "连接失败",
-        "failedError": "连接失败：{{error}}"
+        "failedError": "连接失败：{{error}}",
+        "restarting": "正在重启"
+      },
+      "connectionStatus": {
+        "reconnectingError": "连接失败。正在重新连接... 原因：{{error}}",
+        "failedError": "连接失败。原因：{{error}}"
+      },
+      "connectReachable": {
+        "tunnelConnected": "隧道已连接",
+        "connections_one": "{{count}} 个连接",
+        "connections_other": "{{count}} 个连接"
       },
       "bgPause": {
         "hostLocked": "主机锁定时暂停",
@@ -2262,7 +2271,8 @@
         "battery": "使用电池时暂停"
       },
       "mobile": {
-        "iphoneIpad": "iPhone 和 iPad"
+        "iphoneIpad": "iPhone 和 iPad",
+        "android": "Android"
       },
       "snapshotSetup": {
         "access": "权限",
