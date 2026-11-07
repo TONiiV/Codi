@@ -1432,6 +1432,7 @@ it.effect("lists memory and Telescope tools only to threads with an open Telesco
                       readonly result?: {
                         readonly tools?: ReadonlyArray<{ readonly name: string }>;
                         readonly structuredContent?: unknown;
+                        readonly content?: ReadonlyArray<{ readonly text?: string }>;
                       };
                       readonly error?: { readonly code: number; readonly message: string };
                     },
@@ -1467,7 +1468,13 @@ it.effect("lists memory and Telescope tools only to threads with an open Telesco
           owner_subject_id: workspace.createdBy,
           kind: "chief_of_staff",
           name: agentId,
-          standing_powers_json: "{}",
+          // Memory needs no power, so the agent holds none.
+          standing_powers_json: JSON.stringify({
+            openTickets: false,
+            dispatchWorkers: false,
+            answerMembers: false,
+            mergePRs: false,
+          }),
           exposure: "hidden",
           sync_with_board: 0,
           dispatch_mode: "inbox",
@@ -1480,7 +1487,13 @@ it.effect("lists memory and Telescope tools only to threads with an open Telesco
           run_id: runId,
           agent_id: agentId,
           on_behalf_of_json: JSON.stringify([workspace.createdBy]),
-          input_snapshot_json: "{}",
+          input_snapshot_json: JSON.stringify({
+            promptVersion: "prompt@1",
+            skillsVersions: {},
+            powersVersion: "powers@1",
+            model: "model-a",
+            contextManifest: [],
+          }),
           started_at: at,
           thread_id: threadId,
         });
@@ -1512,6 +1525,32 @@ it.effect("lists memory and Telescope tools only to threads with an open Telesco
           -32602,
         );
       }
+
+      yield* db.insert(workspace.id, "kill_switches", {
+        agent_id: "agent-alice",
+        state: "terminated",
+        by_subject_id: workspace.createdBy,
+        at,
+      });
+      const elsewhere = yield* rpcAs("alice-elsewhere");
+      for (const refused of [
+        write(telescopeRun),
+        elsewhere("tools/call", { name: "memory_search", arguments: { query: "样机周五" } }),
+        telescopeRun("tools/call", { name: "ticket_list", arguments: {} }),
+      ]) {
+        expect(JSON.parse((yield* refused).result?.content?.[0]?.text ?? "{}")).toMatchObject({
+          code: "capability_denied",
+          message: expect.stringContaining("An admin stopped this agent."),
+        });
+      }
+      const audited = (tool: string, outcome: string) =>
+        db.count(workspace.id, "audit", { tool, outcome });
+      expect([
+        yield* audited("memory_write", "denied"),
+        yield* audited("memory_search", "denied"),
+        yield* audited("memory_write", "allowed"),
+      ]).toEqual([1, 1, 1]);
+      yield* db.remove(workspace.id, "kill_switches", { agent_id: "agent-alice" });
       expect(yield* search(yield* rpcAs("alice-elsewhere"))).toMatchObject({
         memories: [{ text: "样机周五交付" }],
       });

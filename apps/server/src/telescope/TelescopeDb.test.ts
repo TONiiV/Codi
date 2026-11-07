@@ -1,7 +1,12 @@
+import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, it } from "@effect/vitest";
 import { Telescope } from "@t3tools/contracts";
+import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
+import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import * as SqlClient from "effect/sql/SqlClient";
 
@@ -19,6 +24,17 @@ const workspace = (workspace_id: string) => ({
   created_at: "2026-11-06T00:00:00.000Z",
   created_by: "owner",
 });
+const memory = (memory_id: string, text: string) => ({
+  memory_id,
+  agent_id: "agent",
+  scope: "agent",
+  layer: "semantic",
+  level: "fact",
+  kind: "fact",
+  text,
+  source_json: "{}",
+  valid_from: "2026-11-06T00:00:00.000Z",
+});
 const layer = TelescopeDb.layer.pipe(
   Layer.provideMerge(
     Layer.effectDiscard(
@@ -34,6 +50,9 @@ const layer = TelescopeDb.layer.pipe(
   ),
 );
 
+const decodeIds = Schema.decodeUnknownEffect(
+  Schema.Array(Schema.Struct({ memory_id: Schema.String })),
+);
 const MemberName = Schema.Struct({ workspace_id: Schema.String, display_name: Schema.String });
 const decodeNames = Schema.decodeUnknownEffect(Schema.Array(MemberName));
 const member = (name: string) => ({
@@ -116,17 +135,6 @@ it.layer(layer)("TelescopeDb", (it) => {
           SELECT memory_id, workspace_id FROM telescope_memories_fts
           WHERE telescope_memories_fts MATCH ${needle}
         `;
-      const memory = (memory_id: string, text: string) => ({
-        memory_id,
-        agent_id: "agent",
-        scope: "agent",
-        layer: "semantic",
-        level: "fact",
-        kind: "fact",
-        text,
-        source_json: "{}",
-        valid_from: "2026-11-06T00:00:00.000Z",
-      });
       yield* db.insert(wsA, "memories", memory("m1", "prefers tabs"));
       assert.deepStrictEqual(yield* indexed("tabs"), [{ memory_id: "m1", workspace_id: "ws-a" }]);
 
@@ -147,3 +155,42 @@ it.layer(layer)("TelescopeDb", (it) => {
     }),
   );
 });
+
+it.effect("searches memories on a reader while a write transaction holds the writer", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const filename = path.join(yield* fs.makeTempDirectoryScoped(), "telescope.sqlite");
+    yield* Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      const db = yield* TelescopeDb.TelescopeDb;
+      yield* sql`INSERT INTO telescope_workspaces ${sql.insert([workspace(wsA)])}`;
+      yield* db.insert(wsA, "memories", memory("m1", "deploys on Friday"));
+      const held = yield* Deferred.make<void>();
+      const release = yield* Deferred.make<void>();
+      const writer = yield* sql
+        .withTransaction(
+          db
+            .insert(wsA, "memories", memory("m2", "deploys on Monday"))
+            .pipe(
+              Effect.andThen(Deferred.succeed(held, undefined)),
+              Effect.andThen(Deferred.await(release)),
+            ),
+        )
+        .pipe(Effect.forkChild);
+      yield* Deferred.await(held);
+      // On the writer this would wait for the transaction above; the reader sees only m1.
+      const found = yield* db.searchMemories(wsA, "deploys", decodeIds, {
+        where: {},
+        validAt: undefined,
+      });
+      assert.deepStrictEqual(found, [{ memory_id: "m1" }]);
+      yield* Deferred.succeed(release, undefined);
+      yield* Fiber.join(writer);
+    }).pipe(
+      Effect.provide(
+        TelescopeDb.layer.pipe(Layer.provideMerge(SqlitePersistence.layerFromPath(filename))),
+      ),
+    );
+  }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+);

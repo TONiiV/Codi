@@ -167,7 +167,7 @@ it.layer(layer)("Telescope tool gateway", (it) => {
       assert.deepStrictEqual(yield* calls, ["open_ticket:allowed", "merge_pr:denied"]);
 
       assert.strictEqual(yield* denial(" "), "unknown_tool");
-      assert.strictEqual(yield* denial("memory_write"), "unknown_tool");
+      assert.strictEqual(yield* denial("memory_pin"), "unknown_tool");
       assert.lengthOf(yield* audit, 2, "unknown tools never reach the audit");
       const gateway = yield* ToolGateway.ToolGateway;
       const noRun = yield* gateway
@@ -282,12 +282,21 @@ it.layer(layer)("Telescope tool gateway", (it) => {
       yield* call("open_ticket");
       yield* rule({ ...ALL, openTickets: false });
       assert.strictEqual(yield* denial("open_ticket"), "forbidden");
+      const none = { openTickets: false, dispatchWorkers: false, answerMembers: false };
+      yield* rule({ ...none, mergePRs: false });
+      yield* call("memory_search");
       yield* rule(ALL);
       yield* call("open_ticket");
       yield* workspaces.revoke(as.ann, { workspaceId, subjectId: beaId });
       assert.strictEqual(yield* denial("open_ticket"), "forbidden");
-      const outcomes = (yield* audit).map((entry) => entry.outcome);
-      assert.deepStrictEqual(outcomes, ["allowed", "denied", "allowed", "denied"]);
+      const outcomes = (yield* audit).map((entry) => [entry.tool, entry.power, entry.outcome]);
+      assert.deepStrictEqual(outcomes, [
+        ["open_ticket", "openTickets", "allowed"],
+        ["open_ticket", "openTickets", "denied"],
+        ["memory_search", undefined, "allowed"],
+        ["open_ticket", "openTickets", "allowed"],
+        ["open_ticket", "openTickets", "denied"],
+      ]);
     }),
   );
 
@@ -401,7 +410,9 @@ it.layer(layer)("Telescope tool gateway", (it) => {
         yield* call("open_ticket");
         yield* call("answer_member");
         assert.strictEqual(yield* denial("open_ticket"), `budget:${level}`);
+        assert.strictEqual(yield* denial("memory_search"), `budget:${level}`);
         const [denied] = (yield* audit).toReversed();
+        assert.strictEqual(denied?.tool, "memory_search");
         assert.strictEqual(denied?.reason, `A Telescope budget is used up. Level: ${level}.`);
 
         const lifted = yield* gateway.setBudget(as.ann, budget);

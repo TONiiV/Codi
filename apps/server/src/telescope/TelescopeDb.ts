@@ -1,4 +1,5 @@
 import { Telescope } from "@t3tools/contracts";
+import * as NodeSqliteClient from "@t3tools/shared/nodeSqliteClient";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -52,6 +53,14 @@ export interface SelectOptions {
   readonly limit?: number;
 }
 
+export interface SearchOptions {
+  readonly where: Row;
+  readonly validAt: string | undefined;
+  /** ANDed like `SelectOptions.filter`, before `limit` applies. */
+  readonly filter?: Statement.Fragment;
+  readonly limit?: number;
+}
+
 /**
  * The only way Telescope code reaches its tables. Every statement is bound to one workspace, so a
  * caller that forgets to filter still cannot touch another workspace's rows.
@@ -90,12 +99,15 @@ export class TelescopeDb extends Context.Service<
       table: TelescopeTable,
       where: Row,
     ) => Effect.Effect<void, PersistenceSqlError>;
-    /** Trigram full-text search over `telescope_memories`: pinned first, then by relevance. */
+    /**
+     * Trigram full-text search over `telescope_memories`: pinned first, then by relevance. It reads
+     * on a reader connection, so a large search never holds the writer.
+     */
     readonly searchMemories: <A, R>(
       workspaceId: Telescope.WorkspaceId,
       query: string,
       decodeRows: RowsDecoder<A, R>,
-      options: { readonly where: Row; readonly validAt: string | undefined },
+      options: SearchOptions,
     ) => Effect.Effect<A, PersistenceSqlError | PersistenceDecodeError, R>;
     /** Deletes every memory of the workspace with its search index rows. */
     readonly removeAllMemories: (
@@ -258,7 +270,7 @@ const make = Effect.gen(function* () {
     workspaceId: Telescope.WorkspaceId,
     query: string,
     decodeRows: RowsDecoder<A, R>,
-    options: { readonly where: Row; readonly validAt: string | undefined },
+    options: SearchOptions,
   ) {
     const terms = query.split(/\s+/).filter((term) => term.length > 0);
     const fts = yield* sql`
@@ -276,7 +288,9 @@ const make = Effect.gen(function* () {
       ...(validAt === undefined
         ? []
         : [sql`valid_from <= ${validAt}`, sql`(invalid_at IS NULL OR invalid_at > ${validAt})`]),
+      ...(options.filter === undefined ? [] : [sql`(${options.filter})`]),
     ]);
+    const limit = options.limit === undefined ? sql`` : sql` LIMIT ${options.limit}`;
     const match = sql.and([
       sql`workspace_id = ${workspaceId}`,
       ...(phrases.length === 0
@@ -290,19 +304,19 @@ const make = Effect.gen(function* () {
       fts.length === 0
         ? sql`
       SELECT * FROM telescope_memories WHERE ${sql.and([filters, ...likes])}
-      ORDER BY pinned DESC, valid_from DESC
+      ORDER BY pinned DESC, valid_from DESC${limit}
     `
         : sql`
       WITH hits AS (SELECT memory_id, rank AS score FROM telescope_memories_fts WHERE ${match})
       SELECT telescope_memories.* FROM telescope_memories JOIN hits USING (memory_id)
       WHERE ${filters}
-      ORDER BY pinned DESC, score, valid_from DESC
+      ORDER BY pinned DESC, score, valid_from DESC${limit}
     `
     ).pipe(Effect.mapError(toPersistenceSqlError("TelescopeDb.searchMemories")));
     return yield* decodeRows(rows).pipe(
       Effect.mapError(toPersistenceDecodeError("TelescopeDb.searchMemories")),
     );
-  });
+  }, NodeSqliteClient.readOnly);
   // The index's delete trigger scans the whole index once per memory row, so it is set aside
   // while the workspace's index rows go in one scan; the savepoint keeps it from being missing.
   const removeAllMemories = Effect.fn("TelescopeDb.removeAllMemories")(function* (

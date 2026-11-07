@@ -14,7 +14,8 @@ import * as TelescopeDb from "./TelescopeDb.ts";
 import * as WorkspaceService from "./WorkspaceService.ts";
 
 // Reading the board needs openTickets too, so an agent without it sees only its own brief.
-const TOOL_POWERS: Readonly<Record<Telescope.GatewayTool, Telescope.GrantPower>> = {
+// Null needs no power: every agent keeps its own memory.
+const TOOL_POWERS: Readonly<Record<Telescope.GatewayTool, Telescope.GrantPower | null>> = {
   open_ticket: "openTickets",
   dispatch_worker: "dispatchWorkers",
   answer_member: "answerMembers",
@@ -32,6 +33,8 @@ const TOOL_POWERS: Readonly<Record<Telescope.GatewayTool, Telescope.GrantPower>>
   delegation_list: "openTickets",
   delegation_report: "openTickets",
   delegation_cancel: "dispatchWorkers",
+  memory_search: null,
+  memory_write: null,
 };
 const SECRET_KEY = /token|secret|password|passphrase|api.?key|authorization|cookie|credential/i;
 
@@ -252,7 +255,7 @@ const make = Effect.gen(function* () {
       ? new ToolGatewayDenied({ reason: refuse, tool })
       : stopped
         ? new ToolGatewayDenied({ reason: "stopped", tool })
-        : !grant.powers[power]
+        : power !== null && !grant.powers[power]
           ? new ToolGatewayDenied({ reason: "forbidden", tool })
           : // An agent without a project still holds dispatchWorkers, to pass down the chain.
             tool === "dispatch_worker" && grant.projectId === undefined
@@ -266,7 +269,7 @@ const make = Effect.gen(function* () {
       runId: run.run_id,
       agentId,
       onBehalfOf,
-      power,
+      ...(power === null ? {} : { power }),
       tool,
       argsRedacted,
       outcome: denied === undefined ? "allowed" : "denied",
