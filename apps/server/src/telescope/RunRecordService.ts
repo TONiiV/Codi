@@ -114,6 +114,7 @@ type Caller = WorkspaceService.Caller;
 type WorkspaceId = Telescope.WorkspaceId;
 type RunRef = typeof Telescope.RunScopedInput.Type;
 type RunList = typeof Telescope.RunListResult.Type;
+type ContextManifest = Telescope.AgentRun["inputSnapshot"]["contextManifest"];
 
 interface RunStartInput {
   readonly agentId: Telescope.AgentRun["agentId"];
@@ -154,6 +155,8 @@ export class RunRecordService extends Context.Service<
     /** Later turns on the thread add their tokens to the run until it finishes. */
     readonly attachThread: (run: RunRef, threadId: ThreadId) => Out<void>;
     readonly recordCall: (run: RunRef, call: RunCallInput) => Out<Telescope.RunCall>;
+    /** Adds the entries an assembled context gave an open run to its manifest, once each. */
+    readonly recordContextManifest: (run: RunRef, entries: ContextManifest) => Out<void>;
     /** Adds a finished provider turn's tokens to every open run attached to its thread. */
     readonly recordThreadTurn: (threadId: ThreadId, tokens: Tokens) => Out<void>;
     readonly finish: (run: RunRef, input: RunFinishInput) => Out<Telescope.AgentRun>;
@@ -258,6 +261,24 @@ const make = Effect.gen(function* () {
         };
         yield* db.insert(run.workspaceId, "run_calls", encodeCall(row));
         return toCall(row);
+      }),
+    );
+  });
+
+  const recordContextManifest = Effect.fn("RunRecordService.recordContextManifest")(function* (
+    run: RunRef,
+    entries: ContextManifest,
+  ) {
+    const key = (entry: ContextManifest[number]) => `${entry.kind}\0${entry.id}\0${entry.hash}`;
+    yield* db.transaction(
+      Effect.gen(function* () {
+        const row = yield* runRow(run, "open");
+        const listed = [...row.input_snapshot_json.contextManifest, ...entries];
+        const contextManifest = [...new Map(listed.map((entry) => [key(entry), entry])).values()];
+        yield* saveRun({
+          ...row,
+          input_snapshot_json: { ...row.input_snapshot_json, contextManifest },
+        });
       }),
     );
   });
@@ -425,6 +446,7 @@ const make = Effect.gen(function* () {
     start,
     attachThread,
     recordCall,
+    recordContextManifest,
     recordThreadTurn,
     finish,
     label,
