@@ -120,6 +120,8 @@ const DENIED_MESSAGES = {
   budget: "A Telescope budget is used up.",
   project_only:
     "Only a project's agent opens Worker threads. Hand the work to its Chief Agent with `delegate`.",
+  no_project:
+    "Only an agent without a project hands work to a Chief Agent. Report back to the agent that gave you this task.",
   linked:
     "Telescope agents cannot act on a linked environment yet. Leave out environmentId to work here.",
 } as const;
@@ -134,6 +136,7 @@ export class ToolGatewayDenied extends Schema.TaggedError<ToolGatewayDenied>()(
       "forbidden",
       "budget",
       "project_only",
+      "no_project",
       "linked",
     ]),
     tool: Schema.optionalKey(Telescope.GatewayTool),
@@ -244,9 +247,11 @@ const make = Effect.gen(function* () {
           : // An agent without a project still holds dispatchWorkers, to pass down the chain.
             tool === "dispatch_worker" && grant.projectId === undefined
             ? new ToolGatewayDenied({ reason: "project_only", tool })
-            : spent !== undefined
-              ? new ToolGatewayDenied({ reason: "budget", tool, level: spent })
-              : undefined;
+            : tool === "delegate" && grant.projectId !== undefined
+              ? new ToolGatewayDenied({ reason: "no_project", tool })
+              : spent !== undefined
+                ? new ToolGatewayDenied({ reason: "budget", tool, level: spent })
+                : undefined;
     yield* grants.audit(workspaceId, {
       runId: run.run_id,
       agentId,

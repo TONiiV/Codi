@@ -216,6 +216,16 @@ const make = Effect.gen(function* () {
     });
     return row ?? (yield* notFound("Delegation"));
   });
+  // To an agent that neither sent nor received it, a delegation does not exist.
+  const loadAsParty = Effect.fn("DelegationService.loadAsParty")(function* (
+    actor: Actor,
+    delegationId: Telescope.DelegationId,
+  ) {
+    const row = yield* load({ workspaceId: actor.workspaceId, delegationId });
+    if (row.from_agent_id !== actor.agentId && row.to_agent_id !== actor.agentId)
+      return yield* notFound("Delegation");
+    return row;
+  });
   const agent = (workspaceId: WorkspaceId, agentId: Telescope.AgentId) =>
     db
       .select(workspaceId, "agents", decodeAgents, { agent_id: agentId })
@@ -348,7 +358,7 @@ const make = Effect.gen(function* () {
   ) {
     if (!REPORT_STATES.includes(input.state))
       return yield* fail("forbidden", "A report does not cancel or restart a delegation.");
-    const row = yield* load({ workspaceId: actor.workspaceId, delegationId: input.delegationId });
+    const row = yield* loadAsParty(actor, input.delegationId);
     if (row.to_agent_id !== actor.agentId)
       return yield* fail("forbidden", "Only the agent a task was delegated to reports on it.");
     const moved = yield* move(
@@ -402,8 +412,10 @@ const make = Effect.gen(function* () {
     by: Actor | MemberActor,
     delegationId: Telescope.DelegationId,
   ) {
-    const root = yield* load({ workspaceId: by.workspaceId, delegationId });
     const byAgent = "agentId" in by;
+    const root = yield* byAgent
+      ? loadAsParty(by, delegationId)
+      : load({ workspaceId: by.workspaceId, delegationId });
     if (byAgent ? root.from_agent_id !== by.agentId : !(yield* chainOwnedBy(root, by.memberId)))
       return yield* fail(
         "forbidden",

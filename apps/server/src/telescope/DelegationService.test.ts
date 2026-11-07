@@ -218,6 +218,7 @@ it.effect("only the to-agent reports, from a state that allows the move", () =>
     assert.deepStrictEqual([working.state, working.threadId], ["WORKING", "thread-chief"]);
     assert.strictEqual(yield* failure(delegations.start(ref)), "conflict");
     assert.strictEqual(yield* failure(report(pa, "COMPLETED")), "forbidden");
+    assert.strictEqual(yield* failure(report(beaChief, "COMPLETED")), "not_found");
     assert.strictEqual(yield* failure(report(chief, "REJECTED")), "conflict");
     const cancelled = delegations.report(actor(chief), {
       delegationId: task.id,
@@ -361,6 +362,7 @@ it.effect("cancel cascades to descendants and reports CANCELED up one level", ()
     ]);
 
     assert.strictEqual(yield* failure(delegations.cancel(actor(chief), task.id)), "forbidden");
+    assert.strictEqual(yield* failure(delegations.cancel(actor(beaChief), task.id)), "not_found");
     const bea = { workspaceId: ws, memberId: "bea" };
     assert.strictEqual(yield* failure(delegations.cancel(bea, task.id)), "forbidden");
 

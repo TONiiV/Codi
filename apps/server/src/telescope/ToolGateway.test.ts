@@ -200,9 +200,9 @@ it.layer(layer)("Telescope tool gateway", (it) => {
     }),
   );
 
-  it.effect("dispatch_worker is refused project_only for the PA and audited", () =>
+  it.effect("refuses the PA's dispatch_worker and a Chief's delegate, both audited", () =>
     Effect.gen(function* () {
-      const { workspaceId, beaId, gateway, audit } = yield* setup;
+      const { workspaceId, beaId, chiefId, gateway, denial, audit } = yield* setup;
       const { agents: mine } = yield* (yield* AgentService.AgentService).listMine(as.bea, {
         workspaceId,
       });
@@ -257,6 +257,19 @@ it.layer(layer)("Telescope tool gateway", (it) => {
         ],
       );
       yield* gateway.call(paThread, "open_ticket", {}, () => Effect.void);
+      yield* gateway.call(paThread, "delegate", {}, () => Effect.void);
+
+      assert.strictEqual(yield* denial("delegate"), "no_project");
+      const [chiefEntry] = (yield* audit).toReversed();
+      assert.deepStrictEqual(
+        [chiefEntry?.agentId, chiefEntry?.tool, chiefEntry?.outcome, chiefEntry?.reason],
+        [
+          chiefId,
+          "delegate",
+          "denied",
+          "Only an agent without a project hands work to a Chief Agent. Report back to the agent that gave you this task.",
+        ],
+      );
     }),
   );
 

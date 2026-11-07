@@ -459,7 +459,7 @@ it.effect("delegate from the PA creates a delegation for its own Chief and a wak
   }).pipe(Effect.provide(layer)),
 );
 
-it.effect("delegate to another member's agent is not found", () =>
+it.effect("delegate to another member's agent is not found, and a Chief does not delegate", () =>
   Effect.gen(function* () {
     const { workspaceId, db, pa, chief, queue } = yield* chain;
     const agent = (id: string, owner: string | null, kind: Telescope.AgentKind) =>
@@ -485,10 +485,21 @@ it.effect("delegate to another member's agent is not found", () =>
         yield* pa.call("delegate", { toAgentId: Telescope.AgentId.make(toAgentId), brief }),
         { code: "invalid_request", message: "Agent not found." },
       );
-    assert.deepInclude(
-      yield* chief.call("delegate", { toAgentId: chief.id, brief }),
-      refused("An agent does not delegate to itself."),
-    );
+    yield* (yield* WorkspaceService.WorkspaceService).bind(ann, {
+      workspaceId,
+      environmentId: EnvironmentId.make("env-elsewhere"),
+      projectId: ProjectId.make("project-app"),
+    });
+    const { agents } = yield* (yield* AgentService.AgentService).listMine(ann, { workspaceId });
+    const sibling = agents.find((row) => row.kind === "chief_agent" && row.id !== chief.id);
+    assert.isDefined(sibling);
+    for (const toAgentId of [sibling.id, chief.id])
+      assert.deepInclude(
+        yield* chief.call("delegate", { toAgentId, brief }),
+        refused(
+          "Only an agent without a project hands work to a Chief Agent. Report back to the agent that gave you this task. Do not retry; tell your member.",
+        ),
+      );
     assert.isUndefined(yield* queue.dequeue);
     assert.deepStrictEqual(yield* pa.call("delegation_list", {}), { delegations: [] });
   }).pipe(Effect.provide(layer)),
