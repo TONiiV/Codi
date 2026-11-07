@@ -54,6 +54,17 @@ describe("Sidebar", () => {
     expect(document.activeElement).not.toBe(trigger);
   });
 
+  it("keeps focus on the trigger after keyboard activation", async () => {
+    await page.viewport(1280, 800);
+    await using screen = await render(<Harness />, { router: false /* no routes involved */ });
+    const trigger = screen.container.querySelector<HTMLElement>('[data-slot="sidebar-trigger"]')!;
+
+    trigger.focus();
+    await userEvent.keyboard("{Enter}");
+    await userEvent.keyboard(" ");
+    expect(document.activeElement).toBe(trigger);
+  });
+
   it("abandons a rail drag when the sidebar collapses mid-drag", async () => {
     await page.viewport(1280, 800);
     const onResize = vi.fn();
