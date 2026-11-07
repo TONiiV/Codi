@@ -1,6 +1,8 @@
+// @effect-diagnostics nodeBuiltinImport:off - Effect's FileSystem has no lutimes, which the symlink rows need.
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, it } from "@effect/vitest";
+import * as NodeFS from "node:fs";
 import { AuthSessionId, EnvironmentId, Telescope, ThreadId } from "@t3tools/contracts";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
@@ -368,20 +370,36 @@ it.effect("the retention pass prunes runs and their context files once a day", (
     const recent = yield* start;
     yield* finish(recent.id);
     yield* writeContext(recent.id);
-    const [oldOrphan, freshOrphan, notContext, folder] = [
+    const [oldOrphan, freshOrphan, notContext, folder, emptyStem, fileLink, folderLink] = [
       "orphan-old.md",
       "orphan-fresh.md",
       "notes.txt",
       "folder.md",
+      ".md",
+      "link-file.md",
+      "link-folder.md",
     ].map((name) => path.join(path.dirname(fileOf(old.id)), name)) as [
       string,
       string,
       string,
       string,
+      string,
+      string,
+      string,
     ];
-    for (const file of [oldOrphan, freshOrphan, notContext]) yield* fs.writeFileString(file, "x");
+    const [outsideFile, outsideFolder] = [
+      path.join(stateDir, "outside.md"),
+      path.join(stateDir, "outside"),
+    ];
+    for (const file of [oldOrphan, freshOrphan, notContext, emptyStem, outsideFile]) {
+      yield* fs.writeFileString(file, "x");
+    }
     yield* fs.makeDirectory(folder);
-    for (const file of [oldOrphan, notContext, folder]) yield* fs.utimes(file, 0, 0);
+    yield* fs.makeDirectory(outsideFolder);
+    yield* fs.symlink(outsideFile, fileLink);
+    yield* fs.symlink(outsideFolder, folderLink);
+    for (const file of [oldOrphan, notContext, folder, emptyStem]) yield* fs.utimes(file, 0, 0);
+    for (const link of [fileLink, folderLink]) NodeFS.lutimesSync(link, 0, 0);
     yield* fs.utimes(freshOrphan, (6 * day) / 1000, (6 * day) / 1000);
     const pass = yield* RunRecordService.makeRetentionPass;
 
@@ -404,8 +422,13 @@ it.effect("the retention pass prunes runs and their context files once a day", (
         yield* fs.exists(freshOrphan),
         yield* fs.exists(notContext),
         yield* fs.exists(folder),
+        yield* fs.exists(emptyStem),
+        yield* fs.exists(fileLink),
+        yield* fs.exists(folderLink),
+        yield* fs.exists(outsideFile),
+        yield* fs.exists(outsideFolder),
       ],
-      [false, true, true, true],
+      [false, true, true, true, true, true, true, true, true],
     );
 
     // The next check waits a day, so a run that ages out meanwhile survives until then.

@@ -1,6 +1,6 @@
 import * as Schema from "effect/Schema";
 
-import { EnvironmentId, PositiveInt, ProjectId } from "../baseSchemas.ts";
+import { EnvironmentId, ProjectId } from "../baseSchemas.ts";
 import { InvitationId, SubjectId, Text, Timestamp, WorkspaceId } from "./common.ts";
 
 export const WorkspaceKind = Schema.Literals(["enterprise", "personal"]);
@@ -71,15 +71,20 @@ export const WorkspaceScopedInput = Schema.Struct(InWorkspace);
 export const WorkspaceListInput = Schema.Struct({});
 export const WorkspaceGetResult = Schema.Struct({ workspace: Workspace, self: Member });
 
+export const MEMBER_CODE_MAX_TTL_SECONDS = 365 * 24 * 60 * 60;
+const CodeTtlSeconds = Schema.Int.check(
+  Schema.isBetween({ minimum: 1, maximum: MEMBER_CODE_MAX_TTL_SECONDS }),
+);
+
 export const MemberInviteInput = Schema.Struct({
   ...InWorkspace,
   role: WorkspaceRole,
-  expiresInSeconds: Schema.optionalKey(PositiveInt),
+  expiresInSeconds: Schema.optionalKey(CodeTtlSeconds),
 });
 export const MemberLinkCodeInput = Schema.Struct({
   ...InWorkspace,
   subjectId: SubjectId,
-  expiresInSeconds: Schema.optionalKey(PositiveInt),
+  expiresInSeconds: Schema.optionalKey(CodeTtlSeconds),
 });
 export const MemberAcceptInput = Schema.Struct({ code: Text, displayName: Text });
 export const MemberListResult = Schema.Struct({ members: Schema.Array(Member) });

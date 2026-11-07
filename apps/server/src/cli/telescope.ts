@@ -276,7 +276,7 @@ export const orgCommand = Command.make("org").pipe(
   Command.withSubcommands([orgInitCommand, orgListCommand, orgExportCommand, orgDeleteCommand]),
 );
 
-const MAX_INVITATION_TTL = Duration.days(365);
+const MAX_INVITATION_TTL = Duration.seconds(Telescope.MEMBER_CODE_MAX_TTL_SECONDS);
 
 const memberInviteCommand = Command.make("invite", {
   ...common,

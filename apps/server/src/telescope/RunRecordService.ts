@@ -488,13 +488,15 @@ export const makeRetentionPass = Effect.gen(function* () {
   const path = yield* Path.Path;
   const { stateDir } = yield* ServerConfig;
   const removeFile = (file: string) =>
-    fs
-      .remove(file, { force: true })
-      .pipe(
-        Effect.catch((error) =>
-          Effect.logWarning("Telescope run context file left", { file, error: error.message }),
-        ),
-      );
+    fs.remove(file, { force: true }).pipe(
+      Effect.catch((error) =>
+        Effect.logWarning("Telescope run context file left", {
+          file,
+          error: error.message,
+          cause: String(error.cause),
+        }),
+      ),
+    );
   const isOldPlainFile = (file: string, cutoffMs: number) =>
     fs.lstat(file).pipe(
       Effect.map(
@@ -518,8 +520,12 @@ export const makeRetentionPass = Effect.gen(function* () {
     const names = yield* fs
       .readDirectory(contextDir(path, stateDir))
       .pipe(Effect.orElseSucceed((): ReadonlyArray<string> => []));
+    const tried = new Set<string>(dropped);
     const orphans = yield* runs.runIdsWithoutRows(
-      names.filter((name) => name.endsWith(".md")).map((name) => name.slice(0, -3)),
+      names
+        .filter((name) => name.endsWith(".md"))
+        .map((name) => name.slice(0, -3))
+        .filter((runId) => runId !== "" && !tried.has(runId)),
     );
     yield* Effect.forEach(
       orphans,
