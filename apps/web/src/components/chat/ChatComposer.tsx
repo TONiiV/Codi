@@ -83,7 +83,7 @@ import {
   extendReplacementRangeForTrailingSpace,
   replaceTextRange,
 } from "../../composer-logic";
-import { DEFAULT_COMPOSER_PLACEHOLDER } from "../../composerPlaceholder";
+import { DEFAULT_COMPOSER_PLACEHOLDER_KEY } from "../../composerPlaceholder";
 import {
   deriveComposerSendState,
   getAntigravitySendBlockReason,
@@ -3369,10 +3369,14 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                   )}
                   onPointerDown={(event) => event.preventDefault()}
                   onClick={expandMobileComposerStable}
-                  aria-label="Expand composer"
+                  aria-label={t("settings.remaining.expandComposer")}
                 >
                   {prompt.trim() ||
-                    (showProviderUnavailable ? "Enable a provider in Settings" : "Ask anything...")}
+                    t(
+                      showProviderUnavailable
+                        ? "settings.remaining.enableProvider"
+                        : "settings.remaining.askAnything",
+                    )}
                 </button>
                 {collapsedComposerImagePreviews}
                 <button
@@ -3524,23 +3528,23 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                     onCitationSubmitAndSend={submitCitationAndSendStable}
                     onCitationDraftSave={saveCitationDraftToPromptStable}
                     onPaste={onComposerPasteStable}
-                    placeholder={
+                    placeholder={t(
                       isComposerApprovalState
                         ? activePendingApproval?.supportsFeedback
-                          ? "Send feedback to decline this request"
-                          : "Send a message to decline and redirect the agent"
+                          ? "settings.remaining.sendFeedbackToDecline"
+                          : "settings.remaining.sendMessageToDecline"
                         : activePendingProgress
                           ? isChoiceOnlyPendingQuestion
-                            ? "Choose an option above"
-                            : "Type your own answer, or leave this blank to use the selected option"
+                            ? "settings.remaining.chooseOptionAbove"
+                            : "settings.remaining.typeOwnAnswer"
                           : showPlanFollowUpPrompt && activeProposedPlan
-                            ? "Add feedback to refine the plan, or leave this blank to implement it"
+                            ? "settings.remaining.refinePlan"
                             : projectSelectionRequired
-                              ? "Choose a project above to start a thread"
+                              ? "settings.remaining.chooseProjectAbove"
                               : showProviderUnavailable
-                                ? "Enable a provider in Settings to send a message"
-                                : DEFAULT_COMPOSER_PLACEHOLDER
-                    }
+                                ? "settings.remaining.enableProviderToSend"
+                                : DEFAULT_COMPOSER_PLACEHOLDER_KEY,
+                    )}
                     disabled={
                       projectSelectionRequired ||
                       isChoiceOnlyPendingQuestion ||
