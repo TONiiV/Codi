@@ -1,6 +1,7 @@
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import { assert, it } from "@effect/vitest";
 import { AuthSessionId, EnvironmentId, Telescope } from "@t3tools/contracts";
+import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
@@ -205,6 +206,40 @@ it.layer(layer)("Telescope board changes", (it) => {
       // It stays ended, though its backlog has room again.
       yield* board.createTask(alice, { workspaceId: a, title: "Once drained" });
       assert.strictEqual(reasonOf(yield* Effect.flip(pull)), "expired");
+    }),
+  );
+
+  it.effect("delivers a write that commits while the watch checks membership", () =>
+    Effect.gen(function* () {
+      const { board, changes: hub, a } = yield* setup;
+      const sql = yield* SqlClient.SqlClient;
+      const task = yield* board.createTask(alice, { workspaceId: a, title: "Held" });
+      const inTransaction = yield* Deferred.make<void>();
+      const release = yield* Deferred.make<void>();
+      const held: Telescope.BoardChange = { kind: "task", workspaceId: a, id: task.id, version: 9 };
+      const writer = yield* sql
+        .withTransaction(
+          hub.batch(
+            Effect.gen(function* () {
+              yield* hub.publish(held);
+              yield* Deferred.succeed(inTransaction, undefined);
+              yield* Deferred.await(release);
+            }),
+          ),
+        )
+        .pipe(Effect.forkScoped({ startImmediately: true }));
+      yield* Deferred.await(inTransaction);
+      // The watch's membership read waits behind the open transaction until the write commits.
+      const items = yield* Queue.unbounded<Telescope.BoardWatchItem>();
+      yield* hub.watch(alice.caller, { workspaceId: a }).pipe(
+        Stream.runForEach((item) => Queue.offer(items, item)),
+        Effect.forkScoped({ startImmediately: true }),
+      );
+      yield* Deferred.succeed(release, undefined);
+      yield* Fiber.join(writer);
+      assert.deepStrictEqual(yield* Queue.take(items), { kind: "synchronized" });
+      yield* board.createTask(alice, { workspaceId: a, title: "Sentinel" });
+      assert.deepStrictEqual(yield* Queue.take(items), changes(held));
     }),
   );
 

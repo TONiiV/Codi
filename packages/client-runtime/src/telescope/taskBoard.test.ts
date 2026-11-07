@@ -472,7 +472,7 @@ describe("board watch", () => {
         );
       yield* fail(second.notices);
       yield* TestClock.adjust("1 second");
-      const third = yield* Queue.take(watches);
+      const third = Option.getOrThrow(yield* Queue.poll(watches));
       expect(third.openedAt - second.openedAt).toBe(1000);
       yield* fail(third.notices);
       yield* TestClock.adjust("2 seconds");
