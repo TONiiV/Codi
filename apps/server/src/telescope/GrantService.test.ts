@@ -199,6 +199,39 @@ it.layer(layer)("Telescope grants", (it) => {
         routing: null,
       };
 
+      const workspaces = yield* WorkspaceService.WorkspaceService;
+      const other = yield* workspaces.create(as.zed, {
+        kind: "enterprise",
+        name: "Other",
+        displayName: "Zed",
+      });
+      const docs = ProjectId.make("project-docs");
+      yield* workspaces.bind(as.zed, { workspaceId: other.id, environmentId, projectId: docs });
+      const othersRules = grants
+        .projectRules(as.zed, { workspaceId: other.id })
+        .pipe(Effect.map(({ rules }) => rules));
+      const untouched = [{ projectId: docs, stored: false, powers: ALL, routing: null }];
+      assert.deepStrictEqual(yield* othersRules, untouched);
+      const intoOther = { ...rule, projectId: docs };
+      assert.strictEqual(
+        yield* reasonOf(grants.setProjectRule(as.ann, intoOther)),
+        "not_found",
+        "an admin of A cannot rule a project bound only to B",
+      );
+      assert.strictEqual(
+        yield* reasonOf(grants.setProjectRule(as.ann, { ...intoOther, workspaceId: other.id })),
+        "forbidden",
+        "an admin of A is nobody in B",
+      );
+      assert.deepStrictEqual(yield* othersRules, untouched, "neither refused set writes into B");
+      const peek = yield* Effect.flip(grants.projectRules(as.bea, { workspaceId: other.id }));
+      assert.strictEqual(
+        peek._tag === "TelescopeWorkspaceError" ? peek.reason : peek._tag,
+        "forbidden",
+        "a member of A cannot list B's rules",
+      );
+      assert.notInclude(peek.message, docs, "the refusal names none of B's projects");
+
       assert.strictEqual(yield* reasonOf(grants.setProjectRule(as.bea, rule)), "forbidden");
       assert.strictEqual(
         yield* reasonOf(
@@ -211,10 +244,15 @@ it.layer(layer)("Telescope grants", (it) => {
       const listed = grants
         .projectRules(as.bea, { workspaceId })
         .pipe(Effect.map(({ rules }) => rules.map((r) => [r.projectId, r.stored, r.routing])));
+      yield* workspaces.bind(as.ann, {
+        workspaceId,
+        environmentId: EnvironmentId.make("env-other"),
+        projectId: web,
+      });
       assert.deepStrictEqual(
         (yield* grants.projectRules(as.bea, { workspaceId })).rules,
         [api, web].map((projectId) => ({ projectId, stored: false, powers: ALL, routing: null })),
-        "an unruled project lists the defaults the grant uses",
+        "an unruled project lists the defaults the grant uses, once per project however many environments bind it",
       );
       assert.strictEqual(
         yield* reasonOf(grants.projectRules(as.zed, { workspaceId })),
