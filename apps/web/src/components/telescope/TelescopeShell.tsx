@@ -110,7 +110,10 @@ export function TelescopeSidebar({
   }
   return (
     <>
-      <SidebarChromeHeader isElectron={isElectron} />
+      {/* The stage artwork runs past the header; stop it at the border under the header. */}
+      <div className="shrink-0 overflow-hidden">
+        <SidebarChromeHeader isElectron={isElectron} />
+      </div>
       {/* The mobile sheet sizes to its content, and most views' bodies are still empty. */}
       <div
         className={cn(
