@@ -110,8 +110,9 @@ export function TelescopeSidebar({
   }
   return (
     <>
-      {/* The stage artwork runs past the header; stop it at the border under the header. */}
-      <div className="shrink-0 overflow-hidden">
+      {/* The stage artwork runs past the header; stop it at the border under the header. Clip
+          only that edge: under a top inset the phone sheet's toggle sits above the header. */}
+      <div className="shrink-0 [clip-path:inset(-100vmax_-100vmax_0)]">
         <SidebarChromeHeader isElectron={isElectron} />
       </div>
       {/* The mobile sheet sizes to its content, and most views' bodies are still empty. */}
