@@ -2064,10 +2064,10 @@
       "thisInstanceUsesDriverWhichIsNot": "此实例使用 <code>{{driver}}</code>，但当前版本不支持它。其配置已保留。"
     },
     "parallelSystem": {
-      "agentDeviceAccessDescription": "新的代理会话可以打开并控制这些设备。agent-device：",
+      "agentDeviceAccessDescription": "新的智能体会话可以打开并控制这些设备。agent-device：",
       "couldNotUpdateEnvironments": "无法更新 {{labels}}。",
       "customSearchUrlHint": "输入包含 %s 的 http 或 https URL。在此之前搜索将使用 DuckDuckGo。",
-      "deviceHubDescription": "在设备面板中打开模拟器和仿真器。Hub：",
+      "deviceHubDescription": "在设备面板中打开模拟器和仿真器。设备中心：",
       "enterAName": "请输入名称。",
       "licenseManifestFailed": "无法加载许可证清单。",
       "linkTargetSystem": "你的默认浏览器",
