@@ -1,9 +1,10 @@
+import { hasNoWorkspace } from "@t3tools/client-runtime/telescope/workspaces";
 import { type EnvironmentId, Telescope } from "@t3tools/contracts";
 import { useNavigate } from "@tanstack/react-router";
 import * as Schema from "effect/Schema";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 
-import { useLocalStorage } from "../../hooks/useLocalStorage";
+import { readLocalStorageValue, writeLocalStorageValue } from "../../hooks/useLocalStorage";
 import { useEnvironmentQuery, type EnvironmentQueryView } from "../../state/query";
 import { TELESCOPE_PATH } from "../sidebar/mainAppLocation";
 import { Button } from "../ui/button";
@@ -29,8 +30,10 @@ const ROLE_LABEL: Record<Telescope.AgentKind, string> = {
   department: "职能代理",
 };
 
-function initials(name: string): string {
-  const words = name.trim().split(/\s+/).filter(Boolean);
+/** Chief Agents are named "<project> Chief Agent"; only the project part tells them apart. */
+function initials(agent: Telescope.Agent): string {
+  const own = agent.kind === "chief_agent" ? agent.name.replace(/\s+Chief Agent$/, "") : agent.name;
+  const words = own.split(/[\s_-]+/).filter(Boolean);
   const picks = words.length > 1 ? [words[0], words.at(-1)] : words;
   return (
     picks
@@ -62,7 +65,7 @@ function ChatRow({
           aria-hidden
           className="inline-flex size-8 shrink-0 items-center justify-center rounded-full border border-sidebar-border bg-sidebar-control-surface text-xs font-medium text-sidebar-foreground"
         >
-          {initials(agent.name)}
+          {initials(agent)}
         </span>
         <span className="flex min-w-0 flex-1 flex-col leading-tight">
           <span className="truncate text-sidebar-foreground">{agent.name}</span>
@@ -77,6 +80,17 @@ function ChatRow({
 
 function SidebarNote({ children }: { children: ReactNode }) {
   return <p className="px-2 py-1 text-xs text-sidebar-muted-foreground">{children}</p>;
+}
+
+function LoadFailed({ onRetry }: { onRetry: () => void }) {
+  return (
+    <div className="flex items-center justify-between gap-2 px-2 py-1">
+      <span className="text-xs text-sidebar-muted-foreground">读取失败</span>
+      <Button size="xs" variant="outline" onClick={onRetry}>
+        重试
+      </Button>
+    </div>
+  );
 }
 
 function ChatGroup({
@@ -111,12 +125,7 @@ function ChatGroup({
           <SidebarMenu>{children(agents)}</SidebarMenu>
         )
       ) : query.error !== null ? (
-        <div className="flex items-center justify-between gap-2 px-2 py-1">
-          <span className="text-xs text-sidebar-muted-foreground">读取失败</span>
-          <Button size="xs" variant="outline" onClick={query.refresh}>
-            重试
-          </Button>
-        </div>
+        <LoadFailed onRetry={query.refresh} />
       ) : (
         <div className="flex justify-center py-3">
           <Spinner tone="muted" />
@@ -144,16 +153,20 @@ function ChatGroups({
   const { isMobile, setOpenMobile } = useSidebar();
   const layout = useTasksLayout();
   const selected = useChatAgentId();
-  const [folded, setFolded] = useLocalStorage(FOLDED_KEY, NONE_FOLDED, FoldedGroups);
+  // State, not useLocalStorage: folding must still work when storage refuses the key.
+  const [folded, setFolded] = useState(() =>
+    readLocalStorageValue(FOLDED_KEY, NONE_FOLDED, FoldedGroups),
+  );
   const enterprise = workspace.kind === "enterprise";
   const scoped = { environmentId, input: { workspaceId: workspace.id } };
   const mine = useEnvironmentQuery(telescopeAgents.listMine(scoped));
   const company = useEnvironmentQuery(enterprise ? telescopeAgents.listCompany(scoped) : null);
 
-  const toggle = (group: ChatGroupId) =>
-    setFolded((current) =>
-      current.includes(group) ? current.filter((id) => id !== group) : [...current, group],
-    );
+  const toggle = (group: ChatGroupId) => {
+    const next = folded.includes(group) ? folded.filter((id) => id !== group) : [...folded, group];
+    setFolded(next);
+    writeLocalStorageValue(FOLDED_KEY, next, NONE_FOLDED, FoldedGroups);
+  };
   const rows = (agents: ReadonlyArray<Telescope.Agent>) =>
     agents.map((agent) => (
       <ChatRow
@@ -203,11 +216,12 @@ export function TelescopeChatList() {
   );
   if (environmentId !== null && current !== null)
     return <ChatGroups environmentId={environmentId} workspace={current} />;
-  if (environmentId !== null && list.data === null && list.error === null)
-    return (
-      <div className="flex justify-center py-3">
-        <Spinner tone="muted" />
-      </div>
-    );
-  return <SidebarNote>建好或加入一个工作区后，你的对话会列在这里。</SidebarNote>;
+  if (hasNoWorkspace(environmentId, list.data))
+    return <SidebarNote>建好或加入一个工作区后，你的对话会列在这里。</SidebarNote>;
+  if (list.error !== null) return <LoadFailed onRetry={list.refresh} />;
+  return (
+    <div className="flex justify-center py-3">
+      <Spinner tone="muted" />
+    </div>
+  );
 }

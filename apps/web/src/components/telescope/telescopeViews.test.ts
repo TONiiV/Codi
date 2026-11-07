@@ -49,9 +49,12 @@ describe("telescope view", () => {
     expect(telescopeSearchAt("/telescope", { view: "tasks", task: ["t-1"] }, null)).toEqual({
       view: "tasks",
     });
-    expect(matchedSearch("/telescope?view=chats&agent=a-1")).toEqual({
+    expect(telescopeSearchAt("/telescope", { view: "chats", agent: "a-1" }, null)).toEqual({
       view: "chats",
       agent: "a-1",
+    });
+    expect(telescopeSearchAt("/telescope", { view: "chats", agent: " " }, null)).toEqual({
+      view: "chats",
     });
     expect(telescopeSearchAt("/telescope", { view: "chats", agent: ["a-1"] }, null)).toEqual({
       view: "chats",
