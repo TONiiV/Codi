@@ -60,6 +60,7 @@ const isRole = Schema.is(Telescope.WorkspaceRole);
 const KILL_SWITCH_LABEL = { running: "运行", paused: "暂停", terminated: "终止" } as const;
 const COMPANY_LEVEL_LABEL = { enterprise: "整个公司", personal: "整个工作区" } as const;
 const isKillSwitchState = Schema.is(Telescope.KillSwitch.fields.state);
+const NO_RULES: ReadonlyArray<Telescope.RoutingRule> = [];
 
 export function MembersSection({ environmentId, workspace, self }: Scoped) {
   const query = useFreshMembers(environmentId, workspace.id);
@@ -212,7 +213,11 @@ function CompanyAgentsSection({ environmentId, workspace, self }: Scoped) {
       ))}
       {company.data !== null && !mayConfigure ? (
         <StatusRow
-          text={mayUpdate ? "只有公司管理员能设定公司 agents。" : noAdminScopeText("公司 agents")}
+          text={
+            self.role === "admin"
+              ? noAdminScopeText("公司 agents")
+              : "只有公司管理员能设定公司 agents。"
+          }
         />
       ) : null}
       {editing ? (
@@ -623,7 +628,7 @@ function RoutingSection(props: Scoped) {
   const [confirming, setConfirming] = useState<Telescope.RoutingRuleId | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const rules = query.data?.rules ?? [];
+  const rules = query.data?.rules ?? NO_RULES;
   const confirmDelete = async (id: Telescope.RoutingRuleId) => {
     setBusy(true);
     const result = await remove({ environmentId, input: { workspaceId: workspace.id, id } });

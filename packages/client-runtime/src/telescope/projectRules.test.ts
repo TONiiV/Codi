@@ -153,6 +153,9 @@ describe("project rule atoms", () => {
       [Telescope.WS_METHODS.budgetSet]: refuse,
       [Telescope.WS_METHODS.killSwitchSet]: refuse,
       [Telescope.WS_METHODS.memberSetRole]: refuse,
+      [Telescope.WS_METHODS.memberRevoke]: refuse,
+      [Telescope.WS_METHODS.memberRestore]: refuse,
+      [Telescope.WS_METHODS.routingDelete]: refuse,
       [Telescope.WS_METHODS.agentUpdateCompany]: refuse,
       [Telescope.WS_METHODS.workspaceGet]: () =>
         Effect.sync(() => ({
@@ -229,6 +232,12 @@ describe("project rule atoms", () => {
         () => workspaces.setRole.run(registry, at({ subjectId: "x", role: "member" as const })),
       ],
       ["company agent", () => agents.updateCompany.run(registry, at({ agentId }))],
+      ["revoke", () => workspaces.revoke.run(registry, at({ subjectId: "x" }))],
+      ["restore", () => workspaces.restore.run(registry, at({ subjectId: "x" }))],
+      [
+        "routing delete",
+        () => routing.remove.run(registry, at({ id: Telescope.RoutingRuleId.make("rule") })),
+      ],
     ];
     const registry = AtomRegistry.make();
     yield* Effect.addFinalizer(() => Effect.sync(() => registry.dispose()));

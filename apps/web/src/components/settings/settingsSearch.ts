@@ -1331,7 +1331,7 @@ export const SETTINGS_SEARCH_ITEMS = [
     id: "telescope-agents",
     title: "Company agents",
     to: "/settings/telescope",
-    searchTerms: ["telescope company agents main department"],
+    searchTerms: ["telescope company agents main department 公司 agents"],
   },
   {
     id: "telescope-governance",

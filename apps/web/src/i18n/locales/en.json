@@ -2944,7 +2944,7 @@
       "secret-providers": "1password vault credentials api key",
       "secret-providers-add": "new 1password vault op cli account",
       "telescope-members": "telescope workspace members roles admin revoke remove restore 成员与角色",
-      "telescope-agents": "telescope company agents main department",
+      "telescope-agents": "telescope company agents main department 公司 agents",
       "telescope-governance": "telescope budget limit tool calls usage kill switch stop pause 预算与急停",
       "telescope-routing": "telescope routing rules harness model task type priority 路由规则",
       "telescope-project-rules": "telescope project rules powers allowlist harness model default 项目规则",
