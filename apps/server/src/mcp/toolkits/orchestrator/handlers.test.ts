@@ -187,7 +187,7 @@ const layer = (opened: Array<string>) =>
 
 const ann: WorkspaceService.SessionCaller = {
   sessionId: AuthSessionId.make("session-ann"),
-  subject: "one-time-token",
+  subject: "desktop-bootstrap",
 };
 const web = ProjectId.make("project-web");
 const scheduledTask = {

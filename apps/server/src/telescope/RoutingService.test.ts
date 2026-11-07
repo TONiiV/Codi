@@ -245,7 +245,12 @@ const session = (name: string): WorkspaceService.SessionCaller => ({
   sessionId: AuthSessionId.make(`session-${name}`),
   subject: "one-time-token",
 });
-const as = { ann: session("ann"), bea: session("bea"), zed: session("zed") };
+const as = {
+  ann: session("ann"),
+  bea: session("bea"),
+  zed: session("zed"),
+  owner: { sessionId: AuthSessionId.make("session-owner"), subject: "desktop-bootstrap" },
+};
 const ALL: Telescope.StandingPowers = {
   openTickets: true,
   dispatchWorkers: true,
@@ -367,7 +372,7 @@ it.layer(layer)("Telescope routing rules", (it) => {
       const { workspaceId, routing } = yield* setup;
       const agents = yield* AgentService.AgentService;
       const grants = yield* GrantService.GrantService;
-      const mine = (yield* agents.listMine(as.bea, { workspaceId })).agents;
+      const mine = (yield* agents.listMine(as.owner, { workspaceId })).agents;
       const chief = mine.find((agent) => agent.kind === "chief_agent" && agent.projectId === web);
       const staff = mine.find((agent) => agent.kind === "chief_of_staff");
       assert.isDefined(chief);
@@ -440,7 +445,7 @@ it.layer(layer)("Telescope routing rules", (it) => {
         onApi.id,
       );
       const sonnet = { instanceId: claude, model: "sonnet" };
-      yield* agents.update(as.bea, { workspaceId, agentId: chief.id, modelSelection: sonnet });
+      yield* agents.update(as.owner, { workspaceId, agentId: chief.id, modelSelection: sonnet });
       const off = yield* routing.set(as.ann, {
         workspaceId,
         taskType: "bugfix",
@@ -459,7 +464,7 @@ it.layer(layer)("Telescope routing rules", (it) => {
       const bugfix = { workspaceId, agentId: chief.id, taskType: "bugfix" };
 
       assert.deepStrictEqual(
-        yield* routing.resolveFor(as.bea, bugfix),
+        yield* routing.resolveFor(as.owner, bugfix),
         {
           source: "rule",
           ruleId: small.id,
@@ -495,7 +500,7 @@ it.layer(layer)("Telescope routing rules", (it) => {
         "conflict",
         "naming another project does not step around the allowlist",
       );
-      assert.strictEqual(yield* reasonOf(routing.resolveFor(as.bea, elsewhere)), "conflict");
+      assert.strictEqual(yield* reasonOf(routing.resolveFor(as.owner, elsewhere)), "conflict");
       yield* grants.setProjectRule(as.ann, projectRule);
       assert.strictEqual(
         (yield* routing.resolve(workspaceId, bugfix)).ruleId,

@@ -41,7 +41,11 @@ const session = (name: string): WorkspaceService.SessionCaller => ({
   sessionId: AuthSessionId.make(`session-${name}`),
   subject: "one-time-token",
 });
-const as = { ann: session("ann"), bea: session("bea") };
+const as = {
+  ann: session("ann"),
+  bea: session("bea"),
+  owner: { sessionId: AuthSessionId.make("session-owner"), subject: "desktop-bootstrap" },
+};
 const web = ProjectId.make("project-web");
 const ALL: Telescope.StandingPowers = {
   openTickets: true,
@@ -50,7 +54,7 @@ const ALL: Telescope.StandingPowers = {
   mergePRs: true,
 };
 
-/** Admin `ann`, member `bea`, and a run of bea's `web` Chief Agent on its own thread. */
+/** Admin `ann`, member `bea`, and a run for bea of the owner's `web` Chief Agent (D147). */
 const setup = Effect.gen(function* () {
   const workspaces = yield* WorkspaceService.WorkspaceService;
   const { id: workspaceId } = yield* workspaces.create(as.ann, {
@@ -66,7 +70,7 @@ const setup = Effect.gen(function* () {
     projectId: web,
   });
   const agents = yield* AgentService.AgentService;
-  const { agents: mine } = yield* agents.listMine(as.bea, { workspaceId });
+  const { agents: mine } = yield* agents.listMine(as.owner, { workspaceId });
   const chief = mine.find((agent) => agent.kind === "chief_agent" && agent.projectId === web);
   assert.isDefined(chief);
   const db = yield* TelescopeDb.TelescopeDb;
@@ -203,7 +207,7 @@ it.layer(layer)("Telescope tool gateway", (it) => {
   it.effect("refuses the PA's dispatch_worker and a Chief's delegate, both audited", () =>
     Effect.gen(function* () {
       const { workspaceId, beaId, chiefId, gateway, denial, audit } = yield* setup;
-      const { agents: mine } = yield* (yield* AgentService.AgentService).listMine(as.bea, {
+      const { agents: mine } = yield* (yield* AgentService.AgentService).listMine(as.owner, {
         workspaceId,
       });
       const pa = mine.find((agent) => agent.kind === "chief_of_staff");
@@ -306,7 +310,7 @@ it.layer(layer)("Telescope tool gateway", (it) => {
     Effect.gen(function* () {
       const { workspaceId, beaId, chiefId, runId, gateway, call, denial, audit } = yield* setup;
       const agentService = yield* AgentService.AgentService;
-      const { agents: mine } = yield* agentService.listMine(as.bea, { workspaceId });
+      const { agents: mine } = yield* agentService.listMine(as.owner, { workspaceId });
       const cos = mine.find((agent) => agent.kind === "chief_of_staff");
       assert.isDefined(cos);
       const viaThread = ThreadId.make(`thread-via-${workspaceId}`);
@@ -362,9 +366,9 @@ it.layer(layer)("Telescope tool gateway", (it) => {
           id: chiefId,
           name: "project-web Chief Agent",
           kind: "chief_agent",
-          ownerSubjectId: beaId,
+          ownerSubjectId: WorkspaceService.OWNER_MEMBER_ID,
         },
-        "the admin's stop list holds a member's private agent",
+        "the admin's stop list holds another member's private agent",
       );
       const hidden = yield* gateway.governance(as.bea, { workspaceId }).pipe(Effect.flip);
       assert.strictEqual(hidden._tag === "TelescopeWorkspaceError" && hidden.reason, "forbidden");
@@ -393,6 +397,15 @@ it.layer(layer)("Telescope tool gateway", (it) => {
         "allowed",
         "allowed",
       ]);
+
+      // D147: a member's agent runs on their own machine, so here it can only stay stopped.
+      const db = yield* TelescopeDb.TelescopeDb;
+      yield* db.update(workspaceId, "agents", { owner_subject_id: beaId }, { agent_id: cos.id });
+      const ofBea = (state: Telescope.KillSwitch["state"]) =>
+        gateway.setKillSwitch(as.ann, { workspaceId, agentId: cos.id, state });
+      assert.strictEqual((yield* ofBea("terminated")).state, "terminated");
+      const restart = yield* ofBea("running").pipe(Effect.flip);
+      assert.strictEqual(restart._tag === "TelescopeWorkspaceError" && restart.reason, "forbidden");
     }),
   );
 

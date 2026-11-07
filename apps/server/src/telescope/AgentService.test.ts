@@ -5,7 +5,7 @@ import { AuthSessionId, EnvironmentId, ProjectId, Telescope } from "@t3tools/con
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
-import type * as SqlClient from "effect/sql/SqlClient";
+import * as SqlClient from "effect/sql/SqlClient";
 
 import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
 import { runMigrations } from "../persistence/Migrations.ts";
@@ -44,7 +44,13 @@ const session = (name: string): WorkspaceService.SessionCaller => ({
   sessionId: AuthSessionId.make(`session-${name}`),
   subject: "one-time-token",
 });
-const as = { ann: session("ann"), bea: session("bea"), pat: session("pat"), zed: session("zed") };
+const as = {
+  ann: session("ann"),
+  bea: session("bea"),
+  pat: session("pat"),
+  zed: session("zed"),
+  owner: { sessionId: AuthSessionId.make("session-owner"), subject: "desktop-bootstrap" },
+};
 const environmentId = EnvironmentId.make("env-local");
 const web = ProjectId.make("project-web");
 const api = ProjectId.make("project-api");
@@ -67,6 +73,15 @@ const setup = (kind: "enterprise" | "personal" = "enterprise") =>
     return { workspaceId, beaId: bea.subjectId, agents: yield* AgentService.AgentService };
   });
 
+/** A member's agents from before D147: the owner's defaults, handed to them. */
+const seedAgentsOf = (workspaceId: Telescope.WorkspaceId, memberId: string) =>
+  Effect.gen(function* () {
+    yield* (yield* AgentService.AgentService).listMine(as.owner, { workspaceId });
+    const sql = yield* SqlClient.SqlClient;
+    yield* sql`UPDATE telescope_agents SET owner_subject_id = ${memberId}
+      WHERE workspace_id = ${workspaceId} AND owner_subject_id = ${Telescope.OWNER_MEMBER_ID}`;
+  });
+
 const reasonOf = <A>(
   effect: Effect.Effect<A, Telescope.WorkspaceError | PersistenceSqlError | PersistenceDecodeError>,
 ) =>
@@ -84,9 +99,9 @@ const chiefAgent = (agents: ReadonlyArray<Telescope.Agent>, projectId: ProjectId
 it.layer(fileLayer)("Telescope agents on a file database", (it) => {
   it.effect("lazily creates one Chief of Staff and one Chief Agent per bound project, once", () =>
     Effect.gen(function* () {
-      const { workspaceId, beaId, agents } = yield* setup();
+      const { workspaceId, agents } = yield* setup();
       const [first, ...rest] = yield* Effect.all(
-        Array.from({ length: 8 }, () => agents.listMine(as.bea, { workspaceId })),
+        Array.from({ length: 8 }, () => agents.listMine(as.owner, { workspaceId })),
         { concurrency: "unbounded" },
       );
       assert.isDefined(first);
@@ -94,9 +109,9 @@ it.layer(fileLayer)("Telescope agents on a file database", (it) => {
       assert.deepStrictEqual(
         first.agents.map((a) => `${a.ownerSubjectId}/${a.kind}/${a.name}`).toSorted(),
         [
-          `${beaId}/chief_agent/project-api Chief Agent`,
-          `${beaId}/chief_agent/project-web Chief Agent`,
-          `${beaId}/chief_of_staff/Chief of Staff`,
+          `owner/chief_agent/project-api Chief Agent`,
+          `owner/chief_agent/project-web Chief Agent`,
+          `owner/chief_of_staff/Chief of Staff`,
         ],
       );
       for (const other of rest)
@@ -113,17 +128,21 @@ it.layer(fileLayer)("Telescope agents on a file database", (it) => {
         Array.from({ length: 8 }, () => 6),
       );
 
-      const custom = yield* agents.createCustom(as.bea, {
+      const custom = yield* agents.createCustom(as.owner, {
         workspaceId,
         name: "Reviewer",
         projectId: web,
       });
-      const third = yield* agents.listMine(as.bea, { workspaceId });
+      const third = yield* agents.listMine(as.owner, { workspaceId });
       assert.deepStrictEqual(
         third.agents.map((a) => a.id),
         [...first.agents.map((a) => a.id), custom.id],
       );
-      assert.strictEqual((yield* agents.listMine(as.ann, { workspaceId })).agents.length, 3);
+      assert.deepStrictEqual(
+        (yield* agents.listMine(as.ann, { workspaceId })).agents,
+        [],
+        "other members get none (D147)",
+      );
       assert.strictEqual(
         yield* reasonOf(agents.listMine(as.zed, { workspaceId })),
         "forbidden",
@@ -134,11 +153,44 @@ it.layer(fileLayer)("Telescope agents on a file database", (it) => {
 });
 
 it.layer(layer)("Telescope agents", (it) => {
-  it.effect("caps standing powers by the owner's role and keeps settings to the owner", () =>
+  it.effect("gives personal agents only to the environment owner (D147)", () =>
     Effect.gen(function* () {
       const { workspaceId, agents } = yield* setup();
+      const mine = (caller: WorkspaceService.SessionCaller) =>
+        agents
+          .listMine(caller, { workspaceId })
+          .pipe(Effect.map(({ agents }) => agents.map((a) => `${a.ownerSubjectId}/${a.kind}`)));
+      const custom = (caller: WorkspaceService.SessionCaller) =>
+        agents.createCustom(caller, { workspaceId, name: "Reviewer" }).pipe(
+          Effect.map((agent) => `${agent.ownerSubjectId}/${agent.kind}`),
+          Effect.catchTags({ TelescopeWorkspaceError: (error) => Effect.succeed(error.reason) }),
+        );
+      const rows = [
+        ["a member gets no agents", mine(as.bea), []],
+        ["nor does an admin who is not the owner", mine(as.ann), []],
+        ["a member creates no custom agent", custom(as.bea), "forbidden"],
+        [
+          "the owner gets the defaults",
+          mine(as.owner),
+          ["owner/chief_of_staff", "owner/chief_agent", "owner/chief_agent"],
+        ],
+        ["and creates custom agents", custom(as.owner), "owner/custom"],
+      ] as const;
+      for (const [name, effect, expected] of rows)
+        assert.deepStrictEqual<unknown>(yield* effect, expected, name);
+    }),
+  );
+
+  it.effect("caps standing powers by the owner's role and keeps settings to the owner", () =>
+    Effect.gen(function* () {
+      const { workspaceId, beaId, agents } = yield* setup();
+      const workspaces = yield* WorkspaceService.WorkspaceService;
+      const { code } = yield* workspaces.invite(as.ann, { workspaceId, role: "project_lead" });
+      const patId = (yield* workspaces.accept(as.pat, { code, displayName: "Pat" })).subjectId;
+      yield* seedAgentsOf(workspaceId, beaId);
+      yield* seedAgentsOf(workspaceId, patId);
       const bea = (yield* agents.listMine(as.bea, { workspaceId })).agents;
-      const ann = (yield* agents.listMine(as.ann, { workspaceId })).agents;
+      const owner = (yield* agents.listMine(as.owner, { workspaceId })).agents;
       const merge = {
         openTickets: true,
         dispatchWorkers: true,
@@ -161,9 +213,9 @@ it.layer(layer)("Telescope agents", (it) => {
         standingPowers: merge,
       });
       assert.isTrue(lead.standingPowers.mergePRs, "the project lead can");
-      const admin = yield* agents.update(as.ann, {
+      const admin = yield* agents.update(as.owner, {
         workspaceId,
-        agentId: chiefAgent(ann, web).id,
+        agentId: chiefAgent(owner, web).id,
         standingPowers: merge,
         name: "Ann's web agent",
       });
@@ -172,12 +224,9 @@ it.layer(layer)("Telescope agents", (it) => {
         [true, "Ann's web agent"],
       );
 
-      const { card } = yield* agents.get(as.ann, { workspaceId, agentId: admin.id });
+      const { card } = yield* agents.get(as.owner, { workspaceId, agentId: admin.id });
       assert.include(card.requiredPermissions, "mergePRs");
 
-      const workspaces = yield* WorkspaceService.WorkspaceService;
-      const { code } = yield* workspaces.invite(as.ann, { workspaceId, role: "project_lead" });
-      yield* workspaces.accept(as.pat, { code, displayName: "Pat" });
       const pat = (yield* agents.listMine(as.pat, { workspaceId })).agents;
       for (const agent of [chiefAgent(pat, api), pat[0]]) {
         assert.isDefined(agent);
@@ -215,10 +264,10 @@ it.layer(layer)("Telescope agents", (it) => {
   it.effect("opens exposure one level at a time and lowers it to any level", () =>
     Effect.gen(function* () {
       const { workspaceId, agents } = yield* setup();
-      const [assistant] = (yield* agents.listMine(as.bea, { workspaceId })).agents;
+      const [assistant] = (yield* agents.listMine(as.owner, { workspaceId })).agents;
       assert.isDefined(assistant);
       const set = (exposure: Telescope.AgentExposure) =>
-        agents.update(as.bea, { workspaceId, agentId: assistant.id, exposure });
+        agents.update(as.owner, { workspaceId, agentId: assistant.id, exposure });
 
       assert.strictEqual(assistant.exposure, "hidden");
       assert.strictEqual(yield* reasonOf(set("contactable")), "forbidden");
@@ -228,10 +277,11 @@ it.layer(layer)("Telescope agents", (it) => {
       assert.strictEqual(yield* reasonOf(set("contactable")), "forbidden");
 
       const personal = yield* setup("personal");
-      const [own] = (yield* agents.listMine(as.bea, { workspaceId: personal.workspaceId })).agents;
+      const [own] = (yield* agents.listMine(as.owner, { workspaceId: personal.workspaceId }))
+        .agents;
       assert.isDefined(own);
       const open = (exposure: Telescope.AgentExposure) =>
-        agents.update(as.bea, { workspaceId: personal.workspaceId, agentId: own.id, exposure });
+        agents.update(as.owner, { workspaceId: personal.workspaceId, agentId: own.id, exposure });
       yield* open("visible");
       yield* open("contactable");
       assert.strictEqual(
@@ -245,6 +295,7 @@ it.layer(layer)("Telescope agents", (it) => {
   it.effect("keeps hidden personal agents out of the company view and unreachable", () =>
     Effect.gen(function* () {
       const { workspaceId, beaId, agents } = yield* setup();
+      yield* seedAgentsOf(workspaceId, beaId);
       const [assistant] = (yield* agents.listMine(as.bea, { workspaceId })).agents;
       assert.isDefined(assistant);
       const companyView = () =>

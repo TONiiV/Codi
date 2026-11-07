@@ -69,6 +69,25 @@ const setup = Effect.gen(function* () {
   return { runs, workspaceId: workspace.id, aliceId: workspace.createdBy };
 });
 
+const seedAgent = (workspaceId: Telescope.WorkspaceId, agent: string, owner: string | null) =>
+  SqlClient.SqlClient.use(
+    (sql) =>
+      sql`INSERT INTO telescope_agents ${sql.insert({
+        agent_id: agent,
+        workspace_id: workspaceId,
+        owner_subject_id: owner,
+        kind: owner === null ? "department" : "chief_of_staff",
+        name: agent,
+        standing_powers_json: "{}",
+        exposure: "hidden",
+        sync_with_board: 0,
+        dispatch_mode: "inbox",
+        channels_json: "[]",
+        created_at: "2026-01-01T00:00:00.000Z",
+        updated_at: "2026-01-01T00:00:00.000Z",
+      })}`,
+  );
+
 const isWorkspaceError = Schema.is(Telescope.WorkspaceError);
 const reason = (error: unknown) => (isWorkspaceError(error) ? error.reason : "unexpected");
 
@@ -365,7 +384,7 @@ it.layer(layer)("Telescope run records", (it) => {
 
   it.effect("rejects non-members on reads and as the member a run acts for", () =>
     Effect.gen(function* () {
-      const { runs, workspaceId } = yield* setup;
+      const { runs, workspaceId, aliceId } = yield* setup;
       const run = yield* runs.start(alice, workspaceId, {
         agentId,
         inputSnapshot: snapshot([]),
@@ -382,6 +401,18 @@ it.layer(layer)("Telescope run records", (it) => {
             revoked_at: "2026-01-02T00:00:00.000Z",
           })}`,
       );
+      // A wake queued for Bob's agent before he became a viewer still never starts.
+      const workspaces = yield* WorkspaceService.WorkspaceService;
+      const { code } = yield* workspaces.invite(alice, { workspaceId, role: "member" });
+      const bobId = (yield* workspaces.accept(bob, { code, displayName: "Bob" })).subjectId;
+      yield* seedAgent(workspaceId, "agent-bob", bobId);
+      yield* workspaces.setRole(alice, { workspaceId, subjectId: bobId, role: "viewer" });
+      yield* seedAgent(workspaceId, "agent-alice", aliceId);
+      const runOf = (memberId: string, agent: string) =>
+        runs.startFor(workspaceId, memberId, {
+          agentId: Telescope.AgentId.make(agent),
+          inputSnapshot: snapshot([]),
+        });
       const reads: ReadonlyArray<Effect.Effect<object, { readonly _tag: string }>> = [
         runs.get(mallory, scoped),
         runs.calls(mallory, scoped),
@@ -391,10 +422,17 @@ it.layer(layer)("Telescope run records", (it) => {
         runs.start(mallory, workspaceId, { agentId, inputSnapshot: snapshot([]) }),
         runs.startFor(workspaceId, "mallory-subject", { agentId, inputSnapshot: snapshot([]) }),
         runs.startFor(workspaceId, "revoked-subject", { agentId, inputSnapshot: snapshot([]) }),
+        // D147: a member's personal agents run on their own machine, never on this one.
+        runOf(aliceId, "agent-alice"),
+        runOf(bobId, "agent-bob"),
       ];
       for (const read of reads) {
         assert.strictEqual(reason(yield* Effect.flip(read)), "forbidden");
       }
+      yield* seedAgent(workspaceId, "agent-owner", Telescope.OWNER_MEMBER_ID);
+      yield* seedAgent(workspaceId, "agent-company", null);
+      yield* runOf(Telescope.OWNER_MEMBER_ID, "agent-owner");
+      yield* runOf(aliceId, "agent-company");
     }),
   );
 });
