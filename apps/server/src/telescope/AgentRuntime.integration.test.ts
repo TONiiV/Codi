@@ -72,6 +72,7 @@ const decodeRuns = Schema.decodeUnknownEffect(
 const makeHarness = Effect.fn("makeHarness")(function* (options: {
   readonly mcp: boolean;
   readonly gate?: boolean;
+  readonly rejectSend?: boolean;
 }) {
   const cwd = yield* checkpointWorkspace(`telescope-agent-runtime-${options.mcp}`);
   const events = yield* Queue.unbounded<ProviderAdapter.ProviderAdapterV2Event>();
@@ -245,8 +246,25 @@ const makeHarness = Effect.fn("makeHarness")(function* (options: {
         agents.powersOf(workspaceId, agentId).pipe(Effect.tap(() => Queue.offer(reads, agentId))),
     })),
   );
+  const threads = Layer.effect(
+    ThreadManagementService.ThreadManagementService,
+    Effect.map(ThreadManagementService.ThreadManagementService, (service) =>
+      options.rejectSend === true
+        ? {
+            ...service,
+            sendToThread: (input) =>
+              Effect.fail(
+                new ThreadManagementService.ThreadManagementProviderInstanceDisabledError({
+                  projectId: input.projectId,
+                  instanceId,
+                }),
+              ),
+          }
+        : service,
+    ),
+  );
   const runtime = Layer.merge(AgentRuntime.layer, ThreadTurnTokens.layer).pipe(
-    Layer.provide(Layer.merge(recordingRuns, signallingAgents)),
+    Layer.provide(Layer.mergeAll(recordingRuns, signallingAgents, threads)),
     Layer.provide(registry),
     Layer.provide(
       Layer.mock(ManagedProjectFolders.ManagedProjectFolders)({
@@ -274,7 +292,7 @@ const makeHarness = Effect.fn("makeHarness")(function* (options: {
 type Harness = Effect.Success<ReturnType<typeof makeHarness>>;
 
 const withHarness = <A, E>(
-  options: { readonly mcp: boolean; readonly gate?: boolean },
+  options: { readonly mcp: boolean; readonly gate?: boolean; readonly rejectSend?: boolean },
   body: (harness: Harness) => Effect.Effect<A, E, Layer.Success<Harness["runtime"]> | Scope.Scope>,
 ) =>
   Effect.scoped(
@@ -578,6 +596,39 @@ it.effect(
         assert.equal(failed.state, "FAILED");
         assert.include(failed.report?.blockedOn, "cannot use Codi's tools");
         assert.equal(yield* db.count(seeded.workspaceId, "runs"), 0);
+      }),
+    ),
+);
+
+it.effect(
+  "a turn that cannot be sent finishes its run as failed and fails the delegation (D81)",
+  () =>
+    withHarness({ mcp: true, rejectSend: true }, (harness) =>
+      Effect.gen(function* () {
+        const seeded = yield* seed;
+        const db = yield* TelescopeDb.TelescopeDb;
+        const delegations = yield* DelegationService.DelegationService;
+        const wakes = yield* WakeQueueService.WakeQueueService;
+        const delegation = yield* delegations.delegate(seeded.actor, {
+          toAgentId: seeded.chief,
+          brief,
+        });
+        const exit = yield* Fiber.await(yield* runWake(yield* wakes.take));
+        assert.isTrue(Exit.isFailure(exit));
+        const threadId = (yield* residentOf(seeded, seeded.chief))!;
+        const finished = yield* Queue.takeAll(harness.finished);
+        assert.lengthOf(finished, 1);
+        assert.equal(finished[0]?.threadId, threadId);
+        assert.isDefined(finished[0]?.finishedAt);
+        assert.include(finished[0]?.outputSummary, "is disabled for project");
+        assert.deepStrictEqual(yield* db.openRunsOnThread(threadId), []);
+        const failed = yield* delegations.get({
+          workspaceId: seeded.workspaceId,
+          delegationId: delegation.id,
+        });
+        assert.equal(failed.state, "FAILED");
+        assert.include(failed.report?.blockedOn, "is disabled for project");
+        assert.equal((yield* wakes.take).wake.agentId, seeded.pa);
       }),
     ),
 );

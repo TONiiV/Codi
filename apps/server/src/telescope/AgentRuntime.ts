@@ -19,6 +19,7 @@ import * as TelescopeDb from "./TelescopeDb.ts";
 import * as WakeQueueService from "./WakeQueueService.ts";
 
 const STOPPED = "agent stopped";
+const NO_TOKENS = { input: 0, cachedInput: 0, cacheCreation: 0, output: 0 };
 // A wake holds its agent until the turn ends; a turn longer than this releases it.
 const TURN_WAIT_MS = 6 * 60 * 60 * 1000;
 
@@ -115,43 +116,61 @@ const make = Effect.gen(function* () {
       // A turn the member started finishes the open run when it ends; start after it.
       yield* threads.waitForThread({ projectId: threadProject, threadId, timeoutMs: TURN_WAIT_MS });
     }
-    yield* runs.startFor(wake.workspaceId, wake.subjectId, {
+    const run = yield* runs.startFor(wake.workspaceId, wake.subjectId, {
       agentId: agent.id,
       via,
       threadId,
       inputSnapshot: runSnapshot(selection),
     });
+    // D81: with no Codi turn started, no listener finishes this run, so the runtime does.
+    const notStarted = (error: { readonly message: string }) =>
+      runs
+        .finish(
+          { workspaceId: wake.workspaceId, runId: run.id },
+          { outputSummary: `Failed: ${error.message}`, tokens: NO_TOKENS, resultLabels: [] },
+        )
+        .pipe(
+          Effect.andThen(
+            Effect.forEach(held, (delegation) => abandon(wake, delegation, error.message), {
+              discard: true,
+            }),
+          ),
+        );
     yield* Effect.forEach(
       held,
       (delegation) =>
         delegations.start({ workspaceId: wake.workspaceId, delegationId: delegation.id, threadId }),
       { discard: true },
-    );
+    ).pipe(Effect.tapError(notStarted));
     const provenance = { createdBy: "agent", creationSource: "server" } as const;
     if (reuse === null)
-      yield* threads.dispatch({
-        type: "thread.create",
-        commandId: CommandId.make(`telescope-wake:${wake.id}:thread`),
+      yield* threads
+        .dispatch({
+          type: "thread.create",
+          commandId: CommandId.make(`telescope-wake:${wake.id}:thread`),
+          threadId,
+          projectId,
+          title: agent.name,
+          modelSelection: selection,
+          runtimeMode: (yield* settings.getSettings).defaultRuntimeMode,
+          interactionMode: "default",
+          branch: null,
+          worktreePath: null,
+          ...provenance,
+        })
+        .pipe(Effect.tapError(notStarted));
+    const sent = yield* threads
+      .sendToThread({
+        projectId: threadProject,
+        commandId: CommandId.make(`telescope-wake:${wake.id}`),
         threadId,
-        projectId,
-        title: agent.name,
-        modelSelection: selection,
-        runtimeMode: (yield* settings.getSettings).defaultRuntimeMode,
-        interactionMode: "default",
-        branch: null,
-        worktreePath: null,
+        messageId: MessageId.make(`telescope-wake:${wake.id}`),
+        text: AgentInstructions.renderTurn(agent, items, { firstTurn: reuse === null }),
+        attachments: [],
+        mode: "queue",
         ...provenance,
-      });
-    const sent = yield* threads.sendToThread({
-      projectId: threadProject,
-      commandId: CommandId.make(`telescope-wake:${wake.id}`),
-      threadId,
-      messageId: MessageId.make(`telescope-wake:${wake.id}`),
-      text: AgentInstructions.renderTurn(agent, items, { firstTurn: reuse === null }),
-      attachments: [],
-      mode: "queue",
-      ...provenance,
-    });
+      })
+      .pipe(Effect.tapError(notStarted));
     yield* threads.waitForThread({
       projectId: threadProject,
       threadId,
