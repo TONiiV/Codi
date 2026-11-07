@@ -20,6 +20,7 @@ import type { RpcSession } from "../rpc/session.ts";
 import {
   budgetUsageText,
   createTelescopeGovernanceAtoms,
+  governanceRows,
   killSwitchState,
   parseCallLimit,
 } from "./governance.ts";
@@ -79,6 +80,75 @@ describe("telescope budget text", () => {
     };
     expect(killSwitchState({ budgets: [], killSwitches: [] }, agentId)).toBe("running");
     expect(killSwitchState({ budgets: [], killSwitches: [stop] }, agentId)).toBe("paused");
+  });
+});
+
+describe("telescope governance rows", () => {
+  const member = (subjectId: string, displayName: string, revoked = false): Telescope.Member => ({
+    workspaceId,
+    subjectId,
+    displayName,
+    role: "member",
+    joinedAt: "2026-11-07T00:00:00.000Z",
+    ...(revoked ? { revokedAt: "2026-11-07T01:00:00.000Z" } : {}),
+  });
+  const agent = (
+    id: string,
+    name: string,
+    ownerSubjectId: string | null,
+  ): Telescope.GovernanceAgent => ({
+    id: Telescope.AgentId.make(id),
+    name,
+    kind: "chief_agent",
+    ownerSubjectId,
+  });
+  const page = {
+    company: { id: workspaceId, title: "整个公司" },
+    projects: [
+      { value: "p2", label: "Beta" },
+      { value: "p1", label: "Alpha" },
+    ],
+    members: [member("owner", "Theo"), member("max", "Max"), member("gone", "Gone", true)],
+    self: "owner",
+    fallbackAgents: [agent("mine", "Mine", "owner"), agent("co", "Company", null)],
+  };
+  const rows = (state: Partial<typeof Telescope.GovernanceState.Type>, overrides = {}) =>
+    governanceRows({ budgets: [], killSwitches: [], ...state }, { ...page, ...overrides }).map(
+      (row) => `${row.scope}:${row.scopeId}:${row.title}`,
+    );
+
+  it("lists company, bound projects, current members, then every agent the server sends", () => {
+    expect(
+      rows(
+        {
+          agents: [
+            agent("co", "Company", null),
+            agent("max-chief", "Chief Agent", "max"),
+            agent("gone-chief", "Old Agent", "gone"),
+            agent("stray", "Stray", "unknown-subject"),
+          ],
+        },
+        { projects: [...page.projects, { value: "p1", label: "Alpha (laptop)" }] },
+      ),
+    ).toEqual([
+      "company:ws:整个公司",
+      "project:p2:Beta",
+      "project:p1:Alpha",
+      "person:owner:Theo",
+      "person:max:Max",
+      "agent:co:Company",
+      "agent:max-chief:Max 的 Chief Agent",
+      "agent:gone-chief:Gone 的 Old Agent",
+      "agent:stray:unknown-subject 的 Stray",
+    ]);
+  });
+
+  it("falls back to the caller's own and company agents, once each, on an older server", () => {
+    const fallbackAgents = [...page.fallbackAgents, agent("co", "Company", null)];
+    expect(rows({}, { fallbackAgents }).filter((row) => row.startsWith("agent:"))).toEqual([
+      "agent:mine:Mine",
+      "agent:co:Company",
+    ]);
   });
 });
 

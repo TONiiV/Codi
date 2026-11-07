@@ -14,7 +14,8 @@ import * as TelescopeDb from "./TelescopeDb.ts";
 import * as WorkspaceService from "./WorkspaceService.ts";
 
 // Reading the board needs openTickets too, so an agent without it sees only its own brief.
-const TOOL_POWERS: Readonly<Record<Telescope.GatewayTool, Telescope.GrantPower>> = {
+// Null needs no power: every agent keeps its own memory.
+const TOOL_POWERS: Readonly<Record<Telescope.GatewayTool, Telescope.GrantPower | null>> = {
   open_ticket: "openTickets",
   dispatch_worker: "dispatchWorkers",
   answer_member: "answerMembers",
@@ -32,6 +33,8 @@ const TOOL_POWERS: Readonly<Record<Telescope.GatewayTool, Telescope.GrantPower>>
   delegation_list: "openTickets",
   delegation_report: "openTickets",
   delegation_cancel: "dispatchWorkers",
+  memory_search: null,
+  memory_write: null,
 };
 const SECRET_KEY = /token|secret|password|passphrase|api.?key|authorization|cookie|credential/i;
 
@@ -231,6 +234,14 @@ const make = Effect.gen(function* () {
       (row) => chain.has(row.agent_id) && row.state !== "running",
     );
     const grant = yield* grants.effectiveGrant(workspaceId, { agentId, onBehalfOf });
+    // A tool that needs no power still needs the run's member to be active.
+    const granted =
+      power === null
+        ? (yield* db.count(workspaceId, "members", {
+            subject_id: onBehalfOf[0],
+            revoked_at: null,
+          })) > 0
+        : grant.powers[power];
     const levelIds: Readonly<Record<Telescope.Budget["scope"], string | undefined>> = {
       company: workspaceId,
       project: grant.projectId,
@@ -252,7 +263,7 @@ const make = Effect.gen(function* () {
       ? new ToolGatewayDenied({ reason: refuse, tool })
       : stopped
         ? new ToolGatewayDenied({ reason: "stopped", tool })
-        : !grant.powers[power]
+        : !granted
           ? new ToolGatewayDenied({ reason: "forbidden", tool })
           : // An agent without a project still holds dispatchWorkers, to pass down the chain.
             tool === "dispatch_worker" && grant.projectId === undefined
@@ -266,7 +277,7 @@ const make = Effect.gen(function* () {
       runId: run.run_id,
       agentId,
       onBehalfOf,
-      power,
+      ...(power === null ? {} : { power }),
       tool,
       argsRedacted,
       outcome: denied === undefined ? "allowed" : "denied",

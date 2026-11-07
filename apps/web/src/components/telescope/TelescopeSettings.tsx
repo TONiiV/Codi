@@ -3,6 +3,8 @@ import {
   budgetOf,
   budgetUsageText,
   createTelescopeGovernanceAtoms,
+  type GovernanceRow,
+  governanceRows,
   killSwitchState,
   parseCallLimit,
 } from "@t3tools/client-runtime/telescope/governance";
@@ -39,6 +41,7 @@ import {
   useFreshMembers,
   WORKSPACE_ROLE_LABEL,
 } from "./TelescopeAccountDialogs";
+import { ProjectRulesSection } from "./TelescopeProjectRules";
 import { telescope, useTelescopeWorkspaces, WORKSPACE_KIND_LABEL } from "./telescopeState";
 
 const governance = createTelescopeGovernanceAtoms(connectionAtomRuntime);
@@ -50,13 +53,13 @@ const KILL_SWITCH_LABEL = { running: "运行", paused: "暂停", terminated: "�
 const COMPANY_LEVEL_LABEL = { enterprise: "整个公司", personal: "整个工作区" } as const;
 const isKillSwitchState = Schema.is(Telescope.KillSwitch.fields.state);
 
-interface Scoped {
+export interface Scoped {
   environmentId: EnvironmentId;
   workspace: Telescope.Workspace;
   self: Telescope.Member;
 }
 
-function StatusRow(props: { text: string; failed?: boolean; onRetry?: () => void }) {
+export function StatusRow(props: { text: string; failed?: boolean; onRetry?: () => void }) {
   return (
     <div className="px-3 py-3 text-sm text-muted-foreground sm:px-4">
       {props.failed ? <ErrorNote {...props} /> : props.text}
@@ -65,7 +68,13 @@ function StatusRow(props: { text: string; failed?: boolean; onRetry?: () => void
 }
 
 /** Loading or failed state of a query whose data is still missing. */
-function QueryStatus({ query, what }: { query: EnvironmentQueryView<unknown>; what: string }) {
+export function QueryStatus({
+  query,
+  what,
+}: {
+  query: EnvironmentQueryView<unknown>;
+  what: string;
+}) {
   const failed = query.error !== null;
   return (
     <StatusRow
@@ -290,10 +299,13 @@ function GovernanceSection({ environmentId, workspace, self }: Scoped) {
   const mayRead = useAtomValue(governance.readPermissionAtom(environmentId));
   const admin = self.role === "admin" && mayRead;
   const state = useEnvironmentQuery(admin ? governance.state(scoped) : null);
-  const mine = useEnvironmentQuery(admin ? telescopeAgents.listMine(scoped) : null);
+  const olderServer = state.data !== null && state.data.agents === undefined;
+  const mine = useEnvironmentQuery(olderServer ? telescopeAgents.listMine(scoped) : null);
   const company = useEnvironmentQuery(
-    admin && workspace.kind === "enterprise" ? telescopeAgents.listCompany(scoped) : null,
+    olderServer && workspace.kind === "enterprise" ? telescopeAgents.listCompany(scoped) : null,
   );
+  const members = useEnvironmentQuery(admin ? telescope.members(scoped) : null);
+  const { projects } = useRoutingNames(environmentId, workspace);
   const mayBudget = useAtomValue(governance.setBudget.permissionAtom(environmentId));
   const mayStop = useAtomValue(governance.setKillSwitch.permissionAtom(environmentId));
   const setBudget = useAtomCommand(governance.setBudget, "修改预算");
@@ -306,10 +318,9 @@ function GovernanceSection({ environmentId, workspace, self }: Scoped) {
       </SettingsSection>
     );
   const data = state.data;
-  const agents = [...(mine.data?.agents ?? []), ...(company.data?.agents ?? [])].filter(
-    (agent, index, all) => all.findIndex((other) => other.id === agent.id) === index,
+  const failedList = [mine, company, members].find(
+    (list) => list.data === null && list.error !== null,
   );
-  const failedList = [mine, company].find((list) => list.data === null && list.error !== null);
   const saveBudget =
     (scope: Telescope.Budget["scope"], scopeId: string) =>
     async (limit: { readonly limitCalls?: number }) => {
@@ -320,19 +331,17 @@ function GovernanceSection({ environmentId, workspace, self }: Scoped) {
       setError(failureText(result));
     };
   const budgetRow = (
-    title: string,
-    scope: Telescope.Budget["scope"],
-    scopeId: string,
+    { title, scope, scopeId }: Pick<GovernanceRow, "title" | "scope" | "scopeId">,
     extra?: ReactNode,
   ) => {
     const budget = data === null ? undefined : budgetOf(data, scope, scopeId);
     return (
       <SettingsRow
-        key={scopeId}
+        key={`${scope}:${scopeId}`}
         title={title}
         description={budgetUsageText(budget)}
         control={
-          <>
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
             <CallLimitForm
               key={budget?.limitCalls ?? "none"}
               label={title}
@@ -341,7 +350,7 @@ function GovernanceSection({ environmentId, workspace, self }: Scoped) {
               onSave={saveBudget(scope, scopeId)}
             />
             {extra}
-          </>
+          </div>
         }
       />
     );
@@ -353,35 +362,42 @@ function GovernanceSection({ environmentId, workspace, self }: Scoped) {
         <QueryStatus query={state} what="预算" />
       ) : (
         <>
-          {budgetRow(COMPANY_LEVEL_LABEL[workspace.kind], "company", workspace.id)}
-          {agents.map((agent) =>
+          {governanceRows(data, {
+            company: { id: workspace.id, title: COMPANY_LEVEL_LABEL[workspace.kind] },
+            projects,
+            members: members.data?.members ?? [],
+            self: self.subjectId,
+            fallbackAgents: [...(mine.data?.agents ?? []), ...(company.data?.agents ?? [])],
+          }).map((row) =>
             budgetRow(
-              agent.name,
-              "agent",
-              agent.id,
-              <ToggleGroup
-                aria-label={`${agent.name}的急停`}
-                disabled={!mayStop}
-                value={[killSwitchState(data, agent.id)]}
-                onValueChange={async (next) => {
-                  const value = next[0];
-                  if (!isKillSwitchState(value)) return;
-                  const result = await setKillSwitch({
-                    environmentId,
-                    input: { workspaceId: workspace.id, agentId: agent.id, state: value },
-                  });
-                  setError(failureText(result));
-                }}
-              >
-                {Telescope.KillSwitch.fields.state.literals.map((value) => (
-                  <Toggle key={value} value={value}>
-                    {KILL_SWITCH_LABEL[value]}
-                  </Toggle>
-                ))}
-              </ToggleGroup>,
+              row,
+              row.scope !== "agent" ? undefined : (
+                <ToggleGroup
+                  aria-label={`${row.title}的急停`}
+                  disabled={!mayStop}
+                  value={[killSwitchState(data, row.scopeId)]}
+                  onValueChange={async (next) => {
+                    const value = next[0];
+                    if (!isKillSwitchState(value)) return;
+                    const result = await setKillSwitch({
+                      environmentId,
+                      input: { workspaceId: workspace.id, agentId: row.scopeId, state: value },
+                    });
+                    setError(failureText(result));
+                  }}
+                >
+                  {Telescope.KillSwitch.fields.state.literals.map((value) => (
+                    <Toggle key={value} value={value}>
+                      {KILL_SWITCH_LABEL[value]}
+                    </Toggle>
+                  ))}
+                </ToggleGroup>
+              ),
             ),
           )}
-          {failedList === undefined ? null : <QueryStatus query={failedList} what="agent 列表" />}
+          {failedList === undefined ? null : (
+            <QueryStatus query={failedList} what={failedList === members ? "成员" : "agent 列表"} />
+          )}
         </>
       )}
       {error === null ? null : <StatusRow text={error} failed />}
@@ -422,7 +438,7 @@ function Picker<T extends string>(props: {
 }
 
 /** Bound projects and the harnesses this server runs, under the names the page shows. */
-function useRoutingNames(environmentId: EnvironmentId, workspace: Telescope.Workspace) {
+export function useRoutingNames(environmentId: EnvironmentId, workspace: Telescope.Workspace) {
   const { bindings } = useTelescopeWorkspaces();
   const bound = useEnvironmentQuery(telescope.bindingSummary({ environmentId, input: {} }));
   const allProjects = useProjects();
@@ -455,7 +471,7 @@ function useRoutingNames(environmentId: EnvironmentId, workspace: Telescope.Work
     `${project(rule.projectId)} · ${Routing.taskTypeLabel(rule.taskType)} → ${harness(rule.harness)} · ${rule.model}`;
   return { projects, harnesses, unbound, project, harness, rule };
 }
-type RoutingNames = ReturnType<typeof useRoutingNames>;
+export type RoutingNames = ReturnType<typeof useRoutingNames>;
 
 function RoutingRuleDialog(
   props: Scoped & { names: RoutingNames; rule: Telescope.RoutingRule | null; onClose: () => void },
@@ -783,6 +799,7 @@ export function TelescopeSettingsPanel() {
           ) : null}
           <GovernanceSection environmentId={environmentId} {...loaded} />
           <RoutingSection environmentId={environmentId} {...loaded} />
+          <ProjectRulesSection environmentId={environmentId} {...loaded} />
         </>
       ) : (
         <SettingsSection id="telescope-members" title="成员与角色">

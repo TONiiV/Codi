@@ -86,6 +86,7 @@ const makeHarness = Effect.fn("makeHarness")(function* (options: {
   readonly rejectStart?: boolean;
   readonly rejectSend?: boolean;
   readonly holdTokens?: boolean;
+  readonly holdScratch?: boolean;
 }) {
   const cwd = yield* checkpointWorkspace(`telescope-agent-runtime-${options.mcp}`);
   const events = yield* Queue.unbounded<ProviderAdapter.ProviderAdapterV2Event>();
@@ -99,6 +100,8 @@ const makeHarness = Effect.fn("makeHarness")(function* (options: {
   const recorded = yield* Queue.unbounded<void>();
   const permits = yield* Queue.unbounded<void>();
   const waits = yield* Queue.unbounded<void>();
+  // With `holdScratch`, each caller reaching Scratch waits until the test opens its own gate.
+  const atScratch = yield* Queue.unbounded<Deferred.Deferred<void>>();
   const services = yield* Deferred.make<{
     readonly db: TelescopeDb.TelescopeDb["Service"];
     readonly memory: MemoryService.MemoryService["Service"];
@@ -299,13 +302,22 @@ const makeHarness = Effect.fn("makeHarness")(function* (options: {
           : service.start(ref),
     })),
   );
-  const runtime = Layer.merge(AgentRuntime.layer, ThreadTurnTokens.layer).pipe(
+  const runtime = Layer.merge(AgentRuntime.layerWakeRunner, ThreadTurnTokens.layer).pipe(
+    Layer.provideMerge(AgentRuntime.layer),
     Layer.provide(Layer.mergeAll(recordingRuns, threads, startable)),
     Layer.provide(registry),
     Layer.provide(
       Layer.mock(ManagedProjectFolders.ManagedProjectFolders)({
         namedProjectsRoot: "/home/user/projects",
-        ensureScratchProject: Effect.succeed({ projectId: scratch }),
+        ensureScratchProject:
+          options.holdScratch === true
+            ? Effect.gen(function* () {
+                const gate = yield* Deferred.make<void>();
+                yield* Queue.offer(atScratch, gate);
+                yield* Deferred.await(gate);
+                return { projectId: scratch };
+              })
+            : Effect.succeed({ projectId: scratch }),
       }),
     ),
     Layer.provideMerge(Layer.merge(telescope, orchestration)),
@@ -319,6 +331,7 @@ const makeHarness = Effect.fn("makeHarness")(function* (options: {
     recorded,
     permits,
     waits,
+    atScratch,
     complete,
   };
 });
@@ -958,6 +971,134 @@ it.effect(
         assert.equal(memberRun.id, open[0]?.runId);
         assert.deepStrictEqual(memberRun.onBehalfOf, [seeded.member]);
         assert.equal(memberRun.tokens.input, 7);
+      }),
+    ),
+);
+
+it.effect(
+  "openThread gives the owner a resident thread with no turn, and the first wake on it still carries the role text",
+  () =>
+    withHarness({ mcp: true }, (harness) =>
+      Effect.gen(function* () {
+        const seeded = yield* seed;
+        const runtime = yield* AgentRuntime.AgentRuntime;
+        const ref = { workspaceId: seeded.workspaceId, agentId: seeded.pa };
+        const { threadId } = yield* runtime.openThread(alice, ref);
+        assert.equal(yield* residentOf(seeded, seeded.pa), threadId);
+        const shell =
+          yield* (yield* ThreadManagementService.ThreadManagementService).getThreadShell(threadId);
+        assert.equal(shell?.projectId, scratch);
+        assert.isNull(shell?.latestRunId);
+        assert.deepStrictEqual(yield* runtime.openThread(alice, ref), { threadId });
+        const runner = yield* runWake(yield* messageWake(seeded, "早"));
+        const turn = yield* Queue.take(harness.started);
+        assert.equal(turn.threadId, threadId);
+        assert.include(turn.message.text, "personal assistant");
+        yield* harness.complete(turn, 1);
+        yield* Fiber.join(runner);
+      }),
+    ),
+);
+
+it.effect("openThread refuses an agent another member owns and creates no thread", () =>
+  withHarness({ mcp: true }, () =>
+    Effect.gen(function* () {
+      const seeded = yield* seed;
+      const db = yield* TelescopeDb.TelescopeDb;
+      yield* db.update(
+        seeded.workspaceId,
+        "agents",
+        { owner_subject_id: "someone-else" },
+        { agent_id: seeded.chief },
+      );
+      const error = yield* Effect.flip(
+        (yield* AgentRuntime.AgentRuntime).openThread(alice, {
+          workspaceId: seeded.workspaceId,
+          agentId: seeded.chief,
+        }),
+      );
+      assert.equal(error._tag, "TelescopeWorkspaceError");
+      assert.equal(error._tag === "TelescopeWorkspaceError" && error.reason, "not_found");
+      assert.isUndefined(yield* residentOf(seeded, seeded.chief));
+    }),
+  ),
+);
+
+it.effect.each([
+  { provider: "Replay (dev)", instance: "devReplay", opens: true },
+  { provider: "another provider without Codi MCP", instance: "codex", opens: false },
+] as const)(
+  "openThread on $provider: opens a resident thread is $opens (D87)",
+  ({ instance, opens }) =>
+    withHarness({ mcp: false }, () =>
+      Effect.gen(function* () {
+        const seeded = yield* seed;
+        const model = { instanceId: ProviderInstanceId.make(instance), model: "showcase" };
+        yield* (yield* TelescopeDb.TelescopeDb).update(
+          seeded.workspaceId,
+          "agents",
+          { model_selection_json: JSON.stringify(model) },
+          { agent_id: seeded.pa },
+        );
+        const opened = yield* Effect.exit(
+          (yield* AgentRuntime.AgentRuntime).openThread(alice, {
+            workspaceId: seeded.workspaceId,
+            agentId: seeded.pa,
+          }),
+        );
+        assert.equal(Exit.isSuccess(opened), opens);
+        assert.equal((yield* residentOf(seeded, seeded.pa)) !== undefined, opens);
+      }),
+    ),
+);
+
+it.effect.each([
+  { rival: "a second openThread call", kind: "open" },
+  { rival: "a wake that replays its create", kind: "wake" },
+  { rival: "a wake refused at its run", kind: "refused" },
+] as const)(
+  "openThread and $rival, racing for one agent, leave exactly one resident thread (D88)",
+  ({ kind }) =>
+    withHarness({ mcp: true, holdScratch: true }, (harness) =>
+      Effect.gen(function* () {
+        const seeded = yield* seed;
+        const runtime = yield* AgentRuntime.AgentRuntime;
+        const ref = { workspaceId: seeded.workspaceId, agentId: seeded.pa };
+        const first = yield* Effect.forkScoped(runtime.openThread(alice, ref));
+        const firstGate = yield* Queue.take(harness.atScratch);
+        const second: Fiber.Fiber<
+          unknown,
+          Effect.Error<ReturnType<typeof runtime.openThread>>
+        > = kind === "open"
+          ? yield* Effect.forkScoped(runtime.openThread(alice, ref))
+          : yield* runWake(yield* messageWake(seeded, "早"));
+        // Both have read the agent with no resident thread before either writes one.
+        const secondGate = yield* Queue.take(harness.atScratch);
+        yield* Deferred.succeed(firstGate, undefined);
+        const { threadId } = yield* Fiber.join(first);
+        if (kind === "refused")
+          yield* (yield* TelescopeDb.TelescopeDb).update(
+            seeded.workspaceId,
+            "members",
+            { revoked_at: "2026-11-07T00:00:00.000Z" },
+            { subject_id: seeded.member },
+          );
+        yield* Deferred.succeed(secondGate, undefined);
+        if (kind === "open") assert.deepStrictEqual(yield* Fiber.join(second), { threadId });
+        if (kind === "refused") assert.isTrue(Exit.isFailure(yield* Fiber.await(second)));
+        if (kind === "wake") {
+          const turn = yield* Effect.raceFirst(
+            Queue.take(harness.started),
+            Fiber.await(second).pipe(Effect.as(null)),
+          );
+          assert.equal(turn?.threadId, threadId);
+          yield* harness.complete(turn!, 1);
+          yield* Fiber.join(second);
+        }
+        assert.equal(yield* residentOf(seeded, seeded.pa), threadId);
+        const shell =
+          yield* (yield* ThreadManagementService.ThreadManagementService).getThreadShell(threadId);
+        assert.equal(shell?.projectId, scratch);
       }),
     ),
 );

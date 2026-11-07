@@ -151,3 +151,12 @@ export function useChatAgentId(): Telescope.AgentId | null {
       null,
   });
 }
+
+/** Re-renders only when this agent's chat opens or closes, not on every switch. */
+export function useIsChatAgentSelected(agentId: Telescope.AgentId): boolean {
+  return useLocation({
+    select: (location) =>
+      telescopeSearchAt(location.pathname, location.search, peekAppModalReturnHref())?.agent ===
+      agentId,
+  });
+}

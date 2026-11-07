@@ -203,6 +203,15 @@ it.layer(layer)("Telescope memories", (it) => {
         (yield* search("bob", "预算")).map((m) => m.text),
         ["预算按季度结算"],
       );
+      // The limit counts only memories the caller sees, even when a hidden one sorts first.
+      const pin = (pinned: boolean) =>
+        memory.pin(as("alice"), { workspaceId, id: secret.id, pinned });
+      yield* pin(true);
+      assert.deepStrictEqual(
+        (yield* search("bob", "预算", { limit: 1 })).map((m) => m.text),
+        ["预算按季度结算"],
+      );
+      yield* pin(false);
       // Private means the writing agent: other agents acting for the same member do not see it.
       yield* db.insert(
         workspaceId,

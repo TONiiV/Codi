@@ -125,6 +125,12 @@ export const AgentUpdateInput = Schema.Struct({
 });
 export type AgentUpdateInput = typeof AgentUpdateInput.Type;
 export const AgentListResult = Schema.Struct({ agents: Schema.Array(Agent) });
+export const AgentOpenThreadResult = Schema.Struct({ threadId: ThreadId });
+/** Why an agent cannot host its resident thread; the chat page tells these apart from other refusals. */
+export const AGENT_MODEL_REFUSALS = {
+  no_model: "Choose a model for this agent or a default model in Settings.",
+  no_mcp: "This agent's provider cannot use Codi's tools, so it cannot host the agent's thread.",
+} as const;
 export const AgentGetResult = Schema.Struct({
   agent: Agent,
   /** Stored powers capped by what the owner's current role still allows. */

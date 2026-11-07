@@ -1346,6 +1346,12 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["telescope routing rules harness model task type priority"],
   },
   {
+    id: "telescope-project-rules",
+    title: "Project rules",
+    to: "/settings/telescope",
+    searchTerms: ["telescope project rules powers allowlist harness model default"],
+  },
+  {
     id: "archive",
     title: "Archived threads",
     to: "/settings/archived",

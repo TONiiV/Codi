@@ -196,7 +196,20 @@ const make = Effect.gen(function* () {
     const { workspaceId } = input;
     const self = yield* actingMember(caller, workspaceId);
     const at = yield* now;
-    const rows = yield* db.searchMemories(workspaceId, input.query, decodeMemories, {
+    const [callerAgent] =
+      "run" in caller
+        ? yield* db.select(workspaceId, "agents", decodeAgents, { agent_id: caller.run.agentId })
+        : [];
+    const asCompanyAgent =
+      callerAgent !== undefined && COMPANY_AGENT_KINDS.includes(callerAgent.kind);
+    // A run reads only its own agent's private memories; a member reads those of agents they own.
+    // confidential and internal both reach every active member until guests exist.
+    const ownsPrivate =
+      "run" in caller
+        ? sql`agent_id = ${caller.run.agentId}`
+        : sql`agent_id IN (SELECT agent_id FROM telescope_agents
+            WHERE workspace_id = ${workspaceId} AND owner_subject_id = ${self.memberId})`;
+    const found = yield* db.searchMemories(workspaceId, input.query, decodeMemories, {
       validAt: input.includeInvalidated === true ? undefined : at,
       where: {
         deleted: 0,
@@ -205,21 +218,14 @@ const make = Effect.gen(function* () {
         ...(input.projectId === undefined ? {} : { project_id: input.projectId }),
         ...(input.aboutSubjectId === undefined ? {} : { about_subject_id: input.aboutSubjectId }),
       },
+      filter: sql.and([
+        sql`(level != 'private' OR ${ownsPrivate})`,
+        ...(asCompanyAgent
+          ? []
+          : [sql`(scope != 'person' OR about_subject_id = ${self.memberId})`]),
+      ]),
+      limit: input.limit ?? DEFAULT_LIMIT,
     });
-    const agents = yield* agentsOf(workspaceId);
-    const callerAgent = "run" in caller ? agents.get(caller.run.agentId) : undefined;
-    const asCompanyAgent =
-      callerAgent !== undefined && COMPANY_AGENT_KINDS.includes(callerAgent.kind);
-    // A run reads only its own agent's private memories; a member reads those of agents they own.
-    // confidential and internal both reach every active member until guests exist.
-    const ownsPrivate = (row: MemoryRow) =>
-      "run" in caller
-        ? row.agent_id === caller.run.agentId
-        : agents.get(row.agent_id)?.owner_subject_id === self.memberId;
-    const visible = (row: MemoryRow) =>
-      (row.level !== "private" || ownsPrivate(row)) &&
-      (row.scope !== "person" || asCompanyAgent || row.about_subject_id === self.memberId);
-    const found = rows.filter(visible).slice(0, input.limit ?? DEFAULT_LIMIT);
     yield* db.markMemoriesRetrieved(
       workspaceId,
       found.map((row) => row.memory_id),
