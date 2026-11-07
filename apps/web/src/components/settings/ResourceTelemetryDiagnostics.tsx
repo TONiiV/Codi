@@ -60,6 +60,9 @@ import {
   visibleResourceTelemetryProcesses,
 } from "./ResourceTelemetryDiagnostics.logic";
 import { SettingsSection } from "./settingsLayout";
+import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
+import { englishT } from "~/i18n/englishT";
 
 const HISTORY_WINDOWS = [
   { label: "5m", windowMs: 5 * 60_000, bucketMs: 15_000 },
@@ -86,12 +89,13 @@ function formatDurationMicros(value: number): string {
   return `${(value / 1_000_000).toFixed(2).replace(/\.0+$/, "")} s`;
 }
 
-function formatSampleInterval(valueMs: number): string {
+function formatSampleInterval(valueMs: number, t: TFunction = englishT): string {
   if (valueMs < 1_000) return `${Math.max(0, Math.round(valueMs))} ms`;
   const seconds = valueMs / 1_000;
-  return `${seconds.toLocaleString(undefined, { maximumFractionDigits: 1 })} ${
-    seconds === 1 ? "second" : "seconds"
-  }`;
+  return `${seconds.toLocaleString(undefined, { maximumFractionDigits: 1 })} ${t(
+    "settings.parallelSystem.secondsUnit",
+    { count: seconds },
+  )}`;
 }
 
 function formatProcessName(process: Pick<ResourceTelemetryProcess, "command" | "name">): string {
@@ -101,28 +105,31 @@ function formatProcessName(process: Pick<ResourceTelemetryProcess, "command" | "
   return normalized.split(/[\\/]/).findLast((segment) => segment.length > 0) ?? normalized;
 }
 
-function categoryLabel(category: ResourceTelemetryProcessCategory): string {
+function categoryLabel(
+  category: ResourceTelemetryProcessCategory,
+  t: TFunction = englishT,
+): string {
   switch (category) {
     case "server":
-      return "Server";
+      return t("settings.parallelSystem.categoryServer");
     case "server-child":
-      return "Backend child";
+      return t("settings.parallelSystem.categoryBackendChild");
     case "provider-root":
-      return "Provider";
+      return t("settings.text.provider");
     case "terminal-root":
-      return "Terminal";
+      return t("settings.parallelSystem.categoryTerminal");
     case "electron-main":
-      return "Electron main";
+      return t("settings.parallelSystem.categoryElectronMain");
     case "electron-renderer":
-      return "Renderer";
+      return t("settings.parallelSystem.categoryRenderer");
     case "electron-gpu":
-      return "GPU";
+      return t("settings.parallelSystem.categoryGpu");
     case "electron-utility":
-      return "Electron utility";
+      return t("settings.parallelSystem.categoryElectronUtility");
     case "resource-monitor":
-      return "Monitor";
+      return t("settings.parallelSystem.categoryMonitor");
     case "unknown-t3":
-      return "T3 process";
+      return t("settings.parallelSystem.categoryT3Process");
   }
 }
 
@@ -133,32 +140,44 @@ function categoryDotClass(category: ResourceTelemetryProcessCategory): string {
   return "bg-success";
 }
 
-function ioSemanticsLabel(semantics: ResourceTelemetryIoSemantics): string {
+function ioSemanticsLabel(
+  semantics: ResourceTelemetryIoSemantics,
+  t: TFunction = englishT,
+): string {
   switch (semantics) {
     case "storage":
-      return "Storage bytes";
+      return t("settings.parallelSystem.ioStorageBytes");
     case "logical":
-      return "Logical bytes";
+      return t("settings.parallelSystem.ioLogicalBytes");
     case "all-io":
-      return "All I/O bytes";
+      return t("settings.parallelSystem.ioAllIoBytes");
     case "unavailable":
-      return "Unavailable";
+      return t("settings.text.unavailable");
   }
 }
 
 function booleanStateLabel(
   value: BackgroundBooleanState,
   labels: { readonly true: string; readonly false: string },
+  t: TFunction = englishT,
 ): string {
   if (value === "true") return labels.true;
   if (value === "false") return labels.false;
-  return "Unknown";
+  return t("settings.text.unknown");
 }
 
 function sourceStatusTone(status: ResourceTelemetrySourceStatus): "default" | "warning" | "danger" {
   if (status === "healthy") return "default";
   if (status === "starting" || status === "degraded") return "warning";
   return "danger";
+}
+
+function sourceStatusLabel(status: ResourceTelemetrySourceStatus, t: TFunction = englishT): string {
+  if (status === "healthy") return t("settings.parallelSystem.sourceHealthy");
+  if (status === "starting") return t("settings.parallelSystem.sourceStarting");
+  if (status === "degraded") return t("settings.parallelSystem.sourceDegraded");
+  if (status === "unavailable") return t("settings.parallelSystem.sourceUnavailable");
+  return t("settings.parallelSystem.sourceStopped");
 }
 
 function SourceStatusBadge({
@@ -175,6 +194,7 @@ function SourceStatusBadge({
       }
     | undefined;
 }) {
+  const { t } = useTranslation();
   const tone = presentation?.tone ?? sourceStatusTone(status);
   return (
     <span
@@ -195,19 +215,25 @@ function SourceStatusBadge({
           tone === "danger" && "bg-destructive",
         )}
       />
-      {label} {presentation?.label ?? status}
+      {label} {presentation?.label ?? sourceStatusLabel(status, t)}
     </span>
   );
 }
 
 function LastSampleLabel({ sampledAt }: { sampledAt: DateTime.Utc | null }) {
+  const { t } = useTranslation();
   const relative = useRelativeTimeState(sampledAt ? DateTime.formatIso(sampledAt) : null);
   if (relative.status !== "relative") {
-    return <span className="text-2xs text-muted-foreground/55">Waiting for sample</span>;
+    return (
+      <span className="text-2xs text-muted-foreground/55">
+        {t("settings.text.waitingForSample")}
+      </span>
+    );
   }
   return (
     <span className="text-2xs text-muted-foreground/60">
-      Updated <span className="font-mono tabular-nums">{relative.value}</span>
+      {t("settings.parallelSystem.updatedPrefix")}{" "}
+      <span className="font-mono tabular-nums">{relative.value}</span>
       {relative.suffix ? ` ${relative.suffix}` : ""}
     </span>
   );
@@ -259,6 +285,7 @@ function AggregateCard({
   accentClass: string;
   aggregate: ResourceTelemetryAggregate;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="relative overflow-hidden border-t border-border/60 px-4 py-4 first:border-t-0 md:border-t-0 md:border-l md:first:border-l-0 sm:px-5">
       <span className={cn("absolute inset-x-5 top-0 h-0.5 rounded-full opacity-75", accentClass)} />
@@ -267,14 +294,28 @@ function AggregateCard({
           {label}
         </div>
         <div className="rounded-md bg-muted/55 px-1.5 py-0.5 font-mono text-3xs tabular-nums text-muted-foreground/70">
-          {aggregate.processCount} {aggregate.processCount === 1 ? "process" : "processes"}
+          {t(
+            aggregate.processCount === 1
+              ? "settings.parallelShared.processCountOne"
+              : "settings.parallelShared.processCountOther",
+            { count: aggregate.processCount },
+          )}
         </div>
       </div>
       <div className="mt-3.5 grid grid-cols-2 gap-x-4 gap-y-2.5">
         <MetricPair label="CPU" value={`${aggregate.currentCpuPercent.toFixed(1)}%`} />
-        <MetricPair label="Memory" value={formatBytes(aggregate.currentRssBytes)} />
-        <MetricPair label="Read" value={formatRate(aggregate.ioReadBytesPerSecond)} />
-        <MetricPair label="Write" value={formatRate(aggregate.ioWriteBytesPerSecond)} />
+        <MetricPair
+          label={t("settings.text.memory")}
+          value={formatBytes(aggregate.currentRssBytes)}
+        />
+        <MetricPair
+          label={t("settings.text.read")}
+          value={formatRate(aggregate.ioReadBytesPerSecond)}
+        />
+        <MetricPair
+          label={t("settings.text.write")}
+          value={formatRate(aggregate.ioWriteBytesPerSecond)}
+        />
       </div>
     </div>
   );
@@ -294,6 +335,7 @@ function MetricPair({ label, value }: { label: string; value: string }) {
 }
 
 function HealthSource({ label, health }: { label: string; health: ResourceTelemetrySourceHealth }) {
+  const { t } = useTranslation();
   const expectedInBrowser =
     health.status === "unavailable" &&
     Option.exists(health.lastError, (error) => error.includes("'web' mode"));
@@ -303,9 +345,9 @@ function HealthSource({ label, health }: { label: string; health: ResourceTeleme
         <div className="text-sm font-medium text-foreground">{label}</div>
         <div className="mt-1 text-2xs leading-relaxed text-muted-foreground/65">
           {expectedInBrowser
-            ? "Available when this page runs inside the desktop app."
+            ? t("settings.text.availableWhenThisPageRunsInside")
             : Option.match(health.lastError, {
-                onNone: () => "No reported errors",
+                onNone: () => t("settings.parallelSystem.noReportedErrors"),
                 onSome: (error) => error,
               })}
         </div>
@@ -316,7 +358,7 @@ function HealthSource({ label, health }: { label: string; health: ResourceTeleme
         presentation={
           expectedInBrowser
             ? {
-                label: "Desktop only",
+                label: t("settings.text.desktopOnly"),
                 tone: "neutral",
               }
             : undefined
@@ -357,9 +399,10 @@ function HistoryWindowSelector({
   selectedWindowMs: number;
   onSelect: (windowMs: number) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <ToggleGroup
-      aria-label="Resource history period"
+      aria-label={t("settings.text.resourceHistoryPeriod")}
       variant="segmented"
       value={[String(selectedWindowMs)]}
       onValueChange={(next) => {
@@ -381,6 +424,7 @@ function ResourceHistoryChart({
 }: {
   buckets: ReadonlyArray<ResourceTelemetryHistoryBucket>;
 }) {
+  const { t } = useTranslation();
   const maxCpu = resourceHistoryCpuScaleMax(buckets);
   const maxIo = Math.max(1, ...buckets.map((bucket) => bucket.ioReadBytes + bucket.ioWriteBytes));
 
@@ -388,13 +432,16 @@ function ResourceHistoryChart({
     <div className="border-t border-border/60 px-4 py-4 sm:px-5">
       <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-3xs text-muted-foreground/65">
         <span className="inline-flex items-center gap-1.5">
-          <span className="h-1.5 w-3 rounded-full bg-foreground/70" /> CPU average
+          <span className="h-1.5 w-3 rounded-full bg-foreground/70" />{" "}
+          {t("settings.parallelShared.cpuAverageLegend")}
         </span>
         <span className="inline-flex items-center gap-1.5">
-          <span className="h-1.5 w-3 rounded-full bg-info/70" /> I/O reads
+          <span className="h-1.5 w-3 rounded-full bg-info/70" />{" "}
+          {t("settings.parallelShared.ioReadsLegend")}
         </span>
         <span className="inline-flex items-center gap-1.5">
-          <span className="h-1.5 w-3 rounded-full bg-warning/80" /> I/O writes
+          <span className="h-1.5 w-3 rounded-full bg-warning/80" />{" "}
+          {t("settings.parallelShared.ioWritesLegend")}
         </span>
       </div>
       <div className="flex h-32 items-end gap-1 overflow-hidden rounded-lg border border-border/40 bg-muted/8 px-2 pt-3 pb-2">
@@ -436,10 +483,26 @@ function ResourceHistoryChart({
               />
               <TooltipPopup side="top" className="text-left">
                 <div className="space-y-0.5">
-                  <div>CPU avg {bucket.avgCpuPercent.toFixed(1)}%</div>
-                  <div>CPU peak {bucket.maxCpuPercent.toFixed(1)}%</div>
-                  <div>Read {formatBytes(bucket.ioReadBytes)}</div>
-                  <div>Write {formatBytes(bucket.ioWriteBytes)}</div>
+                  <div>
+                    {t("settings.parallelSystem.cpuAverage", {
+                      value: bucket.avgCpuPercent.toFixed(1),
+                    })}
+                  </div>
+                  <div>
+                    {t("settings.parallelSystem.cpuPeak", {
+                      value: bucket.maxCpuPercent.toFixed(1),
+                    })}
+                  </div>
+                  <div>
+                    {t("settings.parallelSystem.readValue", {
+                      value: formatBytes(bucket.ioReadBytes),
+                    })}
+                  </div>
+                  <div>
+                    {t("settings.parallelSystem.writeValue", {
+                      value: formatBytes(bucket.ioWriteBytes),
+                    })}
+                  </div>
                 </div>
               </TooltipPopup>
             </Tooltip>
@@ -459,6 +522,7 @@ function ProcessTreeName({
   collapsed: boolean;
   onToggle: (process: ResourceTelemetryProcess) => void;
 }) {
+  const { t } = useTranslation();
   const name = formatProcessName(process);
   const hasChildren = process.childPids.length > 0;
   return (
@@ -471,7 +535,11 @@ function ProcessTreeName({
           size="icon-micro"
           variant="ghost-muted"
           onClick={() => onToggle(process)}
-          aria-label={collapsed ? `Expand ${name}` : `Collapse ${name}`}
+          aria-label={
+            collapsed
+              ? t("settings.text.expandName", { name })
+              : t("settings.text.collapseName", { name })
+          }
         >
           <MorphIcon className="size-3.5" icon={collapsed ? ChevronRight : ChevronDown} />
         </Button>
@@ -533,6 +601,7 @@ function ProcessTable({
   signalingKeys: ReadonlySet<string>;
   onSignal: (process: ResourceTelemetryProcess, signal: ServerProcessSignal) => void;
 }) {
+  const { t } = useTranslation();
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(() => new Set());
   const visible = visibleResourceTelemetryProcesses(processes, collapsed);
   const toggle = (process: ResourceTelemetryProcess) => {
@@ -572,24 +641,28 @@ function ProcessTable({
           </colgroup>
           <thead className="sticky top-0 z-10 border-b border-border/60 bg-card text-3xs uppercase tracking-widest text-muted-foreground/65">
             <tr>
-              <th className="px-4 py-2 font-semibold sm:pl-5">Process</th>
-              <th className="px-3 py-2 font-semibold">Category</th>
+              <th className="px-4 py-2 font-semibold sm:pl-5">{t("settings.text.process")}</th>
+              <th className="px-3 py-2 font-semibold">{t("settings.text.category")}</th>
               <th className="px-3 py-2 text-right font-semibold">CPU</th>
-              <th className="px-3 py-2 text-right font-semibold">CPU Time</th>
-              <th className="px-3 py-2 text-right font-semibold">Memory</th>
-              <th className="px-3 py-2 text-right font-semibold">Read/s</th>
-              <th className="px-3 py-2 text-right font-semibold">Write/s</th>
-              <th className="px-3 py-2 text-right font-semibold">Read Total</th>
-              <th className="px-3 py-2 text-right font-semibold">Write Total</th>
+              <th className="px-3 py-2 text-right font-semibold">{t("settings.text.cpuTime")}</th>
+              <th className="px-3 py-2 text-right font-semibold">{t("settings.text.memory")}</th>
+              <th className="px-3 py-2 text-right font-semibold">{t("settings.text.readS")}</th>
+              <th className="px-3 py-2 text-right font-semibold">{t("settings.text.writeS")}</th>
+              <th className="px-3 py-2 text-right font-semibold">{t("settings.text.readTotal")}</th>
+              <th className="px-3 py-2 text-right font-semibold">
+                {t("settings.text.writeTotal")}
+              </th>
               <th className="px-3 py-2 text-right font-semibold">PID</th>
-              <th className="px-2 py-2 text-right font-semibold sm:pr-4">Kill</th>
+              <th className="px-2 py-2 text-right font-semibold sm:pr-4">
+                {t("settings.text.kill")}
+              </th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border/50">
             {visible.length === 0 ? (
               <tr>
                 <td colSpan={11} className="px-4 py-5 text-xs text-muted-foreground sm:px-5">
-                  Waiting for the native process monitor.
+                  {t("settings.text.waitingForTheNativeProcessMonitor")}
                 </td>
               </tr>
             ) : null}
@@ -603,7 +676,7 @@ function ProcessTable({
                   />
                 </td>
                 <td className="truncate px-3 py-2 text-2xs text-muted-foreground">
-                  {categoryLabel(process.category)}
+                  {categoryLabel(process.category, t)}
                 </td>
                 <td className="px-3 py-2 text-right font-mono tabular-nums">
                   {process.cpuPercent.toFixed(1)}%
@@ -626,7 +699,9 @@ function ProcessTable({
                 <td className="px-3 py-2 text-right font-mono tabular-nums text-muted-foreground">
                   <Tooltip>
                     <TooltipTrigger render={<span>{formatBytes(process.ioWriteBytes)}</span>} />
-                    <TooltipPopup side="top">{ioSemanticsLabel(process.ioSemantics)}</TooltipPopup>
+                    <TooltipPopup side="top">
+                      {ioSemanticsLabel(process.ioSemantics, t)}
+                    </TooltipPopup>
                   </Tooltip>
                 </td>
                 <td className="px-3 py-2 text-right font-mono tabular-nums text-muted-foreground">
@@ -654,6 +729,7 @@ function HistoryProcessTable({
 }: {
   processes: ReadonlyArray<ResourceTelemetryProcessSummary>;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="border-t border-border/60">
       <ScrollArea
@@ -676,14 +752,14 @@ function HistoryProcessTable({
           </colgroup>
           <thead className="sticky top-0 z-10 border-b border-border/60 bg-card text-3xs uppercase tracking-widest text-muted-foreground/65">
             <tr>
-              <th className="px-4 py-2 font-semibold sm:pl-5">Process</th>
-              <th className="px-3 py-2 font-semibold">Category</th>
-              <th className="px-3 py-2 text-right font-semibold">CPU Time</th>
-              <th className="px-3 py-2 text-right font-semibold">Peak CPU</th>
-              <th className="px-3 py-2 text-right font-semibold">Peak Mem</th>
-              <th className="px-3 py-2 text-right font-semibold">Read</th>
-              <th className="px-3 py-2 text-right font-semibold">Write</th>
-              <th className="px-3 py-2 text-right font-semibold">Samples</th>
+              <th className="px-4 py-2 font-semibold sm:pl-5">{t("settings.text.process")}</th>
+              <th className="px-3 py-2 font-semibold">{t("settings.text.category")}</th>
+              <th className="px-3 py-2 text-right font-semibold">{t("settings.text.cpuTime")}</th>
+              <th className="px-3 py-2 text-right font-semibold">{t("settings.text.peakCpu")}</th>
+              <th className="px-3 py-2 text-right font-semibold">{t("settings.text.peakMem")}</th>
+              <th className="px-3 py-2 text-right font-semibold">{t("settings.text.read")}</th>
+              <th className="px-3 py-2 text-right font-semibold">{t("settings.text.write")}</th>
+              <th className="px-3 py-2 text-right font-semibold">{t("settings.text.samples")}</th>
               <th className="px-3 py-2 text-right font-semibold sm:pr-5">PID</th>
             </tr>
           </thead>
@@ -691,7 +767,7 @@ function HistoryProcessTable({
             {processes.length === 0 ? (
               <tr>
                 <td colSpan={9} className="px-4 py-5 text-xs text-muted-foreground sm:px-5">
-                  No retained process samples in this window.
+                  {t("settings.text.noRetainedProcessSamplesInThis")}
                 </td>
               </tr>
             ) : null}
@@ -712,7 +788,7 @@ function HistoryProcessTable({
                   </Tooltip>
                 </td>
                 <td className="truncate px-3 py-2 text-2xs text-muted-foreground">
-                  {categoryLabel(process.category)}
+                  {categoryLabel(process.category, t)}
                 </td>
                 <td className="px-3 py-2 text-right font-mono tabular-nums">
                   {formatCpuTime(process.cpuTimeMs)}
@@ -745,6 +821,7 @@ function HistoryProcessTable({
 }
 
 function AttributionTable({ entries }: { entries: ReadonlyArray<ResourceAttributionEntry> }) {
+  const { t } = useTranslation();
   return (
     <div className="overflow-x-auto border-t border-border/60">
       <table className="w-full min-w-[720px] table-fixed text-left text-xs">
@@ -758,19 +835,23 @@ function AttributionTable({ entries }: { entries: ReadonlyArray<ResourceAttribut
         </colgroup>
         <thead className="border-b border-border/60 text-3xs uppercase tracking-widest text-muted-foreground/65">
           <tr>
-            <th className="px-4 py-2 font-semibold sm:pl-5">Component</th>
-            <th className="px-3 py-2 font-semibold">Operation</th>
-            <th className="px-3 py-2 text-right font-semibold">Logical Read</th>
-            <th className="px-3 py-2 text-right font-semibold">Logical Write</th>
-            <th className="px-3 py-2 text-right font-semibold">Count</th>
-            <th className="px-3 py-2 text-right font-semibold sm:pr-5">Time</th>
+            <th className="px-4 py-2 font-semibold sm:pl-5">{t("settings.text.component")}</th>
+            <th className="px-3 py-2 font-semibold">{t("settings.text.operation")}</th>
+            <th className="px-3 py-2 text-right font-semibold">{t("settings.text.logicalRead")}</th>
+            <th className="px-3 py-2 text-right font-semibold">
+              {t("settings.text.logicalWrite")}
+            </th>
+            <th className="px-3 py-2 text-right font-semibold">{t("settings.text.count")}</th>
+            <th className="px-3 py-2 text-right font-semibold sm:pr-5">
+              {t("settings.text.time")}
+            </th>
           </tr>
         </thead>
         <tbody className="divide-y divide-border/50">
           {entries.length === 0 ? (
             <tr>
               <td colSpan={6} className="px-4 py-5 text-xs text-muted-foreground sm:px-5">
-                No instrumented application I/O has been recorded yet.
+                {t("settings.text.noInstrumentedApplicationIOHas")}
               </td>
             </tr>
           ) : null}
