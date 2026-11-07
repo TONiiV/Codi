@@ -285,8 +285,9 @@ it.layer(layer)("Telescope task board", (it) => {
         Effect.flip(board.listDecisions(outsider, { workspaceId: a })),
         Effect.flip(board.listCommits(outsider, { workspaceId: a, taskId: task.id })),
         Effect.flip(board.createTask(outsider, { workspaceId: a, title: "x" })),
+        Effect.flip(board.getLease(outsider, { workspaceId: a, taskId: task.id })),
       ]);
-      assert.deepStrictEqual(denied.map(reasonOf), Array(5).fill("forbidden"));
+      assert.deepStrictEqual(denied.map(reasonOf), Array(6).fill("forbidden"));
 
       assert.deepStrictEqual((yield* board.listTasks(alice, { workspaceId: b })).tasks, []);
       assert.deepStrictEqual((yield* board.listDecisions(alice, { workspaceId: b })).decisions, []);
@@ -342,9 +343,9 @@ it.layer(layer)("Telescope task board", (it) => {
       assert.strictEqual(reasonOf(yield* Effect.flip(claim(bob, "agent-b"))), "conflict");
 
       yield* TestClock.adjust("60 seconds");
+      assert.deepStrictEqual(yield* board.getLease(bob, read), {});
       const lapsed = yield* board.getTask(bob, { workspaceId: a, taskId: task.id });
       assert.deepStrictEqual([lapsed.leaseId, lapsed.version], [undefined, 3]);
-      assert.deepStrictEqual(yield* board.getLease(bob, read), {});
       const expired = yield* board.heartbeatLease(alice, scoped).pipe(Effect.flip);
       assert.strictEqual(reasonOf(expired), "not_found");
 

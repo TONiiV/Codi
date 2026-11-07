@@ -1622,3 +1622,18 @@ export function deriveAvailableRevertTurnCounts(projection: ThreadStructure | nu
   }
   return available;
 }
+
+/** Why `thread` cannot start side chats: they do not nest, start from subagents, or run on older servers. */
+export function sideChatSourceBlock(
+  thread: Pick<EnvironmentThreadShell, "lineage" | "delegatedFrom"> | null,
+  sideChatsCapability: boolean | undefined,
+): "sideChat" | "subagent" | "unsupported" | null {
+  if (thread?.lineage.sideChat === true) return "sideChat";
+  // A delegated task is a remote thread's subagent.
+  if (
+    thread?.lineage.relationshipToParent === "subagent" ||
+    (thread?.delegatedFrom ?? null) !== null
+  )
+    return "subagent";
+  return sideChatsCapability === true ? null : "unsupported";
+}

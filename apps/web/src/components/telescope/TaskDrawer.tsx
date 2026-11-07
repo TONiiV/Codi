@@ -6,15 +6,19 @@ import { ExternalLinkIcon, MessageSquarePlusIcon } from "lucide-react";
 import { type ReactNode, useState } from "react";
 
 import { useThreadShell } from "../../state/entities";
+import { useEnvironment } from "../../state/environments";
 import { useEnvironmentQuery } from "../../state/query";
 import { buildThreadRouteParams } from "../../threadRoutes";
+import { sideChatSourceBlock } from "../ChatView.logic";
 import { useSideChat } from "../chat/useSideChat";
 import { TELESCOPE_PATH } from "../sidebar/mainAppLocation";
 import { Button } from "../ui/button";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "../ui/empty";
 import { Sheet, SheetDescription, SheetHeader, SheetPopup, SheetTitle } from "../ui/sheet";
+import { Skeleton } from "../ui/skeleton";
 import { Spinner } from "../ui/spinner";
 import { toastManager } from "../ui/toast";
+import { ErrorNote } from "./TelescopeAccountDialogs";
 import { telescopeBoard } from "./telescopeState";
 import {
   type BoardTarget,
@@ -40,6 +44,12 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
 }
 
 const time = (at: string) => new Date(at).toLocaleString();
+
+const SIDE_CHAT_BLOCKED = {
+  sideChat: "关联的对话本身就是 side chat，不能再从它开 side chat。",
+  subagent: "关联的对话是 subagent 对话，不能从它开 side chat。",
+  unsupported: "这个环境的 Codi 服务器还不支持 side chat，更新后才能用。",
+} as const;
 
 function ThreadLink({
   environmentId,
@@ -73,6 +83,14 @@ function SideChatButton({
   const [pending, setPending] = useState(false);
   const threadRef =
     task.threadId === undefined ? null : scopeThreadRef(environmentId, task.threadId);
+  const sideChats = useEnvironment(environmentId)?.serverConfig?.environment.capabilities.sideChats;
+  const block = sideChatSourceBlock(useThreadShell(threadRef), sideChats);
+  const hint =
+    threadRef === null
+      ? "这条任务还没有关联对话，关联后才能在 side chat 里聊它。"
+      : block === null
+        ? null
+        : SIDE_CHAT_BLOCKED[block];
   const sideChat = useSideChat({
     threadRef,
     onError: (description) =>
@@ -87,7 +105,7 @@ function SideChatButton({
     <div className="flex flex-col items-start gap-1.5">
       <Button
         size="sm"
-        disabled={threadRef === null || pending}
+        disabled={hint !== null || pending}
         onClick={async () => {
           if (threadRef === null) return;
           setPending(true);
@@ -103,11 +121,7 @@ function SideChatButton({
         {pending ? <Spinner /> : <MessageSquarePlusIcon />}
         加到 side chat
       </Button>
-      {threadRef === null ? (
-        <p className="text-xs text-muted-foreground">
-          这条任务还没有关联对话，关联后才能在 side chat 里聊它。
-        </p>
-      ) : null}
+      {hint === null ? null : <p className="text-xs text-muted-foreground">{hint}</p>}
     </div>
   );
 }
@@ -116,7 +130,8 @@ function TaskDetail({ target, taskId }: { target: BoardTarget; taskId: Telescope
   const { environmentId } = target;
   const input = { workspaceId: target.workspaceId, taskId };
   const query = useEnvironmentQuery(telescopeBoard.task({ environmentId, input }));
-  const lease = useEnvironmentQuery(telescopeBoard.lease({ environmentId, input })).data?.lease;
+  const leaseQuery = useEnvironmentQuery(telescopeBoard.lease({ environmentId, input }));
+  const lease = leaseQuery.data?.lease;
   const names = useBoardNames(target);
   const task = query.data;
   if (task === null)
@@ -157,8 +172,12 @@ function TaskDetail({ target, taskId }: { target: BoardTarget; taskId: Telescope
                 · 从 {time(lease.acquiredAt)} 起 · {time(lease.expiresAt)} 到期
               </span>
             </p>
-          ) : (
+          ) : leaseQuery.data !== null ? (
             <p className="text-muted-foreground">空闲</p>
+          ) : leaseQuery.error !== null ? (
+            <ErrorNote text="没有读到租约" onRetry={leaseQuery.refresh} />
+          ) : (
+            <Skeleton className="h-5 w-48" />
           )}
         </Field>
         <Field label="关联">

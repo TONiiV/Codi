@@ -7,6 +7,7 @@ import {
   snapshotComposerSend,
   withMessageContext,
   deriveAvailableRevertTurnCounts,
+  sideChatSourceBlock,
 } from "./ChatView.logic";
 import { recallCheckoutIsRepo, rememberCheckoutIsRepo } from "./ChatView.logic";
 import { ProviderDriverKind, type ServerProvider } from "@t3tools/contracts";
@@ -724,6 +725,42 @@ describe("worktree setup visibility", () => {
     expect(resolve(base, newest)).toEqual({ snapshot: newest, isPreparingWorktree: false });
     const other = { ...base, threadId: ThreadId.make("another-thread") };
     expect(resolve(other, other)).toEqual({ snapshot: null, isPreparingWorktree: false });
+  });
+});
+
+describe("sideChatSourceBlock", () => {
+  const root = { parentThreadId: null, relationshipToParent: null, rootThreadId: threadId };
+  const child = { ...root, parentThreadId: threadId, rootThreadId: threadId };
+  const delegatedFrom = { environmentId, threadId, title: "Remote" };
+  it.each([
+    ["a main thread", { lineage: root, delegatedFrom: null }, true, null],
+    ["an unknown thread", null, true, null],
+    [
+      "a fork",
+      { lineage: { ...child, relationshipToParent: "fork" as const }, delegatedFrom: null },
+      true,
+      null,
+    ],
+    [
+      "a side chat",
+      {
+        lineage: { ...child, relationshipToParent: "fork" as const, sideChat: true },
+        delegatedFrom: null,
+      },
+      true,
+      "sideChat",
+    ],
+    [
+      "a subagent",
+      { lineage: { ...child, relationshipToParent: "subagent" as const }, delegatedFrom: null },
+      true,
+      "subagent",
+    ],
+    ["a delegated thread", { lineage: root, delegatedFrom }, true, "subagent"],
+    ["a server without side chats", { lineage: root, delegatedFrom: null }, false, "unsupported"],
+    ["a server not loaded yet", { lineage: root, delegatedFrom: null }, undefined, "unsupported"],
+  ] as const)("%s", (_, thread, sideChats, expected) => {
+    expect(sideChatSourceBlock(thread, sideChats)).toBe(expected);
   });
 });
 
