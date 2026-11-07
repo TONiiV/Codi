@@ -2,7 +2,9 @@ import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import { assert, it } from "@effect/vitest";
 import {
   AuthSessionId,
+  CommandId,
   EnvironmentId,
+  MessageId,
   ProjectId,
   ProviderDriverKind,
   ProviderInstanceId,
@@ -46,6 +48,8 @@ import * as ServerSettings from "../serverSettings.ts";
 import * as AgentInstructions from "./AgentInstructions.ts";
 import * as AgentRuntime from "./AgentRuntime.ts";
 import * as AgentService from "./AgentService.ts";
+import * as BoardChanges from "./BoardChanges.ts";
+import * as DelegationAnswers from "./DelegationAnswers.ts";
 import * as DelegationService from "./DelegationService.ts";
 import * as GrantService from "./GrantService.ts";
 import * as MemoryService from "./MemoryService.ts";
@@ -220,6 +224,7 @@ const makeHarness = Effect.gen(function* () {
     GrantService.layer,
     TaskBoardService.layer,
     ToolGateway.layer,
+    BoardChanges.layer,
   ).pipe(
     Layer.provideMerge(RunRecordService.layer),
     Layer.provideMerge(ProjectStore.layer),
@@ -628,6 +633,127 @@ it.effect(
           second.opened.delegationId,
         ])
           assert.deepStrictEqual(yield* state(delegationId), ["FAILED", "没有汇报"]);
+      }),
+    ),
+);
+
+it.effect.each([
+  { answered: false, name: "the Chief's task stays WORKING while its Worker's question is open" },
+  {
+    answered: true,
+    name: "the member's answer runs the Worker's next turn in a run whose end wakes the Chief once",
+  },
+] as const)(
+  "a Chief that raises its Worker's question on the Worker's task: $name",
+  ({ answered }) =>
+    withHarness((harness) =>
+      Effect.gen(function* () {
+        const seeded = yield* seed;
+        const delegations = yield* DelegationService.DelegationService;
+        const wakes = yield* WakeQueueService.WakeQueueService;
+        const threads = yield* ThreadManagementService.ThreadManagementService;
+        const { delegation, runner, turn, call } = yield* chiefWorking(harness, seeded);
+        const opened = (yield* call("dispatch_worker", {
+          delegationId: delegation.id,
+          brief,
+        })) as Opened;
+        yield* Queue.take(harness.sessions);
+        const workerTurn = yield* Queue.take(harness.started);
+        yield* harness.complete(turn);
+        yield* Fiber.join(runner);
+        assert.equal((yield* Queue.take(harness.finished)).threadId, turn.threadId);
+        yield* harness.complete(workerTurn);
+        assert.equal((yield* Queue.take(harness.finished)).threadId, opened.threadId);
+
+        const next = yield* runWake(yield* wakes.take);
+        const asking = yield* Queue.take(harness.started);
+        yield* call("delegation_report", {
+          delegationId: opened.delegationId,
+          state: "INPUT_REQUIRED",
+          report: { result: "", decisions: [], blockedOn: "电机选型" },
+          question: "换电机还是加齿轮？",
+          options: ["换 MX-40", "加减速齿轮"],
+        });
+        yield* harness.complete(asking);
+        yield* Fiber.join(next);
+        assert.equal((yield* Queue.take(harness.finished)).threadId, turn.threadId);
+        // One fiber handles run ends, so this later run's end follows the asking turn's.
+        const chiefThread = yield* threads.getThreadShell(turn.threadId);
+        yield* threads.sendToThread({
+          projectId: chiefThread!.projectId,
+          commandId: CommandId.make("member-asks"),
+          threadId: turn.threadId,
+          messageId: MessageId.make("member-asks"),
+          text: "进度如何？",
+          attachments: [],
+          mode: "queue",
+          createdBy: "user",
+          creationSource: "web",
+        });
+        yield* harness.complete(yield* Queue.take(harness.started));
+        assert.equal((yield* Queue.take(harness.finished)).threadId, turn.threadId);
+        const state = (delegationId: Telescope.DelegationId) =>
+          delegations
+            .get({ workspaceId: seeded.workspaceId, delegationId })
+            .pipe(Effect.map((row) => [row.state, row.report?.blockedOn]));
+        assert.deepStrictEqual(
+          [yield* state(delegation.id), yield* state(opened.delegationId)],
+          [
+            ["WORKING", undefined],
+            ["INPUT_REQUIRED", "电机选型"],
+          ],
+        );
+        if (!answered) return;
+
+        const board = yield* TaskBoardService.TaskBoardService;
+        const { decisionId } = yield* delegations.get({
+          workspaceId: seeded.workspaceId,
+          delegationId: opened.delegationId,
+        });
+        const { decisions } = yield* board.listDecisions(
+          { caller: alice },
+          { workspaceId: seeded.workspaceId },
+        );
+        const proposal = decisions.find((decision) => decision.id === decisionId)!;
+        yield* board.createDecision(
+          { caller: alice },
+          {
+            workspaceId: seeded.workspaceId,
+            title: proposal.title,
+            text: proposal.text,
+            status: "decided",
+            supersedes: proposal.id,
+            options: proposal.options!,
+            chosen: "1",
+          },
+        );
+        yield* (yield* DelegationAnswers.make).catchUp;
+        const db = yield* TelescopeDb.TelescopeDb;
+        const answer = `telescope-answer:${proposal.id}`;
+        assert.lengthOf(yield* db.openRunsOnThread(opened.threadId, answer), 1);
+        const answeredTurn = yield* Queue.take(harness.started);
+        assert.equal(answeredTurn.threadId, opened.threadId);
+        assert.include(answeredTurn.message.text, "换 MX-40");
+        yield* harness.complete(answeredTurn);
+        assert.equal((yield* Queue.take(harness.finished)).threadId, opened.threadId);
+        const settled = yield* wakes.take;
+        assert.equal(settled.wake.agentId, seeded.chief);
+        assert.deepStrictEqual(settled.payloads, [{ kind: "worker", delegationId: delegation.id }]);
+        assert.isUndefined(yield* wakes.dequeue);
+
+        const last = yield* runWake(settled);
+        const reporting = yield* Queue.take(harness.started);
+        yield* call("delegation_report", {
+          delegationId: delegation.id,
+          state: "COMPLETED",
+          report: { result: "换了 MX-40，回归测试通过", decisions: [] },
+        });
+        yield* harness.complete(reporting);
+        yield* Fiber.join(last);
+        assert.deepStrictEqual(yield* state(delegation.id), ["COMPLETED", undefined]);
+        assert.deepStrictEqual(yield* queued(seeded), [
+          [seeded.pa, { kind: "report", delegationId: delegation.id }],
+        ]);
       }),
     ),
 );

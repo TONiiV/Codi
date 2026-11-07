@@ -133,11 +133,13 @@ export const makeHandler = Effect.gen(function* () {
         : (yield* delegations.listForAgent(owner.workspaceId, owner.agentId)).filter(
             (delegation) => delegation.hop === "worker" && isOpen(delegation),
           );
-    // A Worker is live while its run is open or its settled wake has not served a turn: queued, or
-    // running for a turn other than this one (AgentRuntime's message id for a wake's turn).
+    // A Worker is live while it waits for an answer, its run is open, or its settled wake has not
+    // served a turn: queued, or running for a turn other than this one (AgentRuntime's message id).
     const live = Effect.fn("AgentThreadRuns.live")(function* (taskId: Telescope.DelegationId) {
       const hops = workers.filter((worker) => worker.parentId === taskId);
       if (hops.length === 0) return false;
+      if (hops.some(({ state }) => state === "INPUT_REQUIRED" || state === "AUTH_REQUIRED"))
+        return true;
       for (const { threadId } of hops)
         if (threadId !== undefined && (yield* db.openRunsOnThread(threadId)).length > 0)
           return true;

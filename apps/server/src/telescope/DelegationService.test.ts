@@ -16,6 +16,7 @@ import * as ThreadManagementService from "../orchestration-v2/ThreadManagementSe
 import * as BoardChanges from "./BoardChanges.ts";
 import * as DelegationAnswers from "./DelegationAnswers.ts";
 import * as DelegationService from "./DelegationService.ts";
+import * as RunRecordService from "./RunRecordService.ts";
 import * as TaskBoardService from "./TaskBoardService.ts";
 import * as TelescopeDb from "./TelescopeDb.ts";
 import * as WakeQueueService from "./WakeQueueService.ts";
@@ -842,7 +843,10 @@ const listen = (thread: "open" | "archived" | "deleted" = "open") =>
                   : Effect.succeed({} as never),
               ),
             ),
-        }),
+        }).pipe(
+          // No run on these threads, so no answer opens one.
+          Layer.merge(Layer.mock(RunRecordService.RunRecordService)({})),
+        ),
       ),
     );
     return { ...answers, sends };

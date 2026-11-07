@@ -695,7 +695,14 @@ const layerRuntimeCoreDependenciesBase = Layer.mergeAll(
     ),
   ),
   TelescopeDelegationAnswers.layer.pipe(
-    Layer.provide(Layer.merge(TelescopeDelegations.layer, TelescopeBoardChanges.layer)),
+    Layer.provide(
+      Layer.mergeAll(
+        TelescopeDelegations.layer,
+        TelescopeBoardChanges.layer,
+        TelescopeRuns.layer,
+        TelescopeDb.layer,
+      ),
+    ),
   ),
   ProviderUsageLimitsIngestion.layer,
   layerProviderInstallationRefresh,
