@@ -39,7 +39,7 @@ const TOOL_POWERS: Readonly<Record<Telescope.GatewayTool, Telescope.GrantPower |
 };
 const SECRET_KEY = /token|secret|password|passphrase|api.?key|authorization|cookie|credential/i;
 const AUTH_HEADER_VALUE =
-  /(\bauthorization["']?[ \t]*:[ \t]*["']?)(?:(?:bearer|basic)[ \t]+)?[^\s'"`]+/gi;
+  /(\b(?:authorization|x-api-key|cookie)["']?[ \t]*:[ \t]*["'`]?)(?:[\w-]+\s+)?[^\s'"`]+/gi;
 // Known credential shapes only: auth headers, JWTs, private keys and common provider key prefixes.
 // A bare Bearer or Basic token needs a digit or a later capital, so "Basic validation" stays prose.
 const SECRET_VALUE =

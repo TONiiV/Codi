@@ -195,6 +195,12 @@ it.layer(layer)("Telescope tool gateway", (it) => {
         "authorization: basic Changemeplease",
         "AUTHORIZATION: supersecrettoken",
         `{"Authorization": "Bearer supersecrettoken"}`,
+        "curl -H 'Authorization: Token 9944b09199c62bcf9418ad846dd0e4bbdfc6ee4b' https://api.example.com/",
+        "Authorization: `supersecrettoken123`",
+        "Authorization: Bearer\n  abc123def456ghi789",
+        "Proxy-Authorization: Negotiate YIIGhgYGKwYBBQUCoIIGejCCBnag",
+        "X-API-Key: 9944b09199c62bcf9418ad846dd0e4bbdfc6ee4b",
+        "Cookie: sessionid=9944b09199c62bcf9418ad846dd0e4bbdfc6ee4b",
       ];
       const inText = (text: (shape: string) => string) =>
         Object.fromEntries(Object.entries(shapes).map(([name, shape]) => [name, text(shape)]));
@@ -247,6 +253,12 @@ it.layer(layer)("Telescope tool gateway", (it) => {
           "authorization: [redacted]",
           "AUTHORIZATION: [redacted]",
           `{"Authorization": "[redacted]"}`,
+          "curl -H 'Authorization: [redacted]' https://api.example.com/",
+          "Authorization: `[redacted]`",
+          "Authorization: [redacted]",
+          "Proxy-Authorization: [redacted]",
+          "X-API-Key: [redacted]",
+          "Cookie: [redacted]",
         ],
       });
       assert.deepStrictEqual(entries[1]?.onBehalfOf, [beaId]);
