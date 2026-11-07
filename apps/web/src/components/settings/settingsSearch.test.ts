@@ -205,12 +205,20 @@ describe("searchSettings", () => {
       ["Native sessions", "providers"],
       ["CODEX_HOME path", "providers"],
       ["Shadow home path", "providers"],
-      ["成员与角色", "telescope-members"],
       ["telescope members", "telescope-members"],
-      ["预算与急停", "telescope-governance"],
       ["kill switch", "telescope-governance"],
     ] as const) {
       expect(searchSettings(title)[0]?.id, title).toBe(id);
+    }
+    const zh = createInstance();
+    void zh.init({ lng: "zh-CN", resources: { "zh-CN": { translation: zhCN } } });
+    const items: ReadonlyArray<SettingsSearchItem> = SETTINGS_SEARCH_ITEMS;
+    const zhItems = items.map((item) => localizeSettingsSearchItem(item, zh.t));
+    for (const [title, id] of [
+      ["成员与角色", "telescope-members"],
+      ["预算与急停", "telescope-governance"],
+    ] as const) {
+      expect(searchSettings(title, zhItems)[0]?.id, title).toBe(id);
     }
   });
 

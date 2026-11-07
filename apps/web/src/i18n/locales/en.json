@@ -241,6 +241,9 @@
       "pull-request-routing": "Pull request sharing",
       "secret-providers": "Secret providers",
       "secret-providers-add": "Add secret provider",
+      "telescope-members": "Members and roles",
+      "telescope-agents": "Company agents",
+      "telescope-governance": "Budgets and kill switch",
       "archive": "Archived threads"
     },
     "general": {
@@ -2938,6 +2941,9 @@
       "pull-request-routing": "pull request routing trusted environments shared credentials permissions read actions source control",
       "secret-providers": "1password vault credentials api key",
       "secret-providers-add": "new 1password vault op cli account",
+      "telescope-members": "telescope workspace members roles admin revoke remove restore",
+      "telescope-agents": "telescope company agents main department",
+      "telescope-governance": "telescope budget limit tool calls usage kill switch stop pause",
       "archive": "restore reopen deleted history projects"
     },
     "keybindingCommands": {

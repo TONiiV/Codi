@@ -1323,25 +1323,21 @@ export const SETTINGS_SEARCH_ITEMS = [
   },
   {
     id: "telescope-members",
-    title: "成员与角色",
+    title: "Members and roles",
     to: "/settings/telescope",
-    searchTerms: [
-      "telescope workspace members roles admin revoke remove restore 成员 角色 管理员 移除 吊销 恢复",
-    ],
+    searchTerms: ["telescope workspace members roles admin revoke remove restore"],
   },
   {
     id: "telescope-agents",
-    title: "公司 agents",
+    title: "Company agents",
     to: "/settings/telescope",
-    searchTerms: ["telescope company agents main department 公司 主代理 职能代理"],
+    searchTerms: ["telescope company agents main department"],
   },
   {
     id: "telescope-governance",
-    title: "预算与急停",
+    title: "Budgets and kill switch",
     to: "/settings/telescope",
-    searchTerms: [
-      "telescope budget limit tool calls usage kill switch stop pause 预算 上限 调用 急停 暂停",
-    ],
+    searchTerms: ["telescope budget limit tool calls usage kill switch stop pause"],
   },
   {
     id: "archive",
