@@ -23,25 +23,22 @@ describe("agent bloub seed", () => {
 describe("agent bloub loop", () => {
   it(`keeps an off-screen avatar and one past the first ${LOOP_CAP} on their still frames`, async () => {
     const ids = Array.from({ length: LOOP_CAP + 1 }, (_, i) => `agent-${i}`);
-    // Inline sizes: browser tests load no stylesheet.
     await using screen = await render(
       <div style={{ display: "flex" }}>
-        <div style={{ position: "fixed", top: "200vh", width: 32, height: 32 }}>
-          <AgentBloub seed="off-screen" activity="working" />
+        <div style={{ position: "fixed", top: "200vh" }}>
+          <AgentBloub seed="off-screen" activity="working" size={32} />
         </div>
         {ids.map((id) => (
-          <div key={id} style={{ width: 32, height: 32 }}>
-            <AgentBloub seed={id} activity="working" />
-          </div>
+          <AgentBloub key={id} seed={id} activity="working" size={32} />
         ))}
       </div>,
     );
-    const svgs = [...screen.container.querySelectorAll("svg")];
-    const first = svgs.map((svg) => svg.innerHTML);
-    const moved = () => svgs.filter((svg, i) => svg.innerHTML !== first[i]).length;
+    const canvases = [...screen.container.querySelectorAll("canvas")];
+    const first = canvases.map((canvas) => canvas.toDataURL());
+    const moved = () => canvases.filter((canvas, i) => canvas.toDataURL() !== first[i]).length;
     // Every awake avatar draws in the same frame, so an uncapped one would move with the six.
     await vi.waitFor(() => expect(moved()).toBeGreaterThanOrEqual(LOOP_CAP));
     expect(moved()).toBe(LOOP_CAP);
-    expect(svgs[0]?.innerHTML).toBe(first[0]);
+    expect(canvases[0]?.toDataURL()).toBe(first[0]);
   });
 });
