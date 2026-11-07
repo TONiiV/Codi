@@ -178,7 +178,10 @@ function AgentCrumb(props: ChatScope) {
           agent={agent}
           size="sm"
         />
-        <WorkspaceBreadcrumbText>{agentDisplayName(agent)}</WorkspaceBreadcrumbText>
+        {/* Phones keep only the bloub: the chat's own header names the agent below. */}
+        <WorkspaceBreadcrumbText className="max-w-56 max-sm:sr-only">
+          {agentDisplayName(agent)}
+        </WorkspaceBreadcrumbText>
       </WorkspaceBreadcrumbItem>
     </>
   );

@@ -315,7 +315,8 @@ export default function AgentBloub({
     <svg
       ref={svg}
       viewBox={`${-HALF} ${-HALF} ${HALF * 2} ${HALF * 2}`}
-      className={cn("shrink-0", className)}
+      // Every frame replaces the children, so the svg itself must be the pointer target.
+      className={cn("shrink-0 *:pointer-events-none", className)}
       aria-hidden
       data-activity={activity}
       onPointerMove={(event) => {
