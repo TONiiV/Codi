@@ -152,6 +152,12 @@ export class RunRecordService extends Context.Service<
       workspaceId: WorkspaceId,
       input: RunStartInput,
     ) => Out<Telescope.AgentRun>;
+    /** For runs the server starts itself; `memberId` must be an active member. */
+    readonly startFor: (
+      workspaceId: WorkspaceId,
+      memberId: string,
+      input: RunStartInput,
+    ) => Out<Telescope.AgentRun>;
     /** Later turns on the thread add their tokens to the run until it finishes. */
     readonly attachThread: (run: RunRef, threadId: ThreadId) => Out<void>;
     readonly recordCall: (run: RunRef, call: RunCallInput) => Out<Telescope.RunCall>;
@@ -198,17 +204,21 @@ const make = Effect.gen(function* () {
   const saveRun = (row: typeof RunRow.Type) =>
     db.update(row.workspace_id, "runs", encodeRun(row), { run_id: row.run_id });
 
-  const start = Effect.fn("RunRecordService.start")(function* (
-    caller: Caller,
+  const startFor = Effect.fn("RunRecordService.startFor")(function* (
     workspaceId: WorkspaceId,
+    memberId: string,
     input: RunStartInput,
   ) {
-    const { self } = yield* requireMember(workspaceId, caller);
+    const active = yield* db.count(workspaceId, "members", {
+      subject_id: memberId,
+      revoked_at: null,
+    });
+    if (active === 0) return yield* fail("forbidden", "Runs act only for active members.");
     const row: typeof RunRow.Type = {
       run_id: Telescope.AgentRunId.make(yield* random.uuidV4()),
       workspace_id: workspaceId,
       agent_id: input.agentId,
-      on_behalf_of_json: [self.subjectId, ...(input.via ?? [])],
+      on_behalf_of_json: [memberId, ...(input.via ?? [])],
       input_snapshot_json: input.inputSnapshot,
       started_at: yield* now,
       finished_at: null,
@@ -223,6 +233,14 @@ const make = Effect.gen(function* () {
     };
     yield* db.insert(workspaceId, "runs", encodeRun(row));
     return toRun(row);
+  });
+  const start = Effect.fn("RunRecordService.start")(function* (
+    caller: Caller,
+    workspaceId: WorkspaceId,
+    input: RunStartInput,
+  ) {
+    const { self } = yield* requireMember(workspaceId, caller);
+    return yield* startFor(workspaceId, self.subjectId, input);
   });
 
   const attachThread = Effect.fn("RunRecordService.attachThread")(function* (
@@ -444,6 +462,7 @@ const make = Effect.gen(function* () {
 
   return RunRecordService.of({
     start,
+    startFor,
     attachThread,
     recordCall,
     recordContextManifest,

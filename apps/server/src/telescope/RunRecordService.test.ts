@@ -319,6 +319,7 @@ it.layer(layer)("Telescope run records", (it) => {
         runs.runsForMemory(mallory, { workspaceId, memoryId }),
         runs.memoriesForRun(mallory, scoped),
         runs.start(mallory, workspaceId, { agentId, inputSnapshot: snapshot([]) }),
+        runs.startFor(workspaceId, "mallory-subject", { agentId, inputSnapshot: snapshot([]) }),
       ];
       for (const read of reads) {
         assert.strictEqual(reason(yield* Effect.flip(read)), "forbidden");

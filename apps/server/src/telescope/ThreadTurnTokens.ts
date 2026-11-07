@@ -5,16 +5,21 @@ import * as Stream from "effect/Stream";
 
 import * as Orchestrator from "../orchestration-v2/Orchestrator.ts";
 import { forkParked } from "../serverActivation.ts";
+import * as AgentThreadRuns from "./AgentThreadRuns.ts";
 import * as RunRecordService from "./RunRecordService.ts";
 
 const REMEMBERED_TURNS = 4096;
 const TERMINAL = new Set(["completed", "failed", "interrupted", "cancelled"]);
 
-/** Adds each finished provider turn's tokens to the Telescope runs attached to its thread. */
+/**
+ * Adds each finished provider turn's tokens to the Telescope runs attached to its thread, then
+ * opens and finishes runs on agent threads; one fiber, so a run finishes with its tokens.
+ */
 export const layer = Layer.effectDiscard(
   Effect.gen(function* () {
     const engine = yield* Orchestrator.OrchestratorV2;
     const runs = yield* RunRecordService.RunRecordService;
+    const agentThreadRuns = yield* AgentThreadRuns.makeHandler;
     // A finished turn can be updated again; count each one once.
     const counted = new Set<string>();
 
@@ -45,6 +50,7 @@ export const layer = Layer.effectDiscard(
           Effect.catchCause((cause) =>
             Effect.logWarning("recording turn tokens on a Telescope run failed", { cause }),
           ),
+          Effect.andThen(agentThreadRuns(event)),
         ),
       ).pipe(
         Effect.catchCause((cause) =>

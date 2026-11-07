@@ -89,6 +89,9 @@ import * as TelescopeRuns from "./telescope/RunRecordService.ts";
 import * as TelescopeGrants from "./telescope/GrantService.ts";
 import * as TelescopeToolGateway from "./telescope/ToolGateway.ts";
 import * as TelescopeThreadTurnTokens from "./telescope/ThreadTurnTokens.ts";
+import * as TelescopeAgentRuntime from "./telescope/AgentRuntime.ts";
+import * as TelescopeDb from "./telescope/TelescopeDb.ts";
+import * as TelescopeDelegations from "./telescope/DelegationService.ts";
 import * as TelescopeWakeQueue from "./telescope/WakeQueueService.ts";
 import * as TelescopeAttribution from "./telescope/AttributionService.ts";
 import * as TelescopeTokenSaver from "./telescope/tokensaver/TokenSaverService.ts";
@@ -678,7 +681,11 @@ const layerRuntimeCoreDependenciesBase = Layer.mergeAll(
       yield* service.start();
     }),
   ).pipe(Layer.provide(DelegatedTaskQuestionReactor.layer), Layer.provide(ProjectionStoreV2.layer)),
-  TelescopeThreadTurnTokens.layer.pipe(Layer.provide(TelescopeRuns.layer)),
+  TelescopeThreadTurnTokens.layer.pipe(
+    Layer.provide(
+      Layer.mergeAll(TelescopeRuns.layer, TelescopeDelegations.layer, TelescopeDb.layer),
+    ),
+  ),
   ProviderUsageLimitsIngestion.layer,
   layerProviderInstallationRefresh,
   ReplayMarkers.layer,
@@ -809,7 +816,10 @@ const layerMakeRoutes = Layer.mergeAll(
   Layer.effectDiscard(
     RemoteDelegation.RemoteDelegation.pipe(Effect.flatMap((remote) => remote.start())),
   ),
-  TelescopeWakeQueue.layerWorker,
+  TelescopeWakeQueue.layerWorker.pipe(
+    Layer.provide(TelescopeAgentRuntime.layer),
+    Layer.provide(ProviderAdapterRegistry.layerFromProviderInstanceRegistry),
+  ),
   Layer.merge(TelescopeTokenSaver.layerWeekly, TelescopeRuns.layerRetention),
 ).pipe(
   Layer.provide(
@@ -832,6 +842,8 @@ const layerMakeRoutes = Layer.mergeAll(
       TelescopeToolGateway.layer,
       TelescopeAttribution.layer,
       TelescopeWorkspaceData.layer,
+      TelescopeDelegations.layer,
+      TelescopeDb.layer,
     ),
   ),
   Layer.provide(TelescopeTokenSaver.layer.pipe(Layer.provide(UsageProjectResolver.layer))),

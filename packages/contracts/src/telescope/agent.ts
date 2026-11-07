@@ -1,6 +1,6 @@
 import * as Schema from "effect/Schema";
 
-import { ProjectId } from "../baseSchemas.ts";
+import { ProjectId, ThreadId } from "../baseSchemas.ts";
 import { ModelSelection } from "../modelSelection.ts";
 import { ProviderInstanceId } from "../providerInstance.ts";
 import {
@@ -52,6 +52,8 @@ export const Agent = Schema.Struct({
   syncWithBoard: Schema.Boolean,
   dispatchMode: AgentDispatchMode,
   channels: Schema.Array(Channel),
+  /** The Codi thread the agent's wakes run on; created by its first wake, replaced if archived. */
+  residentThreadId: Schema.optionalKey(ThreadId),
   createdAt: Timestamp,
   updatedAt: Timestamp,
 });
