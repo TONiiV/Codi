@@ -247,6 +247,10 @@
       "types": "./src/telescope/governance.ts",
       "default": "./src/telescope/governance.ts"
     },
+    "./telescope/routing": {
+      "types": "./src/telescope/routing.ts",
+      "default": "./src/telescope/routing.ts"
+    },
     "./state/environmentHttpAuth": {
       "types": "./src/state/environmentHttpAuth.ts",
       "default": "./src/state/environmentHttpAuth.ts"

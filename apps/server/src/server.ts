@@ -85,17 +85,18 @@ import * as TelescopeWorkspaceData from "./telescope/WorkspaceDataService.ts";
 import * as TelescopeBoard from "./telescope/TaskBoardService.ts";
 import * as TelescopeBoardChanges from "./telescope/BoardChanges.ts";
 import * as TelescopeAgents from "./telescope/AgentService.ts";
+import * as TelescopeDelegations from "./telescope/DelegationService.ts";
 import * as TelescopeRuns from "./telescope/RunRecordService.ts";
 import * as TelescopeGrants from "./telescope/GrantService.ts";
 import * as TelescopeToolGateway from "./telescope/ToolGateway.ts";
 import * as TelescopeThreadTurnTokens from "./telescope/ThreadTurnTokens.ts";
 import * as TelescopeAgentRuntime from "./telescope/AgentRuntime.ts";
 import * as TelescopeDb from "./telescope/TelescopeDb.ts";
-import * as TelescopeDelegations from "./telescope/DelegationService.ts";
 import * as TelescopeWakeQueue from "./telescope/WakeQueueService.ts";
 import * as TelescopeAttribution from "./telescope/AttributionService.ts";
 import * as TelescopeTokenSaver from "./telescope/tokensaver/TokenSaverService.ts";
 import * as TelescopeMemory from "./telescope/MemoryService.ts";
+import * as TelescopeRouting from "./telescope/RoutingService.ts";
 import * as PeerLinks from "./peer/PeerLinks.ts";
 import * as PeerMcpClient from "./peer/PeerMcpClient.ts";
 import * as McpSessionRegistry from "./mcp/McpSessionRegistry.ts";
@@ -840,9 +841,10 @@ const layerMakeRoutes = Layer.mergeAll(
       TelescopeGrants.layer,
       TelescopeMemory.layer,
       TelescopeToolGateway.layer,
-      TelescopeAttribution.layer,
-      TelescopeWorkspaceData.layer,
       TelescopeDelegations.layer,
+      TelescopeAttribution.layer,
+      TelescopeRouting.layer,
+      TelescopeWorkspaceData.layer,
       TelescopeDb.layer,
     ),
   ),

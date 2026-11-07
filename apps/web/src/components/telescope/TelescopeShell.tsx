@@ -19,6 +19,7 @@ import { WorkspacePageHeader } from "../WorkspacePageHeader";
 import { MyTeamsPage } from "./MyTeamsPage";
 import { TaskDrawer } from "./TaskDrawer";
 import { TelescopeAccountFooter } from "./TelescopeAccount";
+import { TelescopeChatList } from "./TelescopeChatList";
 import { TelescopeDashboard } from "./TelescopeDashboard";
 import {
   TELESCOPE_VIEWS,
@@ -107,7 +108,7 @@ export function TelescopeSidebar({
   return (
     <>
       <SidebarChromeHeader isElectron={isElectron} />
-      {/* The mobile sheet sizes to its content, and this body has none yet. */}
+      {/* The mobile sheet sizes to its content, and most views' bodies are still empty. */}
       <div className={cn("flex min-h-0 flex-1", isMobile && "w-[calc(100vw-(--spacing(12)))]")}>
         <TelescopeRail view={view} collapsed={false} />
         <SidebarContent className="min-h-full">
@@ -115,7 +116,7 @@ export function TelescopeSidebar({
             <div className="px-2 py-1 text-xs font-medium text-muted-foreground">
               {telescopeViewEntry(view).label}
             </div>
-            {children}
+            {children ?? (view === "chats" ? <TelescopeChatList /> : null)}
           </SidebarGroup>
         </SidebarContent>
       </div>

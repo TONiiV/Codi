@@ -101,9 +101,12 @@ export const BoardChange = Schema.Struct({
   version: Count,
 });
 export type BoardChange = typeof BoardChange.Type;
-/** `synchronized` opens every subscription; a write committed before it is not sent. */
+/**
+ * `synchronized` opens every subscription; a write committed before it is not sent. `changes`
+ * carries one write's notices, or all a watcher had queued, once per item at its newest version.
+ */
 export const BoardWatchItem = Schema.Union([
-  BoardChange,
+  Schema.Struct({ kind: Schema.Literal("changes"), changes: Schema.Array(BoardChange) }),
   Schema.Struct({ kind: Schema.Literal("synchronized") }),
 ]);
 export type BoardWatchItem = typeof BoardWatchItem.Type;

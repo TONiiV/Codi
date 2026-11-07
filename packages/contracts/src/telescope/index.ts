@@ -11,4 +11,5 @@ export * from "./a2a.ts";
 export * from "./taskBoard.ts";
 export * from "./tokenSaver.ts";
 export * from "./dashboard.ts";
+export * from "./routing.ts";
 export * from "./rpc.ts";

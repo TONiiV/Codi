@@ -117,6 +117,7 @@ const setup = Effect.gen(function* () {
     .pipe(Effect.map((result) => result.calls.map((c) => `${c.tool}:${c.grantCheck}`)));
   return {
     workspaceId,
+    threadId,
     beaId: bea.subjectId,
     chiefId: chief.id,
     runId: run.id,
@@ -176,12 +177,108 @@ it.layer(layer)("Telescope tool gateway", (it) => {
     }),
   );
 
+  it.effect("callIfRun runs ungated on a thread without a run", () =>
+    Effect.gen(function* () {
+      const { threadId, gateway, audit, calls } = yield* setup;
+      const plain = ThreadId.make("thread-without-run");
+      assert.strictEqual(
+        yield* gateway.callIfRun(plain, "dispatch_worker", {}, Effect.succeed("ran")),
+        "ran",
+      );
+      assert.strictEqual(
+        yield* gateway
+          .callIfRun(plain, "dispatch_worker", {}, Effect.fail("own"))
+          .pipe(Effect.flip),
+        "own",
+      );
+      assert.lengthOf(yield* audit, 0);
+      assert.strictEqual(
+        yield* gateway.callIfRun(threadId, "dispatch_worker", {}, Effect.succeed("gated")),
+        "gated",
+      );
+      assert.deepStrictEqual(yield* calls, ["dispatch_worker:allowed"]);
+    }),
+  );
+
+  it.effect("refuses the PA's dispatch_worker and a Chief's delegate, both audited", () =>
+    Effect.gen(function* () {
+      const { workspaceId, beaId, chiefId, gateway, denial, audit } = yield* setup;
+      const { agents: mine } = yield* (yield* AgentService.AgentService).listMine(as.bea, {
+        workspaceId,
+      });
+      const pa = mine.find((agent) => agent.kind === "chief_of_staff");
+      assert.isDefined(pa);
+      const db = yield* TelescopeDb.TelescopeDb;
+      yield* db.update(
+        workspaceId,
+        "agents",
+        { standing_powers_json: JSON.stringify(ALL) },
+        { agent_id: pa.id },
+      );
+      const paThread = ThreadId.make(`thread-pa-${workspaceId}`);
+      yield* (yield* RunRecordService.RunRecordService).start(as.bea, workspaceId, {
+        agentId: pa.id,
+        threadId: paThread,
+        inputSnapshot: {
+          promptVersion: "prompt@1",
+          skillsVersions: {},
+          powersVersion: "powers@1",
+          model: "model-a",
+          contextManifest: [],
+        },
+      });
+      const { powers } = yield* (yield* GrantService.GrantService).effectiveGrant(workspaceId, {
+        agentId: pa.id,
+        onBehalfOf: [beaId],
+      });
+      assert.isTrue(powers.dispatchWorkers, "the PA holds the power to pass it down");
+      let ran = false;
+      const denied = yield* gateway
+        .callIfRun(
+          paThread,
+          "dispatch_worker",
+          {},
+          Effect.sync(() => (ran = true)),
+        )
+        .pipe(Effect.flip);
+      assert.strictEqual(
+        denied._tag === "TelescopeToolGatewayDenied" && denied.reason,
+        "project_only",
+      );
+      assert.isFalse(ran);
+      const [entry] = (yield* audit).toReversed();
+      assert.deepStrictEqual(
+        [entry?.agentId, entry?.tool, entry?.outcome, entry?.reason],
+        [
+          pa.id,
+          "dispatch_worker",
+          "denied",
+          "Only a project's agent opens Worker threads. Hand the work to its Chief Agent with `delegate`.",
+        ],
+      );
+      yield* gateway.call(paThread, "open_ticket", {}, () => Effect.void);
+      yield* gateway.call(paThread, "delegate", {}, () => Effect.void);
+
+      assert.strictEqual(yield* denial("delegate"), "no_project");
+      const [chiefEntry] = (yield* audit).toReversed();
+      assert.deepStrictEqual(
+        [chiefEntry?.agentId, chiefEntry?.tool, chiefEntry?.outcome, chiefEntry?.reason],
+        [
+          chiefId,
+          "delegate",
+          "denied",
+          "Only an agent without a project hands work to a Chief Agent. Report back to the agent that gave you this task.",
+        ],
+      );
+    }),
+  );
+
   it.effect("fails the next call after a grant is revoked mid-run", () =>
     Effect.gen(function* () {
       const { workspaceId, beaId, workspaces, call, denial, audit } = yield* setup;
       const grants = yield* GrantService.GrantService;
       const rule = (powers: Telescope.StandingPowers) =>
-        grants.setProjectRule(as.ann, { workspaceId, projectId: web, powers });
+        grants.setProjectRule(as.ann, { workspaceId, projectId: web, powers, routing: null });
       yield* call("open_ticket");
       yield* rule({ ...ALL, openTickets: false });
       assert.strictEqual(yield* denial("open_ticket"), "forbidden");
