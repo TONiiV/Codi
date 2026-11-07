@@ -211,7 +211,7 @@ export class WorkspaceDataService extends Context.Service<
      * the app. Refused over `maxBytes` of JSON; the CLI, which writes files, lifts that cap.
      */
     readonly export: (
-      caller: WorkspaceService.Caller,
+      caller: WorkspaceService.SessionCaller,
       input: typeof Telescope.WorkspaceScopedInput.Type,
       options?: { readonly maxBytes: number },
     ) => Effect.Effect<typeof Telescope.WorkspaceExportResult.Type, Failure>;
@@ -220,7 +220,7 @@ export class WorkspaceDataService extends Context.Service<
      * runs or wakes in flight.
      */
     readonly delete: (
-      caller: WorkspaceService.Caller,
+      caller: WorkspaceService.SessionCaller,
       input: typeof Telescope.WorkspaceDeleteInput.Type,
     ) => Effect.Effect<Telescope.WorkspaceDeleteManifest, Failure | Telescope.WorkspaceBusyError>;
   }
@@ -235,7 +235,10 @@ const make = Effect.gen(function* () {
   const { stateDir } = yield* ServerConfig;
   const now = DateTime.now.pipe(Effect.map(DateTime.formatIso));
 
-  const requireAdmin = (caller: WorkspaceService.Caller, workspaceId: Telescope.WorkspaceId) =>
+  const requireAdmin = (
+    caller: WorkspaceService.SessionCaller,
+    workspaceId: Telescope.WorkspaceId,
+  ) =>
     workspaces.get(caller, { workspaceId }).pipe(
       Effect.filterOrElse(
         (access) => access.self.role === "admin",
@@ -244,7 +247,7 @@ const make = Effect.gen(function* () {
     );
 
   const exportWorkspace = Effect.fn("WorkspaceDataService.export")(function* (
-    caller: WorkspaceService.Caller,
+    caller: WorkspaceService.SessionCaller,
     { workspaceId }: typeof Telescope.WorkspaceScopedInput.Type,
     { maxBytes } = { maxBytes: Telescope.WORKSPACE_EXPORT_MAX_BYTES },
   ) {
@@ -355,7 +358,7 @@ const make = Effect.gen(function* () {
   });
 
   const deleteWorkspace = Effect.fn("WorkspaceDataService.delete")(function* (
-    caller: WorkspaceService.Caller,
+    caller: WorkspaceService.SessionCaller,
     input: typeof Telescope.WorkspaceDeleteInput.Type,
   ) {
     const { workspace } = yield* requireAdmin(caller, input.workspaceId);

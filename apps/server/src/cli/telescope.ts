@@ -27,7 +27,7 @@ import {
 } from "./config.ts";
 
 // Whoever can run the CLI owns this T3 home, so it acts as the environment owner.
-const OWNER: WorkspaceService.Caller = {
+const OWNER: WorkspaceService.SessionCaller = {
   sessionId: AuthSessionId.make("cli"),
   subject: INTERNAL_ADMINISTRATIVE_BOOTSTRAP_SUBJECT,
 };

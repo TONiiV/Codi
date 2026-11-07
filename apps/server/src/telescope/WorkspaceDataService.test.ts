@@ -40,7 +40,7 @@ const services = (random: Layer.Layer<SecureRandom.SecureRandom>) =>
   );
 const layer = services(NodeCrypto.layer);
 
-const session = (name: string): WorkspaceService.Caller => ({
+const session = (name: string): WorkspaceService.SessionCaller => ({
   sessionId: AuthSessionId.make(`session-${name}`),
   subject: "one-time-token",
 });
@@ -119,6 +119,17 @@ const rowCounts = (workspaceId: string) =>
     }
     return counts;
   });
+
+/** A run acting for an admin passes the admin check, so only sessions reach export and delete. */
+export const runsRefusedAtCompileTime = (
+  data: WorkspaceDataService.WorkspaceDataService["Service"],
+  run: Exclude<WorkspaceService.Caller, WorkspaceService.SessionCaller>,
+) => [
+  // @ts-expect-error a run exports its workspace
+  data.export(run, { workspaceId: run.workspaceId }),
+  // @ts-expect-error a run deletes its workspace
+  data.delete(run, { workspaceId: run.workspaceId, confirmName: "Acme" }),
+];
 
 it.layer(layer)("WorkspaceDataService", (it) => {
   it.effect("exports one workspace's rows by table and as Markdown, and none of another's", () =>
