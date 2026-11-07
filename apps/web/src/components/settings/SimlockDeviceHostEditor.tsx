@@ -94,12 +94,12 @@ export function SimlockDeviceHostEditor(props: {
   const checkUrl = simlockDeviceHostProblem(next, t) === null ? next.gatewayUrl : null;
   // Environments whose token field holds a secret reference that cannot be saved yet.
   const [invalidTokens, setInvalidTokens] = useState<ReadonlySet<EnvironmentId>>(new Set());
-  const plan = planSimlockDeviceHostSave(props.environments, next, tokens);
+  const plan = planSimlockDeviceHostSave(props.environments, next, tokens, t);
   const problem =
     "problem" in plan
       ? plan.problem
       : invalidTokens.size > 0
-        ? "Enter a valid secret reference."
+        ? t("settings.text.enterAValidSecretReference")
         : null;
   const several = props.environments.length > 1;
 
@@ -314,7 +314,7 @@ function SimlockTokenField(props: {
         <SecretSourceInput
           key={inputKey}
           id={id}
-          aria-label="Agent token"
+          aria-label={t("settings.text.agentToken")}
           className="min-w-0 flex-1"
           configured={props.token.kind === "saved" && typeof props.saved === "string"}
           value={
