@@ -109,12 +109,15 @@ function DeviceHostEditorForm({
           {isNew ? t("settings.text.addDeviceHost") : t("settings.text.editDeviceHost")}
         </DialogTitle>
         <DialogDescription>
-          {targets.length === 1
-            ? t("settings.parallelConnections.connectFromLabel", { label: targets[0]!.label })
-            : t("settings.text.connectFromLengthSelectedEnvironments", {
-                length: targets.length,
-              })}{" "}
-          {t("settings.text.hostsOnTheSameMachineAre")}
+          {t("settings.remaining.sentencePair", {
+            first:
+              targets.length === 1
+                ? t("settings.parallelConnections.connectFromLabel", { label: targets[0]!.label })
+                : t("settings.text.connectFromLengthSelectedEnvironments", {
+                    length: targets.length,
+                  }),
+            second: t("settings.text.hostsOnTheSameMachineAre"),
+          })}
         </DialogDescription>
       </DialogHeader>
       <DialogPanel>

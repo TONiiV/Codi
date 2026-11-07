@@ -45,6 +45,7 @@ import {
   type ReactNode,
   type SyntheticEvent,
 } from "react";
+import { useTranslation } from "react-i18next";
 import {
   LegendList,
   type LegendListRef,
@@ -1296,7 +1297,7 @@ const ConversationTimeline = memo(function ConversationTimeline({
           className="flex h-full items-center justify-center ps-(--chat-lane-inset-start) pe-(--chat-lane-inset-end)"
           style={{ paddingBottom: emptyPlaceholderInset }}
         >
-          <p className="text-sm text-muted-foreground">Send a message to start the conversation.</p>
+          <EmptyTimelineHint />
         </div>
       </>
     );
@@ -1387,6 +1388,13 @@ const ConversationTimeline = memo(function ConversationTimeline({
     </>
   );
 });
+
+function EmptyTimelineHint() {
+  const { t } = useTranslation();
+  return (
+    <p className="text-sm text-muted-foreground">{t("settings.remaining.startConversation")}</p>
+  );
+}
 
 function TimelineHistoryControl(props: MessagesTimelineHistoryControls) {
   if (!props.hasMoreHistory && props.error === null) {

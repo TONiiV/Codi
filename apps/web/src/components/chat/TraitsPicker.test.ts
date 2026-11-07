@@ -3,7 +3,7 @@ import { describe, expect, it } from "vite-plus/test";
 
 import { englishT } from "~/i18n/englishT";
 import zhCN from "~/i18n/locales/zh-CN.json";
-import { traitText } from "./TraitsPicker";
+import { TRAIT_PHRASE_KEYS, traitText } from "./TraitsPicker";
 
 const zh = createInstance();
 void zh.init({ lng: "zh-CN", resources: { "zh-CN": { translation: zhCN } } });
@@ -23,5 +23,11 @@ describe("traitText", () => {
   ])("translates %s only as whole known phrases", (label, expected) => {
     expect(traitText(label, zh.t)).toBe(expected);
     expect(traitText(label, englishT)).toBe(label);
+  });
+
+  it.each([...TRAIT_PHRASE_KEYS])("translates the known phrase %s through %s", (phrase, key) => {
+    expect(traitText(phrase, englishT)).toBe(phrase);
+    expect(zh.exists(key)).toBe(true);
+    expect(traitText(phrase, zh.t)).toBe(zh.t(key));
   });
 });
