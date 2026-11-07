@@ -10,6 +10,7 @@ import { PROMPT_VERSION } from "./AgentInstructions.ts";
 import * as DelegationService from "./DelegationService.ts";
 import * as RunRecordService from "./RunRecordService.ts";
 import * as TelescopeDb from "./TelescopeDb.ts";
+import * as WakeQueueService from "./WakeQueueService.ts";
 
 const REMEMBERED_RUNS = 4096;
 const TERMINAL: ReadonlySet<OrchestrationV2Run["status"]> = new Set([
@@ -21,6 +22,9 @@ const TERMINAL: ReadonlySet<OrchestrationV2Run["status"]> = new Set([
 ]);
 const NO_TOKENS = { input: 0, cachedInput: 0, cacheCreation: 0, output: 0 };
 const UNREPORTED = "没有汇报";
+/** Every state but a terminal one can still be cancelled. */
+const isOpen = (delegation: Telescope.Delegation) =>
+  DelegationService.canMove(delegation.state, "CANCELED");
 
 const STARTED: ReadonlySet<OrchestrationV2Run["status"]> = new Set([
   "starting",
@@ -53,16 +57,36 @@ const remember = (seen: Set<string>, id: string) => {
 /**
  * Each Telescope run on an agent thread serves one Codi run, linked by its user message (D84). A
  * Codi run with no linked run (the member typing) opens one when it starts; a terminal Codi run
- * finishes its own, and a task that run served still WORKING fails as unreported (D66).
+ * finishes its own, and a task that run served still WORKING fails as unreported (D66) unless
+ * a Worker on it is still open (D82). A Worker thread's ended run wakes its Chief.
  */
 export const makeHandler = Effect.gen(function* () {
   const db = yield* TelescopeDb.TelescopeDb;
   const runs = yield* RunRecordService.RunRecordService;
   const delegations = yield* DelegationService.DelegationService;
+  const wakes = yield* WakeQueueService.WakeQueueService;
   // A Codi run is updated many times; open for it once. A repeated terminal event finds no open run.
   const opened = new Set<string>();
   // The Codi run each agent thread's provider turns belong to, for their tokens.
   const serving = new Map<ThreadId, string>();
+
+  // A Worker thread is no agent's own; its run serves its Worker task, which wakes the Chief once.
+  const wakeChief = Effect.fnUntraced(function* (done: Telescope.AgentRun) {
+    const [memberId] = done.onBehalfOf;
+    if (memberId === undefined) return;
+    for (const delegationId of done.inputSnapshot.delegationIds ?? []) {
+      const worker = yield* delegations.get({ workspaceId: done.workspaceId, delegationId });
+      if (worker.hop !== "worker" || worker.parentId === undefined || !isOpen(worker)) continue;
+      yield* wakes.enqueue(done.workspaceId, {
+        reason: "dispatch",
+        priority: 2,
+        agentId: worker.toAgentId,
+        subjectId: memberId,
+        coalesceKey: `delegation:${worker.parentId}:worker`,
+        payload: { kind: "worker", delegationId: worker.parentId },
+      });
+    }
+  });
 
   // Untraced: runs for every orchestration event; only agent threads reach the traced services.
   const handle = Effect.fnUntraced(function* (event: OrchestrationV2DomainEvent) {
@@ -72,11 +96,10 @@ export const makeHandler = Effect.gen(function* () {
     if (!ending && (!STARTED.has(run.status) || opened.has(run.id))) return;
     if (!ending) remember(opened, run.id);
     const owner = yield* db.agentThread(run.threadId);
-    if (owner === undefined) return;
-    const linked = yield* db.openRunsOnThread(run.threadId, run.userMessageId);
     if (!ending) {
+      if (owner === undefined) return;
       serving.set(run.threadId, run.userMessageId);
-      if (linked.length > 0) return;
+      if ((yield* db.openRunsOnThread(run.threadId, run.userMessageId)).length > 0) return;
       yield* runs.startFor(owner.workspaceId, owner.ownerSubjectId, {
         agentId: owner.agentId,
         threadId: run.threadId,
@@ -85,16 +108,27 @@ export const makeHandler = Effect.gen(function* () {
       return;
     }
     const outputSummary = `Codi run ${run.status}.`;
-    const ended = yield* Effect.forEach(linked, (ref) =>
-      runs.finish(ref, { outputSummary, tokens: NO_TOKENS, resultLabels: [] }),
+    const ended = yield* Effect.forEach(
+      yield* db.openRunsOnThread(run.threadId, run.userMessageId),
+      (ref) => runs.finish(ref, { outputSummary, tokens: NO_TOKENS, resultLabels: [] }),
     );
+    if (owner === undefined) return yield* Effect.forEach(ended, wakeChief, { discard: true });
     const served = new Set(ended.flatMap((done) => done.inputSnapshot.delegationIds ?? []));
-    const working = (yield* delegations.byThread(owner.workspaceId, run.threadId)).filter(
+    const unreported = (yield* delegations.byThread(owner.workspaceId, run.threadId)).filter(
       (delegation) =>
         served.has(delegation.id) &&
         delegation.state === "WORKING" &&
         delegation.hop === "agent" &&
         delegation.toAgentId === owner.agentId,
+    );
+    const workers =
+      unreported.length === 0
+        ? []
+        : (yield* delegations.listForAgent(owner.workspaceId, owner.agentId)).filter(
+            (delegation) => delegation.hop === "worker" && isOpen(delegation),
+          );
+    const working = unreported.filter(
+      ({ id }) => !workers.some((worker) => worker.parentId === id),
     );
     const memberId = owner.ownerSubjectId;
     yield* Effect.forEach(

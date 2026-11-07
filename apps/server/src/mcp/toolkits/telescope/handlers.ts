@@ -6,6 +6,8 @@ import * as AgentService from "../../../telescope/AgentService.ts";
 import * as DelegationService from "../../../telescope/DelegationService.ts";
 import * as TaskBoardService from "../../../telescope/TaskBoardService.ts";
 import * as ToolGateway from "../../../telescope/ToolGateway.ts";
+import * as WorkerDispatch from "../../../telescope/WorkerDispatch.ts";
+import * as McpInvocationContext from "../../McpInvocationContext.ts";
 import * as McpToolAccess from "../../McpToolAccess.ts";
 import { type Failure, gated } from "./gate.ts";
 import { TelescopeToolkit } from "./tools.ts";
@@ -29,6 +31,13 @@ const onBoard =
     );
 
 /** Delegations are signed by the run's agent, for the member and chain the run carries. */
+const actorOf = (caller: ToolGateway.ToolCaller): DelegationService.Actor => ({
+  workspaceId: caller.workspaceId,
+  memberId: caller.memberId,
+  agentId: caller.agentId,
+  onBehalfOf: caller.onBehalfOf,
+  runId: caller.runId,
+});
 const onDelegations =
   <A>(
     use: (
@@ -38,13 +47,7 @@ const onDelegations =
   ) =>
   (caller: ToolGateway.ToolCaller) =>
     Effect.flatMap(DelegationService.DelegationService, (delegations) =>
-      use(delegations, {
-        workspaceId: caller.workspaceId,
-        memberId: caller.memberId,
-        agentId: caller.agentId,
-        onBehalfOf: caller.onBehalfOf,
-        runId: caller.runId,
-      }),
+      use(delegations, actorOf(caller)),
     );
 const summary = (delegation: Telescope.Delegation) => Struct.omit(delegation, ["messages"]);
 
@@ -132,6 +135,20 @@ const handlers = {
       ),
     ),
   ),
+  dispatch_worker: McpToolAccess.actsAsCaller((input) =>
+    gated("dispatch_worker", input, (caller) =>
+      Effect.gen(function* () {
+        const workers = yield* WorkerDispatch.WorkerDispatch;
+        const { delegation, threadId } = yield* workers.dispatch(caller, input);
+        const scope = yield* McpInvocationContext.McpInvocationContext;
+        return {
+          delegationId: delegation.id,
+          threadId,
+          link: McpInvocationContext.threadLinkFor(scope, threadId),
+        };
+      }),
+    ),
+  ),
   delegation_list: McpToolAccess.readsAsCaller(() =>
     gated(
       "delegation_list",
@@ -153,14 +170,10 @@ const handlers = {
     ),
   ),
   delegation_cancel: McpToolAccess.actsAsCaller((input) =>
-    gated(
-      "delegation_cancel",
-      input,
-      onDelegations((delegations, actor) =>
-        delegations
-          .cancel(actor, input.delegationId)
-          .pipe(Effect.map((rows) => ({ canceled: rows.map((row) => row.id) }))),
-      ),
+    gated("delegation_cancel", input, (caller) =>
+      Effect.flatMap(WorkerDispatch.WorkerDispatch, (workers) =>
+        workers.cancel(actorOf(caller), input.delegationId),
+      ).pipe(Effect.map((rows) => ({ canceled: rows.map((row) => row.id) }))),
     ),
   ),
 } satisfies McpToolAccess.Handlers<typeof TelescopeToolkit.tools>;

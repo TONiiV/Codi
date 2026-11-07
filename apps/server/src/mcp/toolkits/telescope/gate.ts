@@ -21,15 +21,22 @@ export type Failure =
   | PersistenceSqlError
   | PersistenceDecodeError;
 
+// These refusals name the agent's next step, so "tell your member" would contradict them.
+const OWN_PATH: ReadonlySet<ToolGateway.ToolGatewayDenied["reason"]> = new Set([
+  "linked",
+  "no_project",
+  "resident",
+  "worker",
+]);
+
 const toFailure = (error: Failure) => {
   switch (error._tag) {
     case "TelescopeToolGatewayDenied":
       return new OrchestratorMcpFailure({
         code: "capability_denied",
-        message:
-          error.reason === "linked"
-            ? error.message
-            : `${error.message} Do not retry; tell your member.`,
+        message: OWN_PATH.has(error.reason)
+          ? error.message
+          : `${error.message} Do not retry; tell your member.`,
       });
     case "TelescopeWorkspaceError":
       if (error.reason !== "storage")

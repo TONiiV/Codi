@@ -43,6 +43,7 @@ import * as MemoryService from "../telescope/MemoryService.ts";
 import * as TaskBoardService from "../telescope/TaskBoardService.ts";
 import * as TelescopeDb from "../telescope/TelescopeDb.ts";
 import * as ToolGateway from "../telescope/ToolGateway.ts";
+import * as WorkerDispatch from "../telescope/WorkerDispatch.ts";
 import * as WorkspaceService from "../telescope/WorkspaceService.ts";
 
 import * as DeviceService from "../device/DeviceService.ts";
@@ -1368,6 +1369,7 @@ it.effect("lists memory and Telescope tools only to threads with an open Telesco
         TaskBoardService.layer,
         AgentService.layer,
         DelegationService.layer,
+        Layer.mock(WorkerDispatch.WorkerDispatch)({}),
       ).pipe(
         Layer.provideMerge(Layer.merge(database, NodeCrypto.layer)),
         Layer.provide(
@@ -1537,6 +1539,26 @@ it.effect("lists memory and Telescope tools only to threads with an open Telesco
       expect(JSON.stringify(yield* telescopeRun("tools/call", ticketList))).toContain(
         "open Telescope run",
       );
+
+      // A Worker's run sees memory but not the board.
+      yield* openRun("run-4", "agent-alice", "thread-worker");
+      yield* db.insert(workspace.id, "delegations", {
+        delegation_id: "worker-1",
+        context_id: "context-worker",
+        from_agent_id: "agent-alice",
+        to_agent_id: "agent-alice",
+        hop: "worker",
+        thread_id: "thread-worker",
+        state: "WORKING",
+        brief_json: JSON.stringify({ goal: "修好夹爪", constraints: [], acceptance: [] }),
+        messages_json: "[]",
+        artifacts_json: "[]",
+        created_at: at,
+        updated_at: at,
+      });
+      const worker = yield* rpcAs("worker");
+      expect(yield* listed(worker)).toEqual(["memory_search", "memory_write"]);
+      expect((yield* worker("tools/call", ticketList)).error?.message).toContain("not found");
     }),
   ).pipe(Effect.provide(NodeHttpServer.layerTest)),
 );
