@@ -84,6 +84,8 @@ const TASK_FIELDS = Object.keys(Telescope.TaskFields.fields) as ReadonlyArray<
 >;
 const sameJson = (a: unknown, b: unknown) =>
   JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+/** A task's fields before its first commit sets any. */
+const BLANK = { title: "", status: "todo", goalChain: [] } as const;
 
 const LEASE_TTL = { minutes: 2 };
 // An agent renews only between tool calls, so its lease outlasts a long step (D59).
@@ -257,9 +259,9 @@ const make = Effect.gen(function* () {
       .pipe(Effect.map(([found]) => found));
 
   /**
-   * The one write path for tasks. A write based on an older version still lands: the last writer
-   * wins, and `overwrote` names each key it replaced whose last change after that version was
-   * another author's.
+   * The one write path for tasks. A write based on an older version still lands for each field it
+   * changed from that version: the last writer wins, and `overwrote` names each key it replaced
+   * whose last change after that version was another author's.
    */
   const commitTask = Effect.fn("TaskBoardService.commitTask")(function* (
     author: Author,
@@ -272,12 +274,24 @@ const make = Effect.gen(function* () {
         baseVersion: input.baseVersion,
         currentVersion: current.version,
       });
+    const stale = input.baseVersion !== current.version;
+    const commits = stale
+      ? (yield* db.select(current.workspaceId, "task_commits", decodeCommits, {
+          task_id: current.id,
+        })).toSorted((a, b) => a.baseVersion - b.baseVersion)
+      : [];
+    const later = commits.filter((commit) => commit.baseVersion >= input.baseVersion);
+    const read: Record<string, unknown> = { ...BLANK };
+    for (const commit of commits)
+      if (commit.baseVersion < input.baseVersion) Object.assign(read, commit.changedFields);
     const set = input.set ?? {};
     const mine: Record<string, Schema.Json> = {};
     for (const key of TASK_FIELDS) {
+      if (!(key in set) || sameJson(set[key], current[key])) continue;
       // Only a write that has seen the marker may clear it.
-      if (key === "conflictDecisionId" && input.baseVersion !== current.version) continue;
-      if (key in set && !sameJson(set[key], current[key])) mine[key] = set[key] ?? null;
+      if (stale && key === "conflictDecisionId") continue;
+      if (stale && sameJson(set[key], read[key])) continue;
+      mine[key] = set[key] ?? null;
     }
     if (author.onBehalfOf !== undefined) {
       // Every open proposal holds its fields, not just the one the marker names.
@@ -298,15 +312,10 @@ const make = Effect.gen(function* () {
     if (notes.length > 0 && current.freeText.length >= limit)
       return yield* new Telescope.FreeTextLimitError({ taskId: current.id, limit });
     if (Object.keys(mine).length === 0 && notes.length === 0) return current;
-    if (input.baseVersion === current.version)
-      return yield* applyCommit(author, current, mine, notes, at);
+    if (!stale) return yield* applyCommit(author, current, mine, notes, at);
 
-    const where = { task_id: current.id };
-    const later = (yield* db.select(current.workspaceId, "task_commits", decodeCommits, where))
-      .filter((commit) => commit.baseVersion >= input.baseVersion)
-      .toSorted((a, b) => b.baseVersion - a.baseVersion);
     const overwrote = Object.keys(mine).flatMap((key) => {
-      const last = later.find((commit) => key in commit.changedFields);
+      const last = later.findLast((commit) => key in commit.changedFields);
       // One agent can act for several members; its change for another member is not its own.
       const own =
         last?.authorId === author.authorId && last.onBehalfOf?.[0] === author.onBehalfOf?.[0];
@@ -330,9 +339,7 @@ const make = Effect.gen(function* () {
       kind: "task",
       id: taskId,
       workspaceId,
-      title: "",
-      status: "todo",
-      goalChain: [],
+      ...BLANK,
       freeText: [],
       createdAt: at,
       updatedAt: at,

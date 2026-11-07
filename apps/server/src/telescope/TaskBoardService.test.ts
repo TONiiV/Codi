@@ -454,12 +454,12 @@ it.layer(layer)("Telescope task board", (it) => {
         workspaceId: a,
         taskId: task.id,
         baseVersion: 1,
-        set: { title: "Plan B", status: "in_review", goalChain: ["Q4"] },
+        set: { title: "Plan B", status: "in_progress", goalChain: ["Q4"] },
         note: "I renamed it first.",
       });
       assert.deepStrictEqual(
         [late.title, late.status, late.goalChain, late.version, late.conflictDecisionId],
-        ["Plan B", "in_review", ["Q4"], 4, undefined],
+        ["Plan B", "in_progress", ["Q4"], 4, undefined],
       );
       assert.deepStrictEqual(late.overwrote, [
         { key: "title", by: aliceId, at: done.updatedAt },
@@ -469,6 +469,11 @@ it.layer(layer)("Telescope task board", (it) => {
       assert.deepStrictEqual(
         [Object.keys(landed?.changedFields ?? {}), landed?.mergeLevel, landed?.mergeReason],
         [["title", "status", "freeText"], 0, "based on version 1"],
+      );
+      const echoed = yield* update(agent, 1, { status: "todo", goalChain: [] });
+      assert.deepStrictEqual(
+        [echoed.status, echoed.goalChain, echoed.version],
+        ["in_progress", ["Q4"], 4],
       );
 
       const holder = { ...alice, authorId: "agent-h" };
@@ -500,7 +505,7 @@ it.layer(layer)("Telescope task board", (it) => {
       yield* update(agent, 12, { status: "needs_decision" });
       const moved = yield* Effect.all([
         Effect.flip(update(agent, 13, { status: "in_progress" })),
-        Effect.flip(update(agent, 12, { status: "in_progress" })),
+        Effect.flip(update(agent, 12, { status: "in_review" })),
       ]);
       assert.deepStrictEqual(moved.map(reasonOf), ["forbidden", "forbidden"]);
 
@@ -512,6 +517,17 @@ it.layer(layer)("Telescope task board", (it) => {
       assert.deepStrictEqual(
         [lateCo.title, lateCo.version, lateCo.overwrote],
         ["Bob's via co", 15, [{ key: "title", by: "agent-co", at: viaCo.updatedAt }]],
+      );
+      const renamed = yield* update(bob, 15, { title: "Bob's title" });
+      const resent = yield* update(agent, 15, { title: "Bob's via co", goalChain: ["Q1"] });
+      assert.deepStrictEqual(
+        [resent.title, resent.goalChain, resent.version, resent.overwrote],
+        ["Bob's title", ["Q1"], 17, undefined],
+      );
+      const changed = yield* update(agent, 15, { title: "Agent's title" });
+      assert.deepStrictEqual(
+        [changed.title, changed.overwrote],
+        ["Agent's title", [{ key: "title", by: bobId, at: renamed.updatedAt }]],
       );
       assert.deepStrictEqual((yield* board.listDecisions(alice, { workspaceId: a })).decisions, []);
     }),
