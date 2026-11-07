@@ -4,11 +4,15 @@ import * as Context from "effect/Context";
 import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import * as Struct from "effect/Struct";
 import * as SqlClient from "effect/sql/SqlClient";
 
+import { ServerConfig } from "../config.ts";
 import type { PersistenceDecodeError, PersistenceSqlError } from "../persistence/Errors.ts";
 import * as Scheduler from "../scheduling/Scheduler.ts";
 import { ServerSettingsService } from "../serverSettings.ts";
@@ -16,6 +20,12 @@ import * as TelescopeDb from "./TelescopeDb.ts";
 import * as WorkspaceService from "./WorkspaceService.ts";
 
 const DEFAULT_LIST_LIMIT = 50;
+
+const contextDir = (path: Path.Path, stateDir: string) =>
+  path.join(stateDir, "telescope", "context");
+/** Where a run's context file is written; deleting its workspace or retention removes it. */
+export const contextFile = (path: Path.Path, stateDir: string, runId: string) =>
+  path.join(contextDir(path, stateDir), `${runId}.md`);
 
 const RunRow = Schema.Struct({
   run_id: Telescope.AgentRunId,
@@ -152,13 +162,26 @@ export class RunRecordService extends Context.Service<
       workspaceId: WorkspaceId,
       input: RunStartInput,
     ) => Out<Telescope.AgentRun>;
+    /** For runs the server starts itself; `memberId` must be an active member. */
+    readonly startFor: (
+      workspaceId: WorkspaceId,
+      memberId: string,
+      input: RunStartInput,
+    ) => Out<Telescope.AgentRun>;
     /** Later turns on the thread add their tokens to the run until it finishes. */
     readonly attachThread: (run: RunRef, threadId: ThreadId) => Out<void>;
     readonly recordCall: (run: RunRef, call: RunCallInput) => Out<Telescope.RunCall>;
     /** Adds the entries an assembled context gave an open run to its manifest, once each. */
     readonly recordContextManifest: (run: RunRef, entries: ContextManifest) => Out<void>;
-    /** Adds a finished provider turn's tokens to every open run attached to its thread. */
-    readonly recordThreadTurn: (threadId: ThreadId, tokens: Tokens) => Out<void>;
+    /**
+     * Adds a finished provider turn's tokens to the open runs on its thread; with `codiMessageId`,
+     * only to the runs serving that Codi run.
+     */
+    readonly recordThreadTurn: (
+      threadId: ThreadId,
+      tokens: Tokens,
+      codiMessageId?: string,
+    ) => Out<void>;
     readonly finish: (run: RunRef, input: RunFinishInput) => Out<Telescope.AgentRun>;
     readonly label: (run: RunRef, label: ResultLabel) => Out<Telescope.AgentRun>;
     readonly get: (caller: Caller, run: RunRef) => Out<Telescope.AgentRun>;
@@ -174,7 +197,11 @@ export class RunRecordService extends Context.Service<
       caller: Caller,
       run: RunRef,
     ) => Out<typeof Telescope.RunMemorySourcesResult.Type>;
-    readonly pruneBefore: (cutoff: DateTime.Utc) => Effect.Effect<void, PersistenceSqlError>;
+    /** Drops runs finished before `cutoff` and returns their ids. */
+    readonly pruneBefore: (
+      cutoff: DateTime.Utc,
+    ) => Effect.Effect<ReadonlyArray<Telescope.AgentRunId>, PersistenceSqlError>;
+    readonly runIdsWithoutRows: TelescopeDb.TelescopeDb["Service"]["runIdsWithoutRows"];
   }
 >()("t3/telescope/RunRecordService") {}
 
@@ -198,17 +225,21 @@ const make = Effect.gen(function* () {
   const saveRun = (row: typeof RunRow.Type) =>
     db.update(row.workspace_id, "runs", encodeRun(row), { run_id: row.run_id });
 
-  const start = Effect.fn("RunRecordService.start")(function* (
-    caller: Caller,
+  const startFor = Effect.fn("RunRecordService.startFor")(function* (
     workspaceId: WorkspaceId,
+    memberId: string,
     input: RunStartInput,
   ) {
-    const { self } = yield* requireMember(workspaceId, caller);
+    const active = yield* db.count(workspaceId, "members", {
+      subject_id: memberId,
+      revoked_at: null,
+    });
+    if (active === 0) return yield* fail("forbidden", "Runs act only for active members.");
     const row: typeof RunRow.Type = {
       run_id: Telescope.AgentRunId.make(yield* random.uuidV4()),
       workspace_id: workspaceId,
       agent_id: input.agentId,
-      on_behalf_of_json: [self.subjectId, ...(input.via ?? [])],
+      on_behalf_of_json: [memberId, ...(input.via ?? [])],
       input_snapshot_json: input.inputSnapshot,
       started_at: yield* now,
       finished_at: null,
@@ -223,6 +254,14 @@ const make = Effect.gen(function* () {
     };
     yield* db.insert(workspaceId, "runs", encodeRun(row));
     return toRun(row);
+  });
+  const start = Effect.fn("RunRecordService.start")(function* (
+    caller: Caller,
+    workspaceId: WorkspaceId,
+    input: RunStartInput,
+  ) {
+    const { self } = yield* requireMember(workspaceId, caller);
+    return yield* startFor(workspaceId, self.subjectId, input);
   });
 
   const attachThread = Effect.fn("RunRecordService.attachThread")(function* (
@@ -286,12 +325,15 @@ const make = Effect.gen(function* () {
   const recordThreadTurn = Effect.fn("RunRecordService.recordThreadTurn")(function* (
     threadId: ThreadId,
     tokens: Tokens,
+    codiMessageId?: string,
   ) {
     const open = (run: RunRef) =>
       db.transaction(
         runRow(run, "open").pipe(Effect.flatMap((row) => saveRun(withTokens(row, tokens)))),
       );
-    yield* Effect.forEach(yield* db.openRunsOnThread(threadId), open, { discard: true });
+    yield* Effect.forEach(yield* db.openRunsOnThread(threadId, codiMessageId), open, {
+      discard: true,
+    });
   });
 
   const exportSpan = (run: Telescope.AgentRun) =>
@@ -444,6 +486,7 @@ const make = Effect.gen(function* () {
 
   return RunRecordService.of({
     start,
+    startFor,
     attachThread,
     recordCall,
     recordContextManifest,
@@ -456,6 +499,7 @@ const make = Effect.gen(function* () {
     runsForMemory,
     memoriesForRun,
     pruneBefore,
+    runIdsWithoutRows: db.runIdsWithoutRows,
   });
 });
 
@@ -469,12 +513,59 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 export const makeRetentionPass = Effect.gen(function* () {
   const runs = yield* RunRecordService;
   const settings = yield* ServerSettingsService;
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const { stateDir } = yield* ServerConfig;
+  const removeFile = (file: string) =>
+    fs.remove(file, { force: true }).pipe(
+      Effect.catch((error) =>
+        Effect.logWarning("Telescope run context file left", {
+          file,
+          error: error.message,
+          cause: String(error.cause),
+        }),
+      ),
+    );
+  const isOldPlainFile = (file: string, cutoffMs: number) =>
+    fs.lstat(file).pipe(
+      Effect.map(
+        (info) =>
+          info.type === "File" && Option.exists(info.mtime, (at) => at.getTime() < cutoffMs),
+      ),
+      Effect.orElseSucceed(() => false),
+    );
   let nextCheckMs = 0;
   return Effect.gen(function* () {
     const now = yield* Clock.currentTimeMillis;
     if (now < nextCheckMs) return;
     const { runRetentionDays } = (yield* settings.getSettings).telescope;
-    yield* runs.pruneBefore(DateTime.makeUnsafe(now - runRetentionDays * DAY_MS));
+    const cutoffMs = now - runRetentionDays * DAY_MS;
+    const dropped = yield* runs.pruneBefore(DateTime.makeUnsafe(cutoffMs));
+    // After the commit, so a file that stays never keeps its run.
+    yield* Effect.forEach(dropped, (runId) => removeFile(contextFile(path, stateDir, runId)), {
+      discard: true,
+    });
+    // Orphans of runs pruned earlier; the age check spares a file written just before its run row.
+    const names = yield* fs
+      .readDirectory(contextDir(path, stateDir))
+      .pipe(Effect.orElseSucceed((): ReadonlyArray<string> => []));
+    const tried = new Set<string>(dropped);
+    const orphans = yield* runs.runIdsWithoutRows(
+      names
+        .filter((name) => name.endsWith(".md"))
+        .map((name) => name.slice(0, -3))
+        .filter((runId) => runId !== "" && !tried.has(runId)),
+    );
+    yield* Effect.forEach(
+      orphans,
+      (runId) => {
+        const file = contextFile(path, stateDir, runId);
+        return isOldPlainFile(file, cutoffMs).pipe(
+          Effect.flatMap((old) => (old ? removeFile(file) : Effect.void)),
+        );
+      },
+      { discard: true },
+    );
     nextCheckMs = now + DAY_MS;
   });
 });

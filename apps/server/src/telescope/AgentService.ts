@@ -1,4 +1,4 @@
-import { ModelSelection, ProjectId, Telescope } from "@t3tools/contracts";
+import { ModelSelection, ProjectId, Telescope, ThreadId } from "@t3tools/contracts";
 import * as Context from "effect/Context";
 import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as DateTime from "effect/DateTime";
@@ -25,6 +25,7 @@ const AgentRow = Schema.Struct({
   sync_with_board: Schema.BooleanFromBit,
   dispatch_mode: Telescope.AgentDispatchMode,
   channels_json: Schema.fromJsonString(Schema.Array(Telescope.Channel)),
+  resident_thread_id: Schema.NullOr(ThreadId),
   created_at: Schema.String,
   updated_at: Schema.String,
 });
@@ -115,6 +116,7 @@ const toAgent = (row: typeof AgentRow.Type): Telescope.Agent => ({
   syncWithBoard: row.sync_with_board,
   dispatchMode: row.dispatch_mode,
   channels: row.channels_json,
+  ...(row.resident_thread_id === null ? {} : { residentThreadId: row.resident_thread_id }),
   createdAt: row.created_at,
   updatedAt: row.updated_at,
 });

@@ -4,6 +4,7 @@ import {
   taskUpdateInput,
   taskUpdateOutcome,
 } from "@t3tools/client-runtime/telescope/taskBoard";
+import { failureText } from "@t3tools/client-runtime/telescope/workspaces";
 import {
   type AtomCommand,
   isAtomCommandInterrupted,
@@ -115,7 +116,10 @@ export function useTaskWrite({ environmentId }: BoardTarget) {
         });
       return true;
     }
-    if (isAtomCommandInterrupted(result)) return false;
+    if (isAtomCommandInterrupted(result)) {
+      toastManager.add({ type: "error", title: "没有改成", description: failureText(result) });
+      return false;
+    }
     const error = squashAtomCommandFailure(result);
     toastManager.add(
       isStaleTaskVersion(error)
@@ -134,7 +138,9 @@ export function useBoardCommand<W, A, E>(
   const run = useAtomCommand(command, { reportFailure: false });
   return async (value: W) => {
     const result = await run(value);
-    if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
+    if (result._tag === "Failure" && isAtomCommandInterrupted(result))
+      toastManager.add({ type: "error", title: "没有完成", description: failureText(result) });
+    else if (result._tag === "Failure") {
       const error = squashAtomCommandFailure(result);
       const known = explain(error);
       toastManager.add(

@@ -276,6 +276,8 @@ export const orgCommand = Command.make("org").pipe(
   Command.withSubcommands([orgInitCommand, orgListCommand, orgExportCommand, orgDeleteCommand]),
 );
 
+const MAX_INVITATION_TTL = Duration.seconds(Telescope.MEMBER_CODE_MAX_TTL_SECONDS);
+
 const memberInviteCommand = Command.make("invite", {
   ...common,
   org: orgFlag,
@@ -286,7 +288,13 @@ const memberInviteCommand = Command.make("invite", {
       (expires) => Duration.isPositive(expires) && Duration.isFinite(expires),
       () => "Invitation codes always expire. Use a duration longer than 0s, for example `1h`.",
     ),
-    Flag.withDescription("How long the code stays valid, for example `1h` or `3d`. Default: 7d."),
+    Flag.filter(
+      (expires) => Duration.isLessThanOrEqualTo(expires, MAX_INVITATION_TTL),
+      () => "Invitation codes last at most 365 days.",
+    ),
+    Flag.withDescription(
+      "How long the code stays valid, for example `1h` or `3d`, at most 365d. Default: 7d.",
+    ),
     Flag.optional,
   ),
 }).pipe(
@@ -352,7 +360,7 @@ const memberRestoreCommand = Command.make("restore", {
   member: memberFlag("member", "Member id of a revoked member, from `t3 member list`."),
 }).pipe(
   Command.withDescription(
-    "Re-admit a revoked member with their previous role. Project leads are not restored: rebind with `--lead`.",
+    "Re-admit a revoked member with their previous role. Project leads are not restored: rebind with `t3 project bind --lead`.",
   ),
   Command.withHandler((flags) =>
     runAsOwner(

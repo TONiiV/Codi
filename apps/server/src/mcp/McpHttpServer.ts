@@ -79,6 +79,7 @@ import {
 import * as HtmlHandlers from "./toolkits/html/handlers.ts";
 import * as MemoryHandlers from "./toolkits/memory/handlers.ts";
 import * as MemoryService from "../telescope/MemoryService.ts";
+import * as TelescopeDb from "../telescope/TelescopeDb.ts";
 import { MemoryToolkit } from "./toolkits/memory/tools.ts";
 import * as TelescopeHandlers from "./toolkits/telescope/handlers.ts";
 import { TelescopeToolkit } from "./toolkits/telescope/tools.ts";
@@ -1204,18 +1205,26 @@ export const layerDeviceToolkit = Layer.mergeAll(
   layerDeviceScreenshotRegistration,
 );
 
-/** Out of `layerTools`: only threads with an open Telescope run see these, so other lists keep their size. */
+/**
+ * Out of `layerTools`: only threads with an open Telescope run, or an agent's resident thread, see
+ * these, so other lists keep their size. Providers cache the list, so a resident thread keeps it.
+ */
 const visibleToTelescopeRuns = McpServer.visibility(
   Effect.map(
-    MemoryService.MemoryService,
-    (memory) => () =>
+    Effect.all({ memory: MemoryService.MemoryService, db: TelescopeDb.TelescopeDb }),
+    (services) => () =>
       Effect.serviceOption(McpInvocationContext.McpInvocationContext).pipe(
         Effect.flatMap((scope) => {
           const thread = Option.getOrUndefined(scope)?.thread;
           return thread === undefined
             ? Effect.succeed(false)
-            : memory.callerForThread(thread.threadId).pipe(
+            : services.memory.callerForThread(thread.threadId).pipe(
                 Effect.as(true),
+                Effect.catch(() =>
+                  services.db
+                    .agentThread(thread.threadId)
+                    .pipe(Effect.map((agent) => agent !== undefined)),
+                ),
                 Effect.orElseSucceed(() => false),
               );
         }),

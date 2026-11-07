@@ -298,11 +298,14 @@ const make = Effect.gen(function* () {
     const bySubject = countBy(running, (row) => row.subject_id);
     const byProject = countBy(running, (row) => row.project_id);
     const busyThreads = new Set(running.map((row) => row.thread_id));
+    // One running wake per agent: its wakes share one resident thread (D84).
+    const busyAgents = new Set(running.map((row) => row.agent_id));
     const next = pick(
       due.filter(
         (row) =>
           (bySubject.get(row.subject_id) ?? 0) < RUNNING_PER_SUBJECT &&
           (row.thread_id === null || !busyThreads.has(row.thread_id)) &&
+          !busyAgents.has(row.agent_id) &&
           (row.project_id === null || (byProject.get(row.project_id) ?? 0) < perProject),
       ),
       lastServed,

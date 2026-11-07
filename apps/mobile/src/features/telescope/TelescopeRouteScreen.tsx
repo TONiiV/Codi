@@ -4,6 +4,7 @@ import {
   squashAtomCommandFailure,
   type AtomCommandResult,
 } from "@t3tools/client-runtime/state/runtime";
+import { failureText } from "@t3tools/client-runtime/telescope/workspaces";
 import { EnvironmentId, Telescope } from "@t3tools/contracts";
 import { AsyncResult } from "effect/reactivity";
 import { useState } from "react";
@@ -73,7 +74,11 @@ function reportFailure(
   onStale: () => void,
   describe = describeFailure,
 ) {
-  if (result._tag !== "Failure" || isAtomCommandInterrupted(result)) return;
+  if (result._tag !== "Failure") return;
+  if (isAtomCommandInterrupted(result)) {
+    Dialog.alert("没有完成", failureText(result) ?? undefined);
+    return;
+  }
   const outcome = describe(squashAtomCommandFailure(result));
   if (outcome.refresh) onStale();
   Dialog.alert(outcome.title, outcome.message);
