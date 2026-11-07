@@ -150,8 +150,6 @@ const TITLEBAR_INSET = {
     "max(var(--workspace-gutter-start), calc(var(--workspace-titlebar-content-left) - var(--sidebar-width-icon)))",
 } as CSSProperties;
 
-const COPILOT_VIEWS: ReadonlySet<TelescopeView> = new Set(["tasks", "decisions", "dashboard"]);
-
 /**
  * Telescope's main area: breadcrumb header and a main slot that falls back to the view's empty
  * state, with the Copilot panel beside it on board views. `background` keeps it inert under
@@ -167,7 +165,8 @@ export function TelescopePage({
   children?: ReactNode;
 }) {
   const [copilotOpen, setCopilotOpen] = useCopilotOpen();
-  const copilot = !background && COPILOT_VIEWS.has(view);
+  // Every board view (任务 and its tabs, Dashboard); 对话 already is a chat.
+  const copilot = !background && view !== "chats" && view !== "teams";
   return (
     <SidebarInset className="h-dvh min-h-0 overflow-hidden overscroll-y-none" inert={background}>
       <WorkspacePageHeader

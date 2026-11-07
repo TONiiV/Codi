@@ -6,6 +6,7 @@ import { type ReactNode, useState } from "react";
 
 import { readLocalStorageValue, writeLocalStorageValue } from "../../hooks/useLocalStorage";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
+import { cn } from "../../lib/utils";
 import { useEnvironmentQuery } from "../../state/query";
 import { PreviewPanelShell } from "../preview/PreviewPanelShell";
 import { Button } from "../ui/button";
@@ -18,7 +19,7 @@ import { NoWorkspace } from "./TasksParts";
 import { ErrorNote } from "./TelescopeAccountDialogs";
 import { AgentChat } from "./TelescopeChatPage";
 import { useTelescopeWorkspaces } from "./telescopeState";
-import { useChatAgentId } from "./telescopeViews";
+import { useChatAgentId, useTaskDrawerId } from "./telescopeViews";
 
 const OPEN_KEY = "t3code:telescope:copilot-open:v1";
 const AGENT_KEY = "t3code:telescope:copilot-agent:v1";
@@ -48,8 +49,9 @@ function Centered({ children }: { children: ReactNode }) {
 }
 
 function PanelHeader({ onClose, children }: { onClose: () => void; children?: ReactNode }) {
+  // In a sheet the header is the title bar: the chat's panel toggles sit fixed at its top right.
   return (
-    <div className="flex h-11 shrink-0 items-center gap-1 border-b px-2">
+    <div className="flex h-11 shrink-0 items-center gap-1 border-b px-2 in-data-[slot=sheet-popup]:h-(--workspace-topbar-height) in-data-[slot=sheet-popup]:pe-28">
       <div className="min-w-0 flex-1">{children}</div>
       <Button size="icon-xs" variant="ghost-muted" aria-label="关闭 Copilot" onClick={onClose}>
         <XIcon />
@@ -146,8 +148,10 @@ const FRAME =
 /** The agent chat beside 任务, 决定 and Dashboard; a sheet on narrow windows. Mounted only while open. */
 export function TelescopeCopilotPanel({ onClose }: { onClose: () => void }) {
   const narrow = useMediaQuery("max-lg");
+  // The chat's title-bar toggles are fixed above sheets and would cover the task drawer's close.
+  const drawerOpen = useTaskDrawerId() !== null;
   const body = (
-    <div className={FRAME}>
+    <div className={cn(FRAME, drawerOpen && "[&_[data-workspace-titlebar-controls]]:invisible")}>
       <CopilotBody onClose={onClose} />
     </div>
   );
