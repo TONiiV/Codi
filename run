@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# Install, build and start Codi from this checkout. Extra flags go to the server:
+#   ./run                     # default: ~/.t3, port 3773
+#   ./run --port 3800 --lan   # see ./run --help
+set -euo pipefail
+cd "$(dirname "$0")"
+
+# vp may be installed but not on PATH in this shell; its installer leaves an env file to load.
+load_vp() {
+  command -v vp >/dev/null && return 0
+  local env_file
+  for env_file in "${XDG_CONFIG_HOME:-$HOME/.config}/vite-plus/env" "$HOME/.vite-plus/env"; do
+    if [ -f "$env_file" ]; then
+      # shellcheck disable=SC1090
+      . "$env_file"
+      echo "Tip: add '. \"$env_file\"' to your shell profile to use vp in new terminals."
+      break
+    fi
+  done
+  command -v vp >/dev/null
+}
+
+if ! load_vp; then
+  echo "Codi needs vp (Vite+), which also brings the right Node version."
+  answer=
+  if { exec 3</dev/tty; } 2>/dev/null; then
+    read -r -u 3 -p "Install it now with 'curl -fsSL https://vite.plus | bash'? [y/N] " answer || true
+  fi
+  case "$answer" in
+    [yY]*) curl -fsSL https://vite.plus | bash ;;
+    *) echo "Not installed. Install vp yourself, then rerun ./run." >&2; exit 1 ;;
+  esac
+  load_vp || { echo "vp not found after install; open a new terminal and rerun ./run." >&2; exit 1; }
+fi
+
+vp i
+vp run build
+exec vp exec node apps/server/dist/bin.mjs "$@"

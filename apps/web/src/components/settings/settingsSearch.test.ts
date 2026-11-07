@@ -209,6 +209,8 @@ describe("searchSettings", () => {
       ["kill switch", "telescope-governance"],
       ["routing rules", "telescope-routing"],
       ["project rules", "telescope-project-rules"],
+      ["路由规则", "telescope-routing"],
+      ["公司 agents", "telescope-agents"],
     ] as const) {
       expect(searchSettings(title)[0]?.id, title).toBe(id);
     }

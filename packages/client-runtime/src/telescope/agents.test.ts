@@ -324,7 +324,11 @@ describe("telescope agent queries", () => {
         read: () => null,
         write: () => {},
       });
-      const agents = createTelescopeAgentAtoms(runtime, workspaces.bindingsRevisionAtom);
+      const agents = createTelescopeAgentAtoms(
+        runtime,
+        workspaces.bindingsRevisionAtom,
+        workspaces.get,
+      );
       const registry = AtomRegistry.make();
       yield* Effect.addFinalizer(() => Effect.sync(() => registry.dispose()));
       registry.mount(sessions(env));

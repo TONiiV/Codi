@@ -1,8 +1,5 @@
 import { type EnvironmentId, type ProviderInstanceId, Telescope } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
-import * as Exit from "effect/Exit";
-import * as Option from "effect/Option";
-import * as Schema from "effect/Schema";
 import { type Atom, AtomRegistry } from "effect/reactivity";
 
 import type { EnvironmentRegistry } from "../connection/registry.ts";
@@ -10,12 +7,17 @@ import {
   createEnvironmentRpcCommand,
   createEnvironmentRpcQueryAtomFamily,
 } from "../state/runtime.ts";
-import { WORKSPACE_ERROR_TEXT, type WorkspaceErrorText } from "./workspaces.ts";
+import {
+  rereadRoleWhenForbidden,
+  WORKSPACE_ERROR_TEXT,
+  type WorkspaceErrorText,
+} from "./workspaces.ts";
 
-const { WS_METHODS } = Telescope;
-
-const MODEL_MAX = 128;
-const ALLOWLIST_MAX = 64;
+const {
+  WS_METHODS,
+  ROUTING_MODEL_MAX: MODEL_MAX,
+  ROUTING_ALLOWLIST_MAX: ALLOWLIST_MAX,
+} = Telescope;
 
 export const PROJECT_RULE_ERROR_TEXT: WorkspaceErrorText = {
   ...WORKSPACE_ERROR_TEXT,
@@ -29,8 +31,6 @@ const ALL_POWERS: Telescope.StandingPowers = {
   answerMembers: true,
   mergePRs: true,
 };
-
-const isWorkspaceError = Schema.is(Telescope.WorkspaceError);
 
 interface InWorkspace {
   readonly environmentId: EnvironmentId;
@@ -122,6 +122,7 @@ export function createTelescopeProjectRuleAtoms<R, E>(
   /** The workspace read that carries the caller's role, re-read when a save is refused for it. */
   workspaceGet: (target: InWorkspace) => Atom.Atom<unknown>,
 ) {
+  const rereadRole = rereadRoleWhenForbidden(workspaceGet);
   const list = createEnvironmentRpcQueryAtomFamily(runtime, {
     label: "telescope:project-rule:list",
     tag: WS_METHODS.projectRuleList,
@@ -143,18 +144,10 @@ export function createTelescopeProjectRuleAtoms<R, E>(
     set: createEnvironmentRpcCommand(runtime, {
       label: "telescope:project-rule:set",
       tag: WS_METHODS.projectRuleSet,
-      onSettled: (
-        { environmentId, input }: InWorkspace,
-        registry: AtomRegistry.AtomRegistry,
-        exit,
-      ) =>
-        Effect.sync(() => {
-          const target = { environmentId, input: { workspaceId: input.workspaceId } };
-          registry.refresh(list(target));
-          const error = Option.getOrUndefined(Exit.findErrorOption(exit));
-          if (isWorkspaceError(error) && error.reason === "forbidden")
-            registry.refresh(workspaceGet(target));
-        }),
+      onSettled: (target, registry, exit) =>
+        Effect.sync(() =>
+          registry.refresh(list({ ...target, input: { workspaceId: target.input.workspaceId } })),
+        ).pipe(Effect.andThen(rereadRole(target, registry, exit))),
     }),
   };
 }
