@@ -13,6 +13,7 @@ import {
   Telescope,
   ThreadId,
 } from "@t3tools/contracts";
+import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
 import * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
 import { checkpointWorkspace } from "@t3tools/provider-testing/replayWorkspace";
 import * as DateTime from "effect/DateTime";
@@ -36,11 +37,14 @@ import { TelescopeToolkit } from "../mcp/toolkits/telescope/tools.ts";
 import { CodexProviderCapabilitiesV2 } from "../orchestration-v2/Adapters/CodexAdapterV2.ts";
 import * as CommandReceiptStore from "../orchestration-v2/CommandReceiptStore.ts";
 import * as EffectOutbox from "../orchestration-v2/EffectOutbox.ts";
+import * as EffectWorker from "../orchestration-v2/EffectWorker.ts";
+import * as EventSink from "../orchestration-v2/EventSink.ts";
 import * as EventStore from "../orchestration-v2/EventStore.ts";
 import * as Orchestrator from "../orchestration-v2/Orchestrator.ts";
 import * as ProjectionStore from "../orchestration-v2/ProjectionStore.ts";
 import * as ProjectStore from "../orchestration-v2/ProjectStore.ts";
 import * as ProviderAdapterRegistry from "../orchestration-v2/ProviderAdapterRegistry.ts";
+import * as ProviderRuntimeRecoveryService from "../orchestration-v2/ProviderRuntimeRecoveryService.ts";
 import * as ProviderReplayHarness from "../orchestration-v2/testkit/ProviderReplayHarness.ts";
 import * as ThreadManagementService from "../orchestration-v2/ThreadManagementService.ts";
 import * as SqlitePersistence from "../persistence/Sqlite.ts";
@@ -186,25 +190,54 @@ const makeHarness = Effect.fn("makeHarness")(function* (listening: boolean) {
         };
       }),
   };
+  const providerTurn = (
+    turn: ProviderAdapter.ProviderAdapterV2TurnInput,
+    status: "running" | "completed",
+  ) =>
+    Effect.map(DateTime.now, (now) => ({
+      type: "provider_turn.updated" as const,
+      driver,
+      providerTurn: {
+        id: ProviderTurnId.make(`provider-turn:${turn.attemptId}`),
+        providerThreadId: turn.providerThread.id,
+        nodeId: turn.rootNodeId,
+        runAttemptId: turn.attemptId,
+        nativeTurnRef: {
+          driver,
+          nativeId: `native:${turn.attemptId}`,
+          strength: "strong" as const,
+        },
+        ordinal: turn.providerTurnOrdinal,
+        status,
+        startedAt: now,
+        completedAt: status === "running" ? null : now,
+      },
+    }));
+  /** The provider reports the turn under way, which a restart needs to resume it. */
+  const running = (turn: ProviderAdapter.ProviderAdapterV2TurnInput) =>
+    Effect.gen(function* () {
+      const engine = yield* Orchestrator.OrchestratorV2;
+      const afterSequence = yield* engine.getThreadEventSequence(turn.threadId);
+      yield* Queue.offer(events, yield* providerTurn(turn, "running"));
+      yield* engine
+        .streamStoredEventsFrom({
+          threadId: turn.threadId,
+          afterSequence,
+          eventType: "provider-turn.updated",
+        })
+        .pipe(
+          Stream.filter(
+            ({ event }) =>
+              event.type === "provider-turn.updated" && event.payload.status === "running",
+          ),
+          Stream.runHead,
+        );
+    });
   const complete = (turn: ProviderAdapter.ProviderAdapterV2TurnInput) =>
     Effect.gen(function* () {
-      const now = yield* DateTime.now;
-      const id = ProviderTurnId.make(`provider-turn:${turn.attemptId}`);
-      yield* Queue.offer(events, {
-        type: "provider_turn.updated",
-        driver,
-        providerTurn: {
-          id,
-          providerThreadId: turn.providerThread.id,
-          nodeId: turn.rootNodeId,
-          runAttemptId: turn.attemptId,
-          nativeTurnRef: { driver, nativeId: `native:${turn.attemptId}`, strength: "strong" },
-          ordinal: turn.providerTurnOrdinal,
-          status: "completed",
-          startedAt: now,
-          completedAt: now,
-        },
-      });
+      const update = yield* providerTurn(turn, "completed");
+      const id = update.providerTurn.id;
+      yield* Queue.offer(events, update);
       yield* Queue.offer(events, {
         type: "turn.terminal",
         driver,
@@ -248,6 +281,7 @@ const makeHarness = Effect.fn("makeHarness")(function* (listening: boolean) {
         EffectOutbox.layer.pipe(Layer.provide(database)),
         ProviderReplayHarness.layerWithRegistry({ name: "telescope-worker-dispatch" }, registry, {
           databaseLayer: database,
+          runEffectWorker: false,
         }),
       ),
     ),
@@ -311,7 +345,28 @@ const makeHarness = Effect.fn("makeHarness")(function* (listening: boolean) {
     ),
     Layer.provideMerge(Layer.merge(telescope, orchestration)),
   );
-  return { runtime, db, sessions, started, finished, route, hook, log, complete };
+  // The effect worker runs as a server's does; a restart stops it with the server.
+  const worker = yield* Ref.make<Fiber.Fiber<void> | undefined>(undefined);
+  const startWorker = Effect.flatMap(Effect.forkScoped(EffectWorker.runDaemon), (fiber) =>
+    Ref.set(worker, fiber),
+  );
+  const stopWorker = Effect.flatMap(Ref.getAndSet(worker, undefined), (fiber) =>
+    fiber === undefined ? Effect.void : Fiber.interrupt(fiber),
+  );
+  return {
+    runtime,
+    db,
+    sessions,
+    started,
+    finished,
+    route,
+    hook,
+    log,
+    running,
+    complete,
+    startWorker,
+    stopWorker,
+  };
 });
 type Harness = Effect.Success<ReturnType<typeof makeHarness>>;
 
@@ -324,6 +379,7 @@ const withHarness = <A, E>(
       const harness = yield* makeHarness(listening);
       return yield* Effect.gen(function* () {
         yield* Deferred.succeed(harness.db, yield* TelescopeDb.TelescopeDb);
+        yield* harness.startWorker;
         return yield* body(harness);
       }).pipe(Effect.provide(harness.runtime));
     }),
@@ -438,6 +494,45 @@ const chiefWorking = (harness: Harness, seeded: Seeded) =>
     return { delegation, runner, turn, call: callOn(turn.threadId) };
   });
 type Opened = { readonly delegationId: Telescope.DelegationId; readonly threadId: ThreadId };
+
+/**
+ * The server stops and starts again in startup's order: the open runs are read as the layer
+ * builds, Codi's recovery runs, then the run listener subscribes. The effect worker stays stopped
+ * until the test starts it, so the startup pass can run before or after Codi resumes a turn.
+ * With `stopping`, the listener sees the runs Codi cuts, as it does while a server stops.
+ */
+const restart = (
+  harness: Harness,
+  { continueThreadsAfterServerUpdate = true, stopping = false } = {},
+) =>
+  Effect.gen(function* () {
+    yield* harness.stopWorker;
+    const handler = yield* AgentThreadRuns.makeHandler;
+    // From a sequence read now, so the listener sees every later event however late it starts.
+    const sink = yield* EventSink.EventSinkV2;
+    const listen = Effect.flatMap(sink.latestSequence(), (afterSequence) =>
+      Effect.forkScoped(
+        Stream.runForEach(sink.stream({ afterSequence }), ({ event }) => handler.handle(event)),
+      ),
+    );
+    if (stopping) yield* listen;
+    yield* ProviderRuntimeRecoveryService.ProviderRuntimeRecoveryService.use(
+      (recovery) => recovery.recover,
+    ).pipe(
+      Effect.provide(
+        ProviderRuntimeRecoveryService.layer.pipe(
+          Layer.provide(
+            Layer.merge(
+              IdAllocator.layer,
+              ServerSettings.layerTest({ continueThreadsAfterServerUpdate }),
+            ),
+          ),
+        ),
+      ),
+    );
+    if (!stopping) yield* listen;
+    return handler;
+  });
 
 it.effect(
   "dispatch_worker opens a top-level Worker thread in the Chief's project whose run exists before its session",
@@ -735,6 +830,159 @@ it.effect("the startup pass leaves a run opened after it read the open runs", ()
       }),
     false,
   ),
+);
+
+it.effect.each([
+  { order: "the startup pass runs before Codi resumes the turn", passFirst: true, stopping: false },
+  { order: "Codi resumes the turn before the startup pass", passFirst: false, stopping: false },
+  { order: "the run listener saw the cut as the server stopped", passFirst: true, stopping: true },
+] as const)(
+  "a Chief run a restart cut follows the turn Codi resumes, whose report settles its task, when $order",
+  ({ passFirst, stopping }) =>
+    withHarness(
+      (harness) =>
+        Effect.gen(function* () {
+          const seeded = yield* seed;
+          const db = yield* TelescopeDb.TelescopeDb;
+          const delegations = yield* DelegationService.DelegationService;
+          const { delegation, runner, turn } = yield* chiefWorking(harness, seeded);
+          yield* harness.running(turn);
+          yield* Fiber.interrupt(runner);
+
+          const restarted = yield* restart(harness, { stopping });
+          if (passFirst) yield* restarted.settleOrphans;
+          yield* harness.startWorker;
+          const resumed = yield* Queue.take(harness.started);
+          if (!passFirst) yield* restarted.settleOrphans;
+          assert.equal(resumed.threadId, turn.threadId);
+          const ref = { workspaceId: seeded.workspaceId, delegationId: delegation.id };
+          assert.equal((yield* delegations.get(ref)).state, "WORKING");
+          assert.lengthOf(yield* db.openRunsOnThread(turn.threadId), 1);
+          assert.deepStrictEqual(yield* queued(seeded), []);
+
+          yield* callOn(resumed.threadId)("delegation_report", {
+            delegationId: delegation.id,
+            state: "COMPLETED",
+            report: { result: "修好了超时，回归测试通过", decisions: [] },
+          });
+          yield* harness.complete(resumed);
+          assert.equal((yield* Queue.take(harness.finished)).threadId, turn.threadId);
+          assert.equal((yield* delegations.get(ref)).state, "COMPLETED");
+          assert.deepStrictEqual(yield* queued(seeded), [
+            [seeded.pa, { kind: "report", delegationId: delegation.id }],
+          ]);
+        }),
+      false,
+    ),
+);
+
+it.effect(
+  "a Worker run a restart cut wakes its Chief once, when the turn Codi resumes ends, not at startup",
+  () =>
+    withHarness(
+      (harness) =>
+        Effect.gen(function* () {
+          const seeded = yield* seed;
+          const delegations = yield* DelegationService.DelegationService;
+          const { delegation, runner, turn, call } = yield* chiefWorking(harness, seeded);
+          const opened = (yield* call("dispatch_worker", {
+            delegationId: delegation.id,
+            brief,
+          })) as Opened;
+          yield* Queue.take(harness.sessions);
+          const working = yield* Queue.take(harness.started);
+          yield* harness.running(working);
+          yield* harness.complete(turn);
+          yield* Fiber.join(runner);
+
+          const restarted = yield* restart(harness);
+          yield* harness.startWorker;
+          const resumed = yield* Queue.take(harness.started);
+          yield* restarted.settleOrphans;
+          assert.equal(resumed.threadId, opened.threadId);
+          assert.deepStrictEqual(
+            (yield* Queue.clear(harness.finished)).map((run) => run.threadId),
+            [turn.threadId],
+          );
+          assert.deepStrictEqual(yield* queued(seeded), []);
+          const ref = { workspaceId: seeded.workspaceId, delegationId: delegation.id };
+          assert.equal((yield* delegations.get(ref)).state, "WORKING");
+
+          yield* harness.complete(resumed);
+          assert.equal((yield* Queue.take(harness.finished)).threadId, opened.threadId);
+          assert.deepStrictEqual(yield* queued(seeded), [
+            [seeded.chief, { kind: "worker", delegationId: delegation.id }],
+          ]);
+        }),
+      false,
+    ),
+);
+
+it.effect(
+  "a Chief run a restart cut fails its task once Codi declines to resume the turn, as when the member settled its thread first",
+  () =>
+    withHarness(
+      (harness) =>
+        Effect.gen(function* () {
+          const seeded = yield* seed;
+          const delegations = yield* DelegationService.DelegationService;
+          const { delegation, runner, turn } = yield* chiefWorking(harness, seeded);
+          yield* harness.running(turn);
+          yield* Fiber.interrupt(runner);
+
+          const restarted = yield* restart(harness);
+          yield* restarted.settleOrphans;
+          yield* (yield* Orchestrator.OrchestratorV2).dispatch({
+            type: "thread.settle",
+            commandId: CommandId.make("member-settles"),
+            threadId: turn.threadId,
+          });
+          yield* harness.startWorker;
+          assert.equal((yield* Queue.take(harness.finished)).threadId, turn.threadId);
+          const failed = yield* delegations.get({
+            workspaceId: seeded.workspaceId,
+            delegationId: delegation.id,
+          });
+          assert.equal(failed.state, "FAILED");
+          assert.equal(failed.report?.blockedOn, "没有汇报");
+          assert.deepStrictEqual(yield* queued(seeded), [
+            [seeded.pa, { kind: "report", delegationId: delegation.id }],
+          ]);
+          assert.strictEqual(yield* Queue.size(harness.started), 0);
+        }),
+      false,
+    ),
+);
+
+it.effect(
+  "with continuing threads after a restart off, a Chief run the restart cut fails its task at startup",
+  () =>
+    withHarness(
+      (harness) =>
+        Effect.gen(function* () {
+          const seeded = yield* seed;
+          const db = yield* TelescopeDb.TelescopeDb;
+          const delegations = yield* DelegationService.DelegationService;
+          const { delegation, runner, turn } = yield* chiefWorking(harness, seeded);
+          yield* harness.running(turn);
+          yield* Fiber.interrupt(runner);
+
+          const restarted = yield* restart(harness, { continueThreadsAfterServerUpdate: false });
+          yield* restarted.settleOrphans;
+          assert.equal((yield* Queue.take(harness.finished)).threadId, turn.threadId);
+          assert.lengthOf(yield* db.openRunsOnThread(turn.threadId), 0);
+          const failed = yield* delegations.get({
+            workspaceId: seeded.workspaceId,
+            delegationId: delegation.id,
+          });
+          assert.equal(failed.state, "FAILED");
+          assert.equal(failed.report?.blockedOn, "没有汇报");
+          assert.deepStrictEqual(yield* queued(seeded), [
+            [seeded.pa, { kind: "report", delegationId: delegation.id }],
+          ]);
+        }),
+      false,
+    ),
 );
 
 it.effect.each([

@@ -17,6 +17,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 
 import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
+import * as Orchestrator from "../orchestration-v2/Orchestrator.ts";
 import * as ProjectionStore from "../orchestration-v2/ProjectionStore.ts";
 import { runMigrations } from "../persistence/Migrations.ts";
 import * as SqlitePersistence from "../persistence/Sqlite.ts";
@@ -36,6 +37,9 @@ const layer = Layer.mergeAll(
   WorkspaceService.layer,
   DelegationService.layer,
   Layer.mock(ProjectionStore.ProjectionStoreV2)({}),
+  Layer.mock(Orchestrator.OrchestratorV2)({
+    restartContinuationPending: () => Effect.succeed(false),
+  }),
   WakeQueueService.layer,
 ).pipe(
   Layer.provideMerge(Layer.merge(database, NodeCrypto.layer)),

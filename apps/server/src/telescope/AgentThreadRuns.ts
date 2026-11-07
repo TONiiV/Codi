@@ -8,6 +8,7 @@ import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
 
+import * as Orchestrator from "../orchestration-v2/Orchestrator.ts";
 import * as ProjectionStore from "../orchestration-v2/ProjectionStore.ts";
 import { PROMPT_VERSION } from "./AgentInstructions.ts";
 import * as DelegationService from "./DelegationService.ts";
@@ -56,6 +57,22 @@ export const runSnapshot = (
   ...serves,
 });
 
+// A restart continuation resumes the Codi run it names, so a chain of them is one Codi turn.
+const firstOfChain = (
+  codiRuns: ReadonlyArray<OrchestrationV2Run>,
+  run: OrchestrationV2Run,
+): OrchestrationV2Run => {
+  const resumed = codiRuns.find((candidate) => candidate.id === run.restartContinuationOfRunId);
+  return resumed === undefined ? run : firstOfChain(codiRuns, resumed);
+};
+const lastOfChain = (
+  codiRuns: ReadonlyArray<OrchestrationV2Run>,
+  run: OrchestrationV2Run,
+): OrchestrationV2Run => {
+  const next = codiRuns.find((candidate) => candidate.restartContinuationOfRunId === run.id);
+  return next === undefined ? run : lastOfChain(codiRuns, next);
+};
+
 const remember = (seen: Set<string>, id: string) => {
   seen.add(id);
   const oldest = seen.values().next();
@@ -73,7 +90,9 @@ export const makeHandler = Effect.gen(function* () {
   const runs = yield* RunRecordService.RunRecordService;
   const delegations = yield* DelegationService.DelegationService;
   const projections = yield* ProjectionStore.ProjectionStoreV2;
+  const engine = yield* Orchestrator.OrchestratorV2;
   const wakes = yield* WakeQueueService.WakeQueueService;
+  const scope = yield* Effect.scope;
   // A Codi run is updated many times; open for it once. A repeated terminal event finds no open run.
   const opened = new Set<string>();
   // The Codi run each agent thread's provider turns belong to, for their tokens.
@@ -186,43 +205,78 @@ export const makeHandler = Effect.gen(function* () {
     }
   });
 
+  const codiRunsOn = (threadId: ThreadId) =>
+    projections.getThreadRecords(threadId, ["runs"]).pipe(
+      Effect.map((records) => records.runs),
+      Effect.catchTags({ ProjectionStoreThreadNotFoundError: () => Effect.succeed([]) }),
+    );
+  // A restart continuation serves the Telescope run of the Codi run its chain started with.
+  const servedMessageId = Effect.fn("AgentThreadRuns.servedMessageId")(function* (
+    run: OrchestrationV2Run,
+  ) {
+    if (run.restartContinuationOfRunId === undefined) return run.userMessageId;
+    return firstOfChain(yield* codiRunsOn(run.threadId), run).userMessageId;
+  });
+  // Settles once the last Codi run of the chain has ended, or is gone, and no restart
+  // continuation of it is pending; returns the run whose continuation is pending.
+  const settleIfEnded = Effect.fn("AgentThreadRuns.settleIfEnded")(function* (
+    threadId: ThreadId,
+    codiMessageId: string,
+  ) {
+    const codiRuns = yield* codiRunsOn(threadId);
+    const first = codiRuns.findLast((candidate) => candidate.userMessageId === codiMessageId);
+    const run = first === undefined ? undefined : lastOfChain(codiRuns, first);
+    if (run !== undefined && !TERMINAL.has(run.status)) return;
+    if (run !== undefined && (yield* engine.restartContinuationPending(run))) return run;
+    yield* settle(threadId, codiMessageId, run);
+  });
+  const logged = (message: string) =>
+    Effect.catchCause((cause) => Effect.logWarning(message, { cause }));
+
   // Untraced: runs for every orchestration event; only agent threads reach the traced services.
   const handle = Effect.fnUntraced(function* (event: OrchestrationV2DomainEvent) {
     if (event.type !== "run.created" && event.type !== "run.updated") return;
     const run = event.payload;
-    if (TERMINAL.has(run.status)) return yield* settle(run.threadId, run.userMessageId, run);
+    if (TERMINAL.has(run.status)) {
+      const codiMessageId = yield* servedMessageId(run);
+      if ((yield* db.openRunsOnThread(run.threadId, codiMessageId)).length === 0) return;
+      // Pending only as the server stops; the continuation or the next start's pass settles it.
+      if (yield* engine.restartContinuationPending(run)) return;
+      return yield* settle(run.threadId, codiMessageId, run);
+    }
     if (!STARTED.has(run.status) || opened.has(run.id)) return;
     remember(opened, run.id);
     const owner = yield* db.agentThread(run.threadId);
     if (owner === undefined) return;
-    serving.set(run.threadId, run.userMessageId);
-    if ((yield* db.openRunsOnThread(run.threadId, run.userMessageId)).length > 0) return;
+    const codiMessageId = yield* servedMessageId(run);
+    serving.set(run.threadId, codiMessageId);
+    if ((yield* db.openRunsOnThread(run.threadId, codiMessageId)).length > 0) return;
     yield* runs.startFor(owner.workspaceId, owner.ownerSubjectId, {
       agentId: owner.agentId,
       threadId: run.threadId,
-      inputSnapshot: runSnapshot(run.modelSelection, { codiMessageId: run.userMessageId }),
+      inputSnapshot: runSnapshot(run.modelSelection, { codiMessageId }),
     });
   });
 
-  // A run whose Codi run ended or went missing while the server was down settles at startup.
-  // After orchestration's recovery, a Codi run still there and not terminal is live (a queued run
-  // kept across the restart); its own end event settles it later.
+  // A run left open by a restart settles at startup when its Codi run ended or is gone, unless
+  // Codi resumes that run; a Codi run still live after recovery settles on its own end.
   const settleOrphan = Effect.fn("AgentThreadRuns.settleOrphan")(function* (
     row: (typeof leftOpen)[number],
   ) {
     const codiMessageId = row.input_snapshot_json.codiMessageId;
     if (row.thread_id === null || codiMessageId === undefined) return;
-    const { runs: codiRuns } = yield* projections.getThreadRecords(row.thread_id, ["runs"]).pipe(
-      Effect.catchTags({
-        ProjectionStoreThreadNotFoundError: () => Effect.succeed({ runs: [] }),
-      }),
-    );
-    const run = codiRuns.find((candidate) => candidate.userMessageId === codiMessageId);
-    if (run === undefined || TERMINAL.has(run.status))
-      yield* settle(row.thread_id, codiMessageId, run);
+    const threadId = row.thread_id;
+    const pending = yield* settleIfEnded(threadId, codiMessageId);
+    // A declined continuation emits no event, so the run is looked at again once it is decided.
+    if (pending !== undefined)
+      yield* engine
+        .awaitRestartContinuation(pending)
+        .pipe(
+          Effect.andThen(lock.withPermit(settleIfEnded(threadId, codiMessageId))),
+          logged("settling a resumed Telescope run failed"),
+          Effect.forkIn(scope),
+        );
   });
-  const logged = (message: string) =>
-    Effect.catchCause((cause) => Effect.logWarning(message, { cause }));
 
   return {
     servingOn: (threadId: ThreadId) => serving.get(threadId),
