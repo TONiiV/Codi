@@ -185,6 +185,7 @@ it.layer(layer)("Telescope tool gateway", (it) => {
       };
       const prose = [
         "Basic authentication for the settings page",
+        "Basic Authentication settings",
         "Fix: Basic validation rejects empty briefs.",
         "Bearer authentication.",
       ];
