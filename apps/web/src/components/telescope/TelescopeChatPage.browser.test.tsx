@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vite-plus/test";
 import { page, userEvent } from "vite-plus/test/browser";
 
 import { render } from "../../../test/render";
-import { SidebarProvider } from "../ui/sidebar";
+import { Sidebar, SidebarContent, SidebarProvider, useSidebarVisibility } from "../ui/sidebar";
 import { TelescopeChatPage } from "./TelescopeChatPage";
 
 const mocks = vi.hoisted(() => ({ agentId: "a" as string | null }));
@@ -39,6 +39,15 @@ vi.mock("./TelescopeNeedsYou", () => ({
   TelescopeNeedsYou: ({ agent }: { agent: Telescope.Agent }) => <section>strip {agent.id}</section>,
 }));
 
+// Like the Telescope sidebar, the list renders only while the sidebar is open.
+function AgentList() {
+  return useSidebarVisibility() ? (
+    <SidebarContent>
+      <button type="button">我的 Agents</button>
+    </SidebarContent>
+  ) : null;
+}
+
 function setup(agentId: string | null = "a") {
   mocks.agentId = agentId;
 }
@@ -69,5 +78,22 @@ describe("TelescopeChatPage", () => {
 
     await userEvent.click(openList);
     await expect.element(openList).not.toBeInTheDocument();
+  });
+
+  it("moves keyboard focus into the agent list it opens", async () => {
+    setup(null);
+    await page.viewport(1280, 800);
+    await using screen = await render(
+      <SidebarProvider defaultOpen={false}>
+        <Sidebar collapsible="icon">
+          <AgentList />
+        </Sidebar>
+        <TelescopeChatPage />
+      </SidebarProvider>,
+    );
+    screen.getByRole("button", { name: "打开 agent 列表" }).element().focus();
+
+    await userEvent.keyboard("{Enter}");
+    await expect.element(screen.getByRole("button", { name: "我的 Agents" })).toHaveFocus();
   });
 });

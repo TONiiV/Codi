@@ -4,6 +4,7 @@ import { offersOpenThread, openThreadFailureText } from "@t3tools/client-runtime
 import type { EnvironmentId, Telescope, ThreadId } from "@t3tools/contracts";
 import { MessagesSquareIcon } from "lucide-react";
 import { useState } from "react";
+import { flushSync } from "react-dom";
 import { AsyncResult } from "effect/reactivity";
 
 import { useQuietThreadShell } from "../../state/entities";
@@ -48,9 +49,15 @@ function ChatEmpty(props: { title: string; description: string; children?: React
 function PickAChat() {
   const { toggleSidebar } = useSidebar();
   const listShown = useSidebarVisibility();
+  const openList = (event: React.MouseEvent) => {
+    flushSync(toggleSidebar);
+    // This button unmounts as the list shows, which would drop keyboard focus to the body.
+    if (event.detail === 0)
+      document.querySelector<HTMLElement>('[data-sidebar="content"] button')?.focus();
+  };
   return (
     <ChatEmpty title="选一个对话" description="选一个 agent，和它的对话会显示在这里。">
-      {listShown ? undefined : <Button onClick={toggleSidebar}>打开 agent 列表</Button>}
+      {listShown ? undefined : <Button onClick={openList}>打开 agent 列表</Button>}
     </ChatEmpty>
   );
 }
