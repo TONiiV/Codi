@@ -721,6 +721,7 @@ describe("ContextPackService", () => {
           "dotdot-in/deep/er/keep.txt": "keep\n",
           "absolute/.claude/settings.local.json": "{}",
           "out-mcp/pack.json": "{}",
+          "segment/d1/OLD.md": "old skill\n",
           ...Object.fromEntries(
             relinkRows.map(({ target }) => [`${target}/d1/d2/d3/d4/OLD.md`, "old skill\n"]),
           ),
@@ -781,6 +782,10 @@ describe("ContextPackService", () => {
           "opencode-agents/AGENTS.md": "../dotfiles/missing-agents.md",
           "opencode-mcp/opencode.json": "../dotfiles/missing-opencode.json",
           "out-mcp/mcp.json": "../dotfiles/missing-out.json",
+          // A removed `deploy` covers only itself, never a sibling whose name starts with it.
+          "segment/.claude/skills/deploy": "../../d1",
+          "segment/.claude/skills/deploy.md": "../../../dotfiles/missing-segment.json",
+          "segment/.mcp.json": ".claude/skills/deploy.md",
           // Inside the project through the same-name skill link, outside once it is removed.
           ...Object.fromEntries(
             relinkRows.flatMap(({ target, base, file }) => [
@@ -825,6 +830,7 @@ describe("ContextPackService", () => {
             "instructions",
             "mcp",
             "into-pack",
+            "segment",
           ].map((target) => [target, "claude"] as const),
           ["codex-agents", "codex"],
           ["codex-mcp", "codex"],
