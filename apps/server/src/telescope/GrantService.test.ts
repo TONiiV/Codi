@@ -1,6 +1,12 @@
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import { assert, it } from "@effect/vitest";
-import { AuthSessionId, EnvironmentId, ProjectId, Telescope } from "@t3tools/contracts";
+import {
+  AuthSessionId,
+  EnvironmentId,
+  ProjectId,
+  ProviderInstanceId,
+  Telescope,
+} from "@t3tools/contracts";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -202,8 +208,40 @@ it.layer(layer)("Telescope grants", (it) => {
       );
       const before = yield* grants.explainFor(as.ann, { workspaceId, agentId: webAgent.id });
       assert.isTrue(before.powers.mergePRs);
+      const listed = grants
+        .projectRules(as.bea, { workspaceId })
+        .pipe(Effect.map(({ rules }) => rules.map((r) => [r.projectId, r.stored, r.routing])));
+      assert.deepStrictEqual(
+        (yield* grants.projectRules(as.bea, { workspaceId })).rules,
+        [api, web].map((projectId) => ({ projectId, stored: false, powers: ALL, routing: null })),
+        "an unruled project lists the defaults the grant uses",
+      );
+      assert.strictEqual(
+        yield* reasonOf(grants.projectRules(as.zed, { workspaceId })),
+        "forbidden",
+        "only members read the rules",
+      );
 
+      const routed = { ...rule, routing: { harnesses: [ProviderInstanceId.make("claude")] } };
+      assert.deepStrictEqual(yield* grants.setProjectRule(as.ann, routed), {
+        projectId: web,
+        stored: true,
+        powers: rule.powers,
+        routing: routed.routing,
+      });
+      assert.deepStrictEqual(yield* listed, [
+        [api, false, null],
+        [web, true, routed.routing],
+      ]);
       yield* grants.setProjectRule(as.ann, rule);
+      assert.deepStrictEqual(
+        yield* listed,
+        [
+          [api, false, null],
+          [web, true, null],
+        ],
+        "routing: null clears the allowlist",
+      );
       const after = yield* grants.explainFor(as.ann, { workspaceId, agentId: webAgent.id });
       assert.deepStrictEqual(after.powers, { ...ALL, mergePRs: false });
       assert.strictEqual(removedBy(after, "mergePRs"), "project");

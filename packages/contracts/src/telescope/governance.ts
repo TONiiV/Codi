@@ -1,5 +1,6 @@
 import * as Schema from "effect/Schema";
 
+import { Agent } from "./agent.ts";
 import {
   AgentId,
   Count,
@@ -72,7 +73,18 @@ export const KillSwitchSetInput = Schema.Struct({
   state: KillSwitch.fields.state,
 });
 
+/** Any member's agent, private ones included, so an admin can stop it. */
+export const GovernanceAgent = Schema.Struct({
+  id: Agent.fields.id,
+  name: Agent.fields.name,
+  kind: Agent.fields.kind,
+  ownerSubjectId: Agent.fields.ownerSubjectId,
+});
+export type GovernanceAgent = typeof GovernanceAgent.Type;
+
 export const GovernanceState = Schema.Struct({
   budgets: Schema.Array(Budget),
   killSwitches: Schema.Array(KillSwitch),
+  /** Every agent of the workspace; the server always sends it. */
+  agents: Schema.optionalKey(Schema.Array(GovernanceAgent)),
 });

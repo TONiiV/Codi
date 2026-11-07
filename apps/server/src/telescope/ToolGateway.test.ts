@@ -280,10 +280,9 @@ it.layer(layer)("Telescope tool gateway", (it) => {
 
   it.effect("stops an agent at its next tool call and resumes it", () =>
     Effect.gen(function* () {
-      const { workspaceId, chiefId, runId, gateway, call, denial, audit } = yield* setup;
-      const { agents: mine } = yield* (yield* AgentService.AgentService).listMine(as.bea, {
-        workspaceId,
-      });
+      const { workspaceId, beaId, chiefId, runId, gateway, call, denial, audit } = yield* setup;
+      const agentService = yield* AgentService.AgentService;
+      const { agents: mine } = yield* agentService.listMine(as.bea, { workspaceId });
       const cos = mine.find((agent) => agent.kind === "chief_of_staff");
       assert.isDefined(cos);
       const viaThread = ThreadId.make(`thread-via-${workspaceId}`);
@@ -321,10 +320,27 @@ it.layer(layer)("Telescope tool gateway", (it) => {
         viaDenied._tag === "TelescopeToolGatewayDenied" && viaDenied.reason,
         "stopped",
       );
-      const { killSwitches } = yield* gateway.governance(as.ann, { workspaceId });
+      const { killSwitches, agents } = yield* gateway.governance(as.ann, { workspaceId });
       assert.deepStrictEqual(
         killSwitches.map((row) => [row.agentId, row.state]),
         [[chiefId, "terminated"]],
+      );
+      const notFound = yield* agentService
+        .get(as.ann, { workspaceId, agentId: chiefId })
+        .pipe(Effect.flip);
+      assert.strictEqual(
+        notFound._tag === "TelescopeWorkspaceError" && notFound.reason,
+        "not_found",
+      );
+      assert.deepInclude(
+        agents ?? [],
+        {
+          id: chiefId,
+          name: "project-web Chief Agent",
+          kind: "chief_agent",
+          ownerSubjectId: beaId,
+        },
+        "the admin's stop list holds a member's private agent",
       );
       const hidden = yield* gateway.governance(as.bea, { workspaceId }).pipe(Effect.flip);
       assert.strictEqual(hidden._tag === "TelescopeWorkspaceError" && hidden.reason, "forbidden");

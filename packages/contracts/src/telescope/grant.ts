@@ -2,6 +2,7 @@ import * as Schema from "effect/Schema";
 
 import { ProjectId } from "../baseSchemas.ts";
 import { StandingPowers } from "./agent.ts";
+import { RoutingAllowlist } from "./routing.ts";
 import {
   AgentId,
   AgentRunId,
@@ -101,3 +102,22 @@ export const GrantAuditListInput = Schema.Struct({
   limit: Schema.optionalKey(Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 200 }))),
 });
 export const GrantAuditListResult = Schema.Struct({ entries: Schema.Array(AuditEntry) });
+
+/** A bound project's cap on every agent's powers there, and the harnesses routing may pick. */
+export const ProjectRule = Schema.Struct({
+  projectId: ProjectId,
+  /** False when the project has no rule: the values are the defaults, which remove nothing. */
+  stored: Schema.Boolean,
+  powers: StandingPowers,
+  /** Null allows any harness and model. */
+  routing: Schema.NullOr(RoutingAllowlist),
+});
+export type ProjectRule = typeof ProjectRule.Type;
+export const ProjectRuleListResult = Schema.Struct({ rules: Schema.Array(ProjectRule) });
+/** Replaces the project's rule. */
+export const ProjectRuleSetInput = Schema.Struct({
+  workspaceId: WorkspaceId,
+  projectId: ProjectId,
+  powers: StandingPowers,
+  routing: ProjectRule.fields.routing,
+});

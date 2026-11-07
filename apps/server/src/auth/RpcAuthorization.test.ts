@@ -80,6 +80,7 @@ describe("RPC authorization scopes", () => {
       Telescope.WS_METHODS.runCalls,
       Telescope.WS_METHODS.wakeList,
       Telescope.WS_METHODS.grantExplain,
+      Telescope.WS_METHODS.projectRuleList,
       Telescope.WS_METHODS.memorySearch,
       Telescope.WS_METHODS.memoryWrite,
       Telescope.WS_METHODS.memoryPin,
@@ -104,6 +105,7 @@ describe("RPC authorization scopes", () => {
       Telescope.WS_METHODS.budgetSet,
       Telescope.WS_METHODS.killSwitchSet,
       Telescope.WS_METHODS.governanceGet,
+      Telescope.WS_METHODS.projectRuleSet,
       Telescope.WS_METHODS.routingSet,
       Telescope.WS_METHODS.routingDelete,
     ]) {
