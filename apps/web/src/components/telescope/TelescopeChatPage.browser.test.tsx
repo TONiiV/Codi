@@ -33,6 +33,7 @@ vi.mock("../../state/shell", () => ({ useEnvironmentShellStatus: () => null }));
 vi.mock("../../threadRoutes", () => ({ isThreadRouteSnapshotAuthoritative: () => true }));
 vi.mock("../ChatView", () => ({ default: () => null }));
 vi.mock("./TelescopeAccountDialogs", () => ({ ErrorNote: () => null }));
+vi.mock("./AgentAvatar", () => ({ AgentAvatar: () => null }));
 vi.mock("./TelescopeNeedsYou", () => ({
   TelescopeNeedsYou: ({ agent }: { agent: Telescope.Agent }) => <section>strip {agent.id}</section>,
 }));
