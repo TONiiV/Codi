@@ -1340,6 +1340,12 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["telescope budget limit tool calls usage kill switch stop pause"],
   },
   {
+    id: "telescope-routing",
+    title: "Routing rules",
+    to: "/settings/telescope",
+    searchTerms: ["telescope routing rules harness model task type priority"],
+  },
+  {
     id: "archive",
     title: "Archived threads",
     to: "/settings/archived",

@@ -15,6 +15,7 @@ import {
   AuthSettingsWriteScope,
   AuthSourceControlWriteScope,
   AuthTelescopeAdminScope,
+  AuthTelescopeMemberScope,
   Telescope,
   ThreadId,
   EnvironmentId,
@@ -23,6 +24,7 @@ import {
   WS_METHODS,
   type AuthSessionState,
   type PeerLinkSummary,
+  ProviderInstanceId,
 } from "@t3tools/contracts";
 import * as Cause from "effect/Cause";
 import * as DateTime from "effect/DateTime";
@@ -38,6 +40,7 @@ import {
 } from "./runtime.ts";
 import { AVAILABLE_CONNECTION_STATE, BearerConnectionTarget } from "../connection/model.ts";
 import { createPeerLinkEnvironmentAtoms } from "./peerLinks.ts";
+import { createTelescopeRoutingAtoms } from "../telescope/routing.ts";
 
 vi.mock("./session.ts", () => ({
   createEnvironmentSessionAtoms: () => ({ sessionStateAtom: sessions }),
@@ -197,6 +200,27 @@ describe("command permissions", () => {
           expect(registry.get(permissions.permissionAtom(other))).toBe(false);
           const denied = yield* permissions.authorize(registry, other).pipe(Effect.flip);
           expect(denied._tag).toBe("EnvironmentAuthorizationError");
+        }),
+      ),
+  );
+  it.effect.each([Telescope.WS_METHODS.routingSet, Telescope.WS_METHODS.routingDelete])(
+    "offers %s to telescope admins, not members",
+    (method) =>
+      Effect.scoped(
+        Effect.gen(function* () {
+          const registry = yield* setup;
+          const permissions = createCommandPermissions(runtime, method);
+          const scoped = (
+            scope: typeof AuthTelescopeAdminScope | typeof AuthTelescopeMemberScope,
+          ) => AsyncResult.success({ ...grant(true), scopes: [scope], permissions: [scope] });
+          registry.set(sessions(env), scoped(AuthTelescopeMemberScope));
+          expect(registry.get(permissions.permissionAtom(env))).toBe(false);
+          expect((yield* permissions.authorize(registry, env).pipe(Effect.flip))._tag).toBe(
+            "EnvironmentAuthorizationError",
+          );
+          registry.set(sessions(env), scoped(AuthTelescopeAdminScope));
+          expect(registry.get(permissions.permissionAtom(env))).toBe(true);
+          yield* permissions.authorize(registry, env);
         }),
       ),
   );
@@ -627,4 +651,76 @@ it.effect(
         expect(get).toHaveBeenCalledExactlyOnceWith({ workspaceId });
       }),
     ),
+);
+
+it.effect("re-reads the routing list after a refused set or delete", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const registry = yield* setup;
+      const workspaceId = Telescope.WorkspaceId.make("ws");
+      const gone: Telescope.RoutingRule = {
+        id: Telescope.RoutingRuleId.make("gone"),
+        workspaceId,
+        taskType: "review",
+        harness: ProviderInstanceId.make("codex"),
+        model: "small",
+        priority: 0,
+      };
+      let rules: ReadonlyArray<Telescope.RoutingRule> = [gone];
+      const refuse = () =>
+        Effect.fail(new Telescope.WorkspaceError({ reason: "not_found", message: "gone" }));
+      const client = {
+        [Telescope.WS_METHODS.routingList]: () => Effect.sync(() => ({ rules })),
+        [Telescope.WS_METHODS.routingSet]: refuse,
+        [Telescope.WS_METHODS.routingDelete]: refuse,
+      };
+      const supervisor = {
+        target: new BearerConnectionTarget({
+          environmentId: env,
+          label: "Test",
+          connectionId: "t",
+        }),
+        session: yield* SubscriptionRef.make(Option.some({ client } as unknown as RpcSession)),
+        state: yield* SubscriptionRef.make({
+          ...AVAILABLE_CONNECTION_STATE,
+          phase: "connected" as const,
+        }),
+      } as EnvironmentSupervisor["Service"];
+      const routing = createTelescopeRoutingAtoms(
+        Atom.runtime(
+          Layer.succeed(EnvironmentRegistry, {
+            run: (_id, effect) => Effect.provideService(effect, EnvironmentSupervisor, supervisor),
+            followStream: (_id, stream) =>
+              Stream.provideService(stream, EnvironmentSupervisor, supervisor),
+          } as EnvironmentRegistry["Service"]),
+        ),
+      );
+      registry.set(
+        sessions(env),
+        AsyncResult.success({
+          ...grant(false),
+          scopes: [AuthTelescopeAdminScope],
+          permissions: [AuthTelescopeAdminScope],
+        }),
+      );
+      const list = routing.list({ environmentId: env, input: { workspaceId } });
+      registry.mount(list);
+      const read = AtomRegistry.getResult(registry, list, { suspendOnWaiting: true });
+      expect(yield* read).toEqual({ rules: [gone] });
+
+      rules = [];
+      const target = { environmentId: env, input: { workspaceId, id: gone.id } };
+      const refused = (result: { _tag: string; cause?: Cause.Cause<unknown> }) =>
+        expect(result._tag === "Failure" && Cause.squash(result.cause!)).toMatchObject({
+          reason: "not_found",
+        });
+      refused(yield* Effect.promise(() => routing.remove.run(registry, target)));
+      expect(yield* read).toEqual({ rules: [] });
+
+      rules = [{ ...gone, model: "large" }];
+      const set = { environmentId: env, input: gone };
+      refused(yield* Effect.promise(() => routing.set.run(registry, set)));
+      expect(yield* read).toEqual({ rules });
+    }),
+  ),
 );

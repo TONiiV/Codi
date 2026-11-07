@@ -244,6 +244,7 @@
       "telescope-members": "成员与角色",
       "telescope-agents": "公司 agents",
       "telescope-governance": "预算与急停",
+      "telescope-routing": "路由规则",
       "archive": "已归档的会话"
     },
     "general": {
@@ -2944,6 +2945,7 @@
       "telescope-members": "成员 角色 管理员 移除 吊销 恢复",
       "telescope-agents": "公司 主代理 职能代理",
       "telescope-governance": "预算 上限 调用 急停 暂停",
+      "telescope-routing": "路由 规则 模型 优先级 任务类型 harness",
       "archive": "恢复 重新打开 已删除 历史 项目 归档"
     },
     "keybindingCommands": {
