@@ -73,6 +73,9 @@ export interface SettingsSearchItem {
   readonly peerLinksOnly?: boolean;
   readonly secondary?: boolean;
   readonly requiresThreadAutoSettlement?: boolean;
+  /** For items whose title is built from a label, such as one per source control host. */
+  readonly titleKey?: string;
+  readonly titleValues?: Readonly<Record<string, string>>;
 }
 
 export interface SettingsSearchAvailability {
@@ -206,6 +209,10 @@ export function sourceControlHostSearchItems(
         title: credentials
           ? `${definition.label} accounts and token`
           : `${definition.label} credentials`,
+        titleKey: credentials
+          ? "settings.manual.searchItems.hostAccountsAndToken"
+          : "settings.manual.searchItems.hostCredentials",
+        titleValues: { label: definition.label },
         to: "/settings/source-control" as const,
         searchTerms: [
           credentials
@@ -1316,25 +1323,21 @@ export const SETTINGS_SEARCH_ITEMS = [
   },
   {
     id: "telescope-members",
-    title: "成员与角色",
+    title: "Members and roles",
     to: "/settings/telescope",
-    searchTerms: [
-      "telescope workspace members roles admin revoke remove restore 成员 角色 管理员 移除 吊销 恢复",
-    ],
+    searchTerms: ["telescope workspace members roles admin revoke remove restore"],
   },
   {
     id: "telescope-agents",
-    title: "公司 agents",
+    title: "Company agents",
     to: "/settings/telescope",
-    searchTerms: ["telescope company agents main department 公司 主代理 职能代理"],
+    searchTerms: ["telescope company agents main department"],
   },
   {
     id: "telescope-governance",
-    title: "预算与急停",
+    title: "Budgets and kill switch",
     to: "/settings/telescope",
-    searchTerms: [
-      "telescope budget limit tool calls usage kill switch stop pause 预算 上限 调用 急停 暂停",
-    ],
+    searchTerms: ["telescope budget limit tool calls usage kill switch stop pause"],
   },
   {
     id: "archive",
@@ -1484,6 +1487,35 @@ export function searchableSetting(
 } {
   const { id: anchorId, title } = SEARCH_ITEMS_BY_ID.get(id)!;
   return { id: anchorId, title: t ? t(`settings.items.${id}`) : title };
+}
+
+/** Titles and keywords in the current language. English keywords stay searchable. */
+export function localizeSettingsSearchItem(
+  item: SettingsSearchItem,
+  t: TFunction,
+): SettingsSearchItem {
+  const section = settingsSectionLabel(item.to, t);
+  const keybindingCommand = item.id.startsWith("keybinding-")
+    ? (item.id.slice("keybinding-".length) as KeybindingCommand)
+    : null;
+  const title = item.titleKey
+    ? t(item.titleKey, item.titleValues ?? {})
+    : keybindingCommand
+      ? commandLabel(keybindingCommand, t)
+      : t(`settings.items.${item.id}`);
+  const catalogTerms = keybindingCommand === null && item.titleKey === undefined;
+  const terms = catalogTerms && item.searchTerms ? [t(`settings.itemTerms.${item.id}`)] : [];
+  return {
+    ...item,
+    title,
+    searchTerms: [
+      item.title,
+      SETTINGS_SECTION_LABELS[item.to],
+      ...(item.searchTerms ?? []),
+      ...terms,
+      section,
+    ],
+  };
 }
 
 export function filterAvailableSettingsSearchItems(

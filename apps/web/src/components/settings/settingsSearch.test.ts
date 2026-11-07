@@ -6,15 +6,21 @@ import {
 } from "@t3tools/contracts";
 import { UNKNOWN_SOURCE_CONTROL_CLIENT } from "@t3tools/client-runtime/source-control-clients";
 import * as Schema from "effect/Schema";
+import { createInstance } from "i18next";
+
+import { englishT } from "~/i18n/englishT";
+import zhCN from "~/i18n/locales/zh-CN.json";
 
 import {
   filterAvailableSettingsSearchItems,
   getSettingsSearchTargetScope,
   getThreadAutoSettlementSearchAvailability,
   isSettingsSearchScopeAvailable,
+  localizeSettingsSearchItem,
   movedSettingsPath,
   searchSettings,
   SETTINGS_NAV_GROUPS,
+  SETTINGS_SECTION_LABELS,
   SETTINGS_SEARCH_ITEMS,
   sourceControlHostSearchItems,
   sourceControlHostSettingsSearchId,
@@ -199,18 +205,50 @@ describe("searchSettings", () => {
       ["Native sessions", "providers"],
       ["CODEX_HOME path", "providers"],
       ["Shadow home path", "providers"],
-      ["成员与角色", "telescope-members"],
       ["telescope members", "telescope-members"],
-      ["预算与急停", "telescope-governance"],
       ["kill switch", "telescope-governance"],
     ] as const) {
       expect(searchSettings(title)[0]?.id, title).toBe(id);
+    }
+    const zh = createInstance();
+    void zh.init({ lng: "zh-CN", resources: { "zh-CN": { translation: zhCN } } });
+    const items: ReadonlyArray<SettingsSearchItem> = SETTINGS_SEARCH_ITEMS;
+    const zhItems = items.map((item) => localizeSettingsSearchItem(item, zh.t));
+    for (const [title, id] of [
+      ["成员与角色", "telescope-members"],
+      ["预算与急停", "telescope-governance"],
+    ] as const) {
+      expect(searchSettings(title, zhItems)[0]?.id, title).toBe(id);
     }
   });
 
   it("keeps catalog result ids unique", () => {
     const ids = SETTINGS_SEARCH_ITEMS.map((item) => item.id);
     expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it("gives every catalog item locale keys whose English matches the catalog", () => {
+    const words = (terms: ReadonlyArray<string> = []) =>
+      new Set(terms.join(" ").toLowerCase().split(/\s+/));
+    const items: ReadonlyArray<SettingsSearchItem> = SETTINGS_SEARCH_ITEMS;
+    const zh = createInstance();
+    void zh.init({ lng: "zh-CN", resources: { "zh-CN": { translation: zhCN } } });
+    const zhItems = items.map((item) => localizeSettingsSearchItem(item, zh.t));
+    const found = (query: string, list: ReadonlyArray<SettingsSearchItem>, id: string) =>
+      searchSettings(query, list).some((result) => result.id === id);
+    for (const item of items) {
+      const localized = localizeSettingsSearchItem(item, englishT);
+      expect(localized.title, item.id).toBe(item.title);
+      expect(words(localized.searchTerms), item.id).toEqual(
+        words([item.title, ...(item.searchTerms ?? []), SETTINGS_SECTION_LABELS[item.to]]),
+      );
+      expect(localizeSettingsSearchItem(item, zh.t).searchTerms, item.id).toContain(
+        SETTINGS_SECTION_LABELS[item.to],
+      );
+      if (found(item.title, items, item.id)) {
+        expect(found(item.title, zhItems, item.id), item.id).toBe(true);
+      }
+    }
   });
 });
 
