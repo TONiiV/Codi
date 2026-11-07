@@ -118,8 +118,8 @@ export function TelescopeNeedsYou({
             {items.map(({ delegation, proposal }) => (
               <li key={proposal.id} className="flex flex-col gap-1">
                 <span className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                  <DelegationMeta environmentId={environmentId} delegation={delegation} />
                   {nameOf(delegation.toAgentId)}
+                  <DelegationMeta environmentId={environmentId} delegation={delegation} />
                 </span>
                 <span className="font-medium wrap-anywhere">{proposal.title}</span>
                 {proposal.text ? (
