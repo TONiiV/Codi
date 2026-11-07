@@ -4,8 +4,9 @@ import {
   squashAtomCommandFailure,
   type AtomCommandResult,
 } from "@t3tools/client-runtime/state/runtime";
-import { failureText } from "@t3tools/client-runtime/telescope/workspaces";
+import { failureText, WORKSPACE_ERROR_TEXT } from "@t3tools/client-runtime/telescope/workspaces";
 import { EnvironmentId, Telescope } from "@t3tools/contracts";
+import * as Schema from "effect/Schema";
 import { AsyncResult } from "effect/reactivity";
 import { useState } from "react";
 import { View } from "react-native";
@@ -53,6 +54,15 @@ const TASK_STATUS_LABEL: Partial<Record<Telescope.TaskStatus, string>> = {
 
 function rowClassName(index: number) {
   return index === 0 ? "gap-2 px-4 py-3" : "gap-2 border-t border-border-subtle px-4 py-3";
+}
+
+const isWorkspaceError = Schema.is(Telescope.WorkspaceError);
+
+function readFailedText(subject: string, failure: unknown): string {
+  const reason = isWorkspaceError(failure)
+    ? WORKSPACE_ERROR_TEXT[failure.reason]
+    : "请检查连接后再试。";
+  return `读取${subject}失败：${reason}`;
 }
 
 function StatusText(props: { readonly text: string; readonly tone?: "danger" }) {
@@ -196,7 +206,7 @@ function EnvironmentWorkspaces(props: {
   return (
     <SettingsSection title={props.label}>
       {list.error ? (
-        <StatusText tone="danger" text="工作区加载失败。" />
+        <StatusText tone="danger" text={readFailedText("工作区", list.failure)} />
       ) : !list.data ? (
         <StatusText text="正在读取工作区…" />
       ) : workspaces.length === 0 ? (
@@ -228,7 +238,7 @@ function DecisionList(props: {
   const decide = useAtomCommand(telescopeBoard.decide, { reportFailure: false });
   const [pendingId, setPendingId] = useState<string | null>(null);
   const { query } = props;
-  if (query.error) return <StatusText tone="danger" text="决定加载失败。" />;
+  if (query.error) return <StatusText tone="danger" text={readFailedText("决定", query.failure)} />;
   if (!query.data) return <StatusText text="正在读取决定…" />;
   const decisions = sortDecisions(query.data.decisions);
   if (decisions.length === 0) return <StatusText text="这个工作区还没有决定。" />;
@@ -305,7 +315,7 @@ function ReviewList(props: {
   const updateTask = useAtomCommand(telescopeBoard.updateTask, { reportFailure: false });
   const [pending, setPending] = useState<{ id: string; status: string } | null>(null);
   const { query } = props;
-  if (query.error) return <StatusText tone="danger" text="任务加载失败。" />;
+  if (query.error) return <StatusText tone="danger" text={readFailedText("任务", query.failure)} />;
   if (!query.data) return <StatusText text="正在读取任务…" />;
   const tasks = reviewQueue(query.data.tasks);
   if (tasks.length === 0) return <StatusText text="没有等你确认的任务。" />;

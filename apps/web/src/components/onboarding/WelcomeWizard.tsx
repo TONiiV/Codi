@@ -341,10 +341,10 @@ function ConnectionStep({
   return (
     <>
       <h1 className="text-2xl font-semibold tracking-tight text-foreground">
-        Connect your computers
+        {t("settings.remaining.connectYourComputers")}
       </h1>
       <p className="mt-2.5 text-sm leading-relaxed text-muted-foreground">
-        Choose one or more computers. We’ll set up agents and projects on each.
+        {t("settings.remaining.connectYourComputersDescription")}
       </p>
       {directEnvironments.length > 0 ? (
         <fieldset className="mt-5 space-y-2">
@@ -1440,7 +1440,9 @@ function ImportStep({
   if (scans.every((scan) => scan.data === null) && scans.some((scan) => scan.isPending)) {
     return (
       <div className="flex h-full min-h-40 flex-col">
-        <h1 className="text-2xl font-semibold tracking-tight text-foreground">Your projects</h1>
+        <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+          {t("settings.remaining.yourProjects")}
+        </h1>
         <div className="flex flex-1 flex-col items-center justify-center gap-3 py-6">
           <Spinner size="lg" tone="muted" />
           <p className="text-center text-sm text-muted-foreground">

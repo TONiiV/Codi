@@ -3545,7 +3545,13 @@
       "connectYourAgentsDescription": "Choose an agent to start coding. You can add more later.",
       "importYourProjects": "Import your projects",
       "importYourProjectsDescription": "Import projects and conversations from Claude Code and Codex on your selected computers.",
-      "updateRequired": "Update {{provider}} to {{version}} or newer to use {{models}}."
+      "updateRequired": "Update {{provider}} to {{version}} or newer to use {{models}}.",
+      "connectYourComputers": "Connect your computers",
+      "connectYourComputersDescription": "Choose one or more computers. We’ll set up agents and projects on each.",
+      "yourProjects": "Your projects",
+      "setupProgress": "Setup progress",
+      "wizardStep": "{{step}}, step {{number}}",
+      "wizardStepWithSummary": "{{step}}, step {{number}}, {{summary}}"
     },
     "parallelShared": {
       "noEffortLevels": "No effort levels",

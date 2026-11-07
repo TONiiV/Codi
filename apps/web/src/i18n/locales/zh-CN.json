@@ -3529,7 +3529,7 @@
       "deviceTools": "设备工具",
       "running": "运行中",
       "notRunning": "未运行",
-      "required": "所需",
+      "required": "所需版本",
       "installed": "已安装",
       "versionsNotChecked": "尚未检查版本。",
       "managedBy": "由 {{owner}} 管理。",
@@ -3545,7 +3545,13 @@
       "connectYourAgentsDescription": "选择一个智能体开始编码。之后还可以添加更多。",
       "importYourProjects": "导入你的项目",
       "importYourProjectsDescription": "从所选电脑上的 Claude Code 和 Codex 导入项目和对话。",
-      "updateRequired": "请将 {{provider}} 更新到 {{version}} 或更高版本，以使用 {{models}}。"
+      "updateRequired": "请将 {{provider}} 更新到 {{version}} 或更高版本，以使用 {{models}}。",
+      "connectYourComputers": "连接你的电脑",
+      "connectYourComputersDescription": "选择一台或多台电脑。我们会在每台电脑上设置智能体和项目。",
+      "yourProjects": "你的项目",
+      "setupProgress": "设置进度",
+      "wizardStep": "{{step}}，第 {{number}} 步",
+      "wizardStepWithSummary": "{{step}}，第 {{number}} 步，{{summary}}"
     },
     "parallelShared": {
       "noEffortLevels": "没有强度等级",
