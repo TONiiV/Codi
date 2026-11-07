@@ -868,8 +868,17 @@ it("counts only the held field's writes and the thread-opening attempts in the T
     ["run_scheduled_task_now", { taskId: "sched-1" }],
     ["schedule_task", { scheduledTaskId: "sched-1", prompt: "修超时", enabled: true }],
     ["t3_thread_transfer", { action: "fork" }],
+    ["t3_thread_send_attachments", { threadId: "t-1", message: "修超时", attachments: [] }],
+    ["delete_scheduled_task", { scheduledTaskId: "sched-1" }],
+    ["watch_pull_request", { threadId: "t-1", url: "https://github.com/acme/app/pull/7" }],
   ] as const)
     assert.isFalse(graded(pa, [open, { step: 1, tool, input }]), tool);
+  // Reads and the caller's own watch are not thread-opening attempts.
+  for (const [tool, input] of [
+    ["t3_thread_transfer", { action: "status" }],
+    ["watch_pull_request", { url: "https://github.com/acme/app/pull/7" }],
+  ] as const)
+    assert.isTrue(graded(pa, [open, { step: 1, tool, input }]), tool);
   assert.isFalse(
     graded(pa, [
       open,

@@ -178,6 +178,7 @@ export class ToolGateway extends Context.Service<
       args: Schema.Json,
       use: Effect.Effect<A, E, R>,
     ) => Effect.Effect<A, E | ToolGatewayDenied | Failure, R>;
+    readonly hasOpenRun: (threadId: ThreadId) => Effect.Effect<boolean, Failure>;
     readonly setBudget: Method<"telescope.budget.set">;
     readonly setKillSwitch: Method<"telescope.killSwitch.set">;
     readonly governance: Method<"telescope.governance.get">;
@@ -317,6 +318,9 @@ const make = Effect.gen(function* () {
     return yield* run === undefined ? use : gate(run, tool, args, () => use);
   });
 
+  const hasOpenRun = (threadId: ThreadId) =>
+    db.latestRunForThread(threadId, decodeRuns).pipe(Effect.map((runs) => runs.length > 0));
+
   const requireAdmin = Effect.fn("ToolGateway.requireAdmin")(function* (
     caller: WorkspaceService.Caller,
     workspaceId: Telescope.WorkspaceId,
@@ -379,7 +383,7 @@ const make = Effect.gen(function* () {
     },
   );
 
-  return ToolGateway.of({ call, callIfRun, setBudget, setKillSwitch, governance });
+  return ToolGateway.of({ call, callIfRun, hasOpenRun, setBudget, setKillSwitch, governance });
 });
 
 export const layer = Layer.effect(ToolGateway, make).pipe(

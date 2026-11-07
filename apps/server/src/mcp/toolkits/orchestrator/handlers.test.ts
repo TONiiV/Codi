@@ -5,6 +5,7 @@ import {
   AuthSessionId,
   EnvironmentId,
   MessageId,
+  OrchestratorMcpFailure,
   ProjectId,
   ProviderInstanceId,
   RunId,
@@ -12,13 +13,17 @@ import {
   type Telescope,
   ThreadId,
 } from "@t3tools/contracts";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
 import type { Tool, Toolkit } from "effect/ai";
 
+import * as AssetSigner from "../../../assets/AssetSigner.ts";
+import * as ServerSecretStore from "../../../auth/ServerSecretStore.ts";
 import * as ServerConfig from "../../../config.ts";
 import * as ServerEnvironment from "../../../environment/ServerEnvironment.ts";
+import * as Orchestrator from "../../../orchestration-v2/Orchestrator.ts";
 import * as ThreadLaunch from "../../../orchestration-v2/ThreadLaunchService.ts";
 import * as ThreadManagement from "../../../orchestration-v2/ThreadManagementService.ts";
 import { runMigrations } from "../../../persistence/Migrations.ts";
@@ -26,7 +31,9 @@ import * as SqlitePersistence from "../../../persistence/Sqlite.ts";
 import * as ManagedProjectFolders from "../../../project/ManagedProjectFolders.ts";
 import * as Project from "../../../project/ProjectService.ts";
 import * as DocumentText from "../../../provider/DocumentText.ts";
+import * as PeerForwarding from "../../../peer/PeerForwarding.ts";
 import * as ProviderRegistry from "../../../provider/ProviderRegistry.ts";
+import * as PullRequestReviewGuideService from "../../../pullRequest/PullRequestReviewGuideService.ts";
 import * as ServerSettings from "../../../serverSettings.ts";
 import * as ScheduledTasks from "../../../scheduledTasks/ScheduledTaskService.ts";
 import * as GitVcsDriver from "../../../vcs/GitVcsDriver.ts";
@@ -40,8 +47,12 @@ import * as McpInvocationContext from "../../McpInvocationContext.ts";
 import * as McpToolAccess from "../../McpToolAccess.ts";
 import { liveThreadShell } from "../../McpToolAccess.testkit.ts";
 import * as OrchestratorMcpService from "../../OrchestratorMcpService.ts";
+import * as AttachmentHandlers from "../attachment/handlers.ts";
+import { AttachmentToolkit } from "../attachment/tools.ts";
 import * as ProjectHandlers from "../project/handlers.ts";
 import { ProjectToolkit } from "../project/tools.ts";
+import * as PullRequestsHandlers from "../pullRequests/handlers.ts";
+import { PullRequestsToolkit } from "../pullRequests/tools.ts";
 import * as ThreadHandlers from "../thread/handlers.ts";
 import { ThreadToolkit } from "../thread/tools.ts";
 import * as OrchestratorHandlers from "./handlers.ts";
@@ -74,14 +85,20 @@ const layer = (opened: Array<string>) =>
     McpToolAccess.HandlersLayer.layer(OrchestratorHandlers.layer),
     McpToolAccess.HandlersLayer.layer(ThreadHandlers.layer),
     McpToolAccess.HandlersLayer.layer(ProjectHandlers.layer),
+    McpToolAccess.HandlersLayer.layer(AttachmentHandlers.layer),
+    McpToolAccess.HandlersLayer.layer(PullRequestsHandlers.layer),
   ).pipe(
     Layer.provideMerge(
       Layer.mergeAll(
         services,
         Layer.mock(ThreadManagement.ThreadManagementService)({
           getThreadShell: (threadId) => Effect.succeed(liveThreadShell(threadId)),
-          getProjectThreadRecords: ({ threadId }) =>
-            Effect.succeed({ thread: { id: threadId } } as never),
+          getProjectThreadRecords: ({ threadId }, fields) =>
+            Effect.sync(() => {
+              if ((fields as ReadonlyArray<string>).includes("messages"))
+                opened.push("t3_thread_send_attachments");
+              return { thread: { id: threadId } } as never;
+            }),
           dispatch: (command) =>
             Effect.sync(
               () => (
@@ -93,6 +110,32 @@ const layer = (opened: Array<string>) =>
               ),
             ),
         }),
+        // Stands in for a linked environment.
+        Layer.mock(PeerForwarding.PeerForwarding)({
+          call: (_scope, tool) =>
+            Effect.sync(() => opened.push(`forwarded ${tool.name}`)).pipe(
+              Effect.andThen(
+                Effect.fail(
+                  new OrchestratorMcpFailure({ code: "orchestration_error", message: "" }),
+                ),
+              ),
+            ),
+        }),
+        Layer.mock(Orchestrator.OrchestratorV2)({
+          // A missing thread is looked up again under its `mcp:` alias.
+          getThreadShell: (threadId) =>
+            Effect.sync(() => {
+              if (!threadId.startsWith("mcp:")) opened.push("watch_pull_request");
+              return null;
+            }),
+        }),
+        Layer.mock(AssetSigner.AssetSigner)({}),
+        Layer.mock(ServerSecretStore.ServerSecretStore)({}),
+        Layer.mock(PullRequestReviewGuideService.PullRequestReviewGuideService)({}),
+        Layer.succeed(
+          SecureRandom.SecureRandom,
+          SecureRandom.make((size) => new Uint8Array(size)),
+        ),
         Layer.mock(ScheduledTasks.ScheduledTaskService)({
           list: () =>
             Effect.sync(() => (opened.push("run_scheduled_task_now"), { tasks: [] }) as never),
@@ -120,6 +163,10 @@ const layer = (opened: Array<string>) =>
           scheduleTask: () => Effect.sync(() => (opened.push("schedule_task"), scheduledTask)),
           updateScheduledTask: () =>
             Effect.sync(() => (opened.push("schedule_task update"), scheduledTask)),
+          deleteScheduledTask: (_scope, { scheduledTaskId }) =>
+            Effect.sync(
+              () => (opened.push("delete_scheduled_task"), { scheduledTaskId, deleted: true }),
+            ),
           sendToThread: (_scope, { threadId }) =>
             Effect.sync(() => {
               opened.push("t3_thread_send");
@@ -180,6 +227,8 @@ const setup = Effect.gen(function* () {
     orchestrator: yield* OrchestratorToolkit,
     thread: yield* ThreadToolkit,
     project: yield* ProjectToolkit,
+    attachment: yield* AttachmentToolkit,
+    pr: yield* PullRequestsToolkit,
   };
   const handleOn =
     <Tools extends Record<string, Tool.Any>>(
@@ -200,11 +249,17 @@ const setup = Effect.gen(function* () {
             providerInstanceId: ProviderInstanceId.make("codex"),
           },
           client: undefined,
-          capabilities: new Set(["orchestration" as const]),
+          capabilities: new Set(["orchestration", "pull-requests"] as const),
           issuedAt: 0,
         }),
       );
-  const callOn = (threadId: ThreadId) => handleOn(toolkits.orchestrator, threadId);
+  const callers = (threadId: ThreadId) => ({
+    call: handleOn(toolkits.orchestrator, threadId),
+    thread: handleOn(toolkits.thread, threadId),
+    project: handleOn(toolkits.project, threadId),
+    attachment: handleOn(toolkits.attachment, threadId),
+    pr: handleOn(toolkits.pr, threadId),
+  });
   const on = Effect.fn(function* (kind: Telescope.AgentKind) {
     const agent = agents.find((candidate) => candidate.kind === kind);
     assert.isDefined(agent);
@@ -227,12 +282,7 @@ const setup = Effect.gen(function* () {
         contextManifest: [],
       },
     });
-    return {
-      agentId: agent.id,
-      call: callOn(threadId),
-      thread: handleOn(toolkits.thread, threadId),
-      project: handleOn(toolkits.project, threadId),
-    };
+    return { agentId: agent.id, threadId, ...callers(threadId) };
   });
   const audit = (yield* GrantService.GrantService)
     .auditList(ann, { workspaceId })
@@ -241,12 +291,12 @@ const setup = Effect.gen(function* () {
         entries.map((entry) => [entry.tool, entry.outcome, entry.reason]),
       ),
     );
-  return { workspaceId, on, callOn, audit };
+  return { workspaceId, on, callers, audit };
 });
 
 const threads = { threads: [{ prompt: "Fix the build" }] };
 const worker = ThreadId.make("thread-worker");
-type Run = Effect.Success<ReturnType<Effect.Success<typeof setup>["on"]>>;
+type Run = ReturnType<Effect.Success<typeof setup>["callers"]>;
 const sched = scheduledTask.scheduledTaskId;
 /** Each tool that opens a thread, writes into one or schedules work, by the service step it reaches. */
 const opens = {
@@ -266,6 +316,21 @@ const opens = {
   "t3_thread_transfer merge_back": (run: Run) =>
     run.thread("t3_thread_transfer", { action: "merge_back", targetThreadId: worker }),
   t3_thread_send: (run: Run) => run.call("t3_thread_send", { threadId: worker, message: "Go" }),
+  t3_thread_send_attachments: (run: Run) =>
+    run.attachment("t3_thread_send_attachments", {
+      threadId: worker,
+      message: "Go",
+      attachments: [
+        { type: "file", id: "log-1", name: "log.txt", mimeType: "text/plain", sizeBytes: 1 },
+      ],
+    }),
+  delete_scheduled_task: (run: Run) =>
+    run.call("delete_scheduled_task", { scheduledTaskId: sched }),
+  // Pull request tools fail as errors, not results.
+  watch_pull_request: (run: Run) =>
+    run
+      .pr("watch_pull_request", { threadId: worker, url: "https://github.com/acme/web/pull/7" })
+      .pipe(Effect.catch(Effect.succeed)),
 };
 
 it.effect.each(Object.keys(opens) as Array<keyof typeof opens>)(
@@ -296,8 +361,8 @@ it.effect.each(Object.keys(opens) as Array<keyof typeof opens>)(
 it.effect("an ordinary thread's create_threads is unchanged", () => {
   const opened: Array<string> = [];
   return Effect.gen(function* () {
-    const { callOn, audit } = yield* setup;
-    const ordinary = callOn(ThreadId.make("thread-ordinary"));
+    const { callers, audit } = yield* setup;
+    const ordinary = callers(ThreadId.make("thread-ordinary")).call;
     assert.deepStrictEqual(yield* ordinary("create_threads", threads), { threads: [] });
     assert.deepStrictEqual(opened, ["create_threads"]);
     assert.deepStrictEqual(yield* audit, []);
@@ -309,6 +374,9 @@ it.effect.each([
   "schedule_task update",
   "t3_thread_transfer fork",
   "t3_thread_transfer merge_back",
+  "t3_thread_send_attachments",
+  "delete_scheduled_task",
+  "watch_pull_request",
 ] as const)("a Chief run's %s passes and counts one budget call", (tool) => {
   const opened: Array<string> = [];
   return Effect.gen(function* () {
@@ -317,7 +385,8 @@ it.effect.each([
     const gateway = yield* ToolGateway.ToolGateway;
     const budget = { workspaceId, scope: "agent" as const, scopeId: chief.agentId };
     yield* gateway.setBudget(ann, { ...budget, limitCalls: 5 });
-    assert.notPropertyVal(yield* opens[tool](chief), "_tag", "OrchestratorMcpFailure");
+    // Past the gateway; some mocked service steps then fail.
+    assert.notPropertyVal(yield* opens[tool](chief), "code", "capability_denied");
     assert.deepStrictEqual(opened, [tool]);
     assert.deepStrictEqual(yield* audit, [["dispatch_worker", "allowed", undefined]]);
     const { budgets } = yield* gateway.governance(ann, { workspaceId });
@@ -325,5 +394,80 @@ it.effect.each([
       budgets.map((row) => row.usedCalls),
       [1],
     );
+  }).pipe(Effect.provide(layer(opened)));
+});
+
+it.effect("a PA run's watch_pull_request on its own thread is not gated", () => {
+  const opened: Array<string> = [];
+  return Effect.gen(function* () {
+    const { on, audit } = yield* setup;
+    const pa = yield* on("chief_of_staff");
+    for (const threadId of [undefined, pa.threadId])
+      yield* Effect.exit(
+        pa.pr("watch_pull_request", { threadId, url: "https://github.com/acme/web/pull/7" }),
+      );
+    assert.deepStrictEqual(opened, ["watch_pull_request", "watch_pull_request"]);
+    assert.deepStrictEqual(yield* audit, []);
+  }).pipe(Effect.provide(layer(opened)));
+});
+
+const peer = EnvironmentId.make("env-peer");
+/** Each `opens` tool that takes a linked environment, called with one. */
+const opensElsewhere = {
+  t3_thread_send: (run: Run) =>
+    run.call("t3_thread_send", { environmentId: peer, threadId: worker, message: "Go" }),
+  schedule_task: (run: Run) =>
+    run.call("schedule_task", {
+      environmentId: peer,
+      prompt: "Fix the build",
+      schedule: { type: "interval", everyMs: 60_000 },
+    }),
+  "schedule_task update": (run: Run) =>
+    run.call("schedule_task", { environmentId: peer, scheduledTaskId: sched, enabled: true }),
+  delete_scheduled_task: (run: Run) =>
+    run.call("delete_scheduled_task", { environmentId: peer, scheduledTaskId: sched }),
+  t3_thread_launch: (run: Run) =>
+    run.project("t3_thread_launch", { environmentId: peer, scratch: true, title: "Fix the build" }),
+  run_scheduled_task_now: (run: Run) =>
+    run.thread("run_scheduled_task_now", { environmentId: peer, taskId: sched }),
+  t3_thread_transfer: (run: Run) =>
+    run.thread("t3_thread_transfer", { environmentId: peer, action: "fork" }),
+  watch_pull_request: (run: Run) =>
+    run
+      .pr("watch_pull_request", {
+        environmentId: peer,
+        threadId: worker,
+        url: "https://github.com/acme/web/pull/7",
+      })
+      .pipe(Effect.catch(Effect.succeed)),
+};
+
+it.effect.each(Object.keys(opensElsewhere) as Array<keyof typeof opensElsewhere>)(
+  "a Telescope run's %s naming a linked environment is refused before it routes",
+  (tool) => {
+    const opened: Array<string> = [];
+    return Effect.gen(function* () {
+      const { on, callers } = yield* setup;
+      const chief = yield* on("chief_agent");
+      assert.deepInclude(yield* opensElsewhere[tool](chief), {
+        _tag: "OrchestratorMcpFailure",
+        code: "capability_denied",
+        message:
+          "Telescope agents cannot act on a linked environment yet. Leave out environmentId to work here.",
+      });
+      assert.deepStrictEqual(opened, []);
+      yield* opensElsewhere[tool](callers(ThreadId.make("thread-ordinary")));
+      assert.deepStrictEqual(opened, [`forwarded ${tool.split(" ")[0]}`]);
+    }).pipe(Effect.provide(layer(opened)));
+  },
+);
+
+it.effect("a Telescope run's reads still route to a linked environment", () => {
+  const opened: Array<string> = [];
+  return Effect.gen(function* () {
+    const pa = yield* (yield* setup).on("chief_of_staff");
+    yield* Effect.exit(pa.thread("t3_thread_transfer", { environmentId: peer, action: "status" }));
+    yield* Effect.exit(pa.call("t3_thread_list", { environmentId: peer }));
+    assert.deepStrictEqual(opened, ["forwarded t3_thread_transfer", "forwarded t3_thread_list"]);
   }).pipe(Effect.provide(layer(opened)));
 });

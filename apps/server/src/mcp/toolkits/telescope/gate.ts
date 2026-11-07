@@ -1,4 +1,4 @@
-import { OrchestratorMcpFailure, type Telescope } from "@t3tools/contracts";
+import { OrchestratorMcpFailure, type Telescope, type ThreadId } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import type * as Schema from "effect/Schema";
@@ -51,24 +51,62 @@ export const gated = Effect.fn("mcp.telescope.gated")(function* <A, R>(
   return yield* gateway.call(thread.threadId, tool, args, use).pipe(Effect.mapError(toFailure));
 });
 
-const gateIfRun = Effect.fn("mcp.telescope.gatedIfRun")(function* <A, E, R>(
-  tool: Telescope.GatewayTool,
-  args: Schema.Json,
+/**
+ * Codi tools that open a thread, write into another one or change scheduled work (D78), by
+ * whether this call does: in a Telescope run each is `dispatch_worker`.
+ */
+const DISPATCHES = new Map<
+  string,
+  (input: { readonly action?: unknown; readonly threadId?: unknown }, caller?: ThreadId) => boolean
+>([
+  ...[
+    "delegate_task",
+    "create_threads",
+    "t3_thread_send",
+    "t3_thread_send_attachments",
+    "t3_thread_launch",
+    "schedule_task",
+    "delete_scheduled_task",
+    "run_scheduled_task_now",
+  ].map((tool) => [tool, () => true] as const),
+  ["t3_thread_transfer", ({ action }) => action !== "status"],
+  // PR events later start turns in the watching thread.
+  ["watch_pull_request", ({ threadId }, caller) => threadId !== undefined && threadId !== caller],
+]);
+
+export const dispatchesWork = (tool: string) => DISPATCHES.has(tool);
+
+const linkedRefused = new OrchestratorMcpFailure({
+  code: "capability_denied",
+  message:
+    "Telescope agents cannot act on a linked environment yet. Leave out environmentId to work here.",
+});
+
+// Decoded tool input is plain JSON once its unset optional keys are dropped.
+const asJson = (input: object): Schema.Json => JSON.parse(JSON.stringify(input));
+
+/**
+ * `use` as tool `tool`: a dispatching call on a thread with an open run goes through the
+ * gateway, or is refused when it is `linked` (bound for a linked environment).
+ */
+export const gateDispatch = Effect.fn("mcp.telescope.gateDispatch")(function* <A, E, R>(
+  tool: string,
+  input: object,
+  linked: boolean,
   use: Effect.Effect<A, E, R>,
 ) {
   const scope = yield* McpInvocationContext.McpInvocationContext;
   // Optional so toolkit tests run without Telescope; the server always provides it.
   const gateway = yield* Effect.serviceOption(ToolGateway.ToolGateway);
-  if (scope.thread === undefined || Option.isNone(gateway)) return yield* use;
+  const thread = scope.thread?.threadId;
+  if (thread === undefined || Option.isNone(gateway) || !DISPATCHES.get(tool)?.(input, thread))
+    return yield* use;
+  if (linked) {
+    const inRun = yield* gateway.value.hasOpenRun(thread).pipe(Effect.mapError(toFailure));
+    return yield* inRun ? Effect.fail(linkedRefused) : use;
+  }
   const exit = yield* gateway.value
-    .callIfRun(scope.thread.threadId, tool, args, Effect.exit(use))
+    .callIfRun(thread, "dispatch_worker", asJson(input), Effect.exit(use))
     .pipe(Effect.mapError(toFailure));
   return yield* exit;
 });
-
-/** A Codi tool in a Telescope run goes through the gateway; anywhere else it runs as before. */
-export const gatedIfRun =
-  (tool: Telescope.GatewayTool, input: object) =>
-  <A, E, R>(use: Effect.Effect<A, E, R>) =>
-    // Decoded tool input is plain JSON once its unset optional keys are dropped.
-    gateIfRun(tool, JSON.parse(JSON.stringify(input)), use);
