@@ -99,7 +99,7 @@ export function useTaskWrite(target: BoardTarget) {
   return async (task: Telescope.Task, change: Parameters<typeof taskUpdateInput>[1]) => {
     const result = await update({ environmentId, input: taskUpdateInput(task, change) });
     if (result._tag === "Success") {
-      const outcome = taskUpdateOutcome(result.value);
+      const outcome = taskUpdateOutcome(change.set ?? {}, result.value);
       if (outcome.kind === "overwrote") {
         const who = outcome.authors.map((id) => names(id) ?? "其他成员").join("、");
         toastManager.add({ type: "info", title: `覆盖了 ${who} 刚才的修改` });
@@ -113,6 +113,13 @@ export function useTaskWrite(target: BoardTarget) {
             children: "去决定",
             onClick: () => void navigate(decisionLink(outcome.decisionId)),
           },
+        });
+      if (outcome.kind === "kept")
+        toastManager.add({
+          ...STALE,
+          description: outcome.fields.includes("status")
+            ? `状态只能往前走，保留了「${TASK_STATUS[result.value.status].label}」。`
+            : "按规则保留了对方的改动。",
         });
       return true;
     }

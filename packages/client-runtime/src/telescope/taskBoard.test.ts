@@ -153,24 +153,39 @@ describe("task writes", () => {
     });
   });
 
-  it("tells an applied write from one that replaced someone's change, and from a conflict", () => {
-    expect(taskUpdateOutcome(task("t1", "done", 2))).toEqual({ kind: "applied" });
-    expect(taskUpdateOutcome({ ...task("t1", "done", 2), overwrote: [] })).toEqual({
+  it("tells an applied write from one that replaced someone's change, one a rule kept a newer value for, and a conflict", () => {
+    expect(taskUpdateOutcome({ status: "done" }, task("t1", "done", 2))).toEqual({
       kind: "applied",
     });
+    expect(
+      taskUpdateOutcome({ status: "done" }, { ...task("t1", "done", 2), overwrote: [] }),
+    ).toEqual({ kind: "applied" });
+    expect(taskUpdateOutcome({ ownerAgentId: null }, task("t1", "todo", 2))).toEqual({
+      kind: "applied",
+    });
+    expect(
+      taskUpdateOutcome({ status: "in_progress", title: "Task t1" }, task("t1", "done", 3)),
+    ).toEqual({ kind: "kept", fields: ["status"] });
     const at = "2026-11-07T00:00:00.000Z";
     const overwrote = [
       { key: "title", by: "member-bob", at },
       { key: "status", by: "member-bob", at },
       { key: "goalChain", by: "agent-1", at },
     ];
-    expect(taskUpdateOutcome({ ...task("t1", "done", 5), overwrote })).toEqual({
-      kind: "overwrote",
-      authors: ["member-bob", "agent-1"],
-    });
+    const marked = {
+      ...task("t1", "done", 5),
+      conflictDecisionId: Telescope.DecisionId.make("d0"),
+      overwrote,
+    };
+    expect(
+      taskUpdateOutcome({ title: "Task t1", status: "done", conflictDecisionId: null }, marked),
+    ).toEqual({ kind: "overwrote", authors: ["member-bob", "agent-1"] });
     const decisionId = Telescope.DecisionId.make("d1");
     expect(
-      taskUpdateOutcome({ ...task("t1", "needs_decision", 3), conflict: { decisionId } }),
+      taskUpdateOutcome(
+        { title: "Mine" },
+        { ...task("t1", "needs_decision", 3), conflict: { decisionId } },
+      ),
     ).toEqual({ kind: "conflict", decisionId });
   });
 

@@ -117,15 +117,25 @@ export function taskUpdateInput(
 export type TaskUpdateOutcome =
   | { readonly kind: "applied" }
   | { readonly kind: "overwrote"; readonly authors: ReadonlyArray<string> }
-  | { readonly kind: "conflict"; readonly decisionId: Telescope.DecisionId };
+  | { readonly kind: "conflict"; readonly decisionId: Telescope.DecisionId }
+  | { readonly kind: "kept"; readonly fields: ReadonlyArray<string> };
 
-/** Whether the write replaced someone's newer change, or, on an older server, opened a decision. */
+/**
+ * Whether the write replaced someone's newer change or, on an older server, opened a decision
+ * or kept a newer value by rule; that server answers `kept` only by returning a different value.
+ */
 export function taskUpdateOutcome(
+  set: Telescope.TaskFields,
   result: typeof Telescope.TaskUpdateResult.Type,
 ): TaskUpdateOutcome {
   if (result.conflict !== undefined) return { kind: "conflict", ...result.conflict };
   const authors = [...new Set(result.overwrote?.map((change) => change.by))];
-  return authors.length === 0 ? { kind: "applied" } : { kind: "overwrote", authors };
+  if (authors.length > 0) return { kind: "overwrote", authors };
+  const saved: Readonly<Record<string, unknown>> = result;
+  const fields = Object.entries(set)
+    .filter(([key, value]) => JSON.stringify(value ?? null) !== JSON.stringify(saved[key] ?? null))
+    .map(([key]) => key);
+  return fields.length === 0 ? { kind: "applied" } : { kind: "kept", fields };
 }
 
 export function isStaleTaskVersion(error: unknown): boolean {
