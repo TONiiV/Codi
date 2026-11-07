@@ -24,7 +24,7 @@ import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { SettingsRow } from "./settingsLayout";
 import { RedactedSensitiveText } from "./RedactedSensitiveText";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 const ProviderAuthTerminal = lazy(() => import("./ProviderAuthTerminal"));
 
@@ -176,14 +176,20 @@ export function ProviderAuthenticationSection({
       description={
         signedIn && !active && provider.auth.email?.trim() ? (
           <span>
-            Signed in as{" "}
-            <RedactedSensitiveText
-              key={provider.auth.email}
-              value={provider.auth.email}
-              ariaLabel={t("settings.text.toggleAccountEmailVisibility")}
-              revealTooltip={t("settings.text.clickToRevealEmail")}
-              hideTooltip={t("settings.text.clickToHideEmail")}
-              className="max-w-full truncate"
+            <Trans
+              i18nKey="settings.text.signedInAsEmail"
+              components={{
+                email: (
+                  <RedactedSensitiveText
+                    key={provider.auth.email}
+                    value={provider.auth.email}
+                    ariaLabel={t("settings.text.toggleAccountEmailVisibility")}
+                    revealTooltip={t("settings.text.clickToRevealEmail")}
+                    hideTooltip={t("settings.text.clickToHideEmail")}
+                    className="max-w-full truncate"
+                  />
+                ),
+              }}
             />
           </span>
         ) : (
@@ -353,9 +359,11 @@ export function ProviderAuthenticationSection({
         <>
           {interaction?.type === "deviceCode" ? (
             <p className="py-2 text-sm text-muted-foreground">
-              Enter code{" "}
-              <code className="select-all font-mono text-foreground">{interaction.userCode}</code>{" "}
-              {t("settings.text.inYourBrowser")}
+              <Trans
+                i18nKey="settings.text.enterCodeInYourBrowser"
+                values={{ code: interaction.userCode }}
+                components={{ code: <code className="select-all font-mono text-foreground" /> }}
+              />
             </p>
           ) : null}
           {interaction?.type === "terminal" ? (
