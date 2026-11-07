@@ -1483,7 +1483,17 @@ export function localizeSettingsSearchItem(
       : t(`settings.items.${item.id}`);
   const catalogTerms = keybindingCommand === null && item.titleKey === undefined;
   const terms = catalogTerms && item.searchTerms ? [t(`settings.itemTerms.${item.id}`)] : [];
-  return { ...item, title, searchTerms: [...(item.searchTerms ?? []), ...terms, section] };
+  return {
+    ...item,
+    title,
+    searchTerms: [
+      item.title,
+      SETTINGS_SECTION_LABELS[item.to],
+      ...(item.searchTerms ?? []),
+      ...terms,
+      section,
+    ],
+  };
 }
 
 export function filterAvailableSettingsSearchItems(
