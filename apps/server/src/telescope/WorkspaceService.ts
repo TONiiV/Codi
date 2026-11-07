@@ -141,6 +141,8 @@ export class WorkspaceService extends Context.Service<
     readonly unbind: Method<"telescope.project.unbind">;
     readonly bindings: Method<"telescope.project.listBindings">;
     readonly bindingSummary: Method<"telescope.project.bindingSummary">;
+    /** Ids of the invitation codes that still work, in every workspace. */
+    readonly liveInvitationIds: () => Effect.Effect<ReadonlySet<string>, Failure>;
   }
 >()("t3/telescope/WorkspaceService") {}
 
@@ -525,6 +527,14 @@ const make = Effect.gen(function* () {
     return { projects: [...projects.values()] };
   });
 
+  const liveInvitationIds = Effect.fn("WorkspaceService.liveInvitationIds")(function* () {
+    const at = yield* now;
+    const rows = yield* Effect.forEach(yield* db.allWorkspaceIds, (id) =>
+      db.select(id, "invitations", decodeInvitations, { accepted_at: null }),
+    );
+    return new Set(rows.flat().flatMap((row) => (row.expires_at > at ? [row.invitation_id] : [])));
+  });
+
   return WorkspaceService.of({
     create,
     list,
@@ -541,6 +551,7 @@ const make = Effect.gen(function* () {
     unbind,
     bindings,
     bindingSummary,
+    liveInvitationIds,
   });
 });
 

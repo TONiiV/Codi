@@ -1,6 +1,7 @@
 import {
   AuthAccessWriteScope,
   type AuthEnvironmentScope,
+  AuthTelescopeAdminScope,
   AuthTelescopeMemberScope,
   Telescope,
 } from "@t3tools/contracts";
@@ -11,7 +12,12 @@ import type * as EnvironmentAuth from "../auth/EnvironmentAuth.ts";
 import type * as WorkspaceService from "./WorkspaceService.ts";
 
 /** An invite never gives machine access (D147): its link pairs a device for Telescope only. */
-const INVITE_LINK_SCOPES: ReadonlyArray<AuthEnvironmentScope> = [AuthTelescopeMemberScope];
+const linkScopes = (role: Telescope.WorkspaceRole): ReadonlyArray<AuthEnvironmentScope> =>
+  role === "admin"
+    ? [AuthTelescopeMemberScope, AuthTelescopeAdminScope]
+    : [AuthTelescopeMemberScope];
+// The label names the invitation, so the link can be revoked when its code stops working.
+const LINK_LABEL = "Telescope invite ";
 
 export interface InviteServices {
   readonly workspaces: WorkspaceService.WorkspaceService["Service"];
@@ -30,9 +36,9 @@ export const invite = Effect.fn("Telescope.InviteLink.invite")(function* (
   const expiresAt = DateTime.makeUnsafe(invitation.expiresAt);
   const pairingLink = yield* auth
     .createPairingLink({
-      scopes: INVITE_LINK_SCOPES,
+      scopes: linkScopes(invitation.role),
       ttl: DateTime.distance(yield* DateTime.now, expiresAt),
-      label: "Telescope invite",
+      label: `${LINK_LABEL}${invitation.id}`,
     })
     .pipe(
       Effect.map((link): Telescope.InvitePairingLink => ({
@@ -56,3 +62,21 @@ export const invite = Effect.fn("Telescope.InviteLink.invite")(function* (
     );
   return { ...invitation, pairingLink };
 });
+
+/** Revokes every unused invite link whose code no longer works: voided, used or deleted. */
+const revokeDeadLinks = Effect.fn("Telescope.InviteLink.revokeDeadLinks")(
+  function* ({ workspaces, auth }: InviteServices) {
+    const live = yield* workspaces.liveInvitationIds();
+    const dead = (yield* auth.listPairingLinks()).filter(
+      ({ label }) => label?.startsWith(LINK_LABEL) && !live.has(label.slice(LINK_LABEL.length)),
+    );
+    yield* Effect.forEach(dead, (link) => auth.revokePairingLink(link.id), { discard: true });
+  },
+  Effect.catchCause((cause) => Effect.logWarning("Telescope invite links were not revoked", cause)),
+);
+
+/** Runs a change that can void or use invitation codes, then revokes the links they carried. */
+export const followCodes =
+  (services: InviteServices) =>
+  <A, E, R>(change: Effect.Effect<A, E, R>) =>
+    Effect.tap(change, () => revokeDeadLinks(services));

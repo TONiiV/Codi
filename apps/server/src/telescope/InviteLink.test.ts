@@ -7,6 +7,7 @@ import {
   AuthStandardClientScopes,
   AuthTelescopeAdminScope,
   AuthTelescopeMemberScope,
+  Telescope,
   WS_METHODS,
   WsRpcGroup,
 } from "@t3tools/contracts";
@@ -61,15 +62,33 @@ it.layer(layer)("Telescope invite links", (it) => {
         name: "Acme",
         displayName: "Olive",
       });
-      const invite = (caller: typeof owner) =>
-        InviteLink.invite({ workspaces, auth }, caller, { workspaceId, role: "viewer" });
+      const invite = (caller: typeof owner, role: Telescope.WorkspaceRole = "viewer") =>
+        InviteLink.invite({ workspaces, auth }, caller, { workspaceId, role });
+      const grantOf = (link: Telescope.InvitePairingLink) =>
+        auth
+          .listPairingLinks()
+          .pipe(
+            Effect.map((links) =>
+              links.find((grant) => link.status === "issued" && grant.id === link.id),
+            ),
+          );
+
+      for (const [role, scopes] of [
+        ["member", [AuthTelescopeMemberScope]],
+        ["project_lead", [AuthTelescopeMemberScope]],
+        ["admin", [AuthTelescopeMemberScope, AuthTelescopeAdminScope]],
+      ] as const) {
+        const issued = yield* invite(owner, role);
+        assert.deepStrictEqual((yield* grantOf(issued.pairingLink))?.permissions, scopes, role);
+      }
 
       const { pairingLink, role } = yield* invite(owner);
       assert.strictEqual(role, "viewer");
       assert.strictEqual(pairingLink.status, "issued");
       if (pairingLink.status !== "issued") return;
-      const grant = (yield* auth.listPairingLinks()).find((link) => link.id === pairingLink.id);
-      assert.deepStrictEqual(grant?.permissions, [AuthTelescopeMemberScope]);
+      assert.deepStrictEqual((yield* grantOf(pairingLink))?.permissions, [
+        AuthTelescopeMemberScope,
+      ]);
 
       const exchanged = yield* auth.exchangeBootstrapCredentialForAccessToken(
         pairingLink.credential,
@@ -96,6 +115,23 @@ it.layer(layer)("Telescope invite links", (it) => {
       const admin = { ...owner, scopes: [AuthTelescopeMemberScope, AuthTelescopeAdminScope] };
       assert.deepStrictEqual((yield* invite(admin)).pairingLink, { status: "owner_only" });
       assert.strictEqual((yield* auth.listPairingLinks()).length, before);
+
+      // The link stops working with its code: here its issuer stops being an admin.
+      const follow = InviteLink.followCodes({ workspaces, auth });
+      const device = { ...owner, sessionId: AuthSessionId.make("session-ada"), subject: "ada" };
+      const { code } = yield* invite(owner, "admin");
+      const ada = yield* follow(workspaces.accept(device, { code, displayName: "Ada" }));
+      const voided = (yield* invite(device)).pairingLink;
+      assert.strictEqual(voided.status, "issued");
+      if (voided.status !== "issued") return;
+      const demote = { workspaceId, subjectId: ada.subjectId, role: "member" } as const;
+      yield* follow(workspaces.setRole(owner, demote));
+      const refused = yield* auth
+        .exchangeBootstrapCredentialForAccessToken(voided.credential, undefined, {
+          deviceType: "desktop",
+        })
+        .pipe(Effect.flip);
+      assert.strictEqual(refused._tag, "ServerAuthInvalidCredentialError");
     }).pipe(Effect.scoped),
   );
 });
