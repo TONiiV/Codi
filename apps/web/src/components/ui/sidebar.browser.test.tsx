@@ -45,6 +45,15 @@ describe("Sidebar", () => {
     await vi.waitFor(() => expect(document.activeElement).toBe(trigger));
   });
 
+  it("does not keep focus on the trigger after a pointer click", async () => {
+    await page.viewport(1280, 800);
+    await using screen = await render(<Harness />, { router: false /* no routes involved */ });
+    const trigger = screen.container.querySelector<HTMLElement>('[data-slot="sidebar-trigger"]')!;
+
+    await userEvent.click(trigger);
+    expect(document.activeElement).not.toBe(trigger);
+  });
+
   it("abandons a rail drag when the sidebar collapses mid-drag", async () => {
     await page.viewport(1280, 800);
     const onResize = vi.fn();
