@@ -97,6 +97,10 @@ export class TelescopeDb extends Context.Service<
       decodeRows: RowsDecoder<A, R>,
       options: { readonly where: Row; readonly validAt: string | undefined },
     ) => Effect.Effect<A, PersistenceSqlError | PersistenceDecodeError, R>;
+    /** Deletes every memory of the workspace with its search index rows. */
+    readonly removeAllMemories: (
+      workspaceId: Telescope.WorkspaceId,
+    ) => Effect.Effect<void, PersistenceSqlError>;
     /** Adds one to `uses` in SQL, so concurrent searches do not overwrite each other's counts. */
     readonly markMemoriesRetrieved: (
       workspaceId: Telescope.WorkspaceId,
@@ -211,10 +215,22 @@ const make = Effect.gen(function* () {
     table: TelescopeTable,
     row: Row,
   ) {
-    yield* checkColumns(`TelescopeDb.insert.${table}`, row, "repository");
-    yield* sql`INSERT INTO ${tableName(table)} ${sql.insert({ ...row, workspace_id: workspaceId })}`.pipe(
-      Effect.mapError(toPersistenceSqlError(`TelescopeDb.insert.${table}`)),
+    const operation = `TelescopeDb.insert.${table}`;
+    yield* checkColumns(operation, row, "repository");
+    const values = { ...row, workspace_id: workspaceId };
+    // In the same statement, so a write that checked membership before its workspace was
+    // deleted adds nothing after the deletion.
+    const exists =
+      table === "workspaces"
+        ? sql``
+        : sql` WHERE EXISTS (SELECT 1 FROM telescope_workspaces WHERE workspace_id = ${workspaceId})`;
+    const inserted = yield* sql`INSERT INTO ${tableName(table)}
+      (${sql.csv(Object.keys(values).map((column) => sql`${sql(column)}`))})
+      SELECT ${sql.csv(Object.values(values).map((value) => sql`${value}`))}${exists} RETURNING 1`.pipe(
+      Effect.mapError(toPersistenceSqlError(operation)),
     );
+    if (inserted.length === 0)
+      return yield* new PersistenceSqlError({ operation, detail: "The workspace does not exist" });
   });
   const update = Effect.fn("TelescopeDb.update")(function* (
     workspaceId: Telescope.WorkspaceId,
@@ -286,6 +302,26 @@ const make = Effect.gen(function* () {
     return yield* decodeRows(rows).pipe(
       Effect.mapError(toPersistenceDecodeError("TelescopeDb.searchMemories")),
     );
+  });
+  // The index's delete trigger scans the whole index once per memory row, so it is set aside
+  // while the workspace's index rows go in one scan; the savepoint keeps it from being missing.
+  const removeAllMemories = Effect.fn("TelescopeDb.removeAllMemories")(function* (
+    workspaceId: Telescope.WorkspaceId,
+  ) {
+    yield* sql
+      .withTransaction(
+        Effect.gen(function* () {
+          const [trigger] = yield* sql<{ readonly sql: string }>`SELECT sql FROM sqlite_master
+            WHERE type = 'trigger' AND name = 'telescope_memories_fts_delete'`;
+          if (trigger !== undefined) {
+            yield* sql`DROP TRIGGER telescope_memories_fts_delete`;
+            yield* sql`DELETE FROM telescope_memories_fts WHERE workspace_id = ${workspaceId}`;
+          }
+          yield* sql`DELETE FROM telescope_memories WHERE workspace_id = ${workspaceId}`;
+          if (trigger !== undefined) yield* sql.unsafe(trigger.sql);
+        }),
+      )
+      .pipe(Effect.mapError(toPersistenceSqlError("TelescopeDb.removeAllMemories")));
   });
   const markMemoriesRetrieved = Effect.fn("TelescopeDb.markMemoriesRetrieved")(function* (
     workspaceId: Telescope.WorkspaceId,
@@ -380,6 +416,7 @@ const make = Effect.gen(function* () {
     update,
     remove,
     searchMemories,
+    removeAllMemories,
     markMemoriesRetrieved,
     latestRunForThread,
     workspaceIdsOf,
