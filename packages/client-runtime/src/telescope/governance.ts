@@ -38,6 +38,59 @@ export function budgetUsageText(budget: Telescope.Budget | undefined): string {
     : `已用 ${used} / ${limit} 次调用${used >= limit ? "，已用完" : ""}`;
 }
 
+export type GovernanceRow =
+  | {
+      readonly scope: "company" | "project" | "person";
+      readonly scopeId: string;
+      readonly title: string;
+    }
+  | { readonly scope: "agent"; readonly scopeId: Telescope.AgentId; readonly title: string };
+
+/**
+ * Budget rows in page order: company, bound projects, members, agents.
+ * A project bound from two environments is one budget, so it gets one row.
+ * An older server sends no `agents`; then the caller's own and company lists stand in.
+ */
+export function governanceRows(
+  state: GovernanceState,
+  page: {
+    readonly company: { readonly id: string; readonly title: string };
+    readonly projects: ReadonlyArray<{ readonly value: string; readonly label: string }>;
+    readonly members: ReadonlyArray<Telescope.Member>;
+    readonly self: Telescope.SubjectId;
+    readonly fallbackAgents: ReadonlyArray<Telescope.GovernanceAgent>;
+  },
+): ReadonlyArray<GovernanceRow> {
+  const firstOf = <T>(items: ReadonlyArray<T>, key: (item: T) => string) =>
+    items.filter((item, index) => items.findIndex((other) => key(other) === key(item)) === index);
+  const agents = firstOf(state.agents ?? page.fallbackAgents, (agent) => agent.id);
+  const ownerName = (owner: Telescope.SubjectId) =>
+    page.members.find((member) => member.subjectId === owner)?.displayName ?? owner;
+  return [
+    { scope: "company", scopeId: page.company.id, title: page.company.title },
+    ...firstOf(page.projects, (project) => project.value).map((project): GovernanceRow => ({
+      scope: "project",
+      scopeId: project.value,
+      title: project.label,
+    })),
+    ...page.members
+      .filter((member) => member.revokedAt === undefined)
+      .map((member): GovernanceRow => ({
+        scope: "person",
+        scopeId: member.subjectId,
+        title: member.displayName,
+      })),
+    ...agents.map((agent): GovernanceRow => ({
+      scope: "agent",
+      scopeId: agent.id,
+      title:
+        agent.ownerSubjectId === null || agent.ownerSubjectId === page.self
+          ? agent.name
+          : `${ownerName(agent.ownerSubjectId)} 的 ${agent.name}`,
+    })),
+  ];
+}
+
 /** Blank removes the limit; anything but a whole number from 0 up is null. */
 export function parseCallLimit(text: string): { readonly limitCalls?: number } | null {
   const trimmed = text.trim();

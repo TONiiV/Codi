@@ -21,7 +21,7 @@ export const GrantPower = Schema.Literals([
 ]);
 export type GrantPower = typeof GrantPower.Type;
 
-/** MCP tools the Telescope tool gateway checks; each needs one power. */
+/** MCP tools the Telescope tool gateway checks; each needs at most one power. */
 export const GatewayTool = Schema.Literals([
   "open_ticket",
   "dispatch_worker",
@@ -40,6 +40,8 @@ export const GatewayTool = Schema.Literals([
   "delegation_list",
   "delegation_report",
   "delegation_cancel",
+  "memory_search",
+  "memory_write",
 ]);
 export type GatewayTool = typeof GatewayTool.Type;
 
@@ -90,7 +92,8 @@ export const AuditEntry = Schema.Struct({
   agentId: AgentId,
   onBehalfOf: OnBehalfOf,
   projectId: Schema.optionalKey(ProjectId),
-  power: GrantPower,
+  /** Absent for a tool that needs no power. */
+  power: Schema.optionalKey(GrantPower),
   tool: Schema.optionalKey(Text),
   argsRedacted: Schema.optionalKey(Schema.Json),
   outcome: AuditOutcome,
