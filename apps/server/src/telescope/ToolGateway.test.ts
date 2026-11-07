@@ -267,7 +267,7 @@ it.layer(layer)("Telescope tool gateway", (it) => {
           chiefId,
           "delegate",
           "denied",
-          "Only an agent without a project hands work to a Chief Agent. Report back to the agent that gave you this task.",
+          "Only an agent without a project hands work to a Chief Agent. Do your own project's work with your Workers (`dispatch_worker`); report work outside your project back with `delegation_report`.",
         ],
       );
     }),

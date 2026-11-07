@@ -92,6 +92,14 @@ import {
 } from "./grant.ts";
 import { DashboardSummary } from "./dashboard.ts";
 import {
+  Delegation,
+  DelegationCancelInput,
+  DelegationCancelResult,
+  DelegationGetInput,
+  DelegationListInput,
+  DelegationListResult,
+} from "./a2a.ts";
+import {
   RoutingResolution,
   RoutingResolveInput,
   RoutingRuleDeleteInput,
@@ -155,6 +163,9 @@ export const WS_METHODS = {
   routingSet: "telescope.routing.set",
   routingDelete: "telescope.routing.delete",
   routingResolve: "telescope.routing.resolve",
+  delegationList: "telescope.delegation.list",
+  delegationGet: "telescope.delegation.get",
+  delegationCancel: "telescope.delegation.cancel",
 } as const;
 
 const error = Schema.Union([WorkspaceError, EnvironmentAuthorizationError]);
@@ -266,4 +277,10 @@ export const RoutingRpcs = [
   make(WS_METHODS.routingSet, RoutingRuleSetInput, RoutingRule),
   make(WS_METHODS.routingDelete, RoutingRuleDeleteInput, Schema.Struct({})),
   make(WS_METHODS.routingResolve, RoutingResolveInput, RoutingResolution),
+] as const;
+
+export const DelegationRpcs = [
+  make(WS_METHODS.delegationList, DelegationListInput, DelegationListResult),
+  make(WS_METHODS.delegationGet, DelegationGetInput, Delegation),
+  make(WS_METHODS.delegationCancel, DelegationCancelInput, DelegationCancelResult),
 ] as const;

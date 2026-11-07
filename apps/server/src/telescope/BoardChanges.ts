@@ -4,6 +4,7 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Queue from "effect/Queue";
+import type * as Scope from "effect/Scope";
 import * as SqlClient from "effect/sql/SqlClient";
 import * as Stream from "effect/Stream";
 
@@ -31,7 +32,8 @@ const coalesce = (changes: ReadonlyArray<Telescope.BoardChange>) => {
 };
 
 interface Watcher {
-  readonly workspaceId: Telescope.WorkspaceId;
+  /** Undefined for a server listener, which hears every workspace. */
+  readonly workspaceId: Telescope.WorkspaceId | undefined;
   readonly writes: Queue.Queue<ReadonlyArray<Telescope.BoardChange>, Telescope.WorkspaceError>;
 }
 
@@ -58,6 +60,11 @@ export class BoardChanges extends Context.Service<
       Telescope.BoardWatchItem,
       Telescope.WorkspaceError | PersistenceSqlError | PersistenceDecodeError
     >;
+    /**
+     * Every workspace's notices, for server listeners: no membership, no backlog limit. The
+     * listener is registered when this runs, so a read after it misses no later write.
+     */
+    readonly changes: Effect.Effect<Stream.Stream<Telescope.BoardChange>, never, Scope.Scope>;
   }
 >()("t3/telescope/BoardChanges") {}
 
@@ -73,7 +80,10 @@ const make = Effect.gen(function* () {
   const send = (changes: ReadonlyArray<Telescope.BoardChange>) =>
     Effect.sync(() => {
       for (const watcher of watchers) {
-        const mine = changes.filter((change) => change.workspaceId === watcher.workspaceId);
+        const mine = changes.filter(
+          (change) =>
+            watcher.workspaceId === undefined || change.workspaceId === watcher.workspaceId,
+        );
         if (mine.length > 0 && !Queue.offerUnsafe(watcher.writes, mine))
           Queue.failCauseUnsafe(watcher.writes, Cause.fail(behind));
       }
@@ -92,6 +102,19 @@ const make = Effect.gen(function* () {
     const result = yield* Effect.provideService(write, PendingChanges, pending);
     if (pending.length > 0) yield* sql.afterCommit(send(pending));
     return result;
+  });
+
+  const changes = Effect.gen(function* () {
+    const writes = yield* Queue.unbounded<
+      ReadonlyArray<Telescope.BoardChange>,
+      Telescope.WorkspaceError
+    >();
+    const watcher: Watcher = { workspaceId: undefined, writes };
+    yield* Effect.acquireRelease(
+      Effect.sync(() => watchers.add(watcher)),
+      () => Effect.sync(() => watchers.delete(watcher)),
+    );
+    return Stream.fromQueue(writes).pipe(Stream.flattenIterable, Stream.orDie);
   });
 
   const watch: BoardChanges["Service"]["watch"] = (caller, { workspaceId }) => {
@@ -117,7 +140,7 @@ const make = Effect.gen(function* () {
     );
   };
 
-  return BoardChanges.of({ publish, batch, watch });
+  return BoardChanges.of({ publish, batch, watch, changes });
 });
 
 export const layer = Layer.effect(BoardChanges, make).pipe(Layer.provide(WorkspaceService.layer));

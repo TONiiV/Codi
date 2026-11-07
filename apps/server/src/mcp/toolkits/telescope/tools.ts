@@ -1,4 +1,4 @@
-import { OrchestratorMcpFailure, Telescope } from "@t3tools/contracts";
+import { OrchestratorMcpFailure, Telescope, ThreadId } from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
 import * as Struct from "effect/Struct";
 import { Tool, Toolkit } from "effect/ai";
@@ -8,6 +8,7 @@ import * as AgentService from "../../../telescope/AgentService.ts";
 import * as DelegationService from "../../../telescope/DelegationService.ts";
 import * as TaskBoardService from "../../../telescope/TaskBoardService.ts";
 import * as ToolGateway from "../../../telescope/ToolGateway.ts";
+import * as WorkerDispatch from "../../../telescope/WorkerDispatch.ts";
 import * as McpInvocationContext from "../../McpInvocationContext.ts";
 
 const dependencies = [
@@ -17,6 +18,7 @@ const dependencies = [
   TaskBoardService.TaskBoardService,
   AgentService.AgentService,
   DelegationService.DelegationService,
+  WorkerDispatch.WorkerDispatch,
 ];
 /** The thread's Telescope run names the workspace, so no tool takes one. */
 const boardTool = <
@@ -160,6 +162,20 @@ const DelegateTool = boardTool("delegate", {
   readonly: false,
 });
 
+const DispatchWorkerTool = boardTool("dispatch_worker", {
+  title: "Open a Worker",
+  description:
+    "Open a Worker for a task delegated to you (`delegationId`): a new thread in your project whose only message is `brief`, so state the goal, constraints, acceptance criteria and `goalChain`; never paste the chat. Returns the Worker task's `delegationId` and the thread's `link`. When the Worker's turn ends you get a new turn; do not wait for it. Then close the Worker task with `delegation_report` and report on your own task with the Worker thread's link.",
+  parameters: Schema.Struct({ ...DelegationIdInput, brief: Telescope.DelegationBrief }),
+  success: Schema.Struct({
+    delegationId: Telescope.DelegationId,
+    state: Telescope.A2ATaskState,
+    threadId: Schema.optionalKey(ThreadId),
+    link: Schema.optionalKey(Schema.String),
+  }),
+  readonly: false,
+});
+
 const DelegationListTool = boardTool("delegation_list", {
   title: "List delegations",
   description: `List the delegations you sent and the ones sent to you, oldest first, with their briefs, states and reports. ${DELEGATION_TEXT}`,
@@ -171,11 +187,13 @@ const DelegationListTool = boardTool("delegation_list", {
 const DelegationReportTool = boardTool("delegation_report", {
   title: "Report on a delegation",
   description:
-    "Report on a delegation sent to you, once its work is done (COMPLETED) or cannot be done (FAILED, say why in `report.blockedOn`). The agent that sent it reads the report. `report.result`: the outcome in a few lines plus the link of each Worker thread; never paste a Worker's transcript. `decisions`: what you decided on the way.",
+    "Report on a delegation sent to you, once its work is done (COMPLETED) or cannot be done (FAILED, say why in `report.blockedOn`). The agent that sent it reads the report. `report.result`: the outcome in a few lines plus the link of each Worker thread; never paste a Worker's transcript. `decisions`: what you decided on the way. When the work needs your member to choose (INPUT_REQUIRED: `question` plus at least one choice in `options`) or to approve something beyond your powers (AUTH_REQUIRED: `question`), put what blocks it in `report.blockedOn`: it becomes a 需要你定 item, and the answer comes back to you on this delegation id. Raise a Worker's question on the Worker's delegation.",
   parameters: Schema.Struct({
     ...DelegationIdInput,
-    state: Schema.Literals(["COMPLETED", "FAILED"]),
+    state: Schema.Literals(["COMPLETED", "FAILED", "INPUT_REQUIRED", "AUTH_REQUIRED"]),
     report: Telescope.DelegationReport,
+    question: Schema.optionalKey(Telescope.DecisionCreateInput.fields.title),
+    options: Schema.optionalKey(Schema.Array(Telescope.Text)),
   }),
   success: DelegationSummary,
   readonly: false,
@@ -202,6 +220,7 @@ export const TelescopeToolkit = Toolkit.make(
   DecisionRecordTool,
   AgentListTool,
   DelegateTool,
+  DispatchWorkerTool,
   DelegationListTool,
   DelegationReportTool,
   DelegationCancelTool,

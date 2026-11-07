@@ -221,6 +221,7 @@ describe("searchSettings", () => {
       ["预算与急停", "telescope-governance"],
       ["路由规则", "telescope-routing"],
       ["项目规则", "telescope-project-rules"],
+      ["色盲", "diff-color-scheme"],
     ] as const) {
       expect(searchSettings(title, zhItems)[0]?.id, title).toBe(id);
     }

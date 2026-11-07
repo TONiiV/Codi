@@ -62,7 +62,7 @@ const MemorySourceRow = Schema.Struct({
   source_json: Schema.fromJsonString(Telescope.Memory.fields.source),
 });
 
-const decodeRuns = Schema.decodeUnknownEffect(Schema.Array(RunRow));
+export const decodeRuns = Schema.decodeUnknownEffect(Schema.Array(RunRow));
 const decodeCalls = Schema.decodeUnknownEffect(Schema.Array(CallRow));
 const decodeMemorySources = Schema.decodeUnknownEffect(Schema.Array(MemorySourceRow));
 // The repository writes workspace_id itself and refuses rows that carry it.
@@ -438,14 +438,18 @@ const make = Effect.gen(function* () {
     return { runs: rows.map(toRun) };
   });
 
+  // Call arguments carry briefs and ticket text: only the run's own member and admins read them.
   const calls = Effect.fn("RunRecordService.calls")(function* (caller: Caller, run: RunRef) {
-    yield* requireMember(run.workspaceId, caller);
-    yield* runRow(run);
+    const { self } = yield* requireMember(run.workspaceId, caller);
+    const ownMember = (yield* runRow(run)).on_behalf_of_json[0];
+    const seesArgs =
+      self.subjectId === ownMember || (self.role === "admin" && !("runId" in caller));
     const where = { run_id: run.runId };
     const rows = yield* db.select(run.workspaceId, "run_calls", decodeCalls, where, {
       orderBy: ["seq"],
     });
-    return { calls: rows.map(toCall) };
+    const visible = rows.map(toCall);
+    return { calls: seesArgs ? visible : visible.map(Struct.omit(["args"])) };
   });
 
   const runsForMemory = Effect.fn("RunRecordService.runsForMemory")(function* (
