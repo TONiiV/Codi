@@ -682,12 +682,23 @@ describe("ContextPackService", () => {
       expect(Object.keys(opencode.mcp).toSorted()).toEqual(["cx", "gh", "oc"]);
       const warnings: Array<string> = [];
       const capture = Logger.make(({ message }) => void warnings.push(String(message)));
-      yield* service
-        .import(pack, dir.at("home2"), "cursor", false, "home")
-        .pipe(Effect.provide(Logger.layer([capture], { mergeWithExisting: false })));
-      expect(warnings.join("\n")).toContain(
+      const withEnv = (env: Record<string, string>) =>
+        Effect.provide(
+          Layer.merge(
+            ConfigProvider.layer(ConfigProvider.fromEnv({ env })),
+            Logger.layer([capture], { mergeWithExisting: false }),
+          ),
+        );
+      // Each override is read only for the harness that uses it, so only that one warns.
+      const elsewhere = { CODEX_HOME: dir.at("elsewhere"), XDG_CONFIG_HOME: dir.at("elsewhere") };
+      for (const harness of ["claude", "cursor"] as const) {
+        yield* service
+          .import(pack, dir.at("home2"), harness, false, "home")
+          .pipe(withEnv(elsewhere));
+      }
+      expect(warnings).toEqual([
         `Left out the instructions: they go in Cursor Settings > Rules, not in a file under ${dir.at("home2")}. Paste the text of ${pack}/instructions.md there.`,
-      );
+      ]);
       expect(yield* dir.read("home2/.cursor/skills/review/SKILL.md")).toBe("Review.\n");
       expect(JSON.parse(yield* dir.read("home2/.cursor/mcp.json")).mcpServers.gh).toEqual({
         command: "gh-mcp",
@@ -711,17 +722,8 @@ describe("ContextPackService", () => {
       ] as const;
       warnings.length = 0;
       for (const [home, harness, name, value, files] of overrides) {
-        const env = { [name]: `${dir.root}/${value}` };
-        yield* service
-          .import(pack, dir.at(home), harness, false, "home")
-          .pipe(
-            Effect.provide(
-              Layer.merge(
-                ConfigProvider.layer(ConfigProvider.fromEnv({ env })),
-                Logger.layer([capture], { mergeWithExisting: false }),
-              ),
-            ),
-          );
+        const env = { ...elsewhere, [name]: `${dir.root}/${value}` };
+        yield* service.import(pack, dir.at(home), harness, false, "home").pipe(withEnv(env));
         expect(yield* dir.read(`${files}/AGENTS.md`), `${name}=${value}`).toContain(
           "Prefer small diffs.",
         );

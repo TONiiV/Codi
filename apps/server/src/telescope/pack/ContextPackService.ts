@@ -143,11 +143,16 @@ const make = Effect.gen(function* () {
     return fallback;
   });
 
-  const harnessesFor = Effect.fnUntraced(function* (scope: PackScope, dir: string) {
+  // Only the overrides the used harnesses read are resolved, so only they can warn.
+  const harnessesFor = Effect.fnUntraced(function* (
+    scope: PackScope,
+    dir: string,
+    used: ReadonlyArray<HarnessName>,
+  ) {
     if (scope === "project") return PROJECT_HARNESSES;
     return homeHarnesses(
-      yield* homeDirFrom(dir, "CODEX_HOME", ".codex"),
-      yield* homeDirFrom(dir, "XDG_CONFIG_HOME", ".config"),
+      used.includes("codex") ? yield* homeDirFrom(dir, "CODEX_HOME", ".codex") : ".codex",
+      used.includes("opencode") ? yield* homeDirFrom(dir, "XDG_CONFIG_HOME", ".config") : ".config",
     );
   });
 
@@ -173,7 +178,7 @@ const make = Effect.gen(function* () {
     scope: PackScope = "project",
   ) {
     const root = yield* fs.realPath(path.resolve(dir));
-    const harnesses = yield* harnessesFor(scope, path.resolve(dir));
+    const harnesses = yield* harnessesFor(scope, path.resolve(dir), EXPORT_ORDER);
     const ordered = EXPORT_ORDER.map((name) => harnesses[name]);
     yield* assertApart(path.resolve(outDir), root, scope, ordered);
     let instructions = "";
@@ -207,7 +212,7 @@ const make = Effect.gen(function* () {
     merge: boolean,
     scope: PackScope = "project",
   ) {
-    const target = (yield* harnessesFor(scope, path.resolve(dir)))[harness];
+    const target = (yield* harnessesFor(scope, path.resolve(dir), [harness]))[harness];
     yield* assertApart(path.resolve(packDir), path.resolve(dir), scope, [target]);
     const pack = yield* readPackDir(path.resolve(packDir));
     yield* target.write(pack, path.resolve(dir), merge);
