@@ -167,13 +167,14 @@ const fail = (reason: Telescope.WorkspaceError["reason"], message: string) =>
   Effect.fail(new Telescope.WorkspaceError({ reason, message }));
 const notFound = () => fail("not_found", "Agent not found.");
 
-type Caller = WorkspaceService.Caller;
+// Only `listMine` (the agent_list tool) serves runs, so a run never creates or changes an agent.
+type Caller = WorkspaceService.SessionCaller;
 type AgentId = Telescope.Agent["id"];
 type Failure = Telescope.WorkspaceError | PersistenceSqlError | PersistenceDecodeError;
 type Rpcs = (typeof Telescope.AgentRpcs)[number];
 type In<Tag extends Rpcs["_tag"]> = Rpc.Payload<Rpc.ExtractTag<Rpcs, Tag>>;
-type Method<Tag extends Rpcs["_tag"]> = (
-  caller: Caller,
+type Method<Tag extends Rpcs["_tag"], C = Caller> = (
+  caller: C,
   input: In<Tag>,
 ) => Effect.Effect<Rpc.Success<Rpc.ExtractTag<Rpcs, Tag>>, Failure>;
 
@@ -181,7 +182,7 @@ type Method<Tag extends Rpcs["_tag"]> = (
 export class AgentService extends Context.Service<
   AgentService,
   {
-    readonly listMine: Method<"telescope.agent.listMine">;
+    readonly listMine: Method<"telescope.agent.listMine", WorkspaceService.Caller>;
     readonly get: Method<"telescope.agent.get">;
     readonly createCustom: Method<"telescope.agent.createCustom">;
     readonly update: Method<"telescope.agent.update">;
@@ -251,7 +252,7 @@ const make = Effect.gen(function* () {
       .select(workspaceId, "agents", decodeAgents, { agent_id: agentId })
       .pipe(Effect.map((rows) => (rows[0] === undefined ? undefined : toAgent(rows[0]))));
 
-  const boundProjectIds = (caller: Caller, workspaceId: Telescope.WorkspaceId) =>
+  const boundProjectIds = (caller: WorkspaceService.Caller, workspaceId: Telescope.WorkspaceId) =>
     workspaces
       .bindings(caller, { workspaceId })
       .pipe(Effect.map(({ bindings }) => bindings.map((binding) => binding.projectId)));
@@ -290,7 +291,7 @@ const make = Effect.gen(function* () {
   });
 
   const listMine = Effect.fn("AgentService.listMine")(function* (
-    caller: Caller,
+    caller: WorkspaceService.Caller,
     { workspaceId }: In<"telescope.agent.listMine">,
   ) {
     const { self } = yield* workspaces.get(caller, { workspaceId });

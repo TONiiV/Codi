@@ -37,7 +37,7 @@ const layer = Layer.mergeAll(
   ),
 );
 
-const session = (name: string): WorkspaceService.Caller => ({
+const session = (name: string): WorkspaceService.SessionCaller => ({
   sessionId: AuthSessionId.make(`session-${name}`),
   subject: "one-time-token",
 });
@@ -142,6 +142,7 @@ it.layer(layer)("Telescope tool gateway", (it) => {
         runId,
         agentId: chiefId,
         memberId: beaId,
+        onBehalfOf: [beaId],
         projectId: web,
       });
       assert.strictEqual(yield* denial("merge_pr"), "forbidden");
@@ -195,7 +196,7 @@ it.layer(layer)("Telescope tool gateway", (it) => {
 
   it.effect("stops an agent at its next tool call and resumes it", () =>
     Effect.gen(function* () {
-      const { workspaceId, chiefId, gateway, call, denial, audit } = yield* setup;
+      const { workspaceId, chiefId, runId, gateway, call, denial, audit } = yield* setup;
       const { agents: mine } = yield* (yield* AgentService.AgentService).listMine(as.bea, {
         workspaceId,
       });
@@ -243,6 +244,19 @@ it.layer(layer)("Telescope tool gateway", (it) => {
       );
       const hidden = yield* gateway.governance(as.bea, { workspaceId }).pipe(Effect.flip);
       assert.strictEqual(hidden._tag === "TelescopeWorkspaceError" && hidden.reason, "forbidden");
+      const ownerRun = { runId, workspaceId, memberId: WorkspaceService.OWNER_MEMBER_ID };
+      const asRun = yield* Effect.all([
+        Effect.flip(gateway.setKillSwitch(ownerRun, stop("running"))),
+        Effect.flip(gateway.governance(ownerRun, { workspaceId })),
+      ]);
+      assert.deepStrictEqual(
+        asRun.map((error) => error._tag === "TelescopeWorkspaceError" && error.reason),
+        ["forbidden", "forbidden"],
+      );
+      assert.deepStrictEqual(
+        (yield* gateway.governance(as.ann, { workspaceId })).killSwitches,
+        killSwitches,
+      );
       yield* gateway.setKillSwitch(as.ann, stop("running"));
       yield* call("open_ticket");
       yield* viaCall;

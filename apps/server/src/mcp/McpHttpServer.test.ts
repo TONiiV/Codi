@@ -37,8 +37,11 @@ import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
 import * as Sqlite from "../persistence/Sqlite.ts";
 import * as ManagedPolicy from "../policy/ManagedPolicy.ts";
 import { runMigrations } from "../persistence/Migrations.ts";
+import * as AgentService from "../telescope/AgentService.ts";
 import * as MemoryService from "../telescope/MemoryService.ts";
+import * as TaskBoardService from "../telescope/TaskBoardService.ts";
 import * as TelescopeDb from "../telescope/TelescopeDb.ts";
+import * as ToolGateway from "../telescope/ToolGateway.ts";
 import * as WorkspaceService from "../telescope/WorkspaceService.ts";
 
 import * as DeviceService from "../device/DeviceService.ts";
@@ -56,6 +59,7 @@ import * as PreviewAutomationBroker from "./PreviewAutomationBroker.ts";
 import { OrchestratorToolkit } from "./toolkits/orchestrator/tools.ts";
 import { PreviewToolkit } from "./toolkits/preview/tools.ts";
 import { ProjectToolkit } from "./toolkits/project/tools.ts";
+import { TelescopeToolkit } from "./toolkits/telescope/tools.ts";
 
 const environmentId = EnvironmentId.make("environment-mcp-test");
 const threadId = ThreadId.make("thread-mcp-test");
@@ -1337,7 +1341,7 @@ it.effect("lists pull request watch tools only to threads that are not delegated
   ).pipe(Effect.provide(NodeHttpServer.layerTest)),
 );
 
-it.effect("lists memory tools only to threads with an open Telescope run", () =>
+it.effect("lists memory and Telescope tools only to threads with an open Telescope run", () =>
   Effect.scoped(
     Effect.gen(function* () {
       const scopeFor = (token: string): McpInvocationContext.McpThreadInvocationScope => ({
@@ -1359,6 +1363,9 @@ it.effect("lists memory tools only to threads with an open Telescope run", () =>
         TelescopeDb.layer,
         WorkspaceService.layer,
         MemoryService.layer,
+        ToolGateway.layer,
+        TaskBoardService.layer,
+        AgentService.layer,
       ).pipe(
         Layer.provideMerge(Layer.merge(database, NodeCrypto.layer)),
         Layer.provide(
@@ -1368,7 +1375,9 @@ it.effect("lists memory tools only to threads with an open Telescope run", () =>
         ),
       );
       const telescopeContext = yield* Layer.build(telescope);
-      const serverLayer = McpHttpServer.layerMcpTransport(McpHttpServer.layerMemoryToolkit).pipe(
+      const serverLayer = McpHttpServer.layerMcpTransport(
+        Layer.merge(McpHttpServer.layerMemoryToolkit, McpHttpServer.layerTelescopeToolkit),
+      ).pipe(
         Layer.provide(ServerSettings.layerTest()),
         Layer.provide(
           Layer.mock(McpSessionRegistry.McpSessionRegistry)({
@@ -1476,7 +1485,11 @@ it.effect("lists memory tools only to threads with an open Telescope run", () =>
       yield* addAgent("agent-alice");
       yield* openRun("run-1", "agent-alice", "thread-telescope");
       const telescopeRun = yield* rpcAs("telescope");
-      expect(yield* listed(telescopeRun)).toEqual(["memory_search", "memory_write"]);
+      expect(yield* listed(telescopeRun)).toEqual([
+        "memory_search",
+        "memory_write",
+        ...Object.keys(TelescopeToolkit.tools),
+      ]);
       expect((yield* write(telescopeRun)).result?.structuredContent).toMatchObject({
         memory: { agentId: "agent-alice", text: "样机周五交付" },
       });
@@ -1504,6 +1517,8 @@ it.effect("lists memory tools only to threads with an open Telescope run", () =>
       yield* db.update(workspace.id, "runs", { finished_at: at }, { run_id: "run-1" });
       expect(yield* listed(telescopeRun)).toEqual([]);
       expect((yield* write(telescopeRun)).error?.message).toContain("not found");
+      const ticketList = { name: "ticket_list", arguments: {} };
+      expect((yield* telescopeRun("tools/call", ticketList)).error?.message).toContain("not found");
     }),
   ).pipe(Effect.provide(NodeHttpServer.layerTest)),
 );

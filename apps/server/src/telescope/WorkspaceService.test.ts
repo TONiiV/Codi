@@ -6,6 +6,7 @@ import {
   EnvironmentId,
   EventId,
   ProjectId,
+  Telescope,
 } from "@t3tools/contracts";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
@@ -39,16 +40,21 @@ const layer = Layer.mergeAll(
   ),
 );
 
-const session = (name: string, proofKeyThumbprint?: string): WorkspaceService.Caller => ({
+const session = (name: string, proofKeyThumbprint?: string): WorkspaceService.SessionCaller => ({
   sessionId: AuthSessionId.make(`session-${name}`),
   subject: "one-time-token",
   ...(proofKeyThumbprint === undefined ? {} : { proofKeyThumbprint }),
 });
-const desktop = (name: string, subject = "desktop-bootstrap"): WorkspaceService.Caller => ({
+const desktop = (name: string, subject = "desktop-bootstrap"): WorkspaceService.SessionCaller => ({
   sessionId: AuthSessionId.make(`session-${name}`),
   subject,
 });
 const OWNER = WorkspaceService.OWNER_MEMBER_ID;
+const runOf = (workspaceId: Telescope.WorkspaceId, memberId: string): WorkspaceService.Caller => ({
+  runId: Telescope.AgentRunId.make(`run-${memberId}`),
+  workspaceId,
+  memberId,
+});
 const seedProject = (projectId: ProjectId) =>
   ProjectStore.ProjectStoreV2.pipe(
     Effect.flatMap((projects) =>
@@ -213,7 +219,10 @@ it.layer(layer)("WorkspaceService", (it) => {
       );
 
       yield* service.bind(a, { ...binding, leadSubjectId: bob.subjectId });
+      const bobRun = runOf(workspaceId, bob.subjectId);
+      assert.deepStrictEqual((yield* service.get(bobRun, { workspaceId })).self, bob);
       yield* service.revoke(a, { workspaceId, subjectId: bob.subjectId });
+      assert.strictEqual(yield* reasonOf(service.get(bobRun, { workspaceId })), "forbidden");
       assert.deepStrictEqual((yield* service.bindings(a, { workspaceId })).bindings, [binding]);
       assert.strictEqual(yield* reasonOf(service.members(b, { workspaceId })), "forbidden");
       assert.deepStrictEqual((yield* service.list(b, {})).workspaces, []);
@@ -349,6 +358,26 @@ it.layer(layer)("WorkspaceService", (it) => {
         yield* reasonOf(service.accept(launch2, { code: code.code, displayName: "Dev" })),
         "conflict",
       );
+
+      const run = runOf(desk.id, OWNER);
+      assert.strictEqual((yield* service.get(run, { workspaceId: desk.id })).self.subjectId, OWNER);
+      const before = yield* service.list(launch2, {});
+      const companyMembers = yield* service.members(paired, { workspaceId: company.id });
+      assert.deepStrictEqual(
+        [
+          yield* reasonOf(service.get(run, { workspaceId: company.id })),
+          yield* reasonOf(service.invite(run, { workspaceId: desk.id, role: "member" })),
+          yield* reasonOf(service.create(run, { kind: "personal", name: "Run", displayName: "R" })),
+          yield* reasonOf(service.accept(run, { code: code.code, displayName: "Run" })),
+        ],
+        ["forbidden", "forbidden", "forbidden", "forbidden"],
+      );
+      assert.deepStrictEqual(yield* service.list(launch2, {}), before);
+      assert.deepStrictEqual(
+        yield* service.members(paired, { workspaceId: company.id }),
+        companyMembers,
+      );
+      yield* service.accept(session("later"), { code: code.code, displayName: "Later" });
     }),
   );
 

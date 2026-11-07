@@ -25,7 +25,7 @@ const layer = Layer.mergeAll(TelescopeDb.layer, WorkspaceService.layer, MemorySe
   ),
 );
 
-const session = (name: string): WorkspaceService.Caller => ({
+const session = (name: string): WorkspaceService.SessionCaller => ({
   sessionId: AuthSessionId.make(`session-${name}`),
   subject: "one-time-token",
 });

@@ -13,11 +13,21 @@ import * as RunRecordService from "./RunRecordService.ts";
 import * as TelescopeDb from "./TelescopeDb.ts";
 import * as WorkspaceService from "./WorkspaceService.ts";
 
+// Reading the board needs openTickets too, so an agent without it sees only its own brief.
 const TOOL_POWERS: Readonly<Record<Telescope.GatewayTool, Telescope.GrantPower>> = {
   open_ticket: "openTickets",
   dispatch_worker: "dispatchWorkers",
   answer_member: "answerMembers",
   merge_pr: "mergePRs",
+  ticket_list: "openTickets",
+  ticket_get: "openTickets",
+  ticket_update: "openTickets",
+  ticket_lease: "openTickets",
+  ticket_lease_renew: "openTickets",
+  ticket_lease_release: "openTickets",
+  decision_list: "openTickets",
+  decision_record: "openTickets",
+  agent_list: "openTickets",
 };
 const SECRET_KEY = /token|secret|password|passphrase|api.?key|authorization|cookie|credential/i;
 
@@ -129,6 +139,7 @@ export interface ToolCaller {
   readonly runId: Telescope.AgentRunId;
   readonly agentId: Telescope.AgentId;
   readonly memberId: string;
+  readonly onBehalfOf: typeof Telescope.OnBehalfOf.Type;
   readonly projectId?: ProjectId;
 }
 
@@ -235,6 +246,7 @@ const make = Effect.gen(function* () {
       runId: run.run_id,
       agentId,
       memberId: onBehalfOf[0],
+      onBehalfOf,
       ...(grant.projectId === undefined ? {} : { projectId: grant.projectId }),
     };
     return caller;
@@ -273,7 +285,7 @@ const make = Effect.gen(function* () {
     workspaceId: Telescope.WorkspaceId,
   ) {
     const { self } = yield* workspaces.get(caller, { workspaceId });
-    if (self.role !== "admin")
+    if (self.role !== "admin" || "runId" in caller)
       return yield* new Telescope.WorkspaceError({
         reason: "forbidden",
         message: "Only admins manage budgets and stops.",

@@ -43,7 +43,7 @@ const layer = Layer.mergeAll(
   ),
 );
 
-const session = (name: string): WorkspaceService.Caller => ({
+const session = (name: string): WorkspaceService.SessionCaller => ({
   sessionId: AuthSessionId.make(`session-${name}`),
   subject: "one-time-token",
 });
@@ -66,7 +66,10 @@ const agentRow = (id: string, owner: string) => ({
 const isWorkspaceError = Schema.is(Telescope.WorkspaceError);
 
 /** A workspace whose agent has two memories about the 夹爪, one of them pinned. */
-const workspaceWithAgent = Effect.fn(function* (caller: WorkspaceService.Caller, name: string) {
+const workspaceWithAgent = Effect.fn(function* (
+  caller: WorkspaceService.SessionCaller,
+  name: string,
+) {
   const db = yield* TelescopeDb.TelescopeDb;
   const memory = yield* MemoryService.MemoryService;
   const workspace = yield* (yield* WorkspaceService.WorkspaceService).create(caller, {
