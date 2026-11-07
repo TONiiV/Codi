@@ -1325,7 +1325,7 @@ export const SETTINGS_SEARCH_ITEMS = [
     id: "telescope-members",
     title: "Members and roles",
     to: "/settings/telescope",
-    searchTerms: ["telescope workspace members roles admin revoke remove restore"],
+    searchTerms: ["telescope workspace members roles admin revoke remove restore 成员与角色"],
   },
   {
     id: "telescope-agents",
@@ -1337,19 +1337,19 @@ export const SETTINGS_SEARCH_ITEMS = [
     id: "telescope-governance",
     title: "Budgets and kill switch",
     to: "/settings/telescope",
-    searchTerms: ["telescope budget limit tool calls usage kill switch stop pause"],
+    searchTerms: ["telescope budget limit tool calls usage kill switch stop pause 预算与急停"],
   },
   {
     id: "telescope-routing",
     title: "Routing rules",
     to: "/settings/telescope",
-    searchTerms: ["telescope routing rules harness model task type priority"],
+    searchTerms: ["telescope routing rules harness model task type priority 路由规则"],
   },
   {
     id: "telescope-project-rules",
     title: "Project rules",
     to: "/settings/telescope",
-    searchTerms: ["telescope project rules powers allowlist harness model default"],
+    searchTerms: ["telescope project rules powers allowlist harness model default 项目规则"],
   },
   {
     id: "archive",

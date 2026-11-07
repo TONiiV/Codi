@@ -705,7 +705,7 @@ it.effect("re-reads the routing and project rule lists after a refused change", 
             Stream.provideService(stream, EnvironmentSupervisor, supervisor),
         } as EnvironmentRegistry["Service"]),
       );
-      const routing = createTelescopeRoutingAtoms(atomRuntime);
+      const routing = createTelescopeRoutingAtoms(atomRuntime, () => Atom.make(null));
       const projectRule = createTelescopeProjectRuleAtoms(atomRuntime, () => Atom.make(null));
       registry.set(
         sessions(env),
