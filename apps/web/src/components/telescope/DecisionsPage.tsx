@@ -7,7 +7,8 @@ import {
 } from "@t3tools/client-runtime/telescope/taskBoard";
 import type { Telescope } from "@t3tools/contracts";
 import { useLocation } from "@tanstack/react-router";
-import { useState } from "react";
+import { GitBranchIcon } from "lucide-react";
+import { type ReactNode, useState } from "react";
 
 import { cn } from "../../lib/utils";
 import { useEnvironmentQuery } from "../../state/query";
@@ -22,16 +23,9 @@ import {
 } from "../ui/alert-dialog";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
-import { TelescopeEmptyState } from "./TelescopeShell";
+import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "../ui/empty";
 import { telescopeBoard } from "./telescopeState";
-import {
-  BoardFrame,
-  type BoardTarget,
-  NoWorkspace,
-  useBoardCommand,
-  useBoardNames,
-  useBoardTarget,
-} from "./TasksParts";
+import { BoardFrame, type BoardTarget, useBoardCommand, useBoardNames } from "./TasksParts";
 
 const GROUPS = {
   proposed: { label: "待决定", badge: "warning" },
@@ -182,7 +176,7 @@ export function useDecide(
   return { busy, choose, dialog };
 }
 
-function DecisionsBody({ target }: { target: BoardTarget }) {
+export function DecisionsBody({ target, actions }: { target: BoardTarget; actions: ReactNode }) {
   const input = { workspaceId: target.workspaceId };
   const query = useEnvironmentQuery(
     telescopeBoard.decisions({ environmentId: target.environmentId, input }),
@@ -192,9 +186,19 @@ function DecisionsBody({ target }: { target: BoardTarget }) {
   const { busy, choose, dialog } = useDecide(target, query);
   const decisions = sortDecisions(query.data?.decisions ?? []);
   return (
-    <BoardFrame query={query}>
+    <BoardFrame query={query} actions={actions}>
       {decisions.length === 0 ? (
-        <TelescopeEmptyState view="decisions" />
+        <Empty>
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <GitBranchIcon />
+            </EmptyMedia>
+            <EmptyTitle>还没有决定</EmptyTitle>
+            <EmptyDescription>
+              这个工作区还没有记下决定。你或 agents 拍板的事会连同理由记在这里，所有成员都查得到。
+            </EmptyDescription>
+          </EmptyHeader>
+        </Empty>
       ) : (
         <div className="flex max-w-3xl flex-col gap-6 p-4">
           {DECISION_STATUSES.map((status) => {
@@ -225,9 +229,4 @@ function DecisionsBody({ target }: { target: BoardTarget }) {
       {dialog}
     </BoardFrame>
   );
-}
-
-export function DecisionsPage() {
-  const target = useBoardTarget();
-  return target === null ? <NoWorkspace /> : <DecisionsBody target={target} />;
 }

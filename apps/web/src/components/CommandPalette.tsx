@@ -1630,7 +1630,7 @@ function OpenCommandPaletteDialog(props: {
       : {
           kind: "action",
           value: "action:telescope",
-          searchTerms: ["telescope", "team", "tasks", "decisions", "dashboard"],
+          searchTerms: ["telescope", "team", "tasks", "decisions", "决定", "dashboard"],
           title: "Open Telescope",
           icon: <TelescopeIcon className={ITEM_ICON_CLASS} />,
           run: async () => {
