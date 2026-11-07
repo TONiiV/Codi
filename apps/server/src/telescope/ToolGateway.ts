@@ -49,6 +49,16 @@ const decodeRuns = Schema.decodeUnknownEffect(Schema.Array(RunRow));
 const decodeAgents = Schema.decodeUnknownEffect(
   Schema.Array(Schema.Struct({ agent_id: Telescope.AgentId })),
 );
+const decodeGovernanceAgents = Schema.decodeUnknownEffect(
+  Schema.Array(
+    Schema.Struct({
+      agent_id: Telescope.AgentId,
+      name: Telescope.Text,
+      kind: Telescope.AgentKind,
+      owner_subject_id: Schema.NullOr(Telescope.SubjectId),
+    }),
+  ),
+);
 const KillSwitchRow = Schema.Struct({
   workspace_id: Telescope.WorkspaceId,
   agent_id: Telescope.AgentId,
@@ -397,7 +407,19 @@ const make = Effect.gen(function* () {
       yield* requireAdmin(caller, workspaceId);
       const budgets = yield* db.select(workspaceId, "budgets", decodeBudgets);
       const killSwitches = yield* db.select(workspaceId, "kill_switches", decodeKillSwitches);
-      return { budgets: budgets.map(toBudget), killSwitches: killSwitches.map(toKillSwitch) };
+      const agents = yield* db.select(workspaceId, "agents", decodeGovernanceAgents, undefined, {
+        orderBy: ["created_at", "agent_id"],
+      });
+      return {
+        budgets: budgets.map(toBudget),
+        killSwitches: killSwitches.map(toKillSwitch),
+        agents: agents.map((row) => ({
+          id: row.agent_id,
+          name: row.name,
+          kind: row.kind,
+          ownerSubjectId: row.owner_subject_id,
+        })),
+      };
     },
   );
 

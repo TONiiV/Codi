@@ -2486,6 +2486,10 @@ export const layerWsRpc = (
           telescopeStorage(telescopeGateway.setKillSwitch(caller, input)),
         [Telescope.WS_METHODS.governanceGet]: (input) =>
           telescopeStorage(telescopeGateway.governance(caller, input)),
+        [Telescope.WS_METHODS.projectRuleList]: (input) =>
+          telescopeStorage(telescopeGrants.projectRules(caller, input)),
+        [Telescope.WS_METHODS.projectRuleSet]: (input) =>
+          telescopeStorage(telescopeGrants.setProjectRule(caller, input)),
         [Telescope.WS_METHODS.memorySearch]: (input) =>
           telescopeStorage(telescopeMemory.search({ session: caller }, input)),
         [Telescope.WS_METHODS.memoryWrite]: (input) =>

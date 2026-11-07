@@ -32,6 +32,18 @@ const decodeRouting = Schema.decodeUnknownEffect(
   Schema.Array(Schema.Struct({ routing_json: Schema.NullOr(RoutingJson) })),
 );
 const encodeRouting = Schema.encodeSync(RoutingJson);
+const decodeProjectIds = Schema.decodeUnknownEffect(
+  Schema.Array(Schema.Struct({ project_id: ProjectId })),
+);
+const decodeProjectRules = Schema.decodeUnknownEffect(
+  Schema.Array(
+    Schema.Struct({
+      project_id: ProjectId,
+      powers_json: PowersJson,
+      routing_json: Schema.NullOr(RoutingJson),
+    }),
+  ),
+);
 const AuditRow = Schema.Struct({
   audit_id: Telescope.AuditEntryId,
   workspace_id: Telescope.WorkspaceId,
@@ -72,6 +84,13 @@ const NO_POWERS: Telescope.StandingPowers = {
   answerMembers: false,
   mergePRs: false,
 };
+// A project without a rule adds no layer to the grant, so its defaults remove nothing.
+const ALL_POWERS: Telescope.StandingPowers = {
+  openTickets: true,
+  dispatchWorkers: true,
+  answerMembers: true,
+  mergePRs: true,
+};
 // Every role holds the everyday powers; merging needs admin or the project's lead (D25).
 const rolePowers = (role: Telescope.WorkspaceRole, isLead: boolean): Telescope.StandingPowers => ({
   openTickets: true,
@@ -95,13 +114,6 @@ export interface GrantRequest {
   readonly agentId: Telescope.AgentId;
   readonly projectId?: ProjectId;
   readonly onBehalfOf: readonly [memberId: string, ...via: ReadonlyArray<Telescope.AgentId>];
-}
-export interface ProjectRuleInput {
-  readonly workspaceId: Telescope.WorkspaceId;
-  readonly projectId: ProjectId;
-  readonly powers: Telescope.StandingPowers;
-  /** The harnesses and models routing may choose here; `null` allows any. */
-  readonly routing: Telescope.RoutingAllowlist | null;
 }
 export interface AuditInput {
   readonly runId?: Telescope.AgentRunId;
@@ -150,8 +162,10 @@ export class GrantService extends Context.Service<
       entry: AuditInput,
     ) => Out<Telescope.AuditEntry>;
     readonly auditList: Method<"telescope.grant.audit.list">;
+    /** Each bound project's rule, or its defaults; any member reads them. */
+    readonly projectRules: Method<"telescope.projectRule.list">;
     /** Admins cap the powers any agent holds in a bound project. */
-    readonly setProjectRule: (caller: Caller, input: ProjectRuleInput) => Out<void>;
+    readonly setProjectRule: Method<"telescope.projectRule.set">;
     readonly routingAllowlist: (
       workspaceId: Telescope.WorkspaceId,
       projectId: ProjectId,
@@ -319,10 +333,33 @@ const make = Effect.gen(function* () {
     },
   );
 
-  const setProjectRule = Effect.fn("GrantService.setProjectRule")(function* (
-    caller: Caller,
-    input: ProjectRuleInput,
-  ) {
+  const projectRules: Method<"telescope.projectRule.list"> = Effect.fn("GrantService.projectRules")(
+    function* (caller, { workspaceId }) {
+      yield* workspaces.get(caller, { workspaceId });
+      const bound = yield* db.select(workspaceId, "project_bindings", decodeProjectIds, undefined, {
+        orderBy: ["project_id"],
+      });
+      const stored = new Map(
+        (yield* db.select(workspaceId, "project_rules", decodeProjectRules)).map((row) => [
+          row.project_id,
+          row,
+        ]),
+      );
+      const rules = [...new Set(bound.map((row) => row.project_id))].map(
+        (projectId): Telescope.ProjectRule => {
+          const rule = stored.get(projectId);
+          return rule === undefined
+            ? { projectId, stored: false, powers: ALL_POWERS, routing: null }
+            : { projectId, stored: true, powers: rule.powers_json, routing: rule.routing_json };
+        },
+      );
+      return { rules };
+    },
+  );
+
+  const setProjectRule: Method<"telescope.projectRule.set"> = Effect.fn(
+    "GrantService.setProjectRule",
+  )(function* (caller, input) {
     const { workspaceId, projectId } = input;
     const { self } = yield* workspaces.get(caller, { workspaceId });
     if (self.role !== "admin") return yield* fail("forbidden", "Only admins set project rules.");
@@ -342,6 +379,7 @@ const make = Effect.gen(function* () {
         .remove(workspaceId, "project_rules", where)
         .pipe(Effect.andThen(db.insert(workspaceId, "project_rules", row))),
     );
+    return { projectId, stored: true, powers: input.powers, routing: input.routing };
   });
 
   const routingAllowlist = Effect.fn("GrantService.routingAllowlist")(function* (
@@ -359,6 +397,7 @@ const make = Effect.gen(function* () {
     explainFor,
     audit,
     auditList,
+    projectRules,
     setProjectRule,
     routingAllowlist,
   });
