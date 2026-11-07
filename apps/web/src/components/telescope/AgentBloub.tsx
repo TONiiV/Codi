@@ -113,6 +113,9 @@ const awake = new Set<Avatar>();
 const loopers = new Set<Avatar>();
 const queued = new Set<Avatar>();
 let raf = 0;
+let drewAt = 0;
+// Every frame rebuilds each avatar's SVG; 30 fps reads as smooth at avatar size for half the work.
+const FRAME_MS = 1000 / 30 - 2;
 
 function run() {
   if (raf === 0 && awake.size > 0 && !document.hidden) raf = requestAnimationFrame(tick);
@@ -121,7 +124,10 @@ function run() {
 function tick(ms: number) {
   raf = 0;
   if (document.hidden) return;
-  for (const a of awake) if (!a.frame(ms)) awake.delete(a);
+  if (ms - drewAt >= FRAME_MS) {
+    drewAt = ms;
+    for (const a of awake) if (!a.frame(ms)) awake.delete(a);
+  }
   run();
 }
 
