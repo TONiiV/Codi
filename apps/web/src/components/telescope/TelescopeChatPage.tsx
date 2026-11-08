@@ -110,7 +110,7 @@ function AgentChat({
     });
     setBusy(false);
     if (AsyncResult.isSuccess(result)) setOpened(result.value.threadId);
-    else setError(openThreadFailureText(result));
+    else setError(openThreadFailureText(result, agent.modelSelection !== undefined));
   };
   return (
     <ChatEmpty title={name} description="你们还没有对话。开始后，你在这里说的话会直接发给它。">

@@ -166,34 +166,45 @@ describe("telescope agent chat", () => {
     {
       cause: "no model",
       message: Telescope.AGENT_MODEL_REFUSALS.no_model,
+      ownModel: false,
       shown: false,
       says: "默认模型",
     },
     {
       cause: "a provider without tools",
       message: Telescope.AGENT_MODEL_REFUSALS.no_mcp,
+      ownModel: false,
       shown: false,
       says: "默认模型",
     },
     {
+      cause: "the agent's own pick without tools",
+      message: Telescope.AGENT_MODEL_REFUSALS.no_mcp,
+      ownModel: true,
+      shown: false,
+      says: "My Teams → 设定 → Harness / 模型",
+    },
+    {
       cause: "no Scratch",
       message: Telescope.AGENT_SCRATCH_REFUSAL,
+      ownModel: false,
       shown: false,
       says: "Git 仓库之外，再重启 Codi",
     },
     {
       cause: "another reason",
       message: "Threads without a project are not available.",
+      ownModel: false,
       shown: true,
       says: "现在开不了这个对话",
     },
   ])(
     "an openThread refusal for $cause shows the server's reason: $shown",
-    ({ message, shown, says }) => {
+    ({ message, ownModel, shown, says }) => {
       const refused = AsyncResult.failure(
         Cause.fail(new Telescope.WorkspaceError({ reason: "invalid", message })),
       );
-      const text = openThreadFailureText(refused) ?? "";
+      const text = openThreadFailureText(refused, ownModel) ?? "";
       expect(text.includes(message)).toBe(shown);
       expect(text).toContain(says);
     },
