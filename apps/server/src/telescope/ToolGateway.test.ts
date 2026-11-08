@@ -306,8 +306,12 @@ it.layer(layer)("Telescope tool gateway", (it) => {
         ],
         [
           "X-Api-Key: none------BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEA0123456789abcdef\n-----END RSA PRIVATE KEY-----",
-          "X-Api-Key: [redacted]-[redacted]",
+          "X-Api-Key: [redacted][redacted]",
         ],
+        [`Authorization: Bearer abc123-----${fake}`, "Authorization: [redacted]"],
+        [`Cookie: sid=ab-----${fake}`, "Cookie: [redacted]"],
+        [`Authorization: -----${fake}`, "Authorization: [redacted]"],
+        [`X-Api-Key: none\n-----${fake}`, "X-Api-Key: [redacted]"],
         [
           "Authorization: Bearer abc123def456ghi789-X-Api-Key: none",
           "Authorization: [redacted]X-Api-Key: [redacted]",
