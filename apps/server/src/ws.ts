@@ -2446,6 +2446,10 @@ export const layerWsRpc = (
           telescopeStorage(board.updateTask(actor, input)),
         [Telescope.WS_METHODS.taskGet]: (input) => telescopeStorage(board.getTask(actor, input)),
         [Telescope.WS_METHODS.taskList]: (input) => telescopeStorage(board.listTasks(actor, input)),
+        [Telescope.WS_METHODS.taskLinkThread]: (input) =>
+          telescopeStorage(board.linkThread(actor, input)),
+        [Telescope.WS_METHODS.taskUnlinkThread]: (input) =>
+          telescopeStorage(board.unlinkThread(actor, input)),
         [Telescope.WS_METHODS.decisionCreate]: (input) =>
           telescopeStorage(board.createDecision(actor, input)),
         [Telescope.WS_METHODS.decisionList]: (input) =>

@@ -18,6 +18,7 @@ import { AppSidebarLayout } from "../components/AppSidebarLayout";
 import { CommandPalette } from "../components/CommandPalette";
 import { CustomSnoozeDialogHost } from "../components/CustomSnoozeDialog";
 import { GuestShareDialogHost } from "../components/chat/GuestShareControls";
+import { LinkTaskDialogHost } from "../components/telescope/ThreadTaskLink";
 import { AddProjectToMachineDialogHost } from "../components/AddProjectToMachineDialog";
 import { ConfirmDialogHost } from "../components/ConfirmDialogHost";
 import { DevReplayHost } from "../components/DevReplayHost";
@@ -211,6 +212,7 @@ function RootRouteBranch() {
         <ConfirmDialogHost />
         <CustomSnoozeDialogHost />
         <GuestShareDialogHost />
+        <LinkTaskDialogHost />
         <ProjectCloneToastCoordinator />
         <AddProjectToMachineDialogHost />
         {import.meta.env.DEV && primaryEnvironmentAuthenticated ? <DevReplayHost /> : null}

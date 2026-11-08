@@ -129,6 +129,8 @@ describe("RPC authorization scopes", () => {
       Telescope.WS_METHODS.taskUpdate,
       Telescope.WS_METHODS.taskGet,
       Telescope.WS_METHODS.taskList,
+      Telescope.WS_METHODS.taskLinkThread,
+      Telescope.WS_METHODS.taskUnlinkThread,
       Telescope.WS_METHODS.decisionCreate,
       Telescope.WS_METHODS.decisionList,
       Telescope.WS_METHODS.commitList,

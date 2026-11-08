@@ -266,6 +266,11 @@ import {
 import { SidebarDraftBlock } from "./sidebar/SidebarDraftBlock";
 import { useTelescopeWorkspaces } from "./telescope/telescopeState";
 import {
+  openLinkTaskDialog,
+  readLinkedTask,
+  unlinkThreadFromTask,
+} from "./telescope/ThreadTaskLink";
+import {
   SidebarProjectFolderHeader,
   sidebarFolderRowId,
 } from "./sidebar/SidebarProjectFolderHeader";
@@ -2619,6 +2624,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                 projectRef.projectId === thread.projectId,
             ),
           ) ?? null;
+        const linkedTask = readLinkedTask(threadRef);
         const clicked = await settlePromise(() =>
           api.contextMenu.show(
             buildThreadActionMenuItems({
@@ -2646,6 +2652,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                 canShareWithGuestAtom(threadRef.environmentId),
               ),
               canTurnIntoProject: canTurnThreadIntoProject(threadRef),
+              linkedTask,
               supports: {
                 settlement: configLoaded,
                 autoSettleOptOut: supportsAutoSettleOptOut,
@@ -2769,6 +2776,12 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
             return;
           case "share-guest":
             openGuestShareDialog(threadRef);
+            return;
+          case "link-task":
+            openLinkTaskDialog(threadRef);
+            return;
+          case "unlink-task":
+            if (linkedTask) await unlinkThreadFromTask(threadRef, linkedTask);
             return;
           case "regenerate-title": {
             if (isRegeneratingTitle) return;

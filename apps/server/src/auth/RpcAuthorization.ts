@@ -222,6 +222,8 @@ export const RPC_REQUIRED_SCOPES = {
   [Telescope.WS_METHODS.taskUpdate]: AuthTelescopeMemberScope,
   [Telescope.WS_METHODS.taskGet]: AuthTelescopeMemberScope,
   [Telescope.WS_METHODS.taskList]: AuthTelescopeMemberScope,
+  [Telescope.WS_METHODS.taskLinkThread]: AuthTelescopeMemberScope,
+  [Telescope.WS_METHODS.taskUnlinkThread]: AuthTelescopeMemberScope,
   [Telescope.WS_METHODS.decisionCreate]: AuthTelescopeMemberScope,
   [Telescope.WS_METHODS.decisionList]: AuthTelescopeMemberScope,
   [Telescope.WS_METHODS.commitList]: AuthTelescopeMemberScope,

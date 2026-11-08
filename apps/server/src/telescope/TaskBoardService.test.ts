@@ -1,6 +1,6 @@
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import { assert, it } from "@effect/vitest";
-import { AuthSessionId, EnvironmentId, Telescope } from "@t3tools/contracts";
+import { AuthSessionId, EnvironmentId, Telescope, ThreadId } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
@@ -16,13 +16,12 @@ import * as WorkspaceService from "./WorkspaceService.ts";
 const database = Layer.effectDiscard(runMigrations()).pipe(
   Layer.provideMerge(SqlitePersistence.layerMemory),
 );
+const here = Layer.succeed(ServerEnvironment.ServerEnvironmentIdentity, {
+  getEnvironmentId: Effect.succeed(EnvironmentId.make("env-elsewhere")),
+});
 const layer = Layer.mergeAll(TaskBoardService.layer, WorkspaceService.layer).pipe(
   Layer.provideMerge(Layer.merge(database, NodeCrypto.layer)),
-  Layer.provide(
-    Layer.succeed(ServerEnvironment.ServerEnvironmentIdentity, {
-      getEnvironmentId: Effect.succeed(EnvironmentId.make("env-elsewhere")),
-    }),
-  ),
+  Layer.provide(here),
 );
 
 const isWorkspaceError = Schema.is(Telescope.WorkspaceError);
@@ -344,6 +343,91 @@ it.layer(layer)("Telescope task board", (it) => {
         })
         .pipe(Effect.flip);
       assert.strictEqual(reasonOf(crossUpdate), "not_found");
+    }),
+  );
+
+  it.effect("links a thread to one task at a time and unlinks it without touching others", () =>
+    Effect.gen(function* () {
+      const { board, a, b, agent } = yield* setup;
+      const thread = (id: string) => ({
+        environmentId: EnvironmentId.make("env-laptop"),
+        threadId: ThreadId.make(id),
+      });
+      const first = yield* board.createTask(alice, {
+        workspaceId: a,
+        title: "Gripper",
+        threads: [thread("t-1"), thread("t-1")],
+      });
+      assert.deepStrictEqual(first.threads, [thread("t-1")]);
+      const second = yield* board.createTask(alice, { workspaceId: a, title: "Casing" });
+      const link = (taskId: Telescope.TaskId, id: string, workspaceId = a) =>
+        board.linkThread(alice, { workspaceId, taskId, ...thread(id) });
+
+      const linked = yield* link(second.id, "t-2");
+      assert.deepStrictEqual([linked.version, linked.threads], [2, [thread("t-2")]]);
+      assert.strictEqual((yield* link(second.id, "t-2")).version, 2, "relinking changes nothing");
+      const both = yield* link(second.id, "t-3");
+      assert.deepStrictEqual(both.threads, [thread("t-2"), thread("t-3")]);
+
+      const taken = yield* link(second.id, "t-1").pipe(Effect.flip);
+      assert.deepStrictEqual(
+        [reasonOf(taken), taken.message],
+        ["conflict", 'This thread already belongs to the task "Gripper".'],
+      );
+      const viaUpdate = yield* board
+        .updateTask(agent, {
+          workspaceId: a,
+          taskId: second.id,
+          baseVersion: both.version,
+          set: { threads: [...both.threads, thread("t-1")] },
+        })
+        .pipe(Effect.flip);
+      assert.strictEqual(reasonOf(viaUpdate), "conflict");
+      const elsewhere = yield* board.createTask(alice, { workspaceId: b, title: "Other" });
+      const crossed = yield* link(elsewhere.id, "t-2", b).pipe(Effect.flip);
+      assert.strictEqual(reasonOf(crossed), "conflict");
+
+      const unlinked = yield* board.unlinkThread(alice, {
+        workspaceId: a,
+        taskId: second.id,
+        ...thread("t-2"),
+      });
+      assert.deepStrictEqual(unlinked.threads, [thread("t-3")]);
+      assert.deepStrictEqual((yield* link(elsewhere.id, "t-2", b)).threads, [thread("t-2")]);
+      const { tasks } = yield* board.listTasks(alice, { workspaceId: a });
+      assert.deepStrictEqual(tasks.map((task) => [task.title, task.threads]).toSorted(), [
+        ["Casing", [thread("t-3")]],
+        ["Gripper", [thread("t-1")]],
+      ]);
+      const { commits } = yield* board.listCommits(alice, { workspaceId: a, taskId: second.id });
+      assert.deepStrictEqual(
+        commits.map((commit) => commit.changedFields.threads),
+        [undefined, [thread("t-2")], [thread("t-2"), thread("t-3")], [thread("t-3")]],
+      );
+    }),
+  );
+
+  it.effect("stamps the threads migration 097 moved with this environment on start", () =>
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      const { board, a } = yield* setup;
+      const task = yield* board.createTask(alice, { workspaceId: a, title: "Moved" });
+      yield* sql`INSERT INTO telescope_task_threads ${sql.insert({
+        workspace_id: a,
+        task_id: task.id,
+        environment_id: "",
+        thread_id: "t-moved",
+        linked_by: "server",
+        linked_at: task.createdAt,
+      })}`;
+      yield* Layer.build(Layer.fresh(TaskBoardService.layer)).pipe(
+        Effect.provide(here),
+        Effect.scoped,
+      );
+      const reread = yield* board.getTask(alice, { workspaceId: a, taskId: task.id });
+      assert.deepStrictEqual(reread.threads, [
+        { environmentId: EnvironmentId.make("env-elsewhere"), threadId: ThreadId.make("t-moved") },
+      ]);
     }),
   );
 

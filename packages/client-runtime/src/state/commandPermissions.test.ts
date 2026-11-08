@@ -227,6 +227,28 @@ describe("command permissions", () => {
       }),
     ),
   );
+  it.effect.each([Telescope.WS_METHODS.taskLinkThread, Telescope.WS_METHODS.taskUnlinkThread])(
+    "offers %s to telescope members, not to a Code-only session",
+    (method) =>
+      Effect.scoped(
+        Effect.gen(function* () {
+          const registry = yield* setup;
+          const permissions = createCommandPermissions(runtime, method);
+          registry.set(sessions(env), AsyncResult.success(grant(true)));
+          expect(registry.get(permissions.permissionAtom(env))).toBe(false);
+          expect((yield* permissions.authorize(registry, env).pipe(Effect.flip))._tag).toBe(
+            "EnvironmentAuthorizationError",
+          );
+          const member = [AuthTelescopeMemberScope];
+          registry.set(
+            sessions(env),
+            AsyncResult.success({ ...grant(false), scopes: member, permissions: member }),
+          );
+          expect(registry.get(permissions.permissionAtom(env))).toBe(true);
+          yield* permissions.authorize(registry, env);
+        }),
+      ),
+  );
   it.effect("waits for an initial grant", () =>
     Effect.scoped(
       Effect.gen(function* () {

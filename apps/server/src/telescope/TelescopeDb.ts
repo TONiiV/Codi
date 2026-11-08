@@ -27,6 +27,7 @@ export type TelescopeTable =
   | "agents"
   | "tasks"
   | "task_commits"
+  | "task_threads"
   | "leases"
   | "grants"
   | "audit"
@@ -145,6 +146,19 @@ export class TelescopeDb extends Context.Service<
       | undefined,
       PersistenceSqlError
     >;
+    /** The task a Code thread is linked to, in whichever workspace holds it. */
+    readonly taskOfThread: (
+      environmentId: string,
+      threadId: string,
+    ) => Effect.Effect<
+      | { readonly workspaceId: Telescope.WorkspaceId; readonly taskId: Telescope.TaskId }
+      | undefined,
+      PersistenceSqlError
+    >;
+    /** Migration 097 moved thread links without this environment's id; this stamps it. */
+    readonly placeMovedThreadLinks: (
+      environmentId: string,
+    ) => Effect.Effect<void, PersistenceSqlError>;
     /** With `codiMessageId`, only the runs that serve that Codi run. */
     readonly openRunsOnThread: (
       threadId: string,
@@ -438,6 +452,28 @@ const make = Effect.gen(function* () {
           ownerSubjectId: row.owner_subject_id,
         };
   });
+  const taskOfThread = Effect.fn("TelescopeDb.taskOfThread")(function* (
+    environmentId: string,
+    threadId: string,
+  ) {
+    const [row] = yield* sql<{ readonly workspace_id: string; readonly task_id: string }>`
+      SELECT workspace_id, task_id FROM telescope_task_threads
+      WHERE environment_id = ${environmentId} AND thread_id = ${threadId}
+    `.pipe(Effect.mapError(toPersistenceSqlError("TelescopeDb.taskOfThread")));
+    return row === undefined
+      ? undefined
+      : {
+          workspaceId: Telescope.WorkspaceId.make(row.workspace_id),
+          taskId: Telescope.TaskId.make(row.task_id),
+        };
+  });
+  const placeMovedThreadLinks = Effect.fn("TelescopeDb.placeMovedThreadLinks")(function* (
+    environmentId: string,
+  ) {
+    yield* sql`
+      UPDATE telescope_task_threads SET environment_id = ${environmentId} WHERE environment_id = ''
+    `.pipe(Effect.mapError(toPersistenceSqlError("TelescopeDb.placeMovedThreadLinks")));
+  });
   const pruneRunsBefore = Effect.fn("TelescopeDb.pruneRunsBefore")(function* (cutoff: string) {
     const [, dropped] = yield* sql
       .withTransaction(
@@ -496,6 +532,8 @@ const make = Effect.gen(function* () {
     allWorkspaceIds,
     workspaceIdForInvitation,
     agentThread,
+    taskOfThread,
+    placeMovedThreadLinks,
     openRunsOnThread,
     pruneRunsBefore,
     runIdsWithoutRows,

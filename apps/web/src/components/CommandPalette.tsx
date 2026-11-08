@@ -66,6 +66,7 @@ import {
   FolderPlusIcon,
   MessageSquareDashedIcon,
   LinkIcon,
+  UnlinkIcon,
   MessageSquareIcon,
   PaletteIcon,
   RotateCcwIcon,
@@ -248,6 +249,11 @@ import { EnvironmentMachineIcon } from "./EnvironmentMachineIcon";
 import { Checkbox } from "./ui/checkbox";
 import { ProjectFilePicker } from "./files/ProjectFilePicker";
 import { openLinkPullRequestDialog } from "./pullRequest/LinkPullRequestDialog";
+import {
+  openLinkTaskDialog,
+  readLinkedTask,
+  unlinkThreadFromTask,
+} from "./telescope/ThreadTaskLink";
 import { canShareWithGuestAtom } from "./chat/guestShareAvailability";
 import { openGuestShareDialog } from "./chat/guestShareDialogState";
 import { ProjectContentSearchDialog } from "./search/ProjectContentSearchDialog";
@@ -492,6 +498,10 @@ function OpenCommandPaletteDialog(props: {
   const canShareActiveThreadWithGuest = useAtomValue(
     canShareWithGuestAtom(activeThread?.environmentId ?? ("" as EnvironmentId)),
   );
+  // Read as the palette opens; the dialog shows the live link if the list was not loaded yet.
+  const activeThreadLinkedTask = activeThread
+    ? readLinkedTask(scopeThreadRef(activeThread.environmentId, activeThread.id))
+    : undefined;
   const activeThreadReferenceCopyTarget =
     referenceThreadRef === null || (pathname === "/pull-requests" && !openPanelPullRequestUrl)
       ? null
@@ -1431,6 +1441,30 @@ function OpenCommandPaletteDialog(props: {
         useRightPanelStore.getState().open(threadRef, "pull-requests");
       },
     });
+  }
+
+  if (activeThread !== null && activeThreadLinkedTask !== undefined) {
+    const threadRef = scopeThreadRef(activeThread.environmentId, activeThread.id);
+    const task = activeThreadLinkedTask;
+    actionItems.push(
+      task === null
+        ? {
+            kind: "action",
+            value: "action:link-thread-to-task",
+            searchTerms: ["telescope", "task", "link", "任务", "关联"],
+            title: "关联到任务…",
+            icon: <LinkIcon className={ITEM_ICON_CLASS} />,
+            run: async () => openLinkTaskDialog(threadRef),
+          }
+        : {
+            kind: "action",
+            value: "action:unlink-thread-from-task",
+            searchTerms: ["telescope", "task", "unlink", "任务", "解除关联"],
+            title: `解除关联「${task.title}」`,
+            icon: <UnlinkIcon className={ITEM_ICON_CLASS} />,
+            run: () => unlinkThreadFromTask(threadRef, task),
+          },
+    );
   }
 
   if (activeThread !== null && canShareActiveThreadWithGuest) {

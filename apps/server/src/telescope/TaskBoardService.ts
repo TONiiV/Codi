@@ -6,7 +6,9 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import type * as Rpc from "effect/rpc/Rpc";
 import * as Schema from "effect/Schema";
+import * as Struct from "effect/Struct";
 
+import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
 import type { PersistenceDecodeError, PersistenceSqlError } from "../persistence/Errors.ts";
 import * as AgentService from "./AgentService.ts";
 import * as BoardChanges from "./BoardChanges.ts";
@@ -79,6 +81,15 @@ const decodeDecisions = rowsAs(Telescope.Decision, "item_id");
 const decodeCommits = rowsAs(Telescope.TaskCommit, "commit_id");
 const decodeLeases = rowsAs(Telescope.Lease, "lease_id");
 const decodeTask = Schema.decodeUnknownEffect(Telescope.Task);
+const decodeLinks = Schema.decodeUnknownEffect(
+  Schema.Array(
+    Schema.Struct({
+      task_id: Telescope.TaskId,
+      environment_id: Telescope.TaskThread.fields.environmentId,
+      thread_id: Telescope.TaskThread.fields.threadId,
+    }),
+  ),
+);
 const decodeMemberNames = Schema.decodeUnknownEffect(
   Schema.Array(
     Schema.Struct({
@@ -109,6 +120,10 @@ const TASK_FIELDS = Object.keys(Telescope.TaskFields.fields) as ReadonlyArray<
 >;
 const sameJson = (a: unknown, b: unknown) =>
   JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+const sameThread = (a: Telescope.TaskThread) => (b: Telescope.TaskThread) =>
+  a.environmentId === b.environmentId && a.threadId === b.threadId;
+const uniqueThreads = (threads: ReadonlyArray<Telescope.TaskThread>) =>
+  threads.filter((thread, index) => threads.findIndex(sameThread(thread)) === index);
 /** A task's fields before its first commit sets any. */
 const BLANK = { title: "", status: "todo", goalChain: [] } as const;
 
@@ -170,6 +185,8 @@ export class TaskBoardService extends Context.Service<
     readonly updateTask: Method<"telescope.task.update">;
     readonly getTask: Method<"telescope.task.get">;
     readonly listTasks: Method<"telescope.task.list">;
+    readonly linkThread: Method<"telescope.task.linkThread">;
+    readonly unlinkThread: Method<"telescope.task.unlinkThread">;
     readonly createDecision: Method<"telescope.decision.create">;
     readonly listDecisions: Method<"telescope.decision.list">;
     readonly listCommits: Method<"telescope.commit.list">;
@@ -190,6 +207,10 @@ const make = Effect.gen(function* () {
   const workspaces = yield* WorkspaceService.WorkspaceService;
   const changes = yield* BoardChanges.BoardChanges;
   const random = yield* SecureRandom.SecureRandom;
+  const environment = yield* ServerEnvironment.ServerEnvironmentIdentity;
+  yield* db
+    .placeMovedThreadLinks(yield* environment.getEnvironmentId)
+    .pipe(Effect.catch((error) => Effect.logWarning("Moved task threads stay unplaced", error)));
   const now = DateTime.now.pipe(Effect.map(DateTime.formatIso));
   /** Every board write: its notices reach a watcher together once it commits. */
   const transact = <A, E, R>(write: Effect.Effect<A, E, R>) => db.transaction(changes.batch(write));
@@ -239,14 +260,68 @@ const make = Effect.gen(function* () {
     yield* changes.publish({ kind, workspaceId, id, version: baseVersion + 1 });
   });
 
+  /** Every task read: a task's threads live in their own table. */
+  const selectTasks = Effect.fn("TaskBoardService.selectTasks")(function* (
+    workspaceId: Telescope.WorkspaceId,
+    where: Columns,
+  ) {
+    const tasks = yield* db.select(workspaceId, "tasks", decodeTasks, { kind: "task", ...where });
+    const [only] = tasks;
+    if (only === undefined) return tasks;
+    const linkWhere = tasks.length === 1 ? { task_id: only.id } : {};
+    const links = yield* db.select(workspaceId, "task_threads", decodeLinks, linkWhere, {
+      orderBy: ["linked_at"],
+    });
+    const byTask = Map.groupBy(links, (link) => link.task_id);
+    return tasks.map((task) => ({
+      ...task,
+      threads: (byTask.get(task.id) ?? []).map((link) => ({
+        environmentId: link.environment_id,
+        threadId: link.thread_id,
+      })),
+    }));
+  });
+
   const findTask = Effect.fn("TaskBoardService.findTask")(function* (
     workspaceId: Telescope.WorkspaceId,
     taskId: Telescope.Task["id"],
   ) {
-    const where = { kind: "task", item_id: taskId };
-    const [task] = yield* db.select(workspaceId, "tasks", decodeTasks, where);
+    const [task] = yield* selectTasks(workspaceId, { item_id: taskId });
     if (task === undefined) return yield* fail("not_found", "Task not found.");
     return task;
+  });
+
+  /** A thread belongs to at most one task, in any workspace on this environment. */
+  const writeThreads = Effect.fn("TaskBoardService.writeThreads")(function* (
+    author: Committer,
+    current: Telescope.Task,
+    threads: ReadonlyArray<Telescope.TaskThread>,
+    at: string,
+  ) {
+    const { workspaceId, id: taskId } = current;
+    for (const gone of current.threads.filter((old) => !threads.some(sameThread(old))))
+      yield* db.remove(workspaceId, "task_threads", {
+        task_id: taskId,
+        environment_id: gone.environmentId,
+        thread_id: gone.threadId,
+      });
+    for (const added of threads.filter((thread) => !current.threads.some(sameThread(thread)))) {
+      const holder = yield* db.taskOfThread(added.environmentId, added.threadId);
+      if (holder !== undefined && holder.workspaceId !== workspaceId)
+        return yield* fail("conflict", "This thread already belongs to another workspace's task.");
+      if (holder !== undefined) {
+        const [task] = yield* selectTasks(workspaceId, { item_id: holder.taskId });
+        const title = task?.title ?? holder.taskId;
+        return yield* fail("conflict", `This thread already belongs to the task "${title}".`);
+      }
+      yield* db.insert(workspaceId, "task_threads", {
+        task_id: taskId,
+        environment_id: added.environmentId,
+        thread_id: added.threadId,
+        linked_by: author.authorId,
+        linked_at: at,
+      });
+    }
   });
 
   /** Writes `fields` and appends `notes` as the task's next version, with its commit. */
@@ -268,12 +343,15 @@ const make = Effect.gen(function* () {
         () => new Telescope.WorkspaceError({ reason: "conflict", message: "Invalid task fields." }),
       ),
     );
+    const row = (item: Readonly<Record<string, unknown>>) =>
+      Struct.omit(toColumns(item, "item_id"), ["threads"]);
     yield* current.version === 0
-      ? db.insert(next.workspaceId, "tasks", toColumns(next, "item_id"))
-      : db.update(next.workspaceId, "tasks", toColumns({ ...written, ...stamp }, "item_id"), {
+      ? db.insert(next.workspaceId, "tasks", row(next))
+      : db.update(next.workspaceId, "tasks", row({ ...written, ...stamp }), {
           item_id: next.id,
           version: current.version,
         });
+    if ("threads" in fields) yield* writeThreads(author, current, next.threads, at);
     yield* recordCommit(author, next, current.version, changedFields, at, merge);
     return next;
   });
@@ -314,7 +392,10 @@ const make = Effect.gen(function* () {
     const read: Record<string, unknown> = { ...BLANK };
     for (const commit of commits)
       if (commit.baseVersion < input.baseVersion) Object.assign(read, commit.changedFields);
-    const set = input.set ?? {};
+    const set =
+      input.set?.threads === undefined
+        ? (input.set ?? {})
+        : { ...input.set, threads: uniqueThreads(input.set.threads) };
     const mine: Record<string, Schema.Json> = {};
     for (const key of TASK_FIELDS) {
       if (!(key in set) || sameJson(set[key], current[key])) continue;
@@ -399,6 +480,7 @@ const make = Effect.gen(function* () {
       id: taskId,
       workspaceId,
       ...BLANK,
+      threads: [],
       freeText: [],
       createdAt: at,
       updatedAt: at,
@@ -436,10 +518,43 @@ const make = Effect.gen(function* () {
   ) {
     yield* requireMember(actor, workspaceId);
     yield* expireLeases(workspaceId);
-    const where = { kind: "task", ...toColumns(filter, "item_id") };
-    const tasks = yield* db.select(workspaceId, "tasks", decodeTasks, where);
+    const tasks = yield* selectTasks(workspaceId, toColumns(filter, "item_id"));
     const listed = Telescope.BOARD_LIMITS.listedFreeTextEntries;
     return { tasks: tasks.map((task) => ({ ...task, freeText: task.freeText.slice(-listed) })) };
+  });
+
+  /** One thread in or out, at the version read inside the write, so nothing else changes. */
+  // Untraced: linkThread and unlinkThread name the span.
+  const setThread = Effect.fnUntraced(function* (
+    actor: Actor,
+    { workspaceId, taskId, environmentId, threadId }: In<"telescope.task.linkThread">,
+    linked: boolean,
+  ) {
+    const author = yield* requireMember(actor, workspaceId, "write");
+    const thread = { environmentId, threadId };
+    return yield* transact(
+      Effect.gen(function* () {
+        const current = yield* findTask(workspaceId, taskId);
+        const others = current.threads.filter((t) => !sameThread(t)(thread));
+        const had = others.length < current.threads.length;
+        const set = { threads: !linked ? others : had ? current.threads : [...others, thread] };
+        const input = { workspaceId, taskId, baseVersion: current.version, set };
+        return yield* commitTask(author, input, current);
+      }),
+    );
+  });
+
+  const linkThread = Effect.fn("TaskBoardService.linkThread")(function* (
+    actor: Actor,
+    input: In<"telescope.task.linkThread">,
+  ) {
+    return yield* setThread(actor, input, true);
+  });
+  const unlinkThread = Effect.fn("TaskBoardService.unlinkThread")(function* (
+    actor: Actor,
+    input: In<"telescope.task.unlinkThread">,
+  ) {
+    return yield* setThread(actor, input, false);
   });
 
   /** Deciding a conflict proposal clears its task's marker and, for `incoming`, applies that side. */
@@ -450,8 +565,7 @@ const make = Effect.gen(function* () {
     decision: Telescope.Decision,
     at: string,
   ) {
-    const where = { kind: "task", item_id: taskId };
-    const [task] = yield* db.select(proposal.workspaceId, "tasks", decodeTasks, where);
+    const [task] = yield* selectTasks(proposal.workspaceId, { item_id: taskId });
     if (task?.conflictDecisionId !== proposal.id) return;
     const chosen = decision.chosen === "incoming" ? incoming : {};
     yield* applyCommit(author, task, { ...chosen, conflictDecisionId: null }, [], at, {
@@ -568,8 +682,7 @@ const make = Effect.gen(function* () {
     at: string,
   ) {
     yield* db.remove(lease.workspaceId, "leases", { lease_id: lease.id });
-    const where = { kind: "task", item_id: lease.taskId };
-    const [task] = yield* db.select(lease.workspaceId, "tasks", decodeTasks, where);
+    const [task] = yield* selectTasks(lease.workspaceId, { item_id: lease.taskId });
     if (task?.leaseId === lease.id) yield* applyCommit(author, task, { leaseId: null }, [], at);
   });
 
@@ -705,6 +818,8 @@ const make = Effect.gen(function* () {
     updateTask,
     getTask,
     listTasks,
+    linkThread,
+    unlinkThread,
     createDecision,
     listDecisions,
     listCommits,

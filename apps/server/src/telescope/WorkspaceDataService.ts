@@ -30,6 +30,7 @@ const KEYS = {
   agents: ["agent_id"],
   tasks: ["item_id"],
   task_commits: ["commit_id"],
+  task_threads: ["environment_id", "thread_id"],
   leases: ["lease_id"],
   grants: ["grant_id"],
   audit: ["audit_id"],

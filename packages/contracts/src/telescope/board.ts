@@ -1,6 +1,7 @@
+import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 
-import { PositiveInt, ProjectId, ThreadId } from "../baseSchemas.ts";
+import { EnvironmentId, PositiveInt, ProjectId, ThreadId } from "../baseSchemas.ts";
 import {
   AgentId,
   AgentRunId,
@@ -38,6 +39,10 @@ export const ForgeIssueRef = Schema.Struct({
 /** Comments and reports live beside the structured fields, never inside them. */
 export const FreeTextEntry = Schema.Struct({ authorId: Text, text: Schema.String, at: Timestamp });
 
+/** A Code thread on any environment; it belongs to at most one task, and unlinking keeps it. */
+export const TaskThread = Schema.Struct({ environmentId: EnvironmentId, threadId: ThreadId });
+export type TaskThread = typeof TaskThread.Type;
+
 export const Task = Schema.Struct({
   kind: Schema.Literal("task"),
   id: TaskId,
@@ -51,7 +56,8 @@ export const Task = Schema.Struct({
   /** The open decision (需要你定) an older server's stale write opened; settling it clears this. */
   conflictDecisionId: Schema.optionalKey(DecisionId),
   forgeIssue: Schema.optionalKey(ForgeIssueRef),
-  threadId: Schema.optionalKey(ThreadId),
+  /** Oldest link first. An older server sends none. */
+  threads: Schema.Array(TaskThread).pipe(Schema.withDecodingDefault(Effect.succeed([]))),
   goalChain: Strings,
   freeText: Schema.Array(FreeTextEntry),
   createdAt: Timestamp,
