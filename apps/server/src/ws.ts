@@ -2417,7 +2417,9 @@ export const layerWsRpc = (
         [Telescope.WS_METHODS.workspaceExport]: (input) =>
           telescopeStorage(telescopeData.export(caller, input)),
         [Telescope.WS_METHODS.workspaceDelete]: (input) =>
-          telescopeStorage(followInviteCodes(telescopeData.delete(caller, input))),
+          telescopeStorage(
+            TelescopeInviteLink.followDelete(inviteLinks)(telescopeData.delete(caller, input)),
+          ),
         [Telescope.WS_METHODS.memberInvite]: (input) =>
           telescopeStorage(TelescopeInviteLink.invite(inviteLinks, caller, input)),
         [Telescope.WS_METHODS.memberLinkCode]: (input) =>
@@ -2429,7 +2431,7 @@ export const layerWsRpc = (
         [Telescope.WS_METHODS.memberSetRole]: (input) =>
           telescopeStorage(followInviteCodes(telescope.setRole(caller, input))),
         [Telescope.WS_METHODS.memberRevoke]: (input) =>
-          telescopeStorage(followInviteCodes(telescope.revoke(caller, input))),
+          telescopeStorage(TelescopeInviteLink.revoke(inviteLinks, caller, input)),
         [Telescope.WS_METHODS.memberRestore]: (input) =>
           telescopeStorage(telescope.restore(caller, input)),
         [Telescope.WS_METHODS.projectBind]: (input) =>

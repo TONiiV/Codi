@@ -82,3 +82,53 @@ export const followCodes =
   (services: InviteServices) =>
   <A, E, R>(change: Effect.Effect<A, E, R>) =>
     Effect.tap(change, () => revokeDeadLinks(services));
+
+const TELESCOPE_SCOPES: ReadonlySet<AuthEnvironmentScope> = new Set([
+  AuthTelescopeMemberScope,
+  AuthTelescopeAdminScope,
+]);
+
+/**
+ * Ends the sessions of these devices that are now in no workspace, when they pair for Telescope
+ * only: machine access the owner gave stays. Proof-key devices pair through T3 Connect with full
+ * scopes, so a key that is not a session id has nothing to end.
+ */
+const endSessions = Effect.fn("Telescope.InviteLink.endSessions")(
+  function* ({ workspaces, auth }: InviteServices, deviceKeys: ReadonlyArray<string>) {
+    const gone = new Set(yield* workspaces.devicesWithoutWorkspace(deviceKeys));
+    const ended = (yield* auth.listSessions()).filter(
+      ({ sessionId, scopes }) =>
+        gone.has(sessionId) && scopes.every((scope) => TELESCOPE_SCOPES.has(scope)),
+    );
+    yield* Effect.forEach(ended, ({ sessionId }) => auth.revokeSession(sessionId), {
+      discard: true,
+    });
+  },
+  Effect.catchCause((cause) => Effect.logWarning("Telescope sessions were not ended", cause)),
+);
+
+/** Revokes a member, the links of the codes that died with them, and their devices' sessions. */
+export const revoke = Effect.fn("Telescope.InviteLink.revoke")(function* (
+  services: InviteServices,
+  caller: WorkspaceService.Caller,
+  input: typeof Telescope.MemberRevokeInput.Type,
+) {
+  const { member, deviceKeys } = yield* followCodes(services)(
+    services.workspaces.revoke(caller, input),
+  );
+  yield* endSessions(services, deviceKeys);
+  return member;
+});
+
+/** Follows a workspace deletion as `revoke` follows a member's, for every device it linked. */
+export const followDelete =
+  (services: InviteServices) =>
+  <E, R>(deletion: Effect.Effect<Telescope.WorkspaceDeleteManifest, E, R>) =>
+    Effect.tap(followCodes(services)(deletion), ({ tables }) => {
+      const links = tables.find(({ table }) => table === "telescope_member_sessions")?.ids ?? [];
+      // Manifest ids are `member_id/device_key`; member ids hold no slash.
+      return endSessions(
+        services,
+        links.map((id) => id.slice(id.indexOf("/") + 1)),
+      );
+    });

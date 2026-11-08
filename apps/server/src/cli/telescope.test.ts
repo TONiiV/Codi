@@ -39,13 +39,14 @@ const makeHome = Effect.gen(function* () {
       return (yield* TestConsole.logLines).slice(before).join("\n");
     });
   // Joining needs a device session, which the CLI never is; the member accepts like the app does.
-  const join = (code: string, displayName: string) =>
+  const join = (
+    code: string,
+    displayName: string,
+    sessionId = AuthSessionId.make(`device-${displayName}`),
+  ) =>
     WorkspaceService.WorkspaceService.pipe(
       Effect.flatMap((service) =>
-        service.accept(
-          { sessionId: AuthSessionId.make(`device-${displayName}`), subject: "one-time-token" },
-          { code, displayName },
-        ),
+        service.accept({ sessionId, subject: "one-time-token" }, { code, displayName }),
       ),
       Effect.provide(
         WorkspaceService.layer.pipe(
@@ -252,6 +253,36 @@ it.layer(layer)("telescope CLI", (it) => {
       assert.include(
         yield* failureOf(t3("member", "list", "--org", "no-such-workspace")),
         "You are not a member of this workspace.",
+      );
+    }),
+  );
+
+  it.effect("member revoke ends the member's link sessions and the links of dead codes", () =>
+    Effect.gen(function* () {
+      const { t3, join } = yield* makeHome;
+      const listed = <S extends Schema.Top>(schema: S, ...args: ReadonlyArray<string>) =>
+        t3(...args, "--json").pipe(Effect.flatMap(decodeJson(schema)));
+      const org = yield* t3("org", "init", "--name", "Acme", "--kind", "enterprise");
+      const invite = ["member", "invite", "--org", org, "--role", "member"];
+      const invitation = yield* listed(Telescope.Invitation, ...invite);
+      const label = `Telescope invite ${invitation.id}`;
+      const scope = ["--scope", "telescope:member"];
+      const Link = Schema.Struct({ id: Schema.String });
+      const link = yield* listed(Link, "auth", "pairing", "create", ...scope, "--label", label);
+      const Session = Schema.Struct({ sessionId: AuthSessionId });
+      const session = yield* listed(Session, "auth", "session", "issue", ...scope);
+      const bob = yield* join(invitation.code, "Bob", session.sessionId);
+
+      yield* t3("member", "revoke", "--org", org, "--member", bob.subjectId);
+      const links = yield* listed(Schema.Array(Link), "auth", "pairing", "list");
+      assert.notInclude(
+        links.map(({ id }) => id),
+        link.id,
+      );
+      const sessions = yield* listed(Schema.Array(Session), "auth", "session", "list");
+      assert.notInclude(
+        sessions.map(({ sessionId }) => sessionId),
+        session.sessionId,
       );
     }),
   );

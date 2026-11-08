@@ -27,12 +27,17 @@ import { runMigrations } from "../persistence/Migrations.ts";
 import * as SqlitePersistence from "../persistence/Sqlite.ts";
 import * as ManagedPolicy from "../policy/ManagedPolicy.ts";
 import * as InviteLink from "./InviteLink.ts";
+import * as WorkspaceDataService from "./WorkspaceDataService.ts";
 import * as WorkspaceService from "./WorkspaceService.ts";
 
 const database = Layer.effectDiscard(runMigrations()).pipe(
   Layer.provideMerge(SqlitePersistence.layerMemory),
 );
-const layer = Layer.mergeAll(WorkspaceService.layer, EnvironmentAuth.layer).pipe(
+const layer = Layer.mergeAll(
+  WorkspaceService.layer,
+  WorkspaceDataService.layer,
+  EnvironmentAuth.layer,
+).pipe(
   Layer.provide(ManagedPolicy.layerTest()),
   Layer.provide(Layer.merge(ProjectStore.layer, ServerSecretStore.layer)),
   Layer.provide(ServerEnvironment.layerIdentity),
@@ -156,5 +161,88 @@ it.layer(layer)("Telescope invite links", (it) => {
       assert.strictEqual(kept.length, 1);
       assert.isDefined(kept[0]);
     }).pipe(Effect.scoped),
+  );
+
+  it.effect("end the Telescope-only sessions of devices a change leaves in no workspace", () =>
+    Effect.gen(function* () {
+      const workspaces = yield* WorkspaceService.WorkspaceService;
+      const data = yield* WorkspaceDataService.WorkspaceDataService;
+      const auth = yield* EnvironmentAuth.EnvironmentAuth;
+      const services = { workspaces, auth };
+      const owner = {
+        sessionId: AuthSessionId.make("session-owner"),
+        subject: "desktop-bootstrap",
+        scopes: AuthStandardClientScopes,
+      };
+      const create = (name: string) =>
+        workspaces
+          .create(owner, { kind: "enterprise", name, displayName: "Olive" })
+          .pipe(Effect.map(({ id }) => id));
+      const acme = yield* create("Acme");
+      const beta = yield* create("Beta");
+      const gamma = yield* create("Gamma");
+      const inviteTo = (workspaceId: Telescope.WorkspaceId) =>
+        InviteLink.invite(services, owner, { workspaceId, role: "member" });
+      const linkOf = ({ pairingLink }: { readonly pairingLink: Telescope.InvitePairingLink }) =>
+        pairingLink.status === "issued" ? pairingLink.credential : assert.fail(pairingLink.status);
+      const bearer = (token: string) =>
+        ({ cookies: {}, headers: { authorization: `Bearer ${token}` } }) as unknown as Parameters<
+          typeof auth.authenticateHttpRequest
+        >[0];
+      // Pairs a device with `credential`, then joins a workspace with each code.
+      const device = Effect.fn(function* (credential: string, codes: ReadonlyArray<string>) {
+        const { access_token: token } = yield* auth.exchangeBootstrapCredentialForAccessToken(
+          credential,
+          undefined,
+          { deviceType: "desktop" },
+        );
+        const session = yield* auth.authenticateHttpRequest(bearer(token));
+        const members = yield* Effect.forEach(codes, (code) =>
+          workspaces.accept(session, { code, displayName: "Device" }),
+        );
+        return { token, members };
+      });
+      const sessionsOf = (devices: ReadonlyArray<{ readonly token: string }>) =>
+        Effect.forEach(devices, ({ token }) =>
+          auth
+            .authenticateHttpRequest(bearer(token))
+            .pipe(Effect.match({ onFailure: (error) => error._tag, onSuccess: () => "live" })),
+        );
+
+      const ada = yield* inviteTo(acme);
+      const adaDevice = yield* device(linkOf(ada), [ada.code]);
+      const bo = yield* inviteTo(acme);
+      const boDevice = yield* device(linkOf(bo), [bo.code, (yield* inviteTo(beta)).code]);
+      // The owner paired this one for the whole machine; Telescope never takes that away.
+      const full = yield* auth.createPairingLink({ scopes: AuthStandardClientScopes });
+      const cyDevice = yield* device(full.credential, [(yield* inviteTo(acme)).code]);
+      const dee = yield* inviteTo(gamma);
+      const deeDevice = yield* device(linkOf(dee), [dee.code]);
+
+      for (const { members } of [adaDevice, boDevice, cyDevice])
+        yield* InviteLink.revoke(services, owner, {
+          workspaceId: acme,
+          subjectId: members[0]!.subjectId,
+        });
+      assert.deepStrictEqual(yield* sessionsOf([adaDevice, boDevice, cyDevice, deeDevice]), [
+        "ServerAuthInvalidCredentialError",
+        "live",
+        "live",
+        "live",
+      ]);
+
+      yield* InviteLink.revoke(services, owner, {
+        workspaceId: beta,
+        subjectId: boDevice.members[1]!.subjectId,
+      });
+      yield* InviteLink.followDelete(services)(
+        data.delete(owner, { workspaceId: gamma, confirmName: "Gamma" }),
+      );
+      assert.deepStrictEqual(yield* sessionsOf([boDevice, cyDevice, deeDevice]), [
+        "ServerAuthInvalidCredentialError",
+        "live",
+        "ServerAuthInvalidCredentialError",
+      ]);
+    }),
   );
 });
