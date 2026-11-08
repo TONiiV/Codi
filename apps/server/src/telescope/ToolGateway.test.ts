@@ -269,12 +269,62 @@ it.layer(layer)("Telescope tool gateway", (it) => {
           `Authorization: Bearer\nX-Api-Key: ${hex}`,
           "Authorization: [redacted]\nX-Api-Key: [redacted]",
         ],
+        [
+          "x-api-key:abc123,Authorization:Bearer 5f0c2b7e81d94a36b2e7c4d1a9f08e63",
+          "x-api-key:[redacted]Authorization:[redacted]",
+        ],
+        [
+          "| X-Api-Key: none |Authorization: supersecrettoken |",
+          "| X-Api-Key: [redacted]Authorization: [redacted]",
+        ],
+        [
+          "Cookie: none;Authorization: supersecrettoken",
+          "Cookie: [redacted]Authorization: [redacted]",
+        ],
+        [
+          "X-Api-Key: none\n{Authorization: supersecrettoken}",
+          "X-Api-Key: [redacted]Authorization: [redacted]",
+        ],
+        ...[",", ";", "|", "{", "(", "-"].map(
+          (join) =>
+            [
+              `X-Api-Key: none${join}Authorization: supersecrettoken`,
+              "X-Api-Key: [redacted]Authorization: [redacted]",
+            ] as const,
+        ),
+        [
+          "Authorization: none,X-Api-Key: supersecrettoken",
+          "Authorization: [redacted]X-Api-Key: [redacted]",
+        ],
+        [
+          "X-Api-Key: none;Cookie: sessionid=supersecrettoken",
+          "X-Api-Key: [redacted]Cookie: [redacted]",
+        ],
+        [
+          "X-Api-Key: none,-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEA0123456789abcdef\n-----END RSA PRIVATE KEY-----",
+          "X-Api-Key: [redacted][redacted]",
+        ],
+        [
+          "X-Api-Key: none------BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEA0123456789abcdef\n-----END RSA PRIVATE KEY-----",
+          "X-Api-Key: [redacted]-[redacted]",
+        ],
+        [
+          "Authorization: Bearer abc123def456ghi789-X-Api-Key: none",
+          "Authorization: [redacted]X-Api-Key: [redacted]",
+        ],
+        ["Cookie: none;Bearer 5f0c2b7e81d94a36b2e7c4d1a9f08e63", "Cookie: [redacted][redacted]"],
+        ["Cookie: none;Basic dXNlcjpwYXNz", "Cookie: [redacted][redacted]"],
+        ["Cookie: mode=superbasic theme", "Cookie: [redacted] theme"],
+        ["X-Api-Key: none\nHTTP_AUTHORIZATION:supersecrettoken", "X-Api-Key: [redacted]"],
+        ["X-Api-Key: none\nmy_cookie:supersecrettoken", "X-Api-Key: [redacted]"],
+        ["Authorization: Token\nBasic dXNlcjpwYXNz", "Authorization: [redacted]\n[redacted]"],
         [`Cookie: theme=dark; sessionid=${hex}`, `Cookie: [redacted] sessionid=${hex}`],
         [`headers['Authorization'] = 'Token ${hex}'`],
         [`req.Header.Set("Authorization", "Bearer supersecrettoken")`],
         [`dict(Authorization="Bearer supersecrettoken")`],
         [`'Authorization' => 'Bearer supersecrettoken'`],
         [`HTTP_AUTHORIZATION: Token ${hex}`],
+        ["X-Api-Key: none\nmy_cookie: supersecrettoken", "X-Api-Key: [redacted] supersecrettoken"],
         [`{\\"Authorization\\": \\"supersecrettoken123\\"}`],
         [`{ name: "Authorization", value: "supersecrettoken" }`],
         [

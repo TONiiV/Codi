@@ -38,10 +38,12 @@ const TOOL_POWERS: Readonly<Record<Telescope.GatewayTool, Telescope.GrantPower |
   memory_write: null,
 };
 const SECRET_KEY = /token|secret|password|passphrase|api.?key|authorization|cookie|credential/i;
-// A scheme word's value may sit on the next line, but a PEM line, a Bearer or Basic credential and
-// the next header are never taken, so SECRET_VALUE and the next match still see them whole.
+// After a scheme word the value may sit on the next line, unless it starts with `-----`, a Bearer
+// or Basic word or a (Proxy-)Authorization, X-Api-Key or Cookie header. Past its first character
+// the value ends before `-----`, a Bearer or Basic word or one of those header names at a word
+// boundary, so SECRET_VALUE and the next match still see them.
 const AUTH_HEADER_VALUE =
-  /(\b(?:authorization|x-api-key|cookie)["']?[ \t]*:[ \t]*["'`]?)(?!-----)(?:[\w-]+\s+(?!-----|(?:bearer|basic)\s|[\w-]*(?:authorization|x-api-key|cookie)["']?[ \t]*:))?[^\s'"`]+/gi;
+  /(\b(?:authorization|x-api-key|cookie)["']?[ \t]*:[ \t]*["'`]?)(?!-----)(?:(?:(?!-----)[\w-])+\s+(?!-----|(?:bearer|basic)\s|(?:proxy-)?(?:authorization|x-api-key|cookie)["']?[ \t]*:))?[^\s'"`](?:(?!\b(?:authorization|x-api-key|cookie)["']?[ \t]*:|-----|\b(?:bearer|basic)\s)[^\s'"`])*/gi;
 // Known credential shapes only: auth headers, JWTs, private keys and common provider key prefixes.
 // A bare Bearer or Basic token needs a digit or a later capital, so "Basic validation" stays prose.
 const SECRET_VALUE =
