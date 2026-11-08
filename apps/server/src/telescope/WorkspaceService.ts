@@ -39,7 +39,7 @@ const MemberRow = Schema.Struct({
   joined_at: Schema.String,
   revoked_at: Schema.NullOr(Schema.String),
 });
-const SessionLinkRow = Schema.Struct({ member_id: Schema.String });
+const SessionLinkRow = Schema.Struct({ member_id: Schema.String, device_key: Schema.String });
 const InvitationRow = Schema.Struct({
   invitation_id: Telescope.InvitationId,
   workspace_id: Telescope.WorkspaceId,
@@ -138,7 +138,10 @@ export class WorkspaceService extends Context.Service<
     readonly accept: Method<"telescope.member.accept">;
     readonly members: Method<"telescope.member.list">;
     readonly setRole: Method<"telescope.member.setRole">;
-    readonly revoke: Method<"telescope.member.revoke">;
+    readonly revoke: (
+      caller: Caller,
+      input: In<"telescope.member.revoke">,
+    ) => Effect.Effect<{ member: Telescope.Member; deviceKeys: ReadonlyArray<string> }, Failure>;
     readonly restore: Method<"telescope.member.restore">;
     readonly bind: Method<"telescope.project.bind">;
     readonly unbind: Method<"telescope.project.unbind">;
@@ -146,6 +149,10 @@ export class WorkspaceService extends Context.Service<
     readonly bindingSummary: Method<"telescope.project.bindingSummary">;
     /** Ids of the invitation codes that still work, in every workspace. */
     readonly liveInvitationIds: () => Effect.Effect<ReadonlySet<string>, Failure>;
+    /** Of these device keys, the ones linked to no active member of any workspace. */
+    readonly devicesWithoutWorkspace: (
+      deviceKeys: ReadonlyArray<string>,
+    ) => Effect.Effect<ReadonlyArray<string>, Failure>;
   }
 >()("t3/telescope/WorkspaceService") {}
 
@@ -420,7 +427,11 @@ const make = Effect.gen(function* () {
         yield* voidCodesOf(target);
         const lead = { lead_subject_id: input.subjectId };
         yield* db.update(input.workspaceId, "project_bindings", { lead_subject_id: null }, lead);
-        return toMember({ ...target, revoked_at: revokedAt });
+        const links = yield* db.select(input.workspaceId, "member_sessions", decodeSessionLinks, {
+          member_id: input.subjectId,
+        });
+        const deviceKeys = links.map((link) => link.device_key);
+        return { member: toMember({ ...target, revoked_at: revokedAt }), deviceKeys };
       }),
     );
   });
@@ -538,6 +549,14 @@ const make = Effect.gen(function* () {
     return new Set(rows.flat().flatMap((row) => (row.expires_at > at ? [row.invitation_id] : [])));
   });
 
+  const devicesWithoutWorkspace = Effect.fn("WorkspaceService.devicesWithoutWorkspace")(function* (
+    deviceKeys: ReadonlyArray<string>,
+  ) {
+    return yield* Effect.filter(deviceKeys, (key) =>
+      db.workspaceIdsOf(key).pipe(Effect.map((ids) => ids.length === 0)),
+    );
+  });
+
   return WorkspaceService.of({
     create,
     list,
@@ -555,6 +574,7 @@ const make = Effect.gen(function* () {
     bindings,
     bindingSummary,
     liveInvitationIds,
+    devicesWithoutWorkspace,
   });
 });
 

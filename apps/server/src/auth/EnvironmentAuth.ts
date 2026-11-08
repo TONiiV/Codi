@@ -10,7 +10,7 @@ import {
   type AuthClientMetadata,
   type AuthClientSession,
   type AuthCreatePairingCredentialInput,
-  type AuthEnvironmentScope,
+  AuthEnvironmentScope,
   type AuthMcpClientAccess,
   type AuthPairingLink,
   type AuthPairingCredentialResult,
@@ -957,9 +957,16 @@ export const make = Effect.gen(function* () {
 
   const exchangeBootstrapCredentialForAccessToken: EnvironmentAuth["Service"]["exchangeBootstrapCredentialForAccessToken"] =
     (credential, requestedScopes, requestMetadata, input) => {
+      // Telescope links a proof-key device by its key, which a member revoke cannot reach, so a
+      // proof key needs another scope. The consume checks it, so a refused link stays unspent.
+      const consumeScopes = input?.proofKeyThumbprint
+        ? (requestedScopes ?? AuthEnvironmentScope.literals).filter(
+            (scope) => !scope.startsWith("telescope:"),
+          )
+        : requestedScopes;
       return resolveBootstrapGrant(credential, {
         ...input,
-        ...(requestedScopes !== undefined ? { requestedScopes } : {}),
+        ...(consumeScopes !== undefined ? { requestedScopes: consumeScopes } : {}),
       }).pipe(
         Effect.flatMap((grant) =>
           Effect.gen(function* () {
