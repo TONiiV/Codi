@@ -61,7 +61,7 @@ export const runSnapshot = (
 });
 
 // A restart continuation resumes the Codi run it names, so a chain of them is one Codi turn.
-const firstOfChain = (
+export const firstOfChain = (
   codiRuns: ReadonlyArray<OrchestrationV2Run>,
   run: OrchestrationV2Run,
 ): OrchestrationV2Run => {

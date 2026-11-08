@@ -1,10 +1,11 @@
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 
+import * as ProjectionStore from "../orchestration-v2/ProjectionStore.ts";
 import * as TurnPreamble from "../orchestration-v2/TurnPreamble.ts";
 import * as AgentInstructions from "./AgentInstructions.ts";
 import { servesRun } from "./AgentRuntime.ts";
-import { runSnapshot } from "./AgentThreadRuns.ts";
+import { firstOfChain, runSnapshot } from "./AgentThreadRuns.ts";
 import * as AgentService from "./AgentService.ts";
 import * as ContextAssembler from "./ContextAssembler.ts";
 import * as RunRecordService from "./RunRecordService.ts";
@@ -24,6 +25,7 @@ export const layer = Layer.effectDiscard(
     const runs = yield* RunRecordService.RunRecordService;
     const assembler = yield* ContextAssembler.ContextAssembler;
     const preamble = yield* TurnPreamble.TurnPreamble;
+    const projections = yield* ProjectionStore.ProjectionStoreV2;
 
     const forTurn = Effect.fn("AgentTurnContext.forTurn")(function* (
       turn: TurnPreamble.TurnPreambleInput,
@@ -32,10 +34,16 @@ export const layer = Layer.effectDiscard(
       if (owner === undefined) return "";
       const { workspaceId } = owner;
       const { agent } = yield* agents.powersOf(workspaceId, owner.agentId);
+      // A resumed or retried turn joins the run its chain serves, as the run listener keys it.
+      const { runs: codiRuns } = yield* projections.getThreadRecords(turn.threadId, ["runs"]);
+      const codiRun = codiRuns.findLast((candidate) => candidate.userMessageId === turn.messageId);
       const run = yield* runs.startFor(workspaceId, owner.ownerSubjectId, {
         agentId: agent.id,
         threadId: turn.threadId,
-        inputSnapshot: runSnapshot(turn.modelSelection, { codiMessageId: turn.messageId }),
+        inputSnapshot: runSnapshot(turn.modelSelection, {
+          codiMessageId:
+            codiRun === undefined ? turn.messageId : firstOfChain(codiRuns, codiRun).userMessageId,
+        }),
       });
       if (!(yield* servesRun(db, workspaceId))(run)) return "";
       const [memberId = owner.ownerSubjectId] = run.onBehalfOf;

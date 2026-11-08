@@ -1,4 +1,5 @@
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
+import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, it } from "@effect/vitest";
 import {
   AuthSessionId,
@@ -33,6 +34,7 @@ import * as TestClock from "effect/testing/TestClock";
 import * as SqlClient from "effect/sql/SqlClient";
 import type { Tool } from "effect/ai";
 
+import { ServerConfig } from "../config.ts";
 import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
 import * as McpInvocationContext from "../mcp/McpInvocationContext.ts";
 import * as McpToolAccess from "../mcp/McpToolAccess.ts";
@@ -52,6 +54,7 @@ import * as ProviderAdapterRegistry from "../orchestration-v2/ProviderAdapterReg
 import * as ProviderRuntimeRecoveryService from "../orchestration-v2/ProviderRuntimeRecoveryService.ts";
 import * as ProviderReplayHarness from "../orchestration-v2/testkit/ProviderReplayHarness.ts";
 import * as ThreadManagementService from "../orchestration-v2/ThreadManagementService.ts";
+import * as TurnPreamble from "../orchestration-v2/TurnPreamble.ts";
 import * as SqlitePersistence from "../persistence/Sqlite.ts";
 import * as ManagedProjectFolders from "../project/ManagedProjectFolders.ts";
 import * as ServerSettings from "../serverSettings.ts";
@@ -59,7 +62,9 @@ import * as AgentInstructions from "./AgentInstructions.ts";
 import * as AgentRuntime from "./AgentRuntime.ts";
 import * as AgentService from "./AgentService.ts";
 import * as AgentThreadRuns from "./AgentThreadRuns.ts";
+import * as AgentTurnContext from "./AgentTurnContext.ts";
 import * as BoardChanges from "./BoardChanges.ts";
+import * as ContextAssembler from "./ContextAssembler.ts";
 import * as DelegationAnswers from "./DelegationAnswers.ts";
 import * as DelegationService from "./DelegationService.ts";
 import * as GrantService from "./GrantService.ts";
@@ -291,7 +296,7 @@ const makeHarness = Effect.fn("makeHarness")(function* (listening: boolean) {
     Layer.provideMerge(RunRecordService.layer),
     Layer.provideMerge(ProjectStore.layer),
     Layer.provideMerge(Layer.merge(database, NodeCrypto.layer)),
-    Layer.provide(
+    Layer.provideMerge(
       Layer.succeed(ServerEnvironment.ServerEnvironmentIdentity, {
         getEnvironmentId: Effect.succeed(environmentId),
       }),
@@ -355,6 +360,9 @@ const makeHarness = Effect.fn("makeHarness")(function* (listening: boolean) {
   const runtime = Layer.mergeAll(
     AgentRuntime.layerWakeRunner,
     listening ? ThreadTurnTokens.layer : Layer.empty,
+    AgentTurnContext.layer.pipe(
+      Layer.provide(Layer.merge(ContextAssembler.layer, TurnPreamble.layer)),
+    ),
     McpToolAccess.HandlersLayer.layer(TelescopeHandlers.layer),
   ).pipe(
     Layer.provideMerge(AgentRuntime.layer),
@@ -368,6 +376,11 @@ const makeHarness = Effect.fn("makeHarness")(function* (listening: boolean) {
       }),
     ),
     Layer.provideMerge(Layer.merge(telescope, orchestration)),
+    Layer.provideMerge(
+      ServerConfig.layerTest(process.cwd(), { prefix: "telescope-worker-dispatch-" }).pipe(
+        Layer.provideMerge(NodeServices.layer),
+      ),
+    ),
   );
   // The effect worker runs as a server's does; a restart stops it with the server.
   const worker = yield* Ref.make<Fiber.Fiber<void> | undefined>(undefined);
@@ -977,6 +990,7 @@ it.effect.each([
           });
           yield* harness.complete(resumed);
           assert.equal((yield* Queue.take(harness.finished)).threadId, turn.threadId);
+          assert.lengthOf(yield* db.openRunsOnThread(turn.threadId), 0);
           assert.equal((yield* delegations.get(ref)).state, "COMPLETED");
           assert.deepStrictEqual(yield* queued(seeded), [
             [seeded.pa, { kind: "report", delegationId: delegation.id }],
@@ -1151,6 +1165,7 @@ it.effect.each([
             (yield* Queue.clear(harness.finished)).map((run) => run.threadId),
             [turn.threadId],
           );
+          assert.lengthOf(yield* db.openRunsOnThread(turn.threadId), 0);
           assert.equal((yield* delegations.get(ref)).state, "COMPLETED");
           assert.deepStrictEqual(yield* queued(seeded), [
             [seeded.pa, { kind: "report", delegationId: delegation.id }],
@@ -1193,6 +1208,7 @@ it.effect(
             (yield* Queue.clear(harness.finished)).map((run) => run.threadId),
             [turn.threadId],
           );
+          assert.lengthOf(yield* db.openRunsOnThread(turn.threadId), 0);
           const task = yield* delegations.get(ref);
           assert.equal(task.state, "FAILED");
           assert.match(task.report?.blockedOn ?? "", /^The provider could not start this turn\./);
@@ -1232,6 +1248,37 @@ it.effect(
           assert.deepStrictEqual(yield* queued(seeded), [
             [seeded.pa, { kind: "report", delegationId: delegation.id }],
           ]);
+        }),
+      false,
+    ),
+);
+
+it.effect(
+  "a Chief run whose resumed turn keeps failing to start fails its task once Codi stops retrying it",
+  () =>
+    withHarness(
+      (harness) =>
+        Effect.gen(function* () {
+          const seeded = yield* seed;
+          const db = yield* TelescopeDb.TelescopeDb;
+          const delegations = yield* DelegationService.DelegationService;
+          const engine = yield* Orchestrator.OrchestratorV2;
+          const { delegation, turn, restarted } = yield* resumedTurnFailsToStart(harness, seeded);
+          yield* restarted.caughtUp;
+          for (const wait of ["61 seconds", "181 seconds"] as const) {
+            const afterSequence = yield* engine.getThreadEventSequence(turn.threadId);
+            yield* Ref.set(harness.failNextStart, Effect.void);
+            yield* TestClock.adjust(wait);
+            yield* runUpdated(turn.threadId, afterSequence, (run) => run.status === "failed");
+          }
+          yield* restarted.caughtUp;
+          assert.deepStrictEqual(
+            (yield* Queue.clear(harness.finished)).map((run) => run.threadId),
+            [turn.threadId],
+          );
+          assert.lengthOf(yield* db.openRunsOnThread(turn.threadId), 0);
+          const ref = { workspaceId: seeded.workspaceId, delegationId: delegation.id };
+          assert.equal((yield* delegations.get(ref)).state, "FAILED");
         }),
       false,
     ),

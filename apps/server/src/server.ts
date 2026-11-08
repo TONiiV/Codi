@@ -877,7 +877,9 @@ const layerMakeRoutes = Layer.mergeAll(
   Layer.merge(TelescopeTokenSaver.layerWeekly, TelescopeRuns.layerRetention),
   // The same preamble provider turns read, by layer memoization.
   TelescopeAgentTurnContext.layer.pipe(
-    Layer.provide(Layer.merge(TelescopeContextAssembler.layer, TurnPreamble.layer)),
+    Layer.provide(
+      Layer.mergeAll(TelescopeContextAssembler.layer, TurnPreamble.layer, ProjectionStoreV2.layer),
+    ),
   ),
   TelescopeAgentLeases.layer,
 ).pipe(
