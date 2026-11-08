@@ -154,6 +154,8 @@ describe("diffBlocks", () => {
       "Para one\r\n\r\n- [ ] x\r\n- [ ] x\r\n- [ ] x\r\n",
       "  indented para\n\n    code block\n\n<!-- html -->\n\n[ref]: https://example.com\n\n- a\n\n1) b",
       "\uFEFF# Title\n\nPara one\n\n- [ ] a\n- [ ] b",
+      "\uFEFF\uFEFF# Title\n\nPara one\n\n- [ ] a\n- [ ] b",
+      "\uFEFF\uFEFF\uFEFF# Title\n\nPara one\n\n- [ ] a\n- [ ] b",
       "- a\n\n-not a list",
       "* item\n\n*Note:* text",
     ];
@@ -167,6 +169,8 @@ describe("diffBlocks", () => {
     }
     const body = "# Title\n\nPara one\n\n- [ ] a\n- [ ] b";
     expect(diff(withIds(body), `\uFEFF${body}`)).toEqual([]);
+    expect(diff(withIds(body), `\uFEFF\uFEFF${body}`)).toEqual([]);
+    expect(diff(withIds(body), `\uFEFF\uFEFF\uFEFF${body}`)).toEqual([]);
   });
 });
 
