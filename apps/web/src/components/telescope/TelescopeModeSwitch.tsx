@@ -41,7 +41,14 @@ export function TelescopeModeSwitch() {
     },
   ];
   return (
-    <div className="pointer-events-none fixed top-(--workspace-controls-top) left-1/2 z-50 hidden h-(--workspace-topbar-height) -translate-x-1/2 items-center [-webkit-app-region:no-drag] md:flex">
+    <div
+      data-header-island=""
+      className={cn(
+        "pointer-events-none fixed top-(--workspace-controls-top) left-1/2 z-50 hidden h-(--workspace-topbar-height) -translate-x-1/2 items-center [-webkit-app-region:no-drag] md:flex",
+        "transition-[scale,opacity] duration-500 ease-spring motion-reduce:transition-none",
+        "data-covered:scale-x-40 data-covered:scale-y-0 data-covered:opacity-0 data-covered:duration-250 data-covered:ease-anticipate",
+      )}
+    >
       <div
         role="group"
         aria-label="Telescope or Microscope"
