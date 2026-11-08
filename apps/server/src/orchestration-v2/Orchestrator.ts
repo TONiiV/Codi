@@ -373,9 +373,16 @@ export interface OrchestratorV2Shape {
     childThreadId: ThreadId,
     taskId?: NodeId,
   ) => Effect.Effect<boolean, OrchestratorProjectionError>;
-  readonly restartContinuationPending: (run: OrchestrationV2Run) => Effect.Effect<boolean>;
-  /** Declined continuations emit no thread event; this still wakes waiters. */
-  readonly awaitRestartContinuation: (run: OrchestrationV2Run) => Effect.Effect<void>;
+  /** With `retryOwed`, the start retry Codi owes a failed continuation counts before it is written. */
+  readonly restartContinuationPending: (
+    run: OrchestrationV2Run,
+    options?: { readonly retryOwed?: boolean },
+  ) => Effect.Effect<boolean>;
+  /** Declined continuations emit no thread event; this still wakes waiters. `retryOwed` awaits the write. */
+  readonly awaitRestartContinuation: (
+    run: OrchestrationV2Run,
+    options?: { readonly retryOwed?: boolean },
+  ) => Effect.Effect<void>;
   readonly dispatch: (
     command: OrchestrationV2ServerCommand,
   ) => Effect.Effect<OrchestratorV2DispatchResult, OrchestratorV2Error>;
@@ -2496,7 +2503,7 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
   );
 
   // Under load a resumed provider can time out before taking the prompt; the restart still owes the turn.
-  const retryContinuationStart = Effect.fn("Orchestrator.retryContinuationStart")(function* (
+  const continuationRetryDelayMs = Effect.fn("Orchestrator.continuationRetryDelayMs")(function* (
     threadId: ThreadId,
     runId: RunId,
   ) {
@@ -2506,18 +2513,23 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
       { turnItemTypes: ["error"], turnItemRunIds: [runId] },
     );
     const run = projection.runs.find((candidate) => candidate.id === runId);
-    if (run === undefined) return;
-    const delayMs = continuationStartRetryDelayMs(run, projection);
+    return run === undefined ? undefined : continuationStartRetryDelayMs(run, projection);
+  });
+  const retryContinuationStart = Effect.fn("Orchestrator.retryContinuationStart")(function* (
+    threadId: ThreadId,
+    runId: RunId,
+  ) {
+    const delayMs = yield* continuationRetryDelayMs(threadId, runId);
     if (delayMs === undefined) return;
-    const commandId = CommandId.make(`command:restart-continuation-retry:${run.id}`);
+    const commandId = CommandId.make(`command:restart-continuation-retry:${runId}`);
     yield* writeSystemEvents(
       [],
       [
         {
-          id: `effect:restart-continuation:${run.id}`,
+          id: `effect:restart-continuation:${runId}`,
           commandId,
           threadId,
-          request: { type: "provider-runtime.continue", sourceRunId: run.id },
+          request: { type: "provider-runtime.continue", sourceRunId: runId },
           availableAt: DateTime.add(yield* DateTime.now, { milliseconds: delayMs }),
         },
       ],
@@ -14362,13 +14374,35 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
     recoverDelegatedTask,
     delegatedTaskResultPending,
     restartContinuationPending: Effect.fn("OrchestratorV2.restartContinuationPending")(
-      function (run) {
-        return awaitsRestartContinuation(run).pipe(Effect.orElseSucceed(() => false));
+      function (run, options) {
+        const owed =
+          options?.retryOwed === true &&
+          run.status === "failed" &&
+          run.restartContinuationOfRunId !== undefined;
+        return effectOutbox.get(`effect:restart-continuation:${run.id}`).pipe(
+          Effect.flatMap((effect) =>
+            Option.isNone(effect) && owed
+              ? Effect.map(continuationRetryDelayMs(run.threadId, run.id), (ms) => ms !== undefined)
+              : Effect.succeed(
+                  Option.exists(
+                    effect,
+                    ({ status }) => status === "pending" || status === "running",
+                  ),
+                ),
+          ),
+          Effect.orElseSucceed(() => false),
+        );
       },
     ),
-    awaitRestartContinuation: Effect.fn("OrchestratorV2.awaitRestartContinuation")(function (run) {
-      return effectOutbox.awaitSettled(`effect:restart-continuation:${run.id}`).pipe(Effect.ignore);
-    }),
+    awaitRestartContinuation: Effect.fn("OrchestratorV2.awaitRestartContinuation")(
+      function (run, options) {
+        return effectOutbox
+          .awaitSettled(`effect:restart-continuation:${run.id}`, {
+            untilWritten: options?.retryOwed === true,
+          })
+          .pipe(Effect.ignore);
+      },
+    ),
     dispatch: dispatchWithReceipt,
     autoArmLimitRecovery: Effect.fn("OrchestratorV2.autoArmLimitRecovery")(function (input) {
       return threadDispatch.withLock(

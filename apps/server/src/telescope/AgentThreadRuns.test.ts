@@ -122,6 +122,8 @@ it.layer(layer)("AgentThreadRuns", (it) => {
         });
         const started: Array<Telescope.AgentRun> = [];
         const finished: Array<Telescope.AgentRunId> = [];
+        // Each Codi run as the events played so far left it.
+        const codiRuns = new Map<string, OrchestrationV2Run>();
         const handler = yield* AgentThreadRuns.makeHandler.pipe(
           Effect.provideService(RunRecordService.RunRecordService, {
             ...runs,
@@ -134,9 +136,28 @@ it.layer(layer)("AgentThreadRuns", (it) => {
                 .finish(ref, input)
                 .pipe(Effect.tap((run) => Effect.sync(() => finished.push(run.id)))),
           }),
+          Effect.provide(
+            Layer.mock(ProjectionStore.ProjectionStoreV2)({
+              getThreadRecords: (threadId) =>
+                Effect.sync(
+                  () =>
+                    ({
+                      runs: [...codiRuns.values()].filter((run) => run.threadId === threadId),
+                    }) as never,
+                ),
+            }),
+          ),
         );
         const play = (events: ReadonlyArray<OrchestrationV2DomainEvent>) =>
-          Effect.forEach(events, handler.handle, { discard: true });
+          Effect.forEach(
+            events,
+            (event) => {
+              if (event.type === "run.created" || event.type === "run.updated")
+                codiRuns.set(event.payload.id, event.payload);
+              return handler.handle(event);
+            },
+            { discard: true },
+          );
         const runtimeRun = yield* runs.startFor(workspace.id, workspace.createdBy, {
           agentId,
           threadId: resident,

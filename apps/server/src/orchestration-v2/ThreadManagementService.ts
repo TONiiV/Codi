@@ -530,7 +530,7 @@ export function latestRun(
   return projection.runs.toSorted((left, right) => right.ordinal - left.ordinal)[0];
 }
 
-function latestRestartContinuation(
+export function latestRestartContinuation(
   runs: ReadonlyArray<OrchestrationV2Run>,
   run: OrchestrationV2Run,
 ): OrchestrationV2Run {

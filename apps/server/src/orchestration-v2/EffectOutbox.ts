@@ -215,8 +215,11 @@ export interface EffectOutboxV2Shape {
   readonly signalCancellations: (effectIds: ReadonlyArray<string>) => Effect.Effect<void>;
   readonly awaitCancellation: (effectId: string) => Effect.Effect<void>;
   readonly clearCancellation: (effectId: string) => Effect.Effect<void>;
-  /** Resolves once the effect is neither pending nor running, or right away when it does not exist. */
-  readonly awaitSettled: (effectId: string) => Effect.Effect<void, EffectOutboxError>;
+  /** Resolves once the effect is neither pending nor running; at once if missing, unless `untilWritten`. */
+  readonly awaitSettled: (
+    effectId: string,
+    options?: { readonly untilWritten?: boolean },
+  ) => Effect.Effect<void, EffectOutboxError>;
   readonly reconcileAfterProcessLoss: Effect.Effect<
     { readonly requeued: number; readonly cancelled: number },
     EffectOutboxError
@@ -474,12 +477,16 @@ export const layer: Layer.Layer<EffectOutboxV2, never, SqlClient.SqlClient> = La
         Effect.sync(() => {
           cancellationSignals.delete(effectId);
         }),
-      awaitSettled: Effect.fn("EffectOutbox.awaitSettled")(function* (effectId) {
+      awaitSettled: Effect.fn("EffectOutbox.awaitSettled")(function* (effectId, options) {
         // Registered before the read, so a settle right after it still resolves.
         const signal = settledSignals.get(effectId) ?? Deferred.makeUnsafe<void>();
         settledSignals.set(effectId, signal);
         const effect = yield* service.get(effectId);
-        if (Option.exists(effect, ({ status }) => status === "pending" || status === "running")) {
+        if (
+          Option.isNone(effect)
+            ? options?.untilWritten === true
+            : effect.value.status === "pending" || effect.value.status === "running"
+        ) {
           return yield* Deferred.await(signal);
         }
         yield* signalSettled([effectId]);

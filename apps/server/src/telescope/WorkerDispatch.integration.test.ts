@@ -5,6 +5,7 @@ import {
   CommandId,
   EnvironmentId,
   MessageId,
+  type OrchestrationV2Run,
   ProjectId,
   ProviderDriverKind,
   ProviderInstanceId,
@@ -21,11 +22,15 @@ import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Queue from "effect/Queue";
 import * as Ref from "effect/Ref";
 import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
+import * as SubscriptionRef from "effect/SubscriptionRef";
+import * as TestClock from "effect/testing/TestClock";
+import * as SqlClient from "effect/sql/SqlClient";
 import type { Tool } from "effect/ai";
 
 import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
@@ -113,6 +118,8 @@ const makeHarness = Effect.fn("makeHarness")(function* (listening: boolean) {
     readonly onBehalfOf?: string;
   }>();
   const started = yield* Queue.unbounded<ProviderAdapter.ProviderAdapterV2TurnInput>();
+  // When set, the next turn start runs this, then fails before the provider takes the prompt.
+  const failNextStart = yield* Ref.make<Effect.Effect<void> | undefined>(undefined);
   const finished = yield* Queue.unbounded<Telescope.AgentRun>();
   const route = yield* Ref.make(byAgentDefault);
   // Runs after each delegation start and run finish, and before each thread create and send.
@@ -179,7 +186,24 @@ const makeHarness = Effect.fn("makeHarness")(function* (listening: boolean) {
               }),
             ),
           resumeThread: ({ providerThread }) => Effect.succeed(providerThread),
-          startTurn: (turn) => Queue.offer(started, turn).pipe(Effect.asVoid),
+          startTurn: (turn) =>
+            Effect.flatMap(Ref.getAndSet(failNextStart, undefined), (before) =>
+              before === undefined
+                ? Queue.offer(started, turn).pipe(Effect.asVoid)
+                : before.pipe(
+                    Effect.andThen(
+                      Effect.fail(
+                        new ProviderAdapter.ProviderAdapterTurnStartError({
+                          driver,
+                          threadId: turn.threadId,
+                          providerThreadId: turn.providerThread.id,
+                          runId: turn.runId,
+                          cause: new Error("timed out before taking the prompt"),
+                        }),
+                      ),
+                    ),
+                  ),
+            ),
           compactThread: () => Effect.die("unused"),
           steerTurn: () => Effect.die("unused"),
           interruptTurn: () => Effect.void,
@@ -358,6 +382,7 @@ const makeHarness = Effect.fn("makeHarness")(function* (listening: boolean) {
     db,
     sessions,
     started,
+    failNextStart,
     finished,
     route,
     hook,
@@ -496,23 +521,37 @@ const chiefWorking = (harness: Harness, seeded: Seeded) =>
 type Opened = { readonly delegationId: Telescope.DelegationId; readonly threadId: ThreadId };
 
 /**
- * The server stops and starts again in startup's order: the open runs are read as the layer
- * builds, Codi's recovery runs, then the run listener subscribes. The effect worker stays stopped
- * until the test starts it, so the startup pass can run before or after Codi resumes a turn.
- * With `stopping`, the listener sees the runs Codi cuts, as it does while a server stops.
+ * A server restart in startup's order: open runs read as the layer builds, recovery, the listener.
+ * The effect worker stays stopped until the test starts it. With `stopping` the listener sees the
+ * runs Codi cuts, as while a server stops; with `gate` it handles nothing until the gate opens.
  */
 const restart = (
   harness: Harness,
-  { continueThreadsAfterServerUpdate = true, stopping = false } = {},
+  {
+    continueThreadsAfterServerUpdate = true,
+    stopping = false,
+    gate,
+  }: {
+    readonly continueThreadsAfterServerUpdate?: boolean;
+    readonly stopping?: boolean;
+    readonly gate?: Deferred.Deferred<void>;
+  } = {},
 ) =>
   Effect.gen(function* () {
     yield* harness.stopWorker;
     const handler = yield* AgentThreadRuns.makeHandler;
     // From a sequence read now, so the listener sees every later event however late it starts.
     const sink = yield* EventSink.EventSinkV2;
+    const handled = yield* SubscriptionRef.make(0);
     const listen = Effect.flatMap(sink.latestSequence(), (afterSequence) =>
-      Effect.forkScoped(
-        Stream.runForEach(sink.stream({ afterSequence }), ({ event }) => handler.handle(event)),
+      SubscriptionRef.set(handled, afterSequence).pipe(
+        Effect.andThen(gate === undefined ? Effect.void : Deferred.await(gate)),
+        Effect.andThen(
+          Stream.runForEach(sink.stream({ afterSequence }), ({ event, sequence }) =>
+            handler.handle(event).pipe(Effect.andThen(SubscriptionRef.set(handled, sequence))),
+          ),
+        ),
+        Effect.forkScoped,
       ),
     );
     if (stopping) yield* listen;
@@ -531,7 +570,78 @@ const restart = (
       ),
     );
     if (!stopping) yield* listen;
-    return handler;
+    return {
+      ...handler,
+      /** Waits until the listener has handled every event stored so far. */
+      caughtUp: Effect.flatMap(sink.latestSequence(), (latest) =>
+        SubscriptionRef.changes(handled).pipe(
+          Stream.filter((sequence) => sequence >= latest),
+          Stream.runHead,
+        ),
+      ),
+    };
+  });
+
+/** The first update to a Codi run on the thread, after the sequence, that matches. */
+const runUpdated = (
+  threadId: ThreadId,
+  afterSequence: number,
+  matches: (run: OrchestrationV2Run) => boolean,
+) =>
+  Effect.flatMap(Orchestrator.OrchestratorV2, (engine) =>
+    engine.streamStoredEventsFrom({ threadId, afterSequence, eventType: "run.updated" }).pipe(
+      Stream.map(({ event }) => (event.type === "run.updated" ? event.payload : undefined)),
+      Stream.filter((run): run is OrchestrationV2Run => run !== undefined && matches(run)),
+      Stream.runHead,
+      Effect.map(Option.getOrThrow),
+    ),
+  );
+
+/**
+ * A restart cuts the Chief's turn, and the turn Codi resumes fails before the provider takes its
+ * prompt while a member message waits behind it. Returns once Codi has held that message, which
+ * it does after it writes the retry it owes the failed continuation, due in 60 s.
+ */
+const resumedTurnFailsToStart = (
+  harness: Harness,
+  seeded: Seeded,
+  gate?: Deferred.Deferred<void>,
+) =>
+  Effect.gen(function* () {
+    const engine = yield* Orchestrator.OrchestratorV2;
+    const { delegation, runner, turn } = yield* chiefWorking(harness, seeded);
+    yield* harness.running(turn);
+    yield* Fiber.interrupt(runner);
+    const entered = yield* Deferred.make<void>();
+    const release = yield* Deferred.make<void>();
+    yield* Ref.set(
+      harness.failNextStart,
+      Deferred.succeed(entered, undefined).pipe(Effect.andThen(Deferred.await(release))),
+    );
+    const restarted = yield* restart(harness, gate === undefined ? {} : { gate });
+    yield* restarted.settleOrphans;
+    const afterSequence = yield* engine.getThreadEventSequence(turn.threadId);
+    yield* harness.startWorker;
+    yield* Deferred.await(entered);
+    yield* engine.dispatch({
+      type: "message.dispatch",
+      commandId: CommandId.make("member-waits"),
+      threadId: turn.threadId,
+      messageId: MessageId.make("member-waits"),
+      text: "顺便看看日志",
+      attachments: [],
+      dispatchMode: { type: "queue_after_active" },
+      createdBy: "user",
+      creationSource: "web",
+    });
+    yield* Deferred.succeed(release, undefined);
+    const failed = yield* runUpdated(
+      turn.threadId,
+      afterSequence,
+      (run) => run.status === "failed",
+    );
+    yield* runUpdated(turn.threadId, afterSequence, (run) => run.queueHeld === true);
+    return { delegation, turn, failed, restarted };
   });
 
 it.effect(
@@ -938,7 +1048,11 @@ it.effect(
             threadId: turn.threadId,
           });
           yield* harness.startWorker;
-          assert.equal((yield* Queue.take(harness.finished)).threadId, turn.threadId);
+          yield* restarted.awaitContinuations;
+          assert.deepStrictEqual(
+            (yield* Queue.clear(harness.finished)).map((run) => run.threadId),
+            [turn.threadId],
+          );
           const failed = yield* delegations.get({
             workspaceId: seeded.workspaceId,
             delegationId: delegation.id,
@@ -969,7 +1083,10 @@ it.effect(
 
           const restarted = yield* restart(harness, { continueThreadsAfterServerUpdate: false });
           yield* restarted.settleOrphans;
-          assert.equal((yield* Queue.take(harness.finished)).threadId, turn.threadId);
+          assert.deepStrictEqual(
+            (yield* Queue.clear(harness.finished)).map((run) => run.threadId),
+            [turn.threadId],
+          );
           assert.lengthOf(yield* db.openRunsOnThread(turn.threadId), 0);
           const failed = yield* delegations.get({
             workspaceId: seeded.workspaceId,
@@ -977,6 +1094,141 @@ it.effect(
           });
           assert.equal(failed.state, "FAILED");
           assert.equal(failed.report?.blockedOn, "没有汇报");
+          assert.deepStrictEqual(yield* queued(seeded), [
+            [seeded.pa, { kind: "report", delegationId: delegation.id }],
+          ]);
+        }),
+      false,
+    ),
+);
+
+it.effect.each([
+  { listener: "sees the failed start as it happens", held: false },
+  { listener: "catches up only once Codi retried", held: true },
+] as const)(
+  "a Chief run whose resumed turn failed to start follows Codi's retry, whose report settles its task, when the run listener $listener",
+  ({ held }) =>
+    withHarness(
+      (harness) =>
+        Effect.gen(function* () {
+          const seeded = yield* seed;
+          const db = yield* TelescopeDb.TelescopeDb;
+          const delegations = yield* DelegationService.DelegationService;
+          const gate = yield* Deferred.make<void>();
+          const { delegation, turn, restarted } = yield* resumedTurnFailsToStart(
+            harness,
+            seeded,
+            held ? gate : undefined,
+          );
+          const afterSequence = yield* (yield* Orchestrator.OrchestratorV2).getThreadEventSequence(
+            turn.threadId,
+          );
+          yield* TestClock.adjust("61 seconds");
+          const retried = yield* Queue.take(harness.started);
+          assert.equal(retried.threadId, turn.threadId);
+          yield* Deferred.succeed(gate, undefined);
+          yield* restarted.caughtUp;
+          const ref = { workspaceId: seeded.workspaceId, delegationId: delegation.id };
+          assert.equal((yield* delegations.get(ref)).state, "WORKING");
+          assert.lengthOf(yield* db.openRunsOnThread(turn.threadId), 1);
+          assert.strictEqual(yield* Queue.size(harness.finished), 0);
+          assert.deepStrictEqual(yield* queued(seeded), []);
+
+          yield* callOn(retried.threadId)("delegation_report", {
+            delegationId: delegation.id,
+            state: "COMPLETED",
+            report: { result: "修好了超时，回归测试通过", decisions: [] },
+          });
+          yield* harness.complete(retried);
+          yield* runUpdated(
+            turn.threadId,
+            afterSequence,
+            (run) => run.id === retried.runId && run.status === "completed",
+          );
+          yield* restarted.caughtUp;
+          yield* restarted.awaitContinuations;
+          assert.deepStrictEqual(
+            (yield* Queue.clear(harness.finished)).map((run) => run.threadId),
+            [turn.threadId],
+          );
+          assert.equal((yield* delegations.get(ref)).state, "COMPLETED");
+          assert.deepStrictEqual(yield* queued(seeded), [
+            [seeded.pa, { kind: "report", delegationId: delegation.id }],
+          ]);
+        }),
+      false,
+    ),
+);
+
+it.effect(
+  "a Chief run whose resumed turn failed to start fails its task once Codi declines the retry it had scheduled when the run listener saw the failed start, as the member archived the thread",
+  () =>
+    withHarness(
+      (harness) =>
+        Effect.gen(function* () {
+          const seeded = yield* seed;
+          const db = yield* TelescopeDb.TelescopeDb;
+          const delegations = yield* DelegationService.DelegationService;
+          const gate = yield* Deferred.make<void>();
+          const { delegation, turn, restarted } = yield* resumedTurnFailsToStart(
+            harness,
+            seeded,
+            gate,
+          );
+          yield* Deferred.succeed(gate, undefined);
+          yield* restarted.caughtUp;
+          const ref = { workspaceId: seeded.workspaceId, delegationId: delegation.id };
+          assert.equal((yield* delegations.get(ref)).state, "WORKING");
+          assert.lengthOf(yield* db.openRunsOnThread(turn.threadId), 1);
+          assert.strictEqual(yield* Queue.size(harness.finished), 0);
+
+          yield* (yield* Orchestrator.OrchestratorV2).dispatch({
+            type: "thread.archive",
+            commandId: CommandId.make("member-archives"),
+            threadId: turn.threadId,
+          });
+          yield* TestClock.adjust("61 seconds");
+          yield* restarted.awaitContinuations;
+          assert.deepStrictEqual(
+            (yield* Queue.clear(harness.finished)).map((run) => run.threadId),
+            [turn.threadId],
+          );
+          const task = yield* delegations.get(ref);
+          assert.equal(task.state, "FAILED");
+          assert.match(task.report?.blockedOn ?? "", /^The provider could not start this turn\./);
+          assert.deepStrictEqual(yield* queued(seeded), [
+            [seeded.pa, { kind: "report", delegationId: delegation.id }],
+          ]);
+          assert.strictEqual(yield* Queue.size(harness.started), 0);
+        }),
+      false,
+    ),
+);
+
+it.effect(
+  "a Chief run whose resumed turn failed to start before the server stopped, with no retry written, fails its task at the next start",
+  () =>
+    withHarness(
+      (harness) =>
+        Effect.gen(function* () {
+          const seeded = yield* seed;
+          const delegations = yield* DelegationService.DelegationService;
+          const sql = yield* SqlClient.SqlClient;
+          const { delegation, turn, failed } = yield* resumedTurnFailsToStart(harness, seeded);
+          yield* sql`DELETE FROM orchestration_v2_effect_outbox WHERE effect_id = ${`effect:restart-continuation:${failed.id}`}`;
+          yield* Queue.clear(harness.finished);
+
+          const again = yield* restart(harness);
+          yield* again.settleOrphans;
+          assert.deepStrictEqual(
+            (yield* Queue.clear(harness.finished)).map((run) => run.threadId),
+            [turn.threadId],
+          );
+          const task = yield* delegations.get({
+            workspaceId: seeded.workspaceId,
+            delegationId: delegation.id,
+          });
+          assert.equal(task.state, "FAILED");
           assert.deepStrictEqual(yield* queued(seeded), [
             [seeded.pa, { kind: "report", delegationId: delegation.id }],
           ]);
