@@ -247,9 +247,10 @@ const orgDeleteCommand = Command.make("delete", {
           const created = file !== undefined && !(yield* fs.exists(file));
           if (file !== undefined) yield* fs.writeFileString(file, "", { flag: "a" });
           const data = yield* WorkspaceDataService.WorkspaceDataService;
-          const manifest = yield* InviteLink.followDelete(links)(
-            data.delete(OWNER, { workspaceId: flags.workspace, confirmName: flags.confirm }),
-          ).pipe(
+          const manifest = yield* InviteLink.deleteWorkspace({ ...links, data }, OWNER, {
+            workspaceId: flags.workspace,
+            confirmName: flags.confirm,
+          }).pipe(
             Effect.onError(() => (created ? fs.remove(file).pipe(Effect.ignore) : Effect.void)),
           );
           if (file !== undefined) yield* fs.writeFileString(file, `${encodeManifest(manifest)}\n`);
@@ -347,7 +348,9 @@ const memberRevokeCommand = Command.make("revoke", {
   org: orgFlag,
   member: memberFlag("member", "Member id, from `t3 member list`."),
 }).pipe(
-  Command.withDescription("Remove a member and void the codes they issued."),
+  Command.withDescription(
+    "Remove a member, void the codes they issued, and sign out their Telescope-only devices that are in no other workspace.",
+  ),
   Command.withHandler((flags) =>
     runAsOwner(
       flags,
@@ -395,14 +398,12 @@ const roleSetCommand = Command.make("set", {
   Command.withHandler((flags) =>
     runAsOwner(
       flags,
-      (service, links) =>
-        InviteLink.followCodes(links)(
-          service.setRole(OWNER, {
-            workspaceId: flags.org,
-            subjectId: flags.member,
-            role: flags.role,
-          }),
-        ),
+      (_, links) =>
+        InviteLink.setRole(links, OWNER, {
+          workspaceId: flags.org,
+          subjectId: flags.member,
+          role: flags.role,
+        }),
       (member) => `${describe(member)} is now ${member.role}.`,
     ),
   ),

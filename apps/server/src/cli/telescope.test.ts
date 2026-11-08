@@ -257,33 +257,57 @@ it.layer(layer)("telescope CLI", (it) => {
     }),
   );
 
-  it.effect("member revoke ends the member's link sessions and the links of dead codes", () =>
+  it.effect("member revoke, role set and org delete revoke dead links; two end link sessions", () =>
     Effect.gen(function* () {
       const { t3, join } = yield* makeHome;
       const listed = <S extends Schema.Top>(schema: S, ...args: ReadonlyArray<string>) =>
         t3(...args, "--json").pipe(Effect.flatMap(decodeJson(schema)));
-      const org = yield* t3("org", "init", "--name", "Acme", "--kind", "enterprise");
-      const invite = ["member", "invite", "--org", org, "--role", "member"];
-      const invitation = yield* listed(Telescope.Invitation, ...invite);
-      const label = `Telescope invite ${invitation.id}`;
       const scope = ["--scope", "telescope:member"];
       const Link = Schema.Struct({ id: Schema.String });
-      const link = yield* listed(Link, "auth", "pairing", "create", ...scope, "--label", label);
       const Session = Schema.Struct({ sessionId: AuthSessionId });
-      const session = yield* listed(Session, "auth", "session", "issue", ...scope);
-      const bob = yield* join(invitation.code, "Bob", session.sessionId);
+      const commands = [
+        [
+          "Acme",
+          true,
+          (org: string, bob: string) => ["member", "revoke", "--org", org, "--member", bob],
+        ],
+        [
+          "Beta",
+          false,
+          (org: string, bob: string) => [
+            "role",
+            "set",
+            "--org",
+            org,
+            "--member",
+            bob,
+            "--role",
+            "admin",
+          ],
+        ],
+        ["Gamma", true, (org: string) => ["org", "delete", org, "--confirm", "Gamma"]],
+      ] as const;
+      for (const [name, endsSession, command] of commands) {
+        const org = yield* t3("org", "init", "--name", name, "--kind", "enterprise");
+        const invite = ["member", "invite", "--org", org, "--role", "member"];
+        const invitation = yield* listed(Telescope.Invitation, ...invite);
+        const label = `Telescope invite ${invitation.id}`;
+        const link = yield* listed(Link, "auth", "pairing", "create", ...scope, "--label", label);
+        const session = yield* listed(Session, "auth", "session", "issue", ...scope);
+        // Joining uses the code, so its link is dead until a command's sweep revokes it.
+        const bob = yield* join(invitation.code, "Bob", session.sessionId);
 
-      yield* t3("member", "revoke", "--org", org, "--member", bob.subjectId);
-      const links = yield* listed(Schema.Array(Link), "auth", "pairing", "list");
-      assert.notInclude(
-        links.map(({ id }) => id),
-        link.id,
-      );
-      const sessions = yield* listed(Schema.Array(Session), "auth", "session", "list");
-      assert.notInclude(
-        sessions.map(({ sessionId }) => sessionId),
-        session.sessionId,
-      );
+        yield* t3(...command(org, bob.subjectId));
+        const links = yield* listed(Schema.Array(Link), "auth", "pairing", "list");
+        assert.notInclude(
+          links.map(({ id }) => id),
+          link.id,
+          name,
+        );
+        const sessions = yield* listed(Schema.Array(Session), "auth", "session", "list");
+        const live = sessions.some(({ sessionId }) => sessionId === session.sessionId);
+        assert.strictEqual(live, !endsSession, name);
+      }
     }),
   );
 

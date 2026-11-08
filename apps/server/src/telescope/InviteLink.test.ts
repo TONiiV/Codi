@@ -2,6 +2,7 @@ import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, it } from "@effect/vitest";
 import {
+  type AuthEnvironmentScope,
   AuthEnvironmentScopes,
   AuthSessionId,
   AuthStandardClientScopes,
@@ -11,7 +12,9 @@ import {
   WS_METHODS,
   WsRpcGroup,
 } from "@t3tools/contracts";
+import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as Ref from "effect/Ref";
 import * as Schema from "effect/Schema";
@@ -131,7 +134,7 @@ it.layer(layer)("Telescope invite links", (it) => {
       assert.strictEqual(voided.status, "issued");
       if (voided.status !== "issued") return;
       const demote = { workspaceId, subjectId: ada.subjectId, role: "member" } as const;
-      yield* follow(workspaces.setRole(owner, demote));
+      yield* InviteLink.setRole({ workspaces, auth }, owner, demote);
       const refused = yield* auth
         .exchangeBootstrapCredentialForAccessToken(voided.credential, undefined, {
           deviceType: "desktop",
@@ -218,31 +221,81 @@ it.layer(layer)("Telescope invite links", (it) => {
       const cyDevice = yield* device(full.credential, [(yield* inviteTo(acme)).code]);
       const dee = yield* inviteTo(gamma);
       const deeDevice = yield* device(linkOf(dee), [dee.code]);
+      // A proof-key device is linked by its key, which no revoke reaches: Telescope-only is refused.
+      const withKey = (credential: string, scopes?: ReadonlyArray<AuthEnvironmentScope>) =>
+        auth
+          .exchangeBootstrapCredentialForAccessToken(
+            credential,
+            scopes,
+            { deviceType: "desktop" },
+            { proofKeyThumbprint: "eve-proof-key" },
+          )
+          .pipe(Effect.match({ onFailure: (error) => error._tag, onSuccess: (t) => t.token_type }));
+      const eve = yield* inviteTo(acme);
+      const machine = yield* auth.createPairingLink({ scopes: AuthStandardClientScopes });
+      assert.deepStrictEqual(
+        [
+          yield* withKey(linkOf(eve)),
+          yield* withKey(machine.credential, [AuthTelescopeMemberScope]),
+          yield* withKey(machine.credential),
+        ],
+        ["ServerAuthScopeNotGrantedError", "ServerAuthScopeNotGrantedError", "DPoP"],
+      );
+      // The refusal left the invite link unspent.
+      const eveDevice = yield* device(linkOf(eve), [eve.code]);
 
-      for (const { members } of [adaDevice, boDevice, cyDevice])
+      for (const { members } of [adaDevice, boDevice, cyDevice, eveDevice])
         yield* InviteLink.revoke(services, owner, {
           workspaceId: acme,
           subjectId: members[0]!.subjectId,
         });
-      assert.deepStrictEqual(yield* sessionsOf([adaDevice, boDevice, cyDevice, deeDevice]), [
-        "ServerAuthInvalidCredentialError",
-        "live",
-        "live",
-        "live",
-      ]);
+      assert.deepStrictEqual(
+        yield* sessionsOf([adaDevice, boDevice, cyDevice, deeDevice, eveDevice]),
+        [
+          "ServerAuthInvalidCredentialError",
+          "live",
+          "live",
+          "live",
+          "ServerAuthInvalidCredentialError",
+        ],
+      );
 
       yield* InviteLink.revoke(services, owner, {
         workspaceId: beta,
         subjectId: boDevice.members[1]!.subjectId,
       });
-      yield* InviteLink.followDelete(services)(
-        data.delete(owner, { workspaceId: gamma, confirmName: "Gamma" }),
-      );
+      yield* InviteLink.deleteWorkspace({ ...services, data }, owner, {
+        workspaceId: gamma,
+        confirmName: "Gamma",
+      });
       assert.deepStrictEqual(yield* sessionsOf([boDevice, cyDevice, deeDevice]), [
         "ServerAuthInvalidCredentialError",
         "live",
         "ServerAuthInvalidCredentialError",
       ]);
+
+      // A client that disconnects once the revoke has committed still ends the session.
+      const fay = yield* inviteTo(acme);
+      const fayDevice = yield* device(linkOf(fay), [fay.code]);
+      const entered = yield* Deferred.make<void>();
+      const gate = yield* Deferred.make<void>();
+      const gated = {
+        ...workspaces,
+        devicesWithoutWorkspace: (keys: ReadonlyArray<string>) =>
+          Deferred.succeed(entered, undefined).pipe(
+            Effect.andThen(Deferred.await(gate)),
+            Effect.andThen(workspaces.devicesWithoutWorkspace(keys)),
+          ),
+      };
+      const revoking = yield* InviteLink.revoke({ workspaces: gated, auth }, owner, {
+        workspaceId: acme,
+        subjectId: fayDevice.members[0]!.subjectId,
+      }).pipe(Effect.forkChild);
+      yield* Deferred.await(entered);
+      revoking.interruptUnsafe();
+      yield* Deferred.succeed(gate, undefined);
+      yield* Fiber.await(revoking);
+      assert.deepStrictEqual(yield* sessionsOf([fayDevice]), ["ServerAuthInvalidCredentialError"]);
     }),
   );
 });

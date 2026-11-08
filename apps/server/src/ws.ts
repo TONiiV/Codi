@@ -1588,7 +1588,7 @@ export const layerWsRpc = (
         ),
       );
       const serverAuth = yield* EnvironmentAuth.EnvironmentAuth;
-      const inviteLinks = { workspaces: telescope, auth: serverAuth };
+      const inviteLinks = { workspaces: telescope, auth: serverAuth, data: telescopeData };
       const followInviteCodes = TelescopeInviteLink.followCodes(inviteLinks);
       const sourceControlDiscovery = yield* SourceControlDiscovery.SourceControlDiscovery;
       const otlpEndpointCheck = yield* OtlpEndpointCheck.OtlpEndpointCheck;
@@ -2417,9 +2417,7 @@ export const layerWsRpc = (
         [Telescope.WS_METHODS.workspaceExport]: (input) =>
           telescopeStorage(telescopeData.export(caller, input)),
         [Telescope.WS_METHODS.workspaceDelete]: (input) =>
-          telescopeStorage(
-            TelescopeInviteLink.followDelete(inviteLinks)(telescopeData.delete(caller, input)),
-          ),
+          telescopeStorage(TelescopeInviteLink.deleteWorkspace(inviteLinks, caller, input)),
         [Telescope.WS_METHODS.memberInvite]: (input) =>
           telescopeStorage(TelescopeInviteLink.invite(inviteLinks, caller, input)),
         [Telescope.WS_METHODS.memberLinkCode]: (input) =>
@@ -2429,7 +2427,7 @@ export const layerWsRpc = (
         [Telescope.WS_METHODS.memberList]: (input) =>
           telescopeStorage(telescope.members(caller, input)),
         [Telescope.WS_METHODS.memberSetRole]: (input) =>
-          telescopeStorage(followInviteCodes(telescope.setRole(caller, input))),
+          telescopeStorage(TelescopeInviteLink.setRole(inviteLinks, caller, input)),
         [Telescope.WS_METHODS.memberRevoke]: (input) =>
           telescopeStorage(TelescopeInviteLink.revoke(inviteLinks, caller, input)),
         [Telescope.WS_METHODS.memberRestore]: (input) =>

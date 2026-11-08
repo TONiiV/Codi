@@ -9,6 +9,7 @@ import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 
 import type * as EnvironmentAuth from "../auth/EnvironmentAuth.ts";
+import type * as WorkspaceDataService from "./WorkspaceDataService.ts";
 import type * as WorkspaceService from "./WorkspaceService.ts";
 
 /** An invite never gives machine access (D147): its link pairs a device for Telescope only. */
@@ -77,12 +78,6 @@ const revokeDeadLinks = Effect.fn("Telescope.InviteLink.revokeDeadLinks")(
   Effect.catchCause((cause) => Effect.logWarning("Telescope invite links were not revoked", cause)),
 );
 
-/** Runs a change that can void or use invitation codes, then revokes the links they carried. */
-export const followCodes =
-  (services: InviteServices) =>
-  <A, E, R>(change: Effect.Effect<A, E, R>) =>
-    Effect.tap(change, () => revokeDeadLinks(services));
-
 const TELESCOPE_SCOPES: ReadonlySet<AuthEnvironmentScope> = new Set([
   AuthTelescopeMemberScope,
   AuthTelescopeAdminScope,
@@ -90,12 +85,13 @@ const TELESCOPE_SCOPES: ReadonlySet<AuthEnvironmentScope> = new Set([
 
 /**
  * Ends the sessions of these devices that are now in no workspace, when they pair for Telescope
- * only: machine access the owner gave stays. Proof-key devices pair through T3 Connect with full
- * scopes, so a key that is not a session id has nothing to end.
+ * only: machine access the owner gave stays. A proof-key session always holds another scope (the
+ * token exchange refuses one without), so a key that is not a session id has nothing to end.
  */
 const endSessions = Effect.fn("Telescope.InviteLink.endSessions")(
   function* ({ workspaces, auth }: InviteServices, deviceKeys: ReadonlyArray<string>) {
     const gone = new Set(yield* workspaces.devicesWithoutWorkspace(deviceKeys));
+    if (gone.size === 0) return;
     const ended = (yield* auth.listSessions()).filter(
       ({ sessionId, scopes }) =>
         gone.has(sessionId) && scopes.every((scope) => TELESCOPE_SCOPES.has(scope)),
@@ -107,28 +103,56 @@ const endSessions = Effect.fn("Telescope.InviteLink.endSessions")(
   Effect.catchCause((cause) => Effect.logWarning("Telescope sessions were not ended", cause)),
 );
 
+/** Runs a change, revokes the links of the codes it voided or used, and ends `devices` sessions. */
+const follow = <A, E, R>(
+  services: InviteServices,
+  change: Effect.Effect<A, E, R>,
+  devices: (result: A) => ReadonlyArray<string>,
+) =>
+  // Once the change commits, a client that disconnects must not skip what follows it.
+  Effect.uninterruptible(
+    Effect.tap(change, (result) =>
+      Effect.andThen(revokeDeadLinks(services), endSessions(services, devices(result))),
+    ),
+  );
+
+/** Runs a change that can void or use invitation codes, then revokes the links they carried. */
+export const followCodes =
+  (services: InviteServices) =>
+  <A, E, R>(change: Effect.Effect<A, E, R>) =>
+    follow(services, change, () => []);
+
 /** Revokes a member, the links of the codes that died with them, and their devices' sessions. */
 export const revoke = Effect.fn("Telescope.InviteLink.revoke")(function* (
   services: InviteServices,
   caller: WorkspaceService.Caller,
   input: typeof Telescope.MemberRevokeInput.Type,
 ) {
-  const { member, deviceKeys } = yield* followCodes(services)(
-    services.workspaces.revoke(caller, input),
-  );
-  yield* endSessions(services, deviceKeys);
-  return member;
+  const revoked = services.workspaces.revoke(caller, input);
+  return (yield* follow(services, revoked, ({ deviceKeys }) => deviceKeys)).member;
 });
 
-/** Follows a workspace deletion as `revoke` follows a member's, for every device it linked. */
-export const followDelete =
-  (services: InviteServices) =>
-  <E, R>(deletion: Effect.Effect<Telescope.WorkspaceDeleteManifest, E, R>) =>
-    Effect.tap(followCodes(services)(deletion), ({ tables }) => {
-      const links = tables.find(({ table }) => table === "telescope_member_sessions")?.ids ?? [];
-      // Manifest ids are `member_id/device_key`; member ids hold no slash.
-      return endSessions(
-        services,
-        links.map((id) => id.slice(id.indexOf("/") + 1)),
-      );
-    });
+/** Changes a member's role; a demotion voids their codes. Their devices stay members. */
+export const setRole = Effect.fn("Telescope.InviteLink.setRole")(function* (
+  services: InviteServices,
+  caller: WorkspaceService.Caller,
+  input: typeof Telescope.MemberSetRoleInput.Type,
+) {
+  return yield* followCodes(services)(services.workspaces.setRole(caller, input));
+});
+
+/** Deletes a workspace and follows it as `revoke` follows a member, for every device it linked. */
+export const deleteWorkspace = Effect.fn("Telescope.InviteLink.deleteWorkspace")(function* (
+  services: InviteServices & {
+    readonly data: WorkspaceDataService.WorkspaceDataService["Service"];
+  },
+  caller: WorkspaceService.SessionCaller,
+  input: typeof Telescope.WorkspaceDeleteInput.Type,
+) {
+  return yield* follow(services, services.data.delete(caller, input), ({ tables }) =>
+    // Manifest ids are `member_id/device_key`; member ids hold no slash.
+    (tables.find(({ table }) => table === "telescope_member_sessions")?.ids ?? []).map((id) =>
+      id.slice(id.indexOf("/") + 1),
+    ),
+  );
+});
