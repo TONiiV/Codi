@@ -20,6 +20,13 @@ const BLOUB: Record<AgentActivity, readonly [StateId, number]> = {
   waiting: ["notify", 0.6],
   blocked: ["alert", 2.1],
 };
+// Screen readers hear the state; idle stays silent next to the agent's name.
+const SPOKEN: Record<AgentActivity, string | undefined> = {
+  idle: undefined,
+  working: "运行中",
+  waiting: "等你决定",
+  blocked: "已急停",
+};
 const ORBIT_FOR = 3.7;
 const ORBIT_GAP = 1.6;
 export const LOOP_CAP = 6;
@@ -114,21 +121,23 @@ const awake = new Set<Avatar>();
 const loopers = new Set<Avatar>();
 const queued = new Set<Avatar>();
 let raf = 0;
+let gap = 1000 / 12;
 
 function run() {
   if (raf === 0 && awake.size > 0 && !document.hidden) raf = requestAnimationFrame(tick);
 }
 
 function tick(ms: number) {
-  // A timer paces the loop, so the page renders only the frames the avatars draw: working loops
-  // at 12 fps, a look or a state change, which plays once, at 24.
-  const fps = [...awake].some((a) => !loopers.has(a)) ? 24 : 12;
+  // A timer paces the loop, so the page renders only the frames the avatars draw: a look or a
+  // state change, which plays once, at 24 fps; working loops at 12, skipping every other fast tick.
+  const fast = gap < 1000 / 12;
+  gap = [...awake].some((a) => !loopers.has(a)) ? 1000 / 24 : 1000 / 12;
   raf = -1;
   setTimeout(() => {
     raf = 0;
     run();
-  }, 1000 / fps);
-  if (!document.hidden) for (const a of awake) if (!a.frame(ms)) awake.delete(a);
+  }, gap);
+  if (!document.hidden) for (const a of awake) if (!a.frame(ms, fast)) awake.delete(a);
 }
 
 // The desktop app keeps rendering hidden windows, so a hidden page stops the loop itself.
@@ -152,6 +161,7 @@ class Avatar {
   aimSince = 0;
   aiming = false;
   last = 0;
+  skipped = false;
 
   constructor(
     canvas: HTMLCanvasElement,
@@ -240,7 +250,7 @@ class Avatar {
     });
     // Bloub turns towards its side panel; an avatar looks straight at the pointer.
     this.engine.setLook({ ...look, yaw: look.yaw + TURN, spin: 0 }, this.clock);
-    this.until = Math.max(this.until, this.clock + 0.3);
+    this.until = Math.max(this.until, this.aimSince + TURN_TIME);
   }
 
   // A looping avatar pauses between orbits; one without a slot goes back to its orbit pose.
@@ -263,7 +273,9 @@ class Avatar {
       paint(this.ctx, this.engine.sample(this.clock), this.style.color, this.style.outlineColor);
   }
 
-  frame(ms: number) {
+  frame(ms: number, fast: boolean) {
+    if (fast && loopers.has(this) && !this.skipped) return (this.skipped = true);
+    this.skipped = false;
     const dt = this.last ? Math.min((ms - this.last) / 1000, 0.1) : 0;
     this.last = ms;
     this.clock += dt;
@@ -284,6 +296,10 @@ export default function AgentBloub(props: { seed: string; activity: AgentActivit
   const avatar = useRef<Avatar | null>(null);
   const latest = useRef(activity);
   const reduced = useMediaQuery("(prefers-reduced-motion: reduce)");
+  // Zoom or a move to another display changes the ratio; the buffer follows it to stay sharp.
+  const ratio = window.devicePixelRatio;
+  useMediaQuery(`(resolution: ${ratio}dppx)`);
+  const spoken = SPOKEN[activity];
   // The canvas reads its colours back from CSS, so they follow the theme.
   const style = { width: size, height: size, color: agentSkin(seed).ink, outlineColor: PAPER };
 
@@ -291,7 +307,7 @@ export default function AgentBloub(props: { seed: string; activity: AgentActivit
   useLayoutEffect(() => {
     const el = canvas.current;
     if (!el) return;
-    el.width = el.height = Math.round(size * window.devicePixelRatio);
+    el.width = el.height = Math.round(size * ratio);
     const a = new Avatar(el, latest.current, agentSkin(seed).shape.radii, !reduced);
     avatar.current = a;
     mounted.add(a);
@@ -310,7 +326,7 @@ export default function AgentBloub(props: { seed: string; activity: AgentActivit
       a.rest();
       avatar.current = null;
     };
-  }, [seed, reduced, size]);
+  }, [seed, reduced, size, ratio]);
 
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- pushes the activity into the imperative avatar, which owns timing
   useLayoutEffect(() => {
@@ -321,7 +337,7 @@ export default function AgentBloub(props: { seed: string; activity: AgentActivit
   return (
     <canvas
       ref={canvas}
-      aria-hidden
+      {...(spoken ? { role: "img", "aria-label": spoken } : { "aria-hidden": true })}
       data-activity={activity}
       className="shrink-0"
       style={style}

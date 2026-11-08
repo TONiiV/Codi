@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vite-plus/test";
 
-import { render } from "../../../test/render";
+import { fakeTimers, render } from "../../../test/render";
 import AgentBloub, { agentSkin, LOOP_CAP } from "./AgentBloub";
 
 describe("agent bloub seed", () => {
@@ -40,5 +40,54 @@ describe("agent bloub loop", () => {
     await vi.waitFor(() => expect(moved()).toBeGreaterThanOrEqual(LOOP_CAP));
     expect(moved()).toBe(LOOP_CAP);
     expect(canvases[0]?.toDataURL()).toBe(first[0]);
+  });
+
+  it("plays a look once under a parked pointer and keeps working loops at 12 fps", async () => {
+    await using screen = await render(
+      <div style={{ display: "flex" }}>
+        <AgentBloub seed="idle-agent" activity="idle" size={32} />
+        <AgentBloub seed="agent-1" activity="working" size={32} />
+        <AgentBloub seed="agent-2" activity="working" size={32} />
+      </div>,
+    );
+    using _frames = fakeTimers();
+    using clears = vi.spyOn(CanvasRenderingContext2D.prototype, "clearRect");
+    const [idle, ...working] = [...screen.container.querySelectorAll("canvas")];
+    const draws = (canvas: HTMLCanvasElement | undefined) =>
+      clears.mock.contexts.filter((ctx) => ctx === canvas?.getContext("2d")).length;
+    // The loop is on the fake frame clock once it waits on a fake timer.
+    await vi.waitFor(() => expect(vi.getTimerCount()).toBeGreaterThan(0));
+
+    const box = idle!.getBoundingClientRect();
+    idle!.dispatchEvent(
+      new PointerEvent("pointermove", {
+        bubbles: true,
+        pointerType: "mouse",
+        clientX: box.left + box.width / 2,
+        clientY: box.top,
+      }),
+    );
+    clears.mockClear();
+    vi.advanceTimersByTime(1000);
+    expect(draws(idle)).toBeGreaterThan(12);
+    for (const canvas of working) expect(draws(canvas)).toBeLessThanOrEqual(12);
+
+    vi.advanceTimersByTime(1500);
+    clears.mockClear();
+    vi.advanceTimersByTime(3000);
+    expect(draws(idle)).toBe(0);
+    for (const canvas of working) expect(draws(canvas)).toBeGreaterThan(24);
+    for (const canvas of working) expect(draws(canvas)).toBeLessThanOrEqual(36);
+  });
+});
+
+describe("agent bloub label", () => {
+  it.each([
+    { activity: "working", name: "运行中" },
+    { activity: "waiting", name: "等你决定" },
+    { activity: "blocked", name: "已急停" },
+  ] as const)("names the $activity state for screen readers", async ({ activity, name }) => {
+    await using screen = await render(<AgentBloub seed="agent" activity={activity} size={32} />);
+    await expect.element(screen.getByRole("img", { name })).toBeInTheDocument();
   });
 });
