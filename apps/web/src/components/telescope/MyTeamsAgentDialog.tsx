@@ -184,8 +184,12 @@ export function AgentSettingsDialog({
         <span className="flex flex-col">
           <span>Harness / 模型</span>
           <span className="text-xs text-muted-foreground">
-            {(picked ?? agent.modelSelection) ? null : "现在跟随默认模型。"}
-            要选能用 Codi 工具的 harness。
+            {(picked ?? agent.modelSelection)
+              ? null
+              : shown === null
+                ? "还没有模型，选一个它才能运行。"
+                : "现在跟随默认模型。"}
+            要选能用 Codi 工具的 harness，新选的模型从它下一次唤醒起生效。
           </span>
         </span>
         <ProviderModelPicker
@@ -200,9 +204,9 @@ export function AgentSettingsDialog({
             shown?.instanceId,
             shown?.model,
           )}
-          isComposerOwned={false}
           popupAlign="end"
           triggerClassName={SETTINGS_PICKER_TRIGGER_CLASSNAME}
+          triggerDetail="Harness / 模型"
           {...(shown === null ? { triggerLabel: "选择模型" } : {})}
           onInstanceModelChange={(instanceId, model) =>
             setPicked(createModelSelection(instanceId, model))
