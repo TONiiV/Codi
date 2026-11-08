@@ -142,8 +142,7 @@ export function TelescopePanel(props: {
   const { environmentId } = panelRef;
   const workspace = useTelescopeWorkspaces().current;
   const chatAgentId = useChatAgentId();
-  // The task drawer covers the window's top right, where the panel controls sit.
-  const covered = useTaskDrawerId() !== null;
+  const drawerOpen = useTaskDrawerId() !== null;
   const keybindings = useAtomValue(primaryServerKeybindingsAtom);
   const state = useRightPanelStore((store) =>
     selectThreadRightPanelState(store.byThreadKey, panelRef),
@@ -240,7 +239,7 @@ export function TelescopePanel(props: {
 
   return (
     <>
-      {covered || (sheet && presence.present && open) ? null : (
+      {drawerOpen || (sheet && presence.present && open) ? null : (
         <WorkspaceTitlebarControls
           showMaximizeControl={!sheet}
           rightPanelOpen={open}

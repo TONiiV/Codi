@@ -400,7 +400,7 @@ type ChatViewProps =
       forceExpandedMobileComposer?: boolean;
       /** A side chat in its parent's right panel; the parent keeps the keyboard and workspace UI. */
       embedded?: SideChatParentPanel;
-      /** False where the page hosts the right panel: no panel, panel toggles, terminal or diff links. */
+      /** False where the page hosts the right panel: no panel, thread details, toggles, terminal or diff links. */
       panels?: boolean;
       routeKind: "server";
       draftId?: never;
@@ -3896,6 +3896,7 @@ export default function ChatView(props: ChatViewProps) {
                 />
 
                 <ThreadDetailsPanel
+                  hidden={!panels}
                   anchor={threadPanelPopoverAnchorRef}
                   handle={threadPanelPopoverHandle}
                   forceNewWorktree={multipleModelSelections !== null}

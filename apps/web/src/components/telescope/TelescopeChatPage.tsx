@@ -6,7 +6,6 @@ import { MessagesSquareIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { AsyncResult } from "effect/reactivity";
 
-import type { SideChatParentPanel } from "../../lib/sideChatPane";
 import { hostRightPanel, telescopePanelRef } from "../../rightPanelStore";
 import { useQuietThreadShell } from "../../state/entities";
 import { useEnvironmentQuery } from "../../state/query";
@@ -58,7 +57,7 @@ function Loading() {
 }
 
 // Never called: `panels={false}` drops the diff and shell links that would use them.
-const PANELLESS: SideChatParentPanel = { openToolDiff: () => {}, runShellCommand: () => {} };
+const PANELLESS = { openToolDiff: () => {}, runShellCommand: () => {} };
 
 /** The agent's resident thread once the shell lists it; a deleted or archived one starts over. */
 export function AgentChat({

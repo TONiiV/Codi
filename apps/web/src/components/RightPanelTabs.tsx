@@ -335,7 +335,7 @@ function RightPanelEmptyState(props: {
   deviceAvailable: boolean;
   sideChatAvailable: boolean;
   sideChatDisabledReason: string | null;
-  surfaceKinds: ReadonlyArray<RightPanelSurface["kind"]> | undefined;
+  surfaceKinds: ReadonlyArray<string> | undefined;
 }) {
   const [highlight, setHighlight] = useState(-1);
 
@@ -422,9 +422,7 @@ function RightPanelEmptyState(props: {
 
   type SurfaceAction = (typeof actions)[number];
 
-  const offered = actions.filter(
-    (action) => props.surfaceKinds?.some((kind) => kind === action.kind) ?? true,
-  );
+  const offered = actions.filter((action) => props.surfaceKinds?.includes(action.kind) ?? true);
   const availableActions = offered.filter((action) => action.available);
   const highlightIndex =
     availableActions.length === 0 ? -1 : Math.min(highlight, availableActions.length - 1);
