@@ -48,7 +48,7 @@ const layer = Layer.mergeAll(
 
 const alice: WorkspaceService.Caller = {
   sessionId: AuthSessionId.make("session-alice"),
-  subject: "one-time-token",
+  subject: "desktop-bootstrap",
 };
 const resident = ThreadId.make("thread-resident");
 const at = DateTime.makeUnsafe(0);

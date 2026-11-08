@@ -70,7 +70,7 @@ const scratch = ProjectId.make("project:scratch");
 const gripper = ProjectId.make("project:gripper");
 const alice: WorkspaceService.Caller = {
   sessionId: AuthSessionId.make("session-alice"),
-  subject: "one-time-token",
+  subject: "desktop-bootstrap",
 };
 const brief = {
   goal: "推进夹爪项目",

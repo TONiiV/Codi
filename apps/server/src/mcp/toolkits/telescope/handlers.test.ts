@@ -73,7 +73,7 @@ const session = (name: string): WorkspaceService.SessionCaller => ({
   sessionId: AuthSessionId.make(`session-${name}`),
   subject: "one-time-token",
 });
-const ann = session("ann");
+const ann = { ...session("ann"), subject: "desktop-bootstrap" };
 const snapshot = {
   promptVersion: "prompt@1",
   skillsVersions: {},
@@ -361,9 +361,11 @@ it.effect("never reaches another workspace's board", () =>
       { caller: bea },
       { workspaceId: other, title: "Hidden", text: "-" },
     );
-    const { agents: foreignAgents } = yield* (yield* AgentService.AgentService).listMine(bea, {
+    // Only the environment owner gets agents, and it is a member of every workspace here.
+    const { agents: foreignAgents } = yield* (yield* AgentService.AgentService).listMine(ann, {
       workspaceId: other,
     });
+    assert.isNotEmpty(foreignAgents);
 
     assert.deepStrictEqual(yield* call("ticket_list", {}), { tasks: [] });
     assert.deepStrictEqual(yield* call("decision_list", {}), { decisions: [] });

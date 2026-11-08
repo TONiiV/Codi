@@ -71,7 +71,7 @@ const gripper = ProjectId.make("project:gripper");
 const environmentId = EnvironmentId.make("env-telescope");
 const alice: WorkspaceService.Caller = {
   sessionId: AuthSessionId.make("session-alice"),
-  subject: "one-time-token",
+  subject: "desktop-bootstrap",
 };
 const brief = {
   goal: "修好夹爪固件的超时 bug",
