@@ -84,14 +84,16 @@ describe("joinBlocks", () => {
 
 const withIds = (markdown: string) =>
   splitBlocks(markdown).map((block, index) => ({ id: `b${index}`, ...block }));
+const diff = (base: ReadonlyArray<{ id: string; text: string }>, next: string) =>
+  diffBlocks(base, splitBlocks(next));
 
 describe("diffBlocks", () => {
   it("turns a checklist toggle into one update, even among identical items", () => {
     const base = withIds("# Plan\n\n- [ ] same\n- [ ] same\n- [ ] other");
-    expect(diffBlocks(base, "# Plan\n\n- [ ] same\n- [x] same\n- [ ] other")).toEqual([
+    expect(diff(base, "# Plan\n\n- [ ] same\n- [x] same\n- [ ] other")).toEqual([
       { op: "update", id: "b2", type: "md", text: "- [x] same" },
     ]);
-    expect(diffBlocks(base, "# Plan\n\n- [x] same\n- [ ] same\n- [ ] other")).toEqual([
+    expect(diff(base, "# Plan\n\n- [x] same\n- [ ] same\n- [ ] other")).toEqual([
       { op: "update", id: "b1", type: "md", text: "- [x] same" },
     ]);
   });
@@ -99,35 +101,34 @@ describe("diffBlocks", () => {
   it("leaves alone a block the writer did not touch, so another writer's later edit to it stays", () => {
     const base = withIds("# Plan\n\nGoal: ship.\n\n- [ ] review");
     // Another writer rewrites the goal after this base; this writer only toggles the item.
-    expect(diffBlocks(base, "# Plan\n\nGoal: ship.\n\n- [x] review")).toEqual([
+    expect(diff(base, "# Plan\n\nGoal: ship.\n\n- [x] review")).toEqual([
       { op: "update", id: "b2", type: "md", text: "- [x] review" },
     ]);
   });
 
   it("pairs changed blocks between anchors in order and inserts or removes the extras", () => {
     const base = withIds("A\n\nB\n\nC\n\nD");
-    expect(diffBlocks(base, "A\n\nB2\n\nC2\n\nC3\n\nC4\n\nD")).toEqual([
+    expect(diff(base, "A\n\nB2\n\nC2\n\nC3\n\nC4\n\nD")).toEqual([
       { op: "update", id: "b1", type: "md", text: "B2" },
       { op: "update", id: "b2", type: "md", text: "C2" },
-      { op: "insert", afterId: "b2", type: "md", text: "C3" },
-      { op: "insert", afterId: "b2", type: "md", text: "C4" },
+      { op: "insert", afterId: "b2", blocks: [md("C3"), md("C4")] },
     ]);
-    expect(diffBlocks(base, "A\n\nX\n\nD")).toEqual([
+    expect(diff(base, "A\n\nX\n\nD")).toEqual([
       { op: "update", id: "b1", type: "md", text: "X" },
       { op: "remove", id: "b2" },
     ]);
-    expect(diffBlocks(base, "New\n\nA\n\nB\n\nC\n\nD")).toEqual([
-      { op: "insert", afterId: null, type: "md", text: "New" },
+    expect(diff(base, "New\n\nA\n\nB\n\nC\n\nD")).toEqual([
+      { op: "insert", afterId: null, blocks: [md("New")] },
     ]);
-    expect(diffBlocks(withIds("```js\n{}\n```"), "```telescope-chart\n{}\n```")).toEqual([
+    expect(diff(withIds("```js\n{}\n```"), "```telescope-chart\n{}\n```")).toEqual([
       { op: "update", id: "b0", type: "chart", text: "```telescope-chart\n{}\n```" },
     ]);
   });
 
   it("moves a block by removing it and inserting it again", () => {
-    expect(diffBlocks(withIds("A\n\nB\n\nC"), "B\n\nC\n\nA")).toEqual([
+    expect(diff(withIds("A\n\nB\n\nC"), "B\n\nC\n\nA")).toEqual([
       { op: "remove", id: "b0" },
-      { op: "insert", afterId: "b2", type: "md", text: "A" },
+      { op: "insert", afterId: "b2", blocks: [md("A")] },
     ]);
   });
 
@@ -146,34 +147,29 @@ describe("diffBlocks", () => {
     for (const body of bodies) {
       const base = withIds(body);
       expect(splitBlocks(joinBlocks(base))).toEqual(splitBlocks(body));
-      expect(diffBlocks(base, body)).toEqual([]);
+      expect(diff(base, body)).toEqual([]);
       for (const next of bodies) {
-        expect(applyOps(base, diffBlocks(base, next))).toEqual(splitBlocks(next));
+        expect(applyOps(base, diff(base, next))).toEqual(splitBlocks(next));
       }
     }
     const body = "# Title\n\nPara one\n\n- [ ] a\n- [ ] b";
-    expect(diffBlocks(withIds(body), `\uFEFF${body}`)).toEqual([]);
+    expect(diff(withIds(body), `\uFEFF${body}`)).toEqual([]);
   });
 });
 
-/** Applies ops the way the server must: inserts after one id land in op order. */
+/** Applies ops the plain way: each insert puts its blocks right after `afterId`, no cursor. */
 function applyOps(
   base: ReadonlyArray<{ id: string; type: string; text: string }>,
   ops: ReadonlyArray<Op<string>>,
 ) {
-  const rows = base.map((block) => ({ ...block }));
-  const lastInserted = new Map<string | null, string>();
+  const rows: Array<{ id?: string; type: string; text: string }> = base.map((block) => ({
+    ...block,
+  }));
   const at = (id: string | null) => rows.findIndex((row) => row.id === id);
-  ops.forEach((op, index) => {
-    if (op.op === "remove") {
-      rows.splice(at(op.id), 1);
-    } else if (op.op === "update") {
-      rows.splice(at(op.id), 1, { id: op.id, type: op.type, text: op.text });
-    } else {
-      const id = `new${index}`;
-      rows.splice(at(lastInserted.get(op.afterId) ?? op.afterId) + 1, 0, { id, ...op });
-      lastInserted.set(op.afterId, id);
-    }
-  });
+  for (const op of ops) {
+    if (op.op === "remove") rows.splice(at(op.id), 1);
+    else if (op.op === "update") rows.splice(at(op.id), 1, op);
+    else rows.splice(at(op.afterId) + 1, 0, ...op.blocks);
+  }
   return rows.map(({ type, text }) => ({ type, text }));
 }

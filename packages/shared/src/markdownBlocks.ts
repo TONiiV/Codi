@@ -41,21 +41,21 @@ export function joinBlocks(blocks: ReadonlyArray<Block>): string {
     .join("");
 }
 
-/** Inserts that share an `afterId` keep their order; a null `afterId` is the start of the body. */
+/** An insert's blocks go, in order, right after `afterId`; a null `afterId` is the start of the body. */
 export type Op<Id> =
   | { op: "update"; id: Id; type: BlockType; text: string }
   | { op: "remove"; id: Id }
-  | { op: "insert"; afterId: Id | null; type: BlockType; text: string };
+  | { op: "insert"; afterId: Id | null; blocks: Block[] };
 
 /**
- * Block operations that turn `base` into `next`. Blocks with the same text anchor; unmatched
- * blocks between two anchors pair up in order as updates, and the extras become inserts or removes.
+ * Block operations that turn `base` into `next` (from `splitBlocks`). Blocks with the same text
+ * anchor; unmatched blocks between two anchors pair up in order as updates, and the extras become
+ * one insert or removes. No two inserts share an `afterId`.
  */
 export function diffBlocks<Id extends string>(
   base: ReadonlyArray<{ id: Id; text: string }>,
-  next: string,
+  blocks: ReadonlyArray<Block>,
 ): Array<Op<Id>> {
-  const blocks = splitBlocks(next);
   const width = blocks.length + 1;
   // ponytail: O(n*m) LCS, n and m <= 400 blocks; add move detection when history shows lost block ids
   const common = new Uint32Array((base.length + 1) * width);
@@ -74,15 +74,14 @@ export function diffBlocks<Id extends string>(
   let removed: Id[] = [];
   let added: Block[] = [];
   const closeGap = () => {
-    added.forEach((block, index) => {
+    added.forEach(({ type, text }, index) => {
       const id = removed[index];
-      if (id === undefined) {
-        ops.push({ op: "insert", afterId, ...block });
-      } else {
-        ops.push({ op: "update", id, ...block });
-        afterId = id;
-      }
+      if (id === undefined) return;
+      ops.push({ op: "update", id, type, text });
+      afterId = id;
     });
+    const extra = added.slice(removed.length);
+    if (extra.length > 0) ops.push({ op: "insert", afterId, blocks: extra });
     for (const id of removed.slice(added.length)) ops.push({ op: "remove", id });
     removed = [];
     added = [];
