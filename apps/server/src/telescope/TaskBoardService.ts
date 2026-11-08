@@ -78,6 +78,12 @@ const decodeDecisions = rowsAs(Telescope.Decision, "item_id");
 const decodeCommits = rowsAs(Telescope.TaskCommit, "commit_id");
 const decodeLeases = rowsAs(Telescope.Lease, "lease_id");
 const decodeTask = Schema.decodeUnknownEffect(Telescope.Task);
+const decodeMemberNames = Schema.decodeUnknownEffect(
+  Schema.Array(Schema.Struct({ subject_id: Schema.String, display_name: Schema.String })),
+);
+const decodeAgentNames = Schema.decodeUnknownEffect(
+  Schema.Array(Schema.Struct({ agent_id: Schema.String, name: Schema.String })),
+);
 
 const TASK_FIELDS = Object.keys(Telescope.TaskFields.fields) as ReadonlyArray<
   keyof Telescope.TaskFields
@@ -261,7 +267,8 @@ const make = Effect.gen(function* () {
   /**
    * The one write path for tasks. A write based on an older version still lands for each field it
    * changed from that version: the last writer wins, and `overwrote` names each key it replaced
-   * whose last change after that version was another author's.
+   * whose last change after that version was another author's. An author is an id plus the
+   * member it acts for, so the same agent acting for another member is another author.
    */
   const commitTask = Effect.fn("TaskBoardService.commitTask")(function* (
     author: Author,
@@ -281,6 +288,10 @@ const make = Effect.gen(function* () {
         })).toSorted((a, b) => a.baseVersion - b.baseVersion)
       : [];
     const later = commits.filter((commit) => commit.baseVersion >= input.baseVersion);
+    const lastChange = (key: string) => later.findLast((commit) => key in commit.changedFields);
+    // One agent can act for several members; its change for another member is not its own.
+    const own = (commit: Telescope.TaskCommit) =>
+      commit.authorId === author.authorId && commit.onBehalfOf?.[0] === author.onBehalfOf?.[0];
     const read: Record<string, unknown> = { ...BLANK };
     for (const commit of commits)
       if (commit.baseVersion < input.baseVersion) Object.assign(read, commit.changedFields);
@@ -290,7 +301,6 @@ const make = Effect.gen(function* () {
       if (!(key in set) || sameJson(set[key], current[key])) continue;
       // Only a write that has seen the marker may clear it.
       if (stale && key === "conflictDecisionId") continue;
-      if (stale && sameJson(set[key], read[key])) continue;
       mine[key] = set[key] ?? null;
     }
     if (author.onBehalfOf !== undefined) {
@@ -305,6 +315,12 @@ const make = Effect.gen(function* () {
       if (blocked.length > 0)
         return yield* forMember(`A member must decide ${blocked.join(", ")} first.`);
     }
+    // Resending the value read is not a write, unless it undoes the writer's own later change.
+    for (const key of Object.keys(mine)) {
+      const last = lastChange(key);
+      if (stale && sameJson(mine[key], read[key]) && !(last !== undefined && own(last)))
+        delete mine[key];
+    }
     const at = yield* now;
     const notes =
       input.note === undefined ? [] : [{ authorId: author.authorId, text: input.note, at }];
@@ -314,18 +330,30 @@ const make = Effect.gen(function* () {
     if (Object.keys(mine).length === 0 && notes.length === 0) return current;
     if (!stale) return yield* applyCommit(author, current, mine, notes, at);
 
-    const overwrote = Object.keys(mine).flatMap((key) => {
-      const last = later.findLast((commit) => key in commit.changedFields);
-      // One agent can act for several members; its change for another member is not its own.
-      const own =
-        last?.authorId === author.authorId && last.onBehalfOf?.[0] === author.onBehalfOf?.[0];
-      return last === undefined || own ? [] : [{ key, by: last.authorId, at: last.createdAt }];
+    const replaced = Object.keys(mine).flatMap((key) => {
+      const last = lastChange(key);
+      return last === undefined || own(last) ? [] : [{ key, last }];
     });
     const next = yield* applyCommit(author, current, mine, notes, at, {
       mergeLevel: 0,
       mergeReason: `based on version ${input.baseVersion}`,
     });
-    return overwrote.length === 0 ? next : { ...next, overwrote };
+    if (replaced.length === 0) return next;
+    const names = new Map([
+      ...(yield* db.select(current.workspaceId, "members", decodeMemberNames)).map(
+        (row) => [row.subject_id, row.display_name] as const,
+      ),
+      ...(yield* db.select(current.workspaceId, "agents", decodeAgentNames)).map(
+        (row) => [row.agent_id, row.name] as const,
+      ),
+    ]);
+    const nameOf = (id: string) => names.get(id) ?? id;
+    const overwrote = replaced.map(({ key, last: { authorId, onBehalfOf, createdAt } }) => {
+      const member = onBehalfOf?.[0];
+      const name = nameOf(authorId) + (member === undefined ? "" : ` for ${nameOf(member)}`);
+      return { key, by: authorId, name, at: createdAt };
+    });
+    return { ...next, overwrote };
   });
 
   const createTask = Effect.fn("TaskBoardService.createTask")(function* (

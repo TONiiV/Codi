@@ -59,12 +59,14 @@ export const TaskUpdateInput = Schema.Struct({
 });
 /**
  * `overwrote`: the keys this write replaced whose last change after its `baseVersion` was another
- * author's. Older servers set `conflict` instead when a stale write opened a decision.
+ * author's. An author is an id plus the member it acts for, so `by` can be the writer's own id
+ * when it wrote for another member; `name` reads "<agent> for <member>" then. Older servers set
+ * `conflict` instead when a stale write opened a decision.
  */
 export const TaskUpdateResult = Schema.Struct({
   ...Task.fields,
   overwrote: Schema.optionalKey(
-    Schema.Array(Schema.Struct({ key: Schema.String, by: Text, at: Timestamp })),
+    Schema.Array(Schema.Struct({ key: Schema.String, by: Text, name: Text, at: Timestamp })),
   ),
   conflict: Schema.optionalKey(Schema.Struct({ decisionId: DecisionId })),
 });

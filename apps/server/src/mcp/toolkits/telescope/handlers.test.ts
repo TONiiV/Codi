@@ -236,7 +236,7 @@ it.effect("works the board as the run's agent through every board tool", () =>
     const { self } = yield* (yield* WorkspaceService.WorkspaceService).get(ann, { workspaceId });
     assert.deepStrictEqual(
       [stale.title, stale.overwrote],
-      ["Agent title", [{ key: "title", by: self.subjectId, at: renamed.updatedAt }]],
+      ["Agent title", [{ key: "title", by: self.subjectId, name: "Ann", at: renamed.updatedAt }]],
     );
     const { id: proposalId } = yield* board.createDecision(member, {
       workspaceId,

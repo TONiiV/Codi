@@ -168,9 +168,9 @@ describe("task writes", () => {
     ).toEqual({ kind: "kept", fields: ["status"] });
     const at = "2026-11-07T00:00:00.000Z";
     const overwrote = [
-      { key: "title", by: "member-bob", at },
-      { key: "status", by: "member-bob", at },
-      { key: "goalChain", by: "agent-1", at },
+      { key: "title", by: "member-bob", name: "Bob", at },
+      { key: "status", by: "member-bob", name: "Bob", at },
+      { key: "goalChain", by: "agent-1", name: "Ops for Bob", at },
     ];
     const marked = {
       ...task("t1", "done", 5),
