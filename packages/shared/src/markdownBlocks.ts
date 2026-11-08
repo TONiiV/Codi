@@ -10,10 +10,11 @@ export type Block = { type: BlockType; text: string };
 
 /**
  * One block per top-level node, except that each top-level list item is its own block. Tables,
- * fences, quotes and nested lists stay whole. Line endings become "\n".
+ * fences, quotes and nested lists stay whole. Line endings become "\n" and a leading BOM goes, since
+ * the parser skips it without counting it in its offsets.
  */
 export function splitBlocks(markdown: string): Block[] {
-  const source = markdown.replace(/\r\n?/g, "\n");
+  const source = markdown.replace(/^\uFEFF/, "").replace(/\r\n?/g, "\n");
   const cut = (node: Node) => {
     const start = node.position?.start.offset ?? 0;
     return source.slice(source.lastIndexOf("\n", start - 1) + 1, node.position?.end.offset);

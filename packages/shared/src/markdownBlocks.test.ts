@@ -52,8 +52,9 @@ describe("splitBlocks", () => {
     expect(splitBlocks(`Intro\n\n${chart}`)).toEqual([md("Intro"), { type: "chart", text: chart }]);
   });
 
-  it("reads CRLF line endings as LF", () => {
+  it("reads CRLF and lone CR line endings as LF", () => {
     expect(splitBlocks("a\r\nb\r\n\r\n- c\r\n- d\r\n")).toEqual([md("a\nb"), md("- c"), md("- d")]);
+    expect(splitBlocks("a\rb\r\r- c\r- d\r")).toEqual([md("a\nb"), md("- c"), md("- d")]);
   });
 
   it("splits an empty body into no blocks", () => {
@@ -138,6 +139,9 @@ describe("diffBlocks", () => {
       "1. one\n2. two\n\n- a\n\n  loose\n- b\n\n* * *\n\n```\nfence\n\n\nwith gaps\n```",
       "Para one\r\n\r\n- [ ] x\r\n- [ ] x\r\n- [ ] x\r\n",
       "  indented para\n\n    code block\n\n<!-- html -->\n\n[ref]: https://example.com\n\n- a\n\n1) b",
+      "\uFEFF# Title\n\nPara one\n\n- [ ] a\n- [ ] b",
+      "- a\n\n-not a list",
+      "* item\n\n*Note:* text",
     ];
     for (const body of bodies) {
       const base = withIds(body);
@@ -147,6 +151,8 @@ describe("diffBlocks", () => {
         expect(applyOps(base, diffBlocks(base, next))).toEqual(splitBlocks(next));
       }
     }
+    const body = "# Title\n\nPara one\n\n- [ ] a\n- [ ] b";
+    expect(diffBlocks(withIds(body), `\uFEFF${body}`)).toEqual([]);
   });
 });
 
