@@ -24,7 +24,7 @@ import { TelescopeChatList } from "./TelescopeChatList";
 import { TelescopeChatPage } from "./TelescopeChatPage";
 import { TelescopeDashboard } from "./TelescopeDashboard";
 import {
-  TELESCOPE_VIEWS,
+  VISIBLE_TELESCOPE_VIEWS,
   telescopeViewEntry,
   type TelescopeView,
   useTasksLayout,
@@ -43,7 +43,7 @@ function TelescopeRail({ view, collapsed }: { view: TelescopeView; collapsed: bo
         collapsed ? "flex-1 border-t" : "border-e",
       )}
     >
-      {TELESCOPE_VIEWS.map((item) => (
+      {VISIBLE_TELESCOPE_VIEWS.map((item) => (
         <Tooltip key={item.id}>
           <TooltipTrigger
             render={
