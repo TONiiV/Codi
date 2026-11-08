@@ -21,7 +21,7 @@ export function reviewQueue(tasks: ReadonlyArray<Telescope.Task>): ReadonlyArray
     );
 }
 
-/** Pins the update to the version the user saw, so a concurrent change is rejected, not lost. */
+/** Pins the update to the version the user saw, so the server can say whose newer change it replaced. */
 export function reviewUpdateInput(
   task: Telescope.Task,
   status: "done" | "in_progress",

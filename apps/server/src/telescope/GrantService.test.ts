@@ -50,6 +50,7 @@ const as = {
   bea: session("bea"),
   cy: session("cy"),
   zed: session("zed"),
+  owner: { sessionId: AuthSessionId.make("session-owner"), subject: "desktop-bootstrap" },
 };
 const environmentId = EnvironmentId.make("env-local");
 const web = ProjectId.make("project-web");
@@ -92,6 +93,14 @@ const setup = Effect.gen(function* () {
     );
   const mine = (caller: WorkspaceService.Caller) =>
     agents.listMine(caller, { workspaceId }).pipe(Effect.map(({ agents }) => agents));
+  // Members get no new agents; Bea's are the owner's defaults handed to her before that rule.
+  yield* mine(as.owner);
+  yield* db.update(
+    workspaceId,
+    "agents",
+    { owner_subject_id: bea.subjectId },
+    { owner_subject_id: Telescope.OWNER_MEMBER_ID },
+  );
   return {
     workspaceId,
     beaId: bea.subjectId,
@@ -190,7 +199,7 @@ it.layer(layer)("Telescope grants", (it) => {
   it.effect("lets a project rule remove a power the role grants", () =>
     Effect.gen(function* () {
       const { workspaceId, beaId, grants, setPowers, mine } = yield* setup;
-      const webAgent = find(yield* mine(as.ann), "chief_agent", web);
+      const webAgent = find(yield* mine(as.owner), "chief_agent", web);
       yield* setPowers(webAgent.id, ALL);
       const rule = {
         workspaceId,
@@ -239,7 +248,7 @@ it.layer(layer)("Telescope grants", (it) => {
         ),
         "not_found",
       );
-      const before = yield* grants.explainFor(as.ann, { workspaceId, agentId: webAgent.id });
+      const before = yield* grants.explainFor(as.owner, { workspaceId, agentId: webAgent.id });
       assert.isTrue(before.powers.mergePRs);
       const listed = grants
         .projectRules(as.bea, { workspaceId })
@@ -280,12 +289,12 @@ it.layer(layer)("Telescope grants", (it) => {
         ],
         "routing: null clears the allowlist",
       );
-      const after = yield* grants.explainFor(as.ann, { workspaceId, agentId: webAgent.id });
+      const after = yield* grants.explainFor(as.owner, { workspaceId, agentId: webAgent.id });
       assert.deepStrictEqual(after.powers, { ...ALL, mergePRs: false });
       assert.strictEqual(removedBy(after, "mergePRs"), "project");
 
       yield* grants.setProjectRule(as.ann, { ...rule, powers: ALL });
-      const lifted = yield* grants.explainFor(as.ann, { workspaceId, agentId: webAgent.id });
+      const lifted = yield* grants.explainFor(as.owner, { workspaceId, agentId: webAgent.id });
       assert.isTrue(lifted.powers.mergePRs, "a rule can be lifted again");
 
       assert.strictEqual(
@@ -299,9 +308,9 @@ it.layer(layer)("Telescope grants", (it) => {
         "conflict",
         "another project's rules never stand in for the agent's own",
       );
-      const cos = find(yield* mine(as.ann), "chief_of_staff");
+      const cos = find(yield* mine(as.owner), "chief_of_staff");
       yield* setPowers(cos.id, ALL);
-      const unbound = yield* grants.explainFor(as.ann, {
+      const unbound = yield* grants.explainFor(as.owner, {
         workspaceId,
         agentId: cos.id,
         projectId: ProjectId.make("unbound"),
@@ -313,10 +322,10 @@ it.layer(layer)("Telescope grants", (it) => {
   it.effect("intersects powers along CoS, Chief Agent and custom agent", () =>
     Effect.gen(function* () {
       const { workspaceId, grants, agents, setPowers, mine } = yield* setup;
-      const ann = yield* mine(as.ann);
-      const cos = find(ann, "chief_of_staff");
-      const chief = find(ann, "chief_agent", web);
-      const custom = yield* agents.createCustom(as.ann, {
+      const owner = yield* mine(as.owner);
+      const cos = find(owner, "chief_of_staff");
+      const chief = find(owner, "chief_agent", web);
+      const custom = yield* agents.createCustom(as.owner, {
         workspaceId,
         name: "Reviewer",
         projectId: web,
@@ -325,10 +334,10 @@ it.layer(layer)("Telescope grants", (it) => {
       yield* setPowers(chief.id, { ...ALL, answerMembers: false });
       yield* setPowers(custom.id, ALL);
 
-      const direct = yield* grants.explainFor(as.ann, { workspaceId, agentId: custom.id });
+      const direct = yield* grants.explainFor(as.owner, { workspaceId, agentId: custom.id });
       assert.deepStrictEqual(direct.powers, ALL);
 
-      const chained = yield* grants.explainFor(as.ann, {
+      const chained = yield* grants.explainFor(as.owner, {
         workspaceId,
         agentId: custom.id,
         via: [cos.id, chief.id],
@@ -350,13 +359,13 @@ it.layer(layer)("Telescope grants", (it) => {
 
       const beaChief = find(yield* mine(as.bea), "chief_agent", web);
       assert.strictEqual(
-        yield* reasonOf(grants.explainFor(as.ann, { workspaceId, agentId: beaChief.id })),
+        yield* reasonOf(grants.explainFor(as.owner, { workspaceId, agentId: beaChief.id })),
         "not_found",
         "another member's agents are not explained",
       );
       assert.strictEqual(
         yield* reasonOf(
-          grants.explainFor(as.ann, { workspaceId, agentId: beaChief.id, projectId: api }),
+          grants.explainFor(as.owner, { workspaceId, agentId: beaChief.id, projectId: api }),
         ),
         "not_found",
         "nor is where they work",

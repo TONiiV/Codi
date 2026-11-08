@@ -7,6 +7,7 @@ import { RESIZABLE_WIDTH_PROPERTY } from "~/hooks/useResizableWidth";
 import { workspaceAreaProps } from "../../lib/workspaceFocus";
 import { cn } from "~/lib/utils";
 
+import { hideHeaderIslandUnderPanel } from "./headerIslandCover";
 import { RightPanelResizeHandle } from "./RightPanelResizeHandle";
 
 export type PreviewPanelMode = "inline" | "sheet" | "sidebar" | "embedded";
@@ -79,9 +80,11 @@ function PreviewPanelShellFrame(
   const attachHost = (host: HTMLDivElement) => {
     hostRef.current = host;
     const stopObservingRow = observeRow(host);
+    const stopCoveringIsland = isInline ? hideHeaderIslandUnderPanel(host) : undefined;
     return () => {
       hostRef.current = null;
       stopObservingRow();
+      stopCoveringIsland?.();
     };
   };
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- on unmount, returns DOM focus to the panel toggle if removal dropped it on the body

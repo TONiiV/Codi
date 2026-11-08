@@ -65,6 +65,9 @@ const MemorySourceRow = Schema.Struct({
 export const decodeRuns = Schema.decodeUnknownEffect(Schema.Array(RunRow));
 const decodeCalls = Schema.decodeUnknownEffect(Schema.Array(CallRow));
 const decodeMemorySources = Schema.decodeUnknownEffect(Schema.Array(MemorySourceRow));
+const decodeAgentOwners = Schema.decodeUnknownEffect(
+  Schema.Array(Schema.Struct({ owner_subject_id: Schema.NullOr(Schema.String) })),
+);
 // The repository writes workspace_id itself and refuses rows that carry it.
 const encodeRun = Schema.encodeSync(RunRow.mapFields(Struct.omit(["workspace_id"])));
 const encodeCall = Schema.encodeSync(CallRow.mapFields(Struct.omit(["workspace_id"])));
@@ -239,6 +242,15 @@ const make = Effect.gen(function* () {
       revoked_at: null,
     });
     if (active === 0) return yield* fail("forbidden", "Runs act only for active members.");
+    const [agent] = yield* db.select(
+      workspaceId,
+      "agents",
+      decodeAgentOwners,
+      { agent_id: input.agentId },
+      { columns: ["owner_subject_id"] },
+    );
+    if (agent !== undefined && !WorkspaceService.runsHere(agent.owner_subject_id))
+      return yield* fail("forbidden", "A member's agents run on their own machine, not this one.");
     const { codiMessageId } = input.inputSnapshot;
     const [serving] =
       input.threadId === undefined || codiMessageId === undefined

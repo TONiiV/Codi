@@ -8,8 +8,8 @@ import type * as Rpc from "effect/rpc/Rpc";
 import * as Schema from "effect/Schema";
 
 import type { PersistenceDecodeError, PersistenceSqlError } from "../persistence/Errors.ts";
+import * as AgentService from "./AgentService.ts";
 import * as BoardChanges from "./BoardChanges.ts";
-import { mergeStale } from "./TaskMerge.ts";
 import * as TelescopeDb from "./TelescopeDb.ts";
 import * as WorkspaceService from "./WorkspaceService.ts";
 
@@ -79,12 +79,38 @@ const decodeDecisions = rowsAs(Telescope.Decision, "item_id");
 const decodeCommits = rowsAs(Telescope.TaskCommit, "commit_id");
 const decodeLeases = rowsAs(Telescope.Lease, "lease_id");
 const decodeTask = Schema.decodeUnknownEffect(Telescope.Task);
+const decodeMemberNames = Schema.decodeUnknownEffect(
+  Schema.Array(
+    Schema.Struct({
+      subject_id: Schema.String,
+      display_name: Schema.String,
+      revoked_at: Schema.NullOr(Schema.String),
+    }),
+  ),
+);
+const decodeAgentNames = Schema.decodeUnknownEffect(
+  Schema.Array(
+    Schema.Struct({
+      agent_id: Schema.String,
+      name: Schema.String,
+      owner_subject_id: Schema.NullOr(Schema.String),
+      kind: Schema.String,
+      project_id: Schema.NullOr(Schema.String),
+      exposure: Schema.String,
+    }),
+  ),
+);
+const decodeBoundProjects = Schema.decodeUnknownEffect(
+  Schema.Array(Schema.Struct({ project_id: Schema.String })),
+);
 
 const TASK_FIELDS = Object.keys(Telescope.TaskFields.fields) as ReadonlyArray<
   keyof Telescope.TaskFields
 >;
 const sameJson = (a: unknown, b: unknown) =>
   JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+/** A task's fields before its first commit sets any. */
+const BLANK = { title: "", status: "todo", goalChain: [] } as const;
 
 const LEASE_TTL = { minutes: 2 };
 // An agent renews only between tool calls, so its lease outlasts a long step (D59).
@@ -257,19 +283,11 @@ const make = Effect.gen(function* () {
       .select(workspaceId, "tasks", decodeDecisions, { kind: "decision", item_id: id })
       .pipe(Effect.map(([found]) => found));
 
-  const activeLease = Effect.fn("TaskBoardService.activeLease")(function* (
-    task: Telescope.Task,
-    at: string,
-  ) {
-    const where = { task_id: task.id };
-    const [lease] = yield* db.select(task.workspaceId, "leases", decodeLeases, where);
-    return lease === undefined || isExpired(lease, at) ? undefined : lease;
-  });
-
   /**
-   * The one write path for tasks. A stale `baseVersion` is merged onto the current version by
-   * `mergeStale`; for fields no rule settles it proposes a decision and marks the task with
-   * `conflictDecisionId`, keeping the current values until that decision is made.
+   * The one write path for tasks. A write based on an older version still lands for each field it
+   * changed from that version: the last writer wins, and `overwrote` names each key it replaced
+   * whose last change after that version was another author's. An author is an id plus the
+   * member it acts for, so the same agent acting for another member is another author.
    */
   const commitTask = Effect.fn("TaskBoardService.commitTask")(function* (
     author: Author,
@@ -282,12 +300,27 @@ const make = Effect.gen(function* () {
         baseVersion: input.baseVersion,
         currentVersion: current.version,
       });
+    const stale = input.baseVersion !== current.version;
+    const commits = stale
+      ? (yield* db.select(current.workspaceId, "task_commits", decodeCommits, {
+          task_id: current.id,
+        })).toSorted((a, b) => a.baseVersion - b.baseVersion)
+      : [];
+    const later = commits.filter((commit) => commit.baseVersion >= input.baseVersion);
+    const lastChange = (key: string) => later.findLast((commit) => key in commit.changedFields);
+    // One agent can act for several members; its change for another member is not its own.
+    const own = (commit: Telescope.TaskCommit) =>
+      commit.authorId === author.authorId && commit.onBehalfOf?.[0] === author.onBehalfOf?.[0];
+    const read: Record<string, unknown> = { ...BLANK };
+    for (const commit of commits)
+      if (commit.baseVersion < input.baseVersion) Object.assign(read, commit.changedFields);
     const set = input.set ?? {};
     const mine: Record<string, Schema.Json> = {};
     for (const key of TASK_FIELDS) {
-      // Only a write that has seen the marker may clear it; it never takes part in a merge.
-      if (key === "conflictDecisionId" && input.baseVersion !== current.version) continue;
-      if (key in set && !sameJson(set[key], current[key])) mine[key] = set[key] ?? null;
+      if (!(key in set) || sameJson(set[key], current[key])) continue;
+      // Only a write that has seen the marker may clear it.
+      if (stale && key === "conflictDecisionId") continue;
+      mine[key] = set[key] ?? null;
     }
     if (author.onBehalfOf !== undefined) {
       // Every open proposal holds its fields, not just the one the marker names.
@@ -301,91 +334,58 @@ const make = Effect.gen(function* () {
       if (blocked.length > 0)
         return yield* forMember(`A member must decide ${blocked.join(", ")} first.`);
     }
+    // Resending the value read is not a write, unless it undoes the writer's own later change.
+    for (const key of Object.keys(mine)) {
+      const undoes = later.some((commit) => key in commit.changedFields && own(commit));
+      if (stale && sameJson(mine[key], read[key]) && !undoes) delete mine[key];
+    }
     const at = yield* now;
     const notes =
       input.note === undefined ? [] : [{ authorId: author.authorId, text: input.note, at }];
     const limit = Telescope.BOARD_LIMITS.freeTextEntries;
     if (notes.length > 0 && current.freeText.length >= limit)
       return yield* new Telescope.FreeTextLimitError({ taskId: current.id, limit });
-    if (input.baseVersion === current.version) {
-      if (Object.keys(mine).length === 0 && notes.length === 0) return current;
-      return yield* applyCommit(author, current, mine, notes, at);
-    }
+    if (Object.keys(mine).length === 0 && notes.length === 0) return current;
+    if (!stale) return yield* applyCommit(author, current, mine, notes, at);
 
-    const where = { task_id: current.id };
-    const history = yield* db.select(current.workspaceId, "task_commits", decodeCommits, where);
-    const lease = yield* activeLease(current, at);
-    const { fields, conflicts, ...merge } = mergeStale({
-      current,
-      mine,
-      history,
-      baseVersion: input.baseVersion,
-      authorId: author.authorId,
-      leaseHolder: lease?.holderAgentId,
+    const replaced = Object.keys(mine).flatMap((key) => {
+      const last = lastChange(key);
+      return last === undefined || own(last) ? [] : [{ key, last }];
     });
-    if (conflicts.length > 0) {
-      const incoming = Object.fromEntries(conflicts.map((key) => [key, mine[key] ?? null]));
-      const open =
-        current.conflictDecisionId === undefined
-          ? undefined
-          : yield* findDecision(current.workspaceId, current.conflictDecisionId);
-      // An agent may not move the marker off an open proposal: deciding it would do nothing.
-      if (author.onBehalfOf !== undefined && open?.status === "proposed")
-        return yield* forMember(
-          `A member must decide ${Object.keys(open.conflict?.incoming ?? {}).join(", ")} first.`,
-        );
-      // A resent stale write reuses the proposal it already opened.
-      const reused =
-        open?.status === "proposed" && sameJson(open.conflict?.incoming, incoming)
-          ? open.id
-          : undefined;
-      if (reused !== undefined && Object.keys(fields).length === 0 && notes.length === 0)
-        return { ...current, conflict: { decisionId: reused } };
-      const decisionId = reused ?? (yield* proposeConflict(author, current, incoming, at)).id;
-      const marked = reused === undefined ? { ...fields, conflictDecisionId: decisionId } : fields;
-      const next = yield* applyCommit(author, current, marked, notes, at, {
-        mergeLevel: 2,
-        mergeReason: `${merge.mergeReason}; no rule settles ${conflicts.join(", ")}; decision ${decisionId}`,
+    const next = yield* applyCommit(author, current, mine, notes, at, {
+      mergeLevel: 0,
+      mergeReason: `based on version ${input.baseVersion}`,
+    });
+    if (replaced.length === 0) return next;
+    const [members, agents, bindings] = yield* Effect.all([
+      db.select(current.workspaceId, "members", decodeMemberNames),
+      db.select(current.workspaceId, "agents", decodeAgentNames),
+      db.select(current.workspaceId, "project_bindings", decodeBoundProjects),
+    ]);
+    const reach = {
+      roles: new Set(members.filter((row) => row.revoked_at === null).map((row) => row.subject_id)),
+      leads: new Set(bindings.map((row) => row.project_id)),
+    };
+    // An agent hidden from the writer's member stays unnamed, as `telescope.agent.get` hides it.
+    const seen = (row: (typeof agents)[number]) =>
+      AgentService.visibleTo(author.memberId, reach, {
+        ownerSubjectId: row.owner_subject_id,
+        kind: row.kind,
+        projectId: row.project_id ?? undefined,
+        exposure: row.exposure,
       });
-      return { ...next, conflict: { decisionId } };
-    }
-    const unchanged = Object.keys(fields).length === 0 && notes.length === 0;
-    if (unchanged && merge.mergeLevel === 0) return current;
-    return yield* applyCommit(author, current, fields, notes, at, merge);
+    const names = new Map([
+      ...members.map((row) => [row.subject_id, row.display_name] as const),
+      ...agents.map((row) => [row.agent_id, seen(row) ? row.name : "an agent"] as const),
+    ]);
+    const nameOf = (id: string) => names.get(id) ?? id;
+    const overwrote = replaced.map(({ key, last: { authorId, onBehalfOf, createdAt } }) => {
+      const member = onBehalfOf?.[0];
+      const name = nameOf(authorId) + (member === undefined ? "" : ` for ${nameOf(member)}`);
+      return { key, by: authorId, name, at: createdAt };
+    });
+    return { ...next, overwrote };
   });
-
-  /**
-   * The proposed decision for the fields of a stale write no rule settles. `conflict` holds the
-   * incoming values; the text shows both sides. The task points at it through `conflictDecisionId`.
-   */
-  const proposeConflict = (
-    author: Author,
-    current: Telescope.Task,
-    incoming: Telescope.TaskConflict["incoming"],
-    at: string,
-  ) => {
-    const existing: Readonly<Record<string, unknown>> = current;
-    const side = (value: unknown) => JSON.stringify(value ?? null);
-    const lines = Object.entries(incoming).map(
-      ([key, value]) => `${key}：当前 ${side(existing[key])}，新提交 ${side(value)}`,
-    );
-    const title = `冲突：${current.title}`.slice(0, Telescope.BOARD_LIMITS.titleLength).trim();
-    return writeDecision(
-      author,
-      current.workspaceId,
-      {
-        title,
-        text: lines.join("\n"),
-        conflict: { taskId: current.id, incoming },
-        status: "proposed",
-        options: [
-          { id: "keep", label: "保留当前值" },
-          { id: "incoming", label: "采用新提交" },
-        ],
-      },
-      at,
-    );
-  };
 
   const createTask = Effect.fn("TaskBoardService.createTask")(function* (
     actor: Actor,
@@ -398,9 +398,7 @@ const make = Effect.gen(function* () {
       kind: "task",
       id: taskId,
       workspaceId,
-      title: "",
-      status: "todo",
-      goalChain: [],
+      ...BLANK,
       freeText: [],
       createdAt: at,
       updatedAt: at,

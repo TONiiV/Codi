@@ -53,7 +53,9 @@ const decodeDelegationIds = Schema.decodeUnknownEffect(
   Schema.Array(Schema.Struct({ delegation_id: Telescope.DelegationId })),
 );
 const decodeAgents = Schema.decodeUnknownEffect(
-  Schema.Array(Schema.Struct({ agent_id: Telescope.AgentId })),
+  Schema.Array(
+    Schema.Struct({ agent_id: Telescope.AgentId, owner_subject_id: Schema.NullOr(Schema.String) }),
+  ),
 );
 const decodeGovernanceAgents = Schema.decodeUnknownEffect(
   Schema.Array(
@@ -425,11 +427,16 @@ const make = Effect.gen(function* () {
     function* (caller, { workspaceId, agentId, state }) {
       const self = yield* requireAdmin(caller, workspaceId);
       const where = { agent_id: agentId };
-      const agents = yield* db.select(workspaceId, "agents", decodeAgents, where);
-      if (agents.length === 0)
+      const [agent] = yield* db.select(workspaceId, "agents", decodeAgents, where);
+      if (agent === undefined)
         return yield* new Telescope.WorkspaceError({
           reason: "not_found",
           message: "Agent not found.",
+        });
+      if (state === "running" && !WorkspaceService.runsHere(agent.owner_subject_id))
+        return yield* new Telescope.WorkspaceError({
+          reason: "forbidden",
+          message: "A member's agents run on their own machine, not this one.",
         });
       const row = { agent_id: agentId, state, by_subject_id: self.subjectId, at: yield* now };
       yield* db.transaction(

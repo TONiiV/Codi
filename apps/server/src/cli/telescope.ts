@@ -12,11 +12,11 @@ import * as Schema from "effect/Schema";
 import { Argument, Command, Flag, GlobalFlag } from "effect/cli";
 import * as CliError from "effect/cli/CliError";
 
-import { INTERNAL_ADMINISTRATIVE_BOOTSTRAP_SUBJECT } from "../auth/EnvironmentAuth.ts";
+import * as EnvironmentAuth from "../auth/EnvironmentAuth.ts";
 import * as ServerConfig from "../config.ts";
 import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
 import type { PersistenceDecodeError, PersistenceSqlError } from "../persistence/Errors.ts";
-import * as SqlitePersistence from "../persistence/Sqlite.ts";
+import * as InviteLink from "../telescope/InviteLink.ts";
 import * as WorkspaceDataService from "../telescope/WorkspaceDataService.ts";
 import * as WorkspaceService from "../telescope/WorkspaceService.ts";
 import {
@@ -29,7 +29,7 @@ import {
 // Whoever can run the CLI owns this T3 home, so it acts as the environment owner.
 const OWNER: WorkspaceService.SessionCaller = {
   sessionId: AuthSessionId.make("cli"),
-  subject: INTERNAL_ADMINISTRATIVE_BOOTSTRAP_SUBJECT,
+  subject: EnvironmentAuth.INTERNAL_ADMINISTRATIVE_BOOTSTRAP_SUBJECT,
 };
 
 const common = {
@@ -78,6 +78,7 @@ const runAsOwner = Effect.fn("cli.telescope.runAsOwner")(function* <A>(
   flags: Flags,
   run: (
     service: WorkspaceService.WorkspaceService["Service"],
+    links: InviteLink.InviteServices,
   ) => Effect.Effect<A, Failure, Services>,
   human: (result: A) => string,
 ) {
@@ -85,8 +86,11 @@ const runAsOwner = Effect.fn("cli.telescope.runAsOwner")(function* <A>(
   const config = yield* resolveCliAuthConfig(flags, yield* GlobalFlag.LogLevel, {
     quietLogs: true,
   });
-  const result = yield* WorkspaceService.WorkspaceService.pipe(
-    Effect.flatMap(run),
+  const result = yield* Effect.all([
+    WorkspaceService.WorkspaceService,
+    EnvironmentAuth.EnvironmentAuth,
+  ]).pipe(
+    Effect.flatMap(([workspaces, auth]) => run(workspaces, { workspaces, auth })),
     Effect.catchTags({
       TelescopeWorkspaceError: userError,
       TelescopeWorkspaceBusyError: userError,
@@ -94,8 +98,7 @@ const runAsOwner = Effect.fn("cli.telescope.runAsOwner")(function* <A>(
     }),
     Effect.provide(
       Layer.merge(WorkspaceService.layer, WorkspaceDataService.layer).pipe(
-        Layer.provideMerge(ServerEnvironment.layerIdentity),
-        Layer.provide(SqlitePersistence.layerConfig),
+        Layer.provideMerge(EnvironmentAuth.layerRuntime),
         Layer.provide(ServerConfig.layer(config)),
         Layer.provide(Layer.succeed(References.MinimumLogLevel, "Error")),
       ),
@@ -234,7 +237,7 @@ const orgDeleteCommand = Command.make("delete", {
   Command.withHandler((flags) =>
     runAsOwner(
       flags,
-      () =>
+      (_, links) =>
         Effect.gen(function* () {
           const fs = yield* FileSystem.FileSystem;
           const file = Option.getOrUndefined(flags.manifest);
@@ -244,11 +247,12 @@ const orgDeleteCommand = Command.make("delete", {
           const created = file !== undefined && !(yield* fs.exists(file));
           if (file !== undefined) yield* fs.writeFileString(file, "", { flag: "a" });
           const data = yield* WorkspaceDataService.WorkspaceDataService;
-          const manifest = yield* data
-            .delete(OWNER, { workspaceId: flags.workspace, confirmName: flags.confirm })
-            .pipe(
-              Effect.onError(() => (created ? fs.remove(file).pipe(Effect.ignore) : Effect.void)),
-            );
+          const manifest = yield* InviteLink.deleteWorkspace({ ...links, data }, OWNER, {
+            workspaceId: flags.workspace,
+            confirmName: flags.confirm,
+          }).pipe(
+            Effect.onError(() => (created ? fs.remove(file).pipe(Effect.ignore) : Effect.void)),
+          );
           if (file !== undefined) yield* fs.writeFileString(file, `${encodeManifest(manifest)}\n`);
           return manifest;
         }),
@@ -344,11 +348,14 @@ const memberRevokeCommand = Command.make("revoke", {
   org: orgFlag,
   member: memberFlag("member", "Member id, from `t3 member list`."),
 }).pipe(
-  Command.withDescription("Remove a member and void the codes they issued."),
+  Command.withDescription(
+    "Remove a member, void the codes they issued, and sign out their Telescope-only devices that are in no other workspace.",
+  ),
   Command.withHandler((flags) =>
     runAsOwner(
       flags,
-      (service) => service.revoke(OWNER, { workspaceId: flags.org, subjectId: flags.member }),
+      (_, links) =>
+        InviteLink.revoke(links, OWNER, { workspaceId: flags.org, subjectId: flags.member }),
       (member) => `Revoked ${describe(member)}.`,
     ),
   ),
@@ -360,7 +367,7 @@ const memberRestoreCommand = Command.make("restore", {
   member: memberFlag("member", "Member id of a revoked member, from `t3 member list`."),
 }).pipe(
   Command.withDescription(
-    "Re-admit a revoked member with their previous role. Project leads are not restored: rebind with `t3 project bind --lead`.",
+    "Re-admit a revoked member with their previous role; devices the revoke signed out need a new invite link. Project leads are not restored: rebind with `t3 project bind --lead`.",
   ),
   Command.withHandler((flags) =>
     runAsOwner(
@@ -391,8 +398,8 @@ const roleSetCommand = Command.make("set", {
   Command.withHandler((flags) =>
     runAsOwner(
       flags,
-      (service) =>
-        service.setRole(OWNER, {
+      (_, links) =>
+        InviteLink.setRole(links, OWNER, {
           workspaceId: flags.org,
           subjectId: flags.member,
           role: flags.role,

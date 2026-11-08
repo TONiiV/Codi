@@ -11,7 +11,7 @@ import {
 
 import { isAppModalPage, peekAppModalReturnHref, TELESCOPE_PATH } from "../sidebar/mainAppLocation";
 
-export const TELESCOPE_VIEWS = [
+const TELESCOPE_VIEWS = [
   {
     id: "chats",
     label: "对话",
@@ -48,8 +48,12 @@ export const TELESCOPE_VIEWS = [
 
 export type TelescopeView = (typeof TELESCOPE_VIEWS)[number]["id"];
 
+// 对话 and My Teams are paused while Telescope focuses on the task board; old links land on 任务.
+const PAUSED_VIEWS: ReadonlySet<TelescopeView> = new Set(["chats", "teams"]);
+export const VISIBLE_TELESCOPE_VIEWS = TELESCOPE_VIEWS.filter((view) => !PAUSED_VIEWS.has(view.id));
+
 function parseTelescopeView(raw: unknown): TelescopeView {
-  return TELESCOPE_VIEWS.find((view) => view.id === raw)?.id ?? "chats";
+  return VISIBLE_TELESCOPE_VIEWS.find((view) => view.id === raw)?.id ?? "tasks";
 }
 
 const TASKS_LAYOUTS = ["table", "board", "decisions"] as const;
