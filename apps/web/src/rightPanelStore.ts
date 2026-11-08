@@ -89,7 +89,7 @@ export const PULL_REQUESTS_PANEL_REF = scopeThreadRef(
 const isPullRequestsPanelKey = (threadKey: string) => threadKey.endsWith(":pull-requests-panel");
 
 export const TELESCOPE_PANEL_SURFACES: ReadonlyArray<RightPanelKind> = ["preview", "side-chat"];
-/** Telescope's one side chat tab; its header picks the agent, so it names no real thread. */
+/** Telescope's one side chat tab; it talks to the member's assistant, so it names no real thread. */
 export const TELESCOPE_SIDE_CHAT = ThreadId.make("telescope-agent-chat");
 
 /** Telescope pages share one panel; its browser tabs belong to no Code thread. */

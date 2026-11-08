@@ -23,7 +23,6 @@ vi.mock(import("./telescopeState"), async (original) => ({
 }));
 vi.mock(import("./telescopeViews"), async (original) => ({
   ...(await original()),
-  useChatAgentId: () => null,
   useTaskDrawerId: () => null,
 }));
 vi.mock(import("./myTeamsShared"), async (original) => ({
