@@ -25,7 +25,7 @@ const FoldedGroups = Schema.Array(ChatGroupId);
 const NONE_FOLDED: ReadonlyArray<ChatGroupId> = [];
 
 /** Chief Agents are named "<project> Chief Agent"; only the project part tells them apart. */
-function initials(agent: Telescope.Agent): string {
+export function initials(agent: Telescope.Agent): string {
   const name = agentDisplayName(agent);
   const own = agent.kind === "chief_agent" ? name.replace(/\s+Chief Agent$/, "") : name;
   const words = own.split(/[\s_-]+/).filter(Boolean);

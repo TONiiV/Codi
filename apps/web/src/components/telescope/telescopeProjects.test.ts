@@ -2,6 +2,7 @@ import type { EnvironmentProject } from "@t3tools/client-runtime/state/shell";
 import { EnvironmentId, ProjectId, Telescope } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
+import { buildSidebarProjectSnapshots } from "../../sidebarProjectGrouping";
 import { boundProjectRows, unlinkedProjects } from "./telescopeProjects";
 
 const AT = "2026-11-08T00:00:00.000Z";
@@ -43,11 +44,11 @@ const binding = (
   ...(leadSubjectId === undefined ? {} : { leadSubjectId }),
 });
 
-const chief = (projectId: string): Telescope.Agent => ({
-  id: Telescope.AgentId.make(`chief-${projectId}`),
+const chief = (projectId: string, kind: Telescope.AgentKind = "chief_agent"): Telescope.Agent => ({
+  id: Telescope.AgentId.make(`${kind}-${projectId}`),
   workspaceId,
   ownerSubjectId: "me",
-  kind: "chief_agent",
+  kind,
   projectId: ProjectId.make(projectId),
   name: `${projectId} Chief Agent`,
   standingPowers: {
@@ -70,7 +71,7 @@ describe("telescope projects page", () => {
     const rows = boundProjectRows(
       bindings,
       [project("app"), project("docs", {}, remote), project("docs"), project("site")],
-      [chief("app"), chief("docs")],
+      [chief("site", "custom"), chief("app"), chief("docs")],
       self,
     );
     expect(
@@ -81,26 +82,62 @@ describe("telescope projects page", () => {
         detail: row.detail,
       })),
     ).toEqual([
-      { project: "local:app", chief: "chief-app", detail: "你是负责人 · 直接做：开工单、合并 PR" },
-      { project: "local:docs", chief: "chief-docs", detail: "你是成员 · 直接做：开工单" },
+      {
+        project: "local:app",
+        chief: "chief_agent-app",
+        detail: "你是负责人 · 直接做：开工单、合并 PR",
+      },
+      { project: "local:docs", chief: "chief_agent-docs", detail: "你是成员 · 直接做：开工单" },
       { project: "local:site", chief: null, detail: "你是成员 · 还没有你的 Chief Agent" },
     ]);
+    const admin = { ...self, role: "admin" as const };
+    expect(boundProjectRows([binding("docs")], [], [chief("docs")], admin)[0]?.detail).toBe(
+      "你是管理员 · 直接做：开工单、合并 PR",
+    );
   });
 
-  it("offers only live Code projects that no workspace has taken", () => {
-    const unlinked = unlinkedProjects(
-      [
+  it("offers each live Code project group that no workspace has taken, bound whole", () => {
+    const repo = (name: string) => ({
+      canonicalKey: `github.com/acme/${name}`,
+      locator: { source: "git-remote" as const, remoteName: "origin", remoteUrl: name },
+    });
+    const groups = buildSidebarProjectSnapshots({
+      projects: [
         project("free"),
         project("scratch", { isScratch: true }),
         project("archived", { archivedAt: AT }),
         project("taken"),
         project("taken", {}, remote),
+        project("app", { repositoryIdentity: repo("app") }),
+        project("app", { repositoryIdentity: repo("app") }, remote),
+        project("lib", { repositoryIdentity: repo("lib") }),
+        project("lib", { repositoryIdentity: repo("lib") }, remote),
       ],
-      [binding("taken", undefined, local)],
-    );
-    expect(unlinked.map((entry) => `${entry.environmentId}:${entry.id}`)).toEqual([
-      "local:free",
-      "remote:taken",
+      settings: { sidebarProjectGroupingMode: "repository", sidebarProjectGroupingOverrides: {} },
+      primaryEnvironmentId: local,
+      resolveEnvironmentLabel: (id) => (id === local ? "本机" : null),
+    });
+    const elsewhere = {
+      ...binding("app", undefined, remote),
+      workspaceId: Telescope.WorkspaceId.make("other"),
+    };
+    const unlinked = unlinkedProjects(groups, [binding("taken"), elsewhere], self);
+    expect(unlinked.map(({ machines, binds }) => ({ machines, binds }))).toEqual([
+      {
+        machines: ["本机"],
+        binds: [{ workspaceId, environmentId: local, projectId: "free", leadSubjectId: "me" }],
+      },
+      {
+        machines: ["remote"],
+        binds: [{ workspaceId, environmentId: remote, projectId: "taken", leadSubjectId: "me" }],
+      },
+      {
+        machines: ["本机", "remote"],
+        binds: [
+          { workspaceId, environmentId: local, projectId: "lib", leadSubjectId: "me" },
+          { workspaceId, environmentId: remote, projectId: "lib", leadSubjectId: "me" },
+        ],
+      },
     ]);
   });
 });

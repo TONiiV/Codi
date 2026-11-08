@@ -1,8 +1,10 @@
 import { useAtomValue } from "@effect/atom-react";
+import { failureText } from "@t3tools/client-runtime/telescope/workspaces";
 import type { EnvironmentId, Telescope } from "@t3tools/contracts";
 import { AsyncResult } from "effect/reactivity";
 import { FolderGit2Icon, PencilIcon, PlusIcon, Settings2Icon } from "lucide-react";
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { flushSync } from "react-dom";
 
 import { openCommandPalette } from "../../commandPaletteBus";
 import { cn } from "../../lib/utils";
@@ -10,6 +12,7 @@ import { useProjects } from "../../state/entities";
 import { useEnvironmentIdentities } from "../../state/environments";
 import { useEnvironmentQuery } from "../../state/query";
 import { useAtomCommand } from "../../state/use-atom-command";
+import { useSettingsProjectGroups } from "../settings/useSettingsProjectGroups";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
@@ -18,6 +21,8 @@ import { AgentSettingsDialog } from "./MyTeamsAgentDialog";
 import { QueryState } from "./MyTeamsPage";
 import { agentDisplayName, telescopeAgents } from "./myTeamsShared";
 import { NoWorkspace } from "./TasksParts";
+import { ErrorNote } from "./TelescopeAccountDialogs";
+import { initials } from "./TelescopeChatList";
 import { TelescopeEmptyState } from "./TelescopeShell";
 import { boundProjectRows, unlinkedProjects } from "./telescopeProjects";
 import { telescope, useTelescopeWorkspaces } from "./telescopeState";
@@ -31,7 +36,7 @@ function AgentInitial({ agent, large = false }: { agent: Telescope.Agent; large?
         large ? "size-10" : "size-6",
       )}
     >
-      {[...agentDisplayName(agent)][0]?.toUpperCase()}
+      {initials(agent)}
     </span>
   );
 }
@@ -40,29 +45,40 @@ function AssistantCard(props: {
   environmentId: EnvironmentId;
   workspaceId: Telescope.WorkspaceId;
   agent: Telescope.Agent;
+  mayRename: boolean;
 }) {
   const { agent } = props;
+  const shown = agentDisplayName(agent);
   const update = useAtomCommand(telescopeAgents.update, "改名");
   const [draft, setDraft] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const renameButton = useRef<HTMLButtonElement>(null);
+  const close = () => {
+    flushSync(() => {
+      setDraft(null);
+      setError(null);
+    });
+    renameButton.current?.focus();
+  };
   const rename = async (name: string) => {
-    if (name !== "" && name !== agent.name) {
+    if (name !== "" && name !== shown) {
       const result = await update({
         environmentId: props.environmentId,
         input: { workspaceId: props.workspaceId, agentId: agent.id, name },
       });
-      if (!AsyncResult.isSuccess(result)) return;
+      if (!AsyncResult.isSuccess(result)) return setError(failureText(result));
     }
-    setDraft(null);
+    close();
   };
   return (
     <section className="flex items-center gap-3 rounded-lg border bg-card p-4">
       <AgentInitial agent={agent} large />
       <div className="min-w-0 flex-1">
         {draft === null ? (
-          <div className="font-medium">{agentDisplayName(agent)}</div>
+          <div className="font-medium">{shown}</div>
         ) : (
           <form
-            className="flex items-center gap-2"
+            className="flex flex-wrap items-center gap-2"
             onSubmit={(event) => {
               event.preventDefault();
               void rename(draft.trim());
@@ -75,18 +91,23 @@ function AssistantCard(props: {
               aria-label="个人助理名字"
               value={draft}
               onChange={(event) => setDraft(event.currentTarget.value)}
+              onKeyDown={(event) => event.key === "Escape" && close()}
             />
             <Button type="submit" size="sm">
               保存
             </Button>
+            <Button type="button" size="sm" variant="ghost-muted" onClick={close}>
+              取消
+            </Button>
           </form>
         )}
+        {error === null ? null : <ErrorNote text={error} />}
         <div className="text-xs text-muted-foreground">
           你的个人助理（Chief of Staff），管你在各个项目里的 Chief Agent
         </div>
       </div>
-      {draft === null ? (
-        <Button size="xs" variant="ghost-muted" onClick={() => setDraft(agent.name)}>
+      {draft === null && props.mayRename ? (
+        <Button ref={renameButton} size="xs" variant="ghost-muted" onClick={() => setDraft(shown)}>
           <PencilIcon /> 改名
         </Button>
       ) : null}
@@ -103,23 +124,49 @@ function Projects(props: {
 }) {
   const { environmentId, workspace, self, agents, bindings } = props;
   const projects = useProjects();
-  const machines = new Map(useEnvironmentIdentities().map((env) => [env.environmentId, env.label]));
+  const groups = useSettingsProjectGroups();
+  const machineLabel = new Map(
+    useEnvironmentIdentities().map((env) => [env.environmentId, env.label]),
+  );
   const { bindings: allBindings } = useTelescopeWorkspaces();
-  const mayBind = useAtomValue(telescope.bind.permissionAtom(environmentId));
+  const mayBind =
+    useAtomValue(telescope.bind.permissionAtom(environmentId)) && self.role === "admin";
+  const mayRename =
+    useAtomValue(telescopeAgents.update.permissionAtom(environmentId)) && self.role !== "viewer";
   const bind = useAtomCommand(telescope.bind, "接入项目");
+  const [bindError, setBindError] = useState<string | null>(null);
   const [editing, setEditing] = useState<Telescope.Agent | null>(null);
+  const boundHeading = useRef<HTMLHeadingElement>(null);
   const rows = boundProjectRows(bindings, projects, agents, self);
-  const unlinked = unlinkedProjects(projects, allBindings);
+  const unlinked = unlinkedProjects(groups, allBindings, self);
   const assistant = agents.find((agent) => agent.kind === "chief_of_staff");
+  const bindGroup = async (
+    binds: (typeof unlinked)[number]["binds"],
+    focusNext: HTMLElement | null,
+  ) => {
+    setBindError(null);
+    for (const input of binds) {
+      const result = await bind({ environmentId, input });
+      if (!AsyncResult.isSuccess(result)) return setBindError(failureText(result));
+    }
+    focusNext?.focus();
+  };
 
   return (
     <div className="flex flex-col gap-8">
       {assistant ? (
-        <AssistantCard environmentId={environmentId} workspaceId={workspace.id} agent={assistant} />
+        <AssistantCard
+          environmentId={environmentId}
+          workspaceId={workspace.id}
+          agent={assistant}
+          mayRename={mayRename}
+        />
       ) : null}
 
       <section className="flex flex-col gap-3">
-        <h2 className="text-sm font-medium">在 Telescope 里</h2>
+        <h3 ref={boundHeading} tabIndex={-1} className="text-sm font-medium outline-none">
+          在 Telescope 里
+        </h3>
         {rows.length === 0 ? (
           <TelescopeEmptyState view="projects" />
         ) : (
@@ -138,19 +185,21 @@ function Projects(props: {
                 {rows.map(({ binding, project, chief, detail }) => (
                   <TableRow key={`${binding.environmentId}:${binding.projectId}`}>
                     <TableCell>
-                      <div className="font-medium">{project?.title ?? binding.projectId}</div>
+                      <div className={project ? "font-medium" : "text-muted-foreground"}>
+                        {project?.title ?? "项目未加载"}
+                      </div>
                       <div className="max-w-48 truncate font-mono text-muted-foreground">
                         {project?.workspaceRoot}
                       </div>
                     </TableCell>
                     <TableCell>
                       <span className="block max-w-48 truncate font-mono text-muted-foreground">
-                        {project?.repositoryIdentity?.canonicalKey ?? "本地目录"}
+                        {project ? (project.repositoryIdentity?.canonicalKey ?? "本地目录") : null}
                       </span>
                     </TableCell>
                     <TableCell>
                       <span className="text-muted-foreground">
-                        {machines.get(binding.environmentId) ?? binding.environmentId}
+                        {machineLabel.get(binding.environmentId) ?? binding.environmentId}
                       </span>
                     </TableCell>
                     <TableCell>
@@ -164,7 +213,12 @@ function Projects(props: {
                     </TableCell>
                     <TableCell>
                       {chief ? (
-                        <Button size="xs" variant="ghost-muted" onClick={() => setEditing(chief)}>
+                        <Button
+                          size="xs"
+                          variant="ghost-muted"
+                          aria-label={`设定 ${project?.title ?? agentDisplayName(chief)}`}
+                          onClick={() => setEditing(chief)}
+                        >
                           <Settings2Icon /> 设定
                         </Button>
                       ) : null}
@@ -179,11 +233,12 @@ function Projects(props: {
 
       <section className="flex flex-col gap-3">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <h2 className="text-sm font-medium">Microscope 里还没接入的项目</h2>
+          <h3 className="text-sm font-medium">Microscope 里还没接入的项目</h3>
           <span className="text-xs text-muted-foreground">
             {mayBind ? null : "请管理员接入。"}接入后，Chief Agent 会出现在左侧聊天列表
           </span>
         </div>
+        {bindError === null ? null : <ErrorNote text={bindError} />}
         {unlinked.length === 0 ? (
           <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
             Microscope 里的项目都已接入。新项目用「添加项目」，和 Microscope
@@ -191,35 +246,32 @@ function Projects(props: {
           </div>
         ) : (
           <ul className="divide-y rounded-lg border bg-card text-sm">
-            {unlinked.map((project) => (
-              <li
-                key={`${project.environmentId}:${project.id}`}
-                className="flex flex-wrap items-center gap-3 px-3 py-2.5"
-              >
+            {unlinked.map(({ group, machines, binds }) => (
+              <li key={group.projectKey} className="flex flex-wrap items-center gap-3 px-3 py-2.5">
                 <FolderGit2Icon className="size-4 shrink-0 text-muted-foreground" />
                 <span className="min-w-0 flex-1 basis-48">
-                  <span className="block font-medium">{project.title}</span>
+                  <span className="block font-medium">{group.displayName}</span>
                   <span className="block truncate font-mono text-xs text-muted-foreground">
-                    {project.workspaceRoot}
+                    {group.workspaceRoot}
                   </span>
                 </span>
+                <span className="text-xs text-muted-foreground">{machines.join("、")}</span>
                 <Badge variant="outline">
-                  {project.repositoryIdentity?.canonicalKey ?? "本地目录"}
+                  {group.repositoryIdentity?.canonicalKey ?? "本地目录"}
                 </Badge>
                 {mayBind ? (
                   <Button
                     size="xs"
                     variant="outline"
-                    onClick={() =>
-                      void bind({
-                        environmentId,
-                        input: {
-                          workspaceId: workspace.id,
-                          environmentId: project.environmentId,
-                          projectId: project.id,
-                        },
-                      })
-                    }
+                    aria-label={`接入 ${group.displayName}`}
+                    onClick={(event) => {
+                      // The bound row unmounts, so focus moves to the row that takes its place.
+                      const row = event.currentTarget.closest("li");
+                      const next = (
+                        row?.nextElementSibling ?? row?.previousElementSibling
+                      )?.querySelector("button");
+                      void bindGroup(binds, next ?? boundHeading.current);
+                    }}
                   >
                     接入
                   </Button>
@@ -260,6 +312,7 @@ function WorkspaceProjects(props: {
             <QueryState query={bound}>
               {({ bindings }) => (
                 <Projects
+                  key={workspace.id}
                   environmentId={props.environmentId}
                   workspace={workspace}
                   self={self}
@@ -282,7 +335,7 @@ export function TelescopeProjectsPage() {
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-8 px-5 py-10">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold">项目</h1>
+          <h2 className="text-2xl font-semibold">项目</h2>
           <p className="mt-1 text-sm text-muted-foreground">
             和 Microscope 里是同一个项目：名字、目录、仓库、机器都一样。每个成员在项目里有自己的
             Chief Agent，大家靠同一块任务板对齐。
