@@ -1,6 +1,6 @@
 // oxlint-disable unicorn/no-array-fill-with-reference-type -- ctx.fill(path) draws; it is not Array.fill
 import type { AgentActivity } from "@t3tools/client-runtime/telescope/agents";
-import { useLayoutEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { useMediaQuery } from "../../hooks/useMediaQuery";
 import { NOTIF_BLUE } from "../../vendor/bloub/decor";
@@ -296,9 +296,14 @@ export default function AgentBloub(props: { seed: string; activity: AgentActivit
   const avatar = useRef<Avatar | null>(null);
   const latest = useRef(activity);
   const reduced = useMediaQuery("(prefers-reduced-motion: reduce)");
-  // Zoom or a move to another display changes the ratio; the buffer follows it to stay sharp.
-  const ratio = window.devicePixelRatio;
-  useMediaQuery(`(resolution: ${ratio}dppx)`);
+  const [ratio, setRatio] = useState(window.devicePixelRatio);
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- follows zoom and display moves so the canvas buffer stays sharp
+  useEffect(() => {
+    const query = matchMedia(`(resolution: ${ratio}dppx)`);
+    const change = () => setRatio(window.devicePixelRatio);
+    query.addEventListener("change", change);
+    return () => query.removeEventListener("change", change);
+  }, [ratio]);
   const spoken = SPOKEN[activity];
   // The canvas reads its colours back from CSS, so they follow the theme.
   const style = { width: size, height: size, color: agentSkin(seed).ink, outlineColor: PAPER };
