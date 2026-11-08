@@ -125,6 +125,19 @@ describe("diffBlocks", () => {
     ]);
   });
 
+  it("anchors the unchanged head and tail before pairing what is left", () => {
+    expect(diff(withIds("Draft\n\nDone"), "Done\n\nNew\n\nDone")).toEqual([
+      { op: "update", id: "b0", type: "md", text: "Done" },
+      { op: "insert", afterId: "b0", blocks: [md("New")] },
+    ]);
+    expect(diff(withIds("A\n\nB"), "A\n\nNew\n\nB")).toEqual([
+      { op: "insert", afterId: "b0", blocks: [md("New")] },
+    ]);
+    expect(diff(withIds("- [ ] x\n- [ ] x"), "- [ ] x\n- [ ] x\n- [ ] x")).toEqual([
+      { op: "insert", afterId: "b1", blocks: [md("- [ ] x")] },
+    ]);
+  });
+
   it("moves a block by removing it and inserting it again", () => {
     expect(diff(withIds("A\n\nB\n\nC"), "B\n\nC\n\nA")).toEqual([
       { op: "remove", id: "b0" },

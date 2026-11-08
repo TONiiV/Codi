@@ -48,29 +48,37 @@ export type Op<Id> =
   | { op: "insert"; afterId: Id | null; blocks: Block[] };
 
 /**
- * Block operations that turn `base` into `next` (from `splitBlocks`). Blocks with the same text
- * anchor; unmatched blocks between two anchors pair up in order as updates, and the extras become
- * one insert or removes. No two inserts share an `afterId`.
+ * Block operations that turn `base` into `next` (from `splitBlocks`). The unchanged head and tail
+ * anchor first, then blocks with the same text; unmatched blocks between two anchors pair up in
+ * order as updates, and the extras become one insert or removes. No two inserts share an `afterId`.
  */
 export function diffBlocks<Id extends string>(
   base: ReadonlyArray<{ id: Id; text: string }>,
-  blocks: ReadonlyArray<Block>,
+  next: ReadonlyArray<Block>,
 ): Array<Op<Id>> {
+  const shorter = Math.min(base.length, next.length);
+  let head = 0;
+  while (head < shorter && base[head]?.text === next[head]?.text) head++;
+  let tail = 0;
+  while (head + tail < shorter && base.at(-1 - tail)?.text === next.at(-1 - tail)?.text) tail++;
+  const rows = base.slice(head, base.length - tail);
+  const blocks = next.slice(head, next.length - tail);
+
   const width = blocks.length + 1;
   // ponytail: O(n*m) LCS, n and m <= 400 blocks; add move detection when history shows lost block ids
-  const common = new Uint32Array((base.length + 1) * width);
+  const common = new Uint32Array((rows.length + 1) * width);
   const lcs = (i: number, j: number) => common[i * width + j] ?? 0;
-  for (let i = base.length - 1; i >= 0; i--) {
+  for (let i = rows.length - 1; i >= 0; i--) {
     for (let j = blocks.length - 1; j >= 0; j--) {
       common[i * width + j] =
-        base[i]?.text === blocks[j]?.text
+        rows[i]?.text === blocks[j]?.text
           ? lcs(i + 1, j + 1) + 1
           : Math.max(lcs(i + 1, j), lcs(i, j + 1));
     }
   }
 
   const ops: Array<Op<Id>> = [];
-  let afterId: Id | null = null;
+  let afterId: Id | null = base[head - 1]?.id ?? null;
   let removed: Id[] = [];
   let added: Block[] = [];
   const closeGap = () => {
@@ -86,8 +94,8 @@ export function diffBlocks<Id extends string>(
     removed = [];
     added = [];
   };
-  for (let i = 0, j = 0; i < base.length || j < blocks.length;) {
-    const from = base[i];
+  for (let i = 0, j = 0; i < rows.length || j < blocks.length;) {
+    const from = rows[i];
     const to = blocks[j];
     if (from && to?.text === from.text) {
       closeGap();
