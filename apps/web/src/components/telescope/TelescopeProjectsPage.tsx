@@ -2,7 +2,7 @@ import { useAtomValue } from "@effect/atom-react";
 import { failureText } from "@t3tools/client-runtime/telescope/workspaces";
 import type { EnvironmentId, Telescope } from "@t3tools/contracts";
 import { AsyncResult } from "effect/reactivity";
-import { FolderGit2Icon, PencilIcon, PlusIcon, Settings2Icon } from "lucide-react";
+import { FolderCodeIcon, PencilIcon, PlusIcon, Settings2Icon } from "lucide-react";
 import { useRef, useState } from "react";
 import { flushSync } from "react-dom";
 
@@ -12,6 +12,7 @@ import { useProjects } from "../../state/entities";
 import { useEnvironmentIdentities } from "../../state/environments";
 import { useEnvironmentQuery } from "../../state/query";
 import { useAtomCommand } from "../../state/use-atom-command";
+import { ProjectFavicon } from "../ProjectFavicon";
 import { useSettingsProjectGroups } from "../settings/useSettingsProjectGroups";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
@@ -185,7 +186,17 @@ function Projects(props: {
                 {rows.map(({ binding, project, chief, detail }) => (
                   <TableRow key={`${binding.environmentId}:${binding.projectId}`}>
                     <TableCell>
-                      <div className={project ? "font-medium" : "text-muted-foreground"}>
+                      <div
+                        className={cn(
+                          "flex items-center gap-2.5",
+                          project ? "font-medium" : "text-muted-foreground",
+                        )}
+                      >
+                        {project ? (
+                          <ProjectFavicon project={project} className="size-4 shrink-0" />
+                        ) : (
+                          <FolderCodeIcon className="size-4 shrink-0 text-icon-muted" />
+                        )}
                         {project?.title ?? "项目未加载"}
                       </div>
                       <div className="max-w-48 truncate font-mono text-muted-foreground">
@@ -248,7 +259,7 @@ function Projects(props: {
           <ul className="divide-y rounded-lg border bg-card text-sm">
             {unlinked.map(({ group, machines, binds }) => (
               <li key={group.projectKey} className="flex flex-wrap items-center gap-3 px-3 py-2.5">
-                <FolderGit2Icon className="size-4 shrink-0 text-muted-foreground" />
+                <ProjectFavicon project={group} className="size-4 shrink-0" />
                 <span className="min-w-0 flex-1 basis-48">
                   <span className="block font-medium">{group.displayName}</span>
                   <span className="block truncate font-mono text-xs text-muted-foreground">
