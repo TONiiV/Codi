@@ -38,8 +38,10 @@ const TOOL_POWERS: Readonly<Record<Telescope.GatewayTool, Telescope.GrantPower |
   memory_write: null,
 };
 const SECRET_KEY = /token|secret|password|passphrase|api.?key|authorization|cookie|credential/i;
+// A scheme word's value may sit on the next line, but a PEM line, a Bearer or Basic credential and
+// the next header are never taken, so SECRET_VALUE and the next match still see them whole.
 const AUTH_HEADER_VALUE =
-  /(\b(?:authorization|x-api-key|cookie)["']?[ \t]*:[ \t]*["'`]?)(?:[\w-]+\s+)?[^\s'"`]+/gi;
+  /(\b(?:authorization|x-api-key|cookie)["']?[ \t]*:[ \t]*["'`]?)(?!-----)(?:[\w-]+\s+(?!-----|(?:bearer|basic)\s|[\w-]*(?:authorization|x-api-key|cookie)["']?[ \t]*:))?[^\s'"`]+/gi;
 // Known credential shapes only: auth headers, JWTs, private keys and common provider key prefixes.
 // A bare Bearer or Basic token needs a digit or a later capital, so "Basic validation" stays prose.
 const SECRET_VALUE =

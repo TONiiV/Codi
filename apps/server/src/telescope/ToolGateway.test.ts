@@ -183,24 +183,108 @@ it.layer(layer)("Telescope tool gateway", (it) => {
         ...Object.fromEntries(prefixed.map((prefix) => [prefix, `${prefix}${fake}`])),
         AKIA: `AKIA${fake.toUpperCase().slice(0, 16)}`,
       };
-      const prose = [
-        "Basic authentication for the settings page",
-        "Basic Authentication settings",
-        "Fix: Basic validation rejects empty briefs.",
-        "Bearer authentication.",
-      ];
-      const headers = [
-        "curl -H 'Authorization: Bearer supersecrettoken' https://api.example.com",
-        "Authorization: Bearer correct-horse-battery-staple",
-        "authorization: basic Changemeplease",
-        "AUTHORIZATION: supersecrettoken",
-        `{"Authorization": "Bearer supersecrettoken"}`,
-        "curl -H 'Authorization: Token 9944b09199c62bcf9418ad846dd0e4bbdfc6ee4b' https://api.example.com/",
-        "Authorization: `supersecrettoken123`",
-        "Authorization: Bearer\n  abc123def456ghi789",
-        "Proxy-Authorization: Negotiate YIIGhgYGKwYBBQUCoIIGejCCBnag",
-        "X-API-Key: 9944b09199c62bcf9418ad846dd0e4bbdfc6ee4b",
-        "Cookie: sessionid=9944b09199c62bcf9418ad846dd0e4bbdfc6ee4b",
+      const hex = "9944b09199c62bcf9418ad846dd0e4bbdfc6ee4b";
+      // A row without `stored` is kept verbatim; the credentials kept at the end are known misses.
+      const probes: ReadonlyArray<readonly [input: string, stored?: string]> = [
+        ["Basic authentication for the settings page"],
+        ["Basic Authentication settings"],
+        ["Basic Authentication for the settings page"],
+        ["Fix: Basic validation rejects empty briefs."],
+        ["Bearer authentication."],
+        [
+          "Merged d7be12ba6dada3160991f0198a735147d0323552 for 123e4567-e89b-12d3-a456-426614174000",
+        ],
+        ["the Authorization: header is required", "the Authorization: [redacted] required"],
+        ["scopes: authorization:read", "scopes: authorization:[redacted]"],
+        ["feature/sk-1234-improve-login-flow", "feature/[redacted]"],
+        [
+          "curl -H 'Authorization: Bearer supersecrettoken' https://api.example.com",
+          "curl -H 'Authorization: [redacted]' https://api.example.com",
+        ],
+        ["Authorization: Bearer correct-horse-battery-staple", "Authorization: [redacted]"],
+        ["Authorization: Bearer Changemeplease", "Authorization: [redacted]"],
+        ["authorization: basic Changemeplease", "authorization: [redacted]"],
+        ["AUTHORIZATION: supersecrettoken", "AUTHORIZATION: [redacted]"],
+        ["Authorization:   supersecrettoken", "Authorization:   [redacted]"],
+        ["Authorization : supersecrettoken", "Authorization : [redacted]"],
+        ["Authorization:\tsupersecrettoken", "Authorization:\t[redacted]"],
+        ["'Authorization': 'supersecrettoken'", "'Authorization': '[redacted]'"],
+        [`{"Authorization": "Bearer supersecrettoken"}`, `{"Authorization": "[redacted]"}`],
+        [`{Authorization: "supersecrettoken"}`, `{Authorization: "[redacted]"}`],
+        ["Authorization: token ghp_0123456789abcdefghij", "Authorization: [redacted]"],
+        [
+          `curl -H 'Authorization: Token ${hex}' https://api.example.com/`,
+          "curl -H 'Authorization: [redacted]' https://api.example.com/",
+        ],
+        [`Authorization: Bot ${fake}.Cl2FMQ.${fake}`, "Authorization: [redacted]"],
+        ["Authorization: SSWS 00QCjAl4MlV-WPXM-0123456789abcdefghij", "Authorization: [redacted]"],
+        ["Authorization: Key supersecrettoken", "Authorization: [redacted]"],
+        ["Authorization: ApiKey supersecrettoken", "Authorization: [redacted]"],
+        ["Authorization: `supersecrettoken123`", "Authorization: `[redacted]`"],
+        ["Authorization: Bearer\n  abc123def456ghi789", "Authorization: [redacted]"],
+        [
+          "Proxy-Authorization: Negotiate YIIGhgYGKwYBBQUCoIIGejCCBnag",
+          "Proxy-Authorization: [redacted]",
+        ],
+        [
+          "curl -H 'Proxy-Authorization: Basic Changemeplease' https://proxy.example.com",
+          "curl -H 'Proxy-Authorization: [redacted]' https://proxy.example.com",
+        ],
+        [`X-API-Key: ${hex}`, "X-API-Key: [redacted]"],
+        [`Cookie: sessionid=${hex}`, "Cookie: [redacted]"],
+        [
+          `GET /v1/items HTTP/1.1\nX-Api-Key: ${hex}\nAuthorization: 5f0c2b7e81d94a36b2e7c4d1a9f08e63`,
+          "GET /v1/items HTTP/1.1\nX-Api-Key: [redacted]\nAuthorization: [redacted]",
+        ],
+        [
+          `http GET api.example.com x-api-key:${hex} Authorization:'Bearer supersecrettoken'`,
+          "http GET api.example.com x-api-key:[redacted] Authorization:'[redacted]'",
+        ],
+        [
+          `headers:\n  x-api-key: ${hex}\n  authorization: supersecrettoken`,
+          "headers:\n  x-api-key: [redacted]\n  authorization: [redacted]",
+        ],
+        [
+          "Authorization: Token\nProxy-Authorization: Basic Changemeplease",
+          "Authorization: [redacted]\nProxy-Authorization: [redacted]",
+        ],
+        [
+          `Authorization: supersecrettoken\nX-Api-Key: ${hex}`,
+          "Authorization: [redacted]\nX-Api-Key: [redacted]",
+        ],
+        [
+          `Authorization: supersecrettoken\nCookie: sessionid=${hex}`,
+          "Authorization: [redacted]\nCookie: [redacted]",
+        ],
+        [
+          "X-Api-Key: none\n-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEA0123456789abcdef\n-----END RSA PRIVATE KEY-----",
+          "X-Api-Key: [redacted]\n[redacted]",
+        ],
+        [
+          "X-Api-Key: -----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEA0123456789abcdef\n-----END RSA PRIVATE KEY-----",
+          "X-Api-Key: [redacted]",
+        ],
+        ["Cookie: none\nBearer abc123def456ghi789", "Cookie: [redacted]\n[redacted]"],
+        [
+          `Authorization: Bearer\nX-Api-Key: ${hex}`,
+          "Authorization: [redacted]\nX-Api-Key: [redacted]",
+        ],
+        [`Cookie: theme=dark; sessionid=${hex}`, `Cookie: [redacted] sessionid=${hex}`],
+        [`headers['Authorization'] = 'Token ${hex}'`],
+        [`req.Header.Set("Authorization", "Bearer supersecrettoken")`],
+        [`dict(Authorization="Bearer supersecrettoken")`],
+        [`'Authorization' => 'Bearer supersecrettoken'`],
+        [`HTTP_AUTHORIZATION: Token ${hex}`],
+        [`{\\"Authorization\\": \\"supersecrettoken123\\"}`],
+        [`{ name: "Authorization", value: "supersecrettoken" }`],
+        [
+          "-----BEGIN PGP PRIVATE KEY BLOCK-----\nlQOYBF0abc123\n-----END PGP PRIVATE KEY BLOCK-----",
+        ],
+        ["https://alice:hunter2hunter2@git.example.com/acme/web.git"],
+        ["postgres://admin:pw@db/app"],
+        ["DB_PASSWORD=hunter2hunter2"],
+        ["AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"],
+        ["c2stMDEyMzQ1Njc4OWFiY2RlZmdoaWo="],
       ];
       const inText = (text: (shape: string) => string) =>
         Object.fromEntries(Object.entries(shapes).map(([name, shape]) => [name, text(shape)]));
@@ -211,8 +295,7 @@ it.layer(layer)("Telescope tool gateway", (it) => {
           { brief: "curl -H 'Authorization: Bearer abc.def-123456' sk-proj-0123456789abcdef" },
         ],
         shapes: inText((shape) => `use ${shape} now`),
-        prose,
-        headers,
+        probes: probes.map(([input]) => input),
       });
       assert.deepStrictEqual(caller, {
         workspaceId,
@@ -246,20 +329,7 @@ it.layer(layer)("Telescope tool gateway", (it) => {
         apiKey: "[redacted]",
         nested: [{ brief: "curl -H 'Authorization: [redacted]' [redacted]" }],
         shapes: inText(() => "use [redacted] now"),
-        prose,
-        headers: [
-          "curl -H 'Authorization: [redacted]' https://api.example.com",
-          "Authorization: [redacted]",
-          "authorization: [redacted]",
-          "AUTHORIZATION: [redacted]",
-          `{"Authorization": "[redacted]"}`,
-          "curl -H 'Authorization: [redacted]' https://api.example.com/",
-          "Authorization: `[redacted]`",
-          "Authorization: [redacted]",
-          "Proxy-Authorization: [redacted]",
-          "X-API-Key: [redacted]",
-          "Cookie: [redacted]",
-        ],
+        probes: probes.map(([input, stored = input]) => stored),
       });
       assert.deepStrictEqual(entries[1]?.onBehalfOf, [beaId]);
       assert.strictEqual(entries[1]?.projectId, web);
