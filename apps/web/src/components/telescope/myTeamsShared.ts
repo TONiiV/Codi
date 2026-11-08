@@ -1,5 +1,5 @@
 import { createTelescopeAgentAtoms } from "@t3tools/client-runtime/telescope/agents";
-import type { Telescope } from "@t3tools/contracts";
+import type { ModelSelection, Telescope } from "@t3tools/contracts";
 
 import { connectionAtomRuntime } from "../../connection/runtime";
 import { telescope } from "./telescopeState";
@@ -51,4 +51,15 @@ export function powerSummary(powers: Telescope.StandingPowers) {
       .map((power) => power.label)
       .join("、") || "都先问"
   );
+}
+
+/** Sent only when the pick names another harness or model, so stored options and the default survive. */
+export function modelSelectionPatch(
+  picked: ModelSelection | undefined,
+  stored: ModelSelection | undefined,
+): Pick<Telescope.AgentUpdateInput, "modelSelection"> {
+  return picked === undefined ||
+    (picked.instanceId === stored?.instanceId && picked.model === stored.model)
+    ? {}
+    : { modelSelection: picked };
 }

@@ -1,14 +1,22 @@
+import { useAtomValue } from "@effect/atom-react";
 import {
   cappedPowers,
   ownerCanMergePRs,
   selectableExposures,
 } from "@t3tools/client-runtime/telescope/agents";
 import { failureText } from "@t3tools/client-runtime/telescope/workspaces";
-import type { EnvironmentId, Telescope } from "@t3tools/contracts";
+import type { EnvironmentId, ModelSelection, Telescope } from "@t3tools/contracts";
+import { createModelSelection } from "@t3tools/shared/model";
 import { AsyncResult } from "effect/reactivity";
 import { useId, useState, type FormEvent, type ReactNode } from "react";
 
+import { useEnvironmentSettings } from "../../hooks/useSettings";
+import { getCustomModelOptionsByInstance } from "../../modelSelection";
+import { NO_PROVIDER_MODEL_SELECTION, providerInstanceEntriesFor } from "../../providerInstances";
+import { providersIgnoringCheckedAtAtom } from "../../state/server";
 import { useAtomCommand } from "../../state/use-atom-command";
+import { ProviderModelPicker } from "../chat/ProviderModelPicker";
+import { SETTINGS_PICKER_TRIGGER_CLASSNAME } from "../settings/settingsLayout";
 import { Button } from "../ui/button";
 import { Checkbox } from "../ui/checkbox";
 import {
@@ -24,7 +32,13 @@ import { Input } from "../ui/input";
 import { Label } from "../ui/label";
 import { Switch } from "../ui/switch";
 import { Toggle, ToggleGroup } from "../ui/toggle-group";
-import { EXPOSURE_LABEL, KIND_LABEL, POWERS, telescopeAgents } from "./myTeamsShared";
+import {
+  EXPOSURE_LABEL,
+  KIND_LABEL,
+  modelSelectionPatch,
+  POWERS,
+  telescopeAgents,
+} from "./myTeamsShared";
 import { ErrorNote } from "./TelescopeAccountDialogs";
 
 const isExposure = (value: unknown): value is Telescope.AgentExposure =>
@@ -112,6 +126,12 @@ export function AgentSettingsDialog({
   const [powers, setPowers] = useState(shownPowers);
   const [syncWithBoard, setSyncWithBoard] = useState(agent.syncWithBoard);
   const [dispatchMode, setDispatchMode] = useState(agent.dispatchMode);
+  const [picked, setPicked] = useState<ModelSelection>();
+  const settings = useEnvironmentSettings(environmentId);
+  const providers = useAtomValue(providersIgnoringCheckedAtAtom(environmentId));
+  const entries = providerInstanceEntriesFor(providers, settings, agent.projectId ?? null);
+  // The server falls back to this default on every wake while the agent has no model of its own.
+  const shown = picked ?? agent.modelSelection ?? settings.defaultModelSelection;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const selectable = selectableExposures(agent.exposure, workspace.kind);
@@ -132,6 +152,7 @@ export function AgentSettingsDialog({
         ...(changed ? { standingPowers: powers } : {}),
         ...(syncWithBoard === agent.syncWithBoard ? {} : { syncWithBoard }),
         ...(dispatchMode === agent.dispatchMode ? {} : { dispatchMode }),
+        ...modelSelectionPatch(picked, agent.modelSelection),
       },
     });
     setBusy(false);
@@ -159,6 +180,35 @@ export function AgentSettingsDialog({
           onChange={(event) => setName(event.currentTarget.value)}
         />
       </Label>
+      <div className="flex items-center justify-between gap-3 rounded-md border px-3 py-2 text-sm">
+        <span className="flex flex-col">
+          <span>Harness / 模型</span>
+          <span className="text-xs text-muted-foreground">
+            {(picked ?? agent.modelSelection) ? null : "现在跟随默认模型。"}
+            要选能用 Codi 工具的 harness。
+          </span>
+        </span>
+        <ProviderModelPicker
+          environmentId={environmentId}
+          activeInstanceId={(shown ?? entries[0] ?? NO_PROVIDER_MODEL_SELECTION).instanceId}
+          model={shown?.model ?? ""}
+          lockedProvider={null}
+          instanceEntries={entries}
+          modelOptionsByInstance={getCustomModelOptionsByInstance(
+            settings,
+            providers,
+            shown?.instanceId,
+            shown?.model,
+          )}
+          isComposerOwned={false}
+          popupAlign="end"
+          triggerClassName={SETTINGS_PICKER_TRIGGER_CLASSNAME}
+          {...(shown === null ? { triggerLabel: "选择模型" } : {})}
+          onInstanceModelChange={(instanceId, model) =>
+            setPicked(createModelSelection(instanceId, model))
+          }
+        />
+      </div>
       {company ? null : (
         <fieldset className="flex flex-col gap-2">
           <legend className="mb-1 text-sm font-medium">暴露级别</legend>
