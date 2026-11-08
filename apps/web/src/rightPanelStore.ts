@@ -79,7 +79,7 @@ export type RightPanelSurface =
   | { id: `side-chat:${string}`; kind: "side-chat"; threadId: ThreadId };
 
 const RIGHT_PANEL_STORAGE_KEY = "t3code:right-panel-state:v2";
-const RIGHT_PANEL_STORAGE_VERSION = 14;
+const RIGHT_PANEL_STORAGE_VERSION = 15;
 
 export const PULL_REQUESTS_PANEL_REF = scopeThreadRef(
   EnvironmentId.make("pull-requests-panel"),
@@ -89,11 +89,17 @@ export const PULL_REQUESTS_PANEL_REF = scopeThreadRef(
 const isPullRequestsPanelKey = (threadKey: string) => threadKey.endsWith(":pull-requests-panel");
 
 export const TELESCOPE_PANEL_SURFACES: ReadonlyArray<RightPanelKind> = ["preview", "side-chat"];
+/** Telescope's one side chat tab; its header picks the agent, so it names no real thread. */
+export const TELESCOPE_SIDE_CHAT = ThreadId.make("telescope-agent-chat");
 
 /** Telescope pages share one panel; its browser tabs belong to no Code thread. */
 export function telescopePanelRef(environmentId: EnvironmentId): ScopedThreadRef {
   return scopeThreadRef(environmentId, ThreadId.make("telescope-panel"));
 }
+
+// Telescope's panel holds only the kinds it offers, whoever asks and whatever was stored.
+const hiddenInPanel = (threadKey: string, kind: RightPanelKind) =>
+  threadKey.endsWith(":telescope-panel") && !TELESCOPE_PANEL_SURFACES.includes(kind);
 
 export interface ThreadRightPanelState {
   isOpen: boolean;
@@ -320,6 +326,7 @@ const updateThreadStateMap = (
 ): Record<string, ThreadRightPanelState> => {
   const current = byThreadKey[threadKey] ?? EMPTY_THREAD_STATE;
   const next = updater(current);
+  if (next.surfaces.some((surface) => hiddenInPanel(threadKey, surface.kind))) return byThreadKey;
   if (
     !next.isOpen &&
     next.activeSurfaceId === null &&
@@ -411,6 +418,9 @@ export function rightPanelHostRef(ref: ScopedThreadRef): ScopedThreadRef {
   return panelHosts.get(scopedThreadKey(ref)) ?? ref;
 }
 
+export const rightPanelOffers = (ref: ScopedThreadRef, kind: RightPanelKind) =>
+  !hiddenInPanel(scopedThreadKey(rightPanelHostRef(ref)), kind);
+
 const userAction = (
   state: RightPanelStoreState,
   guestKey: string,
@@ -497,6 +507,7 @@ export function migratePersistedRightPanelState(persistedState: unknown): {
                 ? validThreadState.surfaces.flatMap<RightPanelSurface>((surface) => {
                     const kind = (surface as { kind?: string }).kind;
                     if (kind === "plan" || kind === "agents") return [];
+                    if (hiddenInPanel(threadKey, surface.kind)) return [];
                     if (
                       (surface.kind === "file" || surface.kind === "files") &&
                       "folderTrail" in surface &&

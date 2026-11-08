@@ -3,6 +3,7 @@ import {
   EnvironmentId,
   ProjectId,
   Telescope,
+  ThreadId,
   type AuthSessionState,
 } from "@t3tools/contracts";
 import * as Cause from "effect/Cause";
@@ -174,7 +175,20 @@ describe("telescope agent chat", () => {
     ...chief("hq"),
     kind: "company_main",
     ownerSubjectId: null,
+    residentThreadId: ThreadId.make("hq-thread"),
   };
+  // Company agents come back with other members' exposed agents and the caller's own.
+  const companyList = [
+    { ...chief("hr"), kind: "department" as const, ownerSubjectId: null },
+    company,
+    {
+      ...assistant,
+      id: Telescope.AgentId.make("their-pa"),
+      ownerSubjectId: "someone-else",
+      residentThreadId: ThreadId.make("their-thread"),
+    },
+    { ...assistant, residentThreadId: ThreadId.make("pa-thread") },
+  ];
   const pa = assistant.id;
   it.each([
     {
@@ -201,6 +215,13 @@ describe("telescope agent chat", () => {
     {
       case: "a stored agent gone from the list",
       stored: "gone",
+      mainPane: null,
+      choices: [pa, "app", "docs", "hq"],
+      shown: pa,
+    },
+    {
+      case: "another member's exposed assistant",
+      stored: "their-pa",
       mainPane: null,
       choices: [pa, "app", "docs", "hq"],
       shown: pa,
@@ -235,7 +256,8 @@ describe("telescope agent chat", () => {
     },
   ])("the side chat shows the right agent: $case", ({ stored, mainPane, choices, shown }) => {
     const result = sideChatAgents(
-      [assistant, chief("app"), custom, chief("docs"), company],
+      [assistant, chief("app"), custom, chief("docs")],
+      companyList,
       stored === null ? null : Telescope.AgentId.make(stored),
       mainPane === null ? null : Telescope.AgentId.make(mainPane),
     );
@@ -244,7 +266,7 @@ describe("telescope agent chat", () => {
   });
 
   it("the side chat shows nothing when the member has no agents here", () => {
-    expect(sideChatAgents([custom], null, null)).toEqual({ choices: [], shown: null });
+    expect(sideChatAgents([custom], [], null, null)).toEqual({ choices: [], shown: null });
   });
 
   it.each([

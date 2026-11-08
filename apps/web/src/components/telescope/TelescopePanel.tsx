@@ -6,7 +6,6 @@ import {
   type EnvironmentId,
   type ScopedThreadRef,
   Telescope,
-  ThreadId,
 } from "@t3tools/contracts";
 import { XIcon } from "lucide-react";
 import * as Schema from "effect/Schema";
@@ -27,6 +26,7 @@ import {
   selectActiveRightPanelSurface,
   selectThreadRightPanelState,
   TELESCOPE_PANEL_SURFACES,
+  TELESCOPE_SIDE_CHAT,
   useRightPanelStore,
 } from "../../rightPanelStore";
 import { useDeviceState } from "../../state/device";
@@ -36,6 +36,7 @@ import { primaryServerKeybindingsAtom } from "../../state/server";
 import { useEnvironmentScope } from "../../state/session";
 import { BackgroundThreadContext } from "../chat/backgroundThread";
 import { ChatRightPanel } from "../chat/ChatRightPanel";
+import { usePreviewSession } from "../preview/usePreviewSession";
 import {
   PanelLayoutControls,
   RightPanelMaximizeControl,
@@ -54,8 +55,6 @@ import { type TelescopeView, useChatAgentId, useTaskDrawerId } from "./telescope
 const PreviewPanel = lazy(() =>
   import("../preview/PreviewPanel").then((module) => ({ default: module.PreviewPanel })),
 );
-// One side chat tab; its header picks the agent, so it names no real thread.
-const AGENT_CHAT = ThreadId.make("telescope-agent-chat");
 const AGENT_KEY = "t3code:telescope:side-chat-agent:v1";
 const StoredAgent = Schema.NullOr(Telescope.AgentId);
 const NO_TERMINALS: ReadonlyMap<string, string> = new Map();
@@ -84,8 +83,12 @@ function SideChat(props: {
     workspace.kind === "enterprise" ? telescopeAgents.listCompany({ environmentId, input }) : null,
   );
   const [stored, setStored] = useLocalStorage(AGENT_KEY, null, StoredAgent);
-  const agents = [...(mine.data?.agents ?? []), ...(company.data?.agents ?? [])];
-  const { choices, shown } = sideChatAgents(agents, stored, props.mainAgentId);
+  const { choices, shown } = sideChatAgents(
+    mine.data?.agents ?? [],
+    company.data?.agents ?? [],
+    stored,
+    props.mainAgentId,
+  );
   return (
     <div data-side-chat-pane className="flex h-full min-h-0 flex-col">
       <div className="flex h-9 shrink-0 items-center gap-1 border-b border-border pr-1 pl-1.5">
@@ -122,7 +125,7 @@ function SideChat(props: {
           </ComposerHandleContext>
         </BackgroundThreadContext>
       ) : mine.data !== null ? (
-        <p className="m-auto text-muted-foreground text-sm">还没有 agent。</p>
+        <p className="m-auto text-muted-foreground text-sm">现在没有别的 agent 可以对话。</p>
       ) : mine.error !== null ? (
         <ErrorNote text="读取失败" onRetry={mine.refresh} />
       ) : (
@@ -163,8 +166,9 @@ export function TelescopePanel(props: {
   );
   const previewState = useThreadPreviewState(panelRef);
   const canOperatePreview = useEnvironmentScope(environmentId, AuthPreviewOperateScope);
-  const browserAvailable =
-    useEnvironmentSupportsServerBrowser(environmentId) || isPreviewSupportedInRuntime();
+  const serverBrowser = useEnvironmentSupportsServerBrowser(environmentId);
+  const browserAvailable = serverBrowser || isPreviewSupportedInRuntime();
+  usePreviewSession(open && canOperatePreview && serverBrowser ? panelRef : null);
   const explicitDiffOpenRef = useRef<ScopedThreadRef | null>(null);
   const closers = useRightPanelSurfaceClose({
     threadRef: panelRef,
@@ -213,11 +217,7 @@ export function TelescopePanel(props: {
     return () => document.removeEventListener("keydown", onKeyDown);
   }, []);
 
-  // Panel actions of hosted chats can add surfaces Telescope does not offer; those stay hidden.
-  const surfaces = (presence.value?.surfaces ?? []).filter((surface) =>
-    TELESCOPE_PANEL_SURFACES.includes(surface.kind),
-  );
-  const active = surfaces.find((surface) => surface === presence.value?.activeSurface) ?? null;
+  const active = presence.value?.activeSurface ?? null;
   const toggles = (
     <PanelLayoutControls
       showThreadPanelControl={false}
@@ -272,7 +272,7 @@ export function TelescopePanel(props: {
               </div>
             ) : null
           }
-          surfaces={surfaces}
+          surfaces={presence.value?.surfaces ?? []}
           environmentId={environmentId}
           activeSurfaceId={active?.id ?? null}
           pendingSurfaceIds={NO_PENDING}
@@ -297,7 +297,9 @@ export function TelescopePanel(props: {
           onAddPullRequest={noop}
           onAddPullRequests={noop}
           onAddDevice={noop}
-          onAddSideChat={() => useRightPanelStore.getState().openSideChat(panelRef, AGENT_CHAT)}
+          onAddSideChat={() =>
+            useRightPanelStore.getState().openSideChat(panelRef, TELESCOPE_SIDE_CHAT)
+          }
           browserAvailable={canOperatePreview && browserAvailable}
           terminalAvailable={false}
           diffAvailable={false}

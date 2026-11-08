@@ -61,17 +61,23 @@ export function offersOpenThread(agent: Telescope.Agent, self: Telescope.Member)
   return agent.ownerSubjectId === self.subjectId && self.revokedAt === undefined;
 }
 
-/** The side chat offers the assistant, Chief Agents and company agents, never the main pane's. */
+/**
+ * The side chat offers the member's assistant and Chief Agents, which they can start, and the
+ * company's own agents that already have a chat; never the main pane's agent.
+ */
 export function sideChatAgents(
-  agents: ReadonlyArray<Telescope.Agent>,
+  mine: ReadonlyArray<Telescope.Agent>,
+  company: ReadonlyArray<Telescope.Agent>,
   stored: Telescope.AgentId | null,
   mainPane: Telescope.AgentId | null,
 ) {
-  const choices = agents.filter(
-    (agent) =>
-      agent.id !== mainPane &&
-      (agent.ownerSubjectId === null || ["chief_of_staff", "chief_agent"].includes(agent.kind)),
-  );
+  const choices = [
+    ...mine.filter((agent) => ["chief_of_staff", "chief_agent"].includes(agent.kind)),
+    // The company list also returns members' exposed agents, the caller's own included.
+    ...company.filter(
+      (agent) => agent.ownerSubjectId === null && agent.residentThreadId !== undefined,
+    ),
+  ].filter((agent) => agent.id !== mainPane);
   const shown =
     choices.find((agent) => agent.id === stored) ??
     choices.find((agent) => agent.kind === "chief_of_staff") ??

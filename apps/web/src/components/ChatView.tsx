@@ -2769,7 +2769,7 @@ export default function ChatView(props: ChatViewProps) {
     },
     fallback: (command) => {
       const scriptId = projectScriptIdFromCommand(command);
-      if (!scriptId || !activeProject || !canOperateTerminal) return undefined;
+      if (!scriptId || !activeProject || !canOperateTerminal || !panels) return undefined;
       const script = activeProjectScripts.find((entry) => entry.id === scriptId);
       return script ? () => void runProjectScriptStable(script) : undefined;
     },
