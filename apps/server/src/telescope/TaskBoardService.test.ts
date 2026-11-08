@@ -28,6 +28,7 @@ const layer = Layer.mergeAll(TaskBoardService.layer, WorkspaceService.layer).pip
 const isWorkspaceError = Schema.is(Telescope.WorkspaceError);
 const isStale = Schema.is(Telescope.StaleTaskVersionError);
 const decodeLeaseAcquire = Schema.decodeUnknownSync(Telescope.LeaseAcquireInput);
+const encodeUpdateResult = Schema.encodeEffect(Telescope.TaskUpdateResult);
 const reasonOf = (error: { readonly _tag: string }) =>
   isWorkspaceError(error) ? error.reason : error._tag;
 
@@ -49,7 +50,7 @@ const setup = Effect.gen(function* () {
 });
 
 it.layer(layer)("Telescope task board", (it) => {
-  it.effect("records a commit per write and merges a stale write on other fields", () =>
+  it.effect("records a commit per write and lands a stale write on other fields", () =>
     Effect.gen(function* () {
       const { workspaces, board, a, aliceId, agent } = yield* setup;
       const task = yield* board.createTask(alice, { workspaceId: a, title: "Ship invites" });
@@ -88,15 +89,15 @@ it.layer(layer)("Telescope task board", (it) => {
         ["agent-cos", bobId],
       );
 
-      const merged = yield* board.updateTask(alice, {
+      const late = yield* board.updateTask(alice, {
         workspaceId: a,
         taskId: task.id,
         baseVersion: 2,
         set: { status: "done" },
       });
       assert.deepStrictEqual(
-        [merged.version, merged.status, merged.ownerAgentId, merged.freeText.length],
-        [4, "done", undefined, 2],
+        [late.version, late.status, late.ownerAgentId, late.freeText.length, late.overwrote],
+        [4, "done", undefined, 2, undefined],
       );
       const ahead = yield* board
         .updateTask(alice, { workspaceId: a, taskId: task.id, baseVersion: 9, set: {} })
@@ -115,7 +116,7 @@ it.layer(layer)("Telescope task board", (it) => {
       );
       assert.deepStrictEqual(
         [commits[3]?.changedFields, commits[3]?.mergeLevel, commits[3]?.mergeReason],
-        [{ status: "done" }, 0, "rebased from version 2"],
+        [{ status: "done" }, 0, "based on version 2"],
       );
       assert.deepStrictEqual(commits[1]?.changedFields, {
         status: "in_progress",
@@ -433,122 +434,219 @@ it.layer(layer)("Telescope task board", (it) => {
     }),
   );
 
-  it.effect("merges stale writes by rule and sends unsettled conflicts to a decision", () =>
+  it.effect("a stale write lands last-writer-wins and reports what it overwrote", () =>
     Effect.gen(function* () {
-      const { workspaces, board, a, agent } = yield* setup;
+      const { workspaces, board, a, aliceId, agent } = yield* setup;
       const bob = { caller: session("bob") };
       const { code } = yield* workspaces.invite(alice.caller, { workspaceId: a, role: "member" });
-      yield* workspaces.accept(bob.caller, { code, displayName: "Bob" });
+      const bobId = (yield* workspaces.accept(bob.caller, { code, displayName: "Bob" })).subjectId;
       const task = yield* board.createTask(alice, { workspaceId: a, title: "Plan" });
-      const update = (actor: TaskBoardService.Actor, baseVersion: number, set: object) =>
-        board.updateTask(actor, { workspaceId: a, taskId: task.id, baseVersion, set });
+      const update = (
+        actor: TaskBoardService.Actor,
+        baseVersion: number,
+        set: object,
+        note?: string,
+      ) =>
+        board.updateTask(actor, {
+          workspaceId: a,
+          taskId: task.id,
+          baseVersion,
+          set,
+          ...(note === undefined ? {} : { note }),
+        });
       const lastCommit = Effect.map(
         board.listCommits(alice, { workspaceId: a, taskId: task.id }),
         ({ commits }) => commits.at(-1),
       );
 
-      yield* update(alice, 1, { title: "Plan v2", status: "done" });
-      const kept = yield* update(bob, 1, { title: "Plan", status: "in_progress" });
-      assert.deepStrictEqual([kept.title, kept.status, kept.version], ["Plan v2", "done", 3]);
-      const ruled = yield* lastCommit;
-      assert.deepStrictEqual(
-        [ruled?.changedFields, ruled?.mergeLevel, ruled?.mergeReason],
-        [{}, 1, 'rebased from version 1; status: status only moves forward, kept "done"'],
-      );
-
-      const conflicted = yield* board.updateTask(bob, {
+      const done = yield* update(alice, 1, { title: "Plan v2", status: "done" });
+      yield* TestClock.adjust("1 minute");
+      yield* update(alice, 2, { goalChain: ["Q4"] });
+      const late = yield* board.updateTask(bob, {
         workspaceId: a,
         taskId: task.id,
         baseVersion: 1,
-        set: { title: "Plan B", ownerAgentId: Telescope.AgentId.make("agent-bob") },
+        set: { title: "Plan B", status: "in_progress", goalChain: ["Q4"] },
         note: "I renamed it first.",
       });
-      const [decision] = (yield* board.listDecisions(alice, { workspaceId: a })).decisions;
       assert.deepStrictEqual(
-        [
-          conflicted.title,
-          conflicted.status,
-          conflicted.ownerAgentId,
-          conflicted.conflictDecisionId,
-          conflicted.conflict,
-          conflicted.freeText.map((e) => e.text),
-        ],
-        [
-          "Plan v2",
-          "done",
-          "agent-bob",
-          decision?.id,
-          { decisionId: decision?.id },
-          ["I renamed it first."],
-        ],
+        [late.title, late.status, late.goalChain, late.version, late.conflictDecisionId],
+        ["Plan B", "in_progress", ["Q4"], 4, undefined],
       );
-      assert.strictEqual(decision?.status, "proposed");
+      assert.deepStrictEqual(late.overwrote, [
+        { key: "title", by: aliceId, name: "Alice", at: done.updatedAt },
+        { key: "status", by: aliceId, name: "Alice", at: done.updatedAt },
+      ]);
+      const landed = yield* lastCommit;
       assert.deepStrictEqual(
-        [decision?.conflict, decision?.text],
-        [
-          { taskId: task.id, incoming: { title: "Plan B" } },
-          'title：当前 "Plan v2"，新提交 "Plan B"',
-        ],
+        [Object.keys(landed?.changedFields ?? {}), landed?.mergeLevel, landed?.mergeReason],
+        [["title", "status", "freeText"], 0, "based on version 1"],
       );
-      const escalated = yield* lastCommit;
+      const echoed = yield* update(agent, 1, { status: "todo", goalChain: [] });
       assert.deepStrictEqual(
-        [escalated?.changedFields.ownerAgentId, escalated?.mergeLevel, escalated?.mergeReason],
-        ["agent-bob", 2, `rebased from version 1; no rule settles title; decision ${decision?.id}`],
+        [echoed.status, echoed.goalChain, echoed.version],
+        ["in_progress", ["Q4"], 4],
       );
-      const settled = yield* update(alice, 4, { conflictDecisionId: null });
-      assert.strictEqual(settled.conflictDecisionId, undefined);
 
       const holder = { ...alice, authorId: "agent-h" };
       yield* board.acquireLease(holder, { workspaceId: a, taskId: task.id });
-      yield* update(bob, 6, { title: "Bob's plan" });
-      const won = yield* update(holder, 6, { title: "Holder's plan" });
-      assert.deepStrictEqual([won.title, won.version], ["Holder's plan", 8]);
-      assert.strictEqual(
-        (yield* lastCommit)?.mergeReason,
-        'rebased from version 6; title: lease holder wins, kept "Holder\'s plan"',
+      const held = yield* update(holder, 5, { title: "Holder's plan" });
+      const over = yield* update(bob, 5, { title: "Bob's plan" });
+      const again = yield* update(bob, 5, { title: "Bob's plan, again" });
+      assert.deepStrictEqual(
+        [held.overwrote, over.title, over.overwrote],
+        [
+          undefined,
+          "Bob's plan",
+          [{ key: "title", by: "agent-h", name: "agent-h", at: held.updatedAt }],
+        ],
+      );
+      assert.deepStrictEqual(
+        [again.title, again.version, again.overwrote],
+        ["Bob's plan, again", 8, undefined],
       );
 
-      const race = yield* board.createTask(alice, { workspaceId: a, title: "Race" });
-      const write = (actor: TaskBoardService.Actor, baseVersion: number, set: object) =>
-        board.updateTask(actor, { workspaceId: a, taskId: race.id, baseVersion, set });
-      const raceCommit = Effect.map(
-        board.listCommits(alice, { workspaceId: a, taskId: race.id }),
-        ({ commits }) => commits.at(-1),
+      yield* update(alice, 8, { status: "done" });
+      const reopened = yield* update(agent, 8, { status: "in_review" });
+      assert.deepStrictEqual(
+        [reopened.status, reopened.version, reopened.overwrote],
+        ["in_review", 10, [{ key: "status", by: aliceId, name: "Alice", at: reopened.updatedAt }]],
       );
-      yield* board.acquireLease(holder, { workspaceId: a, taskId: race.id });
-      yield* write(bob, 2, { status: "done" });
-      const forward = yield* write(holder, 2, { status: "in_progress" });
-      assert.deepStrictEqual([forward.status, forward.version], ["done", 4]);
-      assert.strictEqual(
-        (yield* raceCommit)?.mergeReason,
-        'rebased from version 2; status: status only moves forward, kept "done"',
+      yield* update(agent, 10, { status: "needs_decision" });
+      const answered = yield* update(bob, 10, { status: "in_progress" });
+      assert.deepStrictEqual(
+        [answered.status, answered.overwrote?.map((o) => o.by)],
+        ["in_progress", ["agent-cos"]],
+      );
+      yield* update(agent, 12, { status: "needs_decision" });
+      const moved = yield* Effect.all([
+        Effect.flip(update(agent, 13, { status: "in_progress" })),
+        Effect.flip(update(agent, 12, { status: "in_progress" })),
+      ]);
+      assert.deepStrictEqual(moved.map(reasonOf), ["forbidden", "forbidden"]);
+
+      // A company agent serving two members is one author but writes for each of them.
+      const forAlice = { ...alice, authorId: "agent-co", onBehalfOf: [aliceId, "agent-co"] };
+      const forBob = { ...bob, authorId: "agent-co", onBehalfOf: [bobId, "agent-co"] };
+      const sql = yield* SqlClient.SqlClient;
+      yield* sql`INSERT INTO telescope_agents ${sql.insert({
+        agent_id: "agent-co",
+        workspace_id: a,
+        kind: "custom",
+        name: "Ops",
+        standing_powers_json: "{}",
+        exposure: "hidden",
+        sync_with_board: 0,
+        dispatch_mode: "inbox",
+        channels_json: "[]",
+        created_at: task.createdAt,
+        updated_at: task.createdAt,
+      })}`;
+      const viaCo = yield* update(forAlice, 13, { title: "Alice's via co" });
+      const lateCo = yield* update(forBob, 13, { title: "Bob's via co" });
+      assert.deepStrictEqual(
+        [lateCo.title, lateCo.version, lateCo.overwrote],
+        [
+          "Bob's via co",
+          15,
+          [{ key: "title", by: "agent-co", name: "Ops for Alice", at: viaCo.updatedAt }],
+        ],
+      );
+      const renamed = yield* update(bob, 15, { title: "Bob's title" });
+      const resent = yield* update(agent, 15, { title: "Bob's via co", goalChain: ["Q1"] });
+      assert.deepStrictEqual(
+        [resent.title, resent.goalChain, resent.version, resent.overwrote],
+        ["Bob's title", ["Q1"], 17, undefined],
+      );
+      const changed = yield* update(agent, 15, { title: "Agent's title" });
+      assert.deepStrictEqual(
+        [changed.title, changed.overwrote],
+        ["Agent's title", [{ key: "title", by: bobId, name: "Bob", at: renamed.updatedAt }]],
       );
 
-      yield* write(holder, 4, { title: "Holder's race" });
-      const guarded = yield* write(bob, 4, { title: "Bob's race" });
-      assert.deepStrictEqual([guarded.title, guarded.version], ["Holder's race", 6]);
-      assert.strictEqual(
-        (yield* raceCommit)?.mergeReason,
-        'rebased from version 4; title: lease holder wins, kept "Holder\'s race"',
+      yield* update(bob, 18, { status: "in_progress" });
+      yield* update(agent, 19, { title: "Agent's title v2", status: "in_review" });
+      const reverted = yield* update(agent, 19, { title: "Agent's title", status: "in_progress" });
+      assert.deepStrictEqual(
+        [reverted.title, reverted.status, reverted.version, reverted.overwrote],
+        ["Agent's title", "in_progress", 21, undefined],
+      );
+      yield* update(agent, 21, { title: "Agent's title v3" });
+      const noted = yield* update(agent, 21, { title: "Agent's title" }, "Put the title back.");
+      assert.deepStrictEqual(
+        [noted.title, noted.version, noted.freeText.at(-1)?.text, noted.overwrote],
+        ["Agent's title", 23, "Put the title back.", undefined],
+      );
+      yield* update(bob, 23, { status: "needs_decision" });
+      const resentHeld = yield* Effect.flip(update(agent, 23, { status: "in_progress" }));
+      assert.strictEqual(reasonOf(resentHeld), "forbidden");
+      assert.deepStrictEqual((yield* board.listDecisions(alice, { workspaceId: a })).decisions, []);
+
+      yield* update(agent, 24, { title: "Agent's title v4" });
+      const bobsAgain = yield* update(bob, 25, { title: "Bob's title v2" });
+      const undone = yield* update(agent, 24, { title: "Agent's title" });
+      assert.deepStrictEqual(
+        [undone.title, undone.version, undone.overwrote],
+        ["Agent's title", 27, [{ key: "title", by: bobId, name: "Bob", at: bobsAgain.updatedAt }]],
       );
 
-      yield* write(agent, 6, { status: "needs_decision" });
-      const held = yield* write(bob, 6, { status: "in_progress" });
-      assert.deepStrictEqual([held.status, held.version], ["needs_decision", 8]);
-      assert.strictEqual((yield* raceCommit)?.mergeLevel, 1);
-      const moved = yield* Effect.flip(write(agent, 8, { status: "in_progress" }));
-      assert.strictEqual(reasonOf(moved), "forbidden");
-      const { decisions } = yield* board.listDecisions(alice, { workspaceId: a });
-      assert.strictEqual(decisions.length, 1);
+      // Bob's personal agent stays hidden from Alice, so the result names only Bob.
+      yield* sql`INSERT INTO telescope_agents ${sql.insert({
+        agent_id: "agent-bob",
+        workspace_id: a,
+        owner_subject_id: bobId,
+        kind: "chief_of_staff",
+        name: "Bob's secret helper",
+        standing_powers_json: "{}",
+        exposure: "hidden",
+        sync_with_board: 0,
+        dispatch_mode: "inbox",
+        channels_json: "[]",
+        created_at: task.createdAt,
+        updated_at: task.createdAt,
+      })}`;
+      const bobsAgent = { ...bob, authorId: "agent-bob", onBehalfOf: [bobId, "agent-bob"] };
+      const secret = yield* update(bobsAgent, 27, { title: "Secret plan" });
+      const unnamed = yield* update(alice, 27, { title: "Alice's plan" });
+      assert.deepStrictEqual(unnamed.overwrote, [
+        { key: "title", by: "agent-bob", name: "an agent for Bob", at: secret.updatedAt },
+      ]);
+      const wire = JSON.stringify(yield* encodeUpdateResult(unnamed));
+      assert.notInclude(wire, "secret helper");
+      const secretAgain = yield* update(bobsAgent, 29, { title: "Secret plan v2" });
+      const named = yield* update(forBob, 29, { title: "Bob's plan via co" });
+      assert.deepStrictEqual(named.overwrote, [
+        {
+          key: "title",
+          by: "agent-bob",
+          name: "Bob's secret helper for Bob",
+          at: secretAgain.updatedAt,
+        },
+      ]);
+
+      // Once shown, it is named only while its project is bound and Bob is still a member.
+      yield* sql`UPDATE telescope_agents SET kind = 'chief_agent', project_id = 'project-1',
+        exposure = 'visible' WHERE agent_id = 'agent-bob'`;
+      yield* sql`INSERT INTO telescope_project_bindings ${sql.insert({
+        workspace_id: a,
+        environment_id: "env-elsewhere",
+        project_id: "project-1",
+      })}`;
+      const shown = yield* update(bobsAgent, 31, { title: "Shown plan" });
+      const shownOver = yield* update(alice, 31, { title: "Alice's plan v2" });
+      yield* update(bobsAgent, 33, { title: "Last plan" });
+      yield* workspaces.revoke(alice.caller, { workspaceId: a, subjectId: bobId });
+      const former = yield* update(alice, 33, { title: "Alice's plan v3" });
+      assert.deepStrictEqual(
+        [shownOver.overwrote?.[0]?.name, shownOver.overwrote?.[0]?.at, former.overwrote?.[0]?.name],
+        ["Bob's secret helper for Bob", shown.updatedAt, "an agent for Bob"],
+      );
     }),
   );
 
-  it.effect("keeps the conflict marker out of merges and settles it with its decision", () =>
+  it.effect("settles old conflict proposals and keeps their marker from stale writes", () =>
     Effect.gen(function* () {
-      const { workspaces, board, a, agent } = yield* setup;
-      const bob = { caller: session("bob") };
-      const { code } = yield* workspaces.invite(alice.caller, { workspaceId: a, role: "member" });
-      yield* workspaces.accept(bob.caller, { code, displayName: "Bob" });
+      const { board, a, aliceId, agent } = yield* setup;
       const task = yield* board.createTask(alice, { workspaceId: a, title: "Plan" });
       const update = (actor: TaskBoardService.Actor, baseVersion: number, set: object) =>
         board.updateTask(actor, { workspaceId: a, taskId: task.id, baseVersion, set });
@@ -565,27 +663,34 @@ it.layer(layer)("Telescope task board", (it) => {
           chosen,
           ...(supersedes === undefined ? {} : { supersedes }),
         });
+      // Older servers opened these for stale writes; a write no longer does.
+      const sql = yield* SqlClient.SqlClient;
+      const seedConflict = (title: string) =>
+        Effect.gen(function* () {
+          const proposal = yield* board.createDecision(alice, {
+            workspaceId: a,
+            title: "冲突：Plan",
+            text: "",
+            status: "proposed",
+          });
+          const conflict = JSON.stringify({ taskId: task.id, incoming: { title } });
+          yield* sql`UPDATE telescope_tasks SET conflict_json = ${conflict} WHERE item_id = ${proposal.id}`;
+          yield* sql`UPDATE telescope_tasks SET conflict_decision_id = ${proposal.id} WHERE item_id = ${task.id}`;
+          return proposal.id;
+        });
 
       yield* update(alice, 1, { title: "Plan A" });
-      const first = yield* update(bob, 1, { title: "Plan B" });
-      const resent = yield* update(bob, 1, { title: "Plan B" });
-      assert.deepStrictEqual(
-        [resent.conflict, resent.version, (yield* decisions).length],
-        [first.conflict, 3, 1],
-      );
-
-      const second = yield* update(bob, 1, { title: "Plan C" });
-      const d2 = second.conflict?.decisionId;
-      const staleClear = yield* update(alice, 3, { conflictDecisionId: null });
+      const d1 = yield* seedConflict("Plan B");
+      const d2 = yield* seedConflict("Plan C");
+      const staleClear = yield* update(alice, 1, { conflictDecisionId: null });
       assert.deepStrictEqual(
         [staleClear.conflictDecisionId, staleClear.conflict, (yield* decisions).length],
         [d2, undefined, 2],
       );
       const holder = { ...alice, authorId: "agent-h" };
       yield* board.acquireLease(holder, { workspaceId: a, taskId: task.id });
-      yield* update(holder, 3, { conflictDecisionId: null });
+      yield* update(holder, 2, { conflictDecisionId: null });
       assert.strictEqual((yield* current).conflictDecisionId, d2);
-      assert.isDefined(d2);
       const { version } = yield* current;
       const agentSettle = { workspaceId: a, title: "Settle", text: "", supersedes: d2 };
       const refused = yield* Effect.all([
@@ -605,34 +710,34 @@ it.layer(layer)("Telescope task board", (it) => {
       assert.strictEqual(elsewhere.title, "Agent plan", "d2 holds title on its own task only");
       yield* update(agent, version, { status: "in_review" });
       yield* update(alice, version + 1, { goalChain: ["Q4"] });
-      const moved = yield* Effect.flip(update(agent, version, { goalChain: ["Q1"] }));
-      assert.strictEqual(reasonOf(moved), "forbidden");
-      assert.strictEqual((yield* current).conflictDecisionId, d2);
+      const late = yield* update(agent, version, { goalChain: ["Q1"] });
+      assert.deepStrictEqual(
+        [late.goalChain, late.conflictDecisionId, late.overwrote?.map((o) => [o.key, o.by])],
+        [["Q1"], d2, [["goalChain", aliceId]]],
+      );
 
       yield* decide(d2, "incoming");
       const applied = yield* current;
       assert.deepStrictEqual(
         [applied.title, applied.conflictDecisionId, applied.version],
-        ["Plan C", undefined, 8],
+        ["Plan C", undefined, 7],
       );
       const orphaned = yield* Effect.flip(update(agent, applied.version, { title: "Agent plan" }));
       assert.strictEqual(reasonOf(orphaned), "forbidden");
-      yield* decide(first.conflict?.decisionId, "incoming");
+      yield* decide(d1, "incoming");
       assert.strictEqual((yield* current).title, "Plan C");
 
-      const third = yield* update(bob, 1, { title: "Plan D" });
-      yield* decide(third.conflict?.decisionId, "keep");
+      yield* decide(yield* seedConflict("Plan D"), "keep");
       const kept = yield* current;
       assert.deepStrictEqual(
         [kept.title, kept.conflictDecisionId, kept.version],
-        ["Plan C", undefined, 10],
+        ["Plan C", undefined, 8],
       );
       const settled = yield* update(agent, kept.version, { title: "Agent plan" });
       assert.strictEqual(settled.title, "Agent plan");
 
       // Deciding a member's counter-proposal settles the marked proposal it replaces.
-      const d4 = (yield* update(bob, 1, { title: "Plan E" })).conflict?.decisionId;
-      assert.isDefined(d4);
+      const d4 = yield* seedConflict("Plan E");
       const counter = yield* board.createDecision(alice, {
         workspaceId: a,
         title: "Counter",
