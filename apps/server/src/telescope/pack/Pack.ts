@@ -42,7 +42,11 @@ const decodeManifest = Schema.decodeEffect(Manifest);
 const encodeMcpFile = Schema.encodeEffect(McpFile);
 const decodeMcpFile = Schema.decodeEffect(McpFile);
 
-const PACK_FILES = { manifest: "pack.json", instructions: "instructions.md", mcp: "mcp.json" };
+export const PACK_FILES = {
+  manifest: "pack.json",
+  instructions: "instructions.md",
+  mcp: "mcp.json",
+};
 
 export interface Pack {
   readonly instructions: string;
@@ -81,7 +85,7 @@ export class ContextPackOverlapError extends Schema.TaggedError<ContextPackOverl
   { path: Schema.String, source: Schema.String },
 ) {
   override get message(): string {
-    return `${this.path} overlaps ${this.source}. Keep the context pack directory outside it.`;
+    return `${this.path} overlaps ${this.source}. Move the context pack directory so that neither one holds the other.`;
   }
 }
 
@@ -105,8 +109,8 @@ type HarnessEffect<A> = Effect.Effect<
 
 // Relative to the project or home directory being read or written.
 export interface HarnessPaths {
-  // Undefined where the harness keeps these instructions in its own settings, not in a file.
-  readonly instructions: string | undefined;
+  // `settings` names where the harness keeps these instructions when they are not in a file.
+  readonly instructions: string | { readonly settings: string };
   // Written to the first directory, read from all of them.
   readonly skillsDirs: readonly [string, ...Array<string>];
   readonly mcp: string;
@@ -135,8 +139,9 @@ export type Harness = ReturnType<ReturnType<typeof makeHarness>>;
 export const makeHarness = (spec: HarnessSpec) => (paths: HarnessPaths) => {
   const parse = <A>(path: string, run: () => A) =>
     Effect.try({ try: run, catch: (cause) => new ContextPackFormatError({ path, cause }) });
-  const instructionsFile = paths.instructions;
+  const instructionsFile = typeof paths.instructions === "string" ? paths.instructions : undefined;
   return {
+    settings: typeof paths.instructions === "string" ? undefined : paths.instructions.settings,
     owned: [
       ...(instructionsFile === undefined ? [] : [instructionsFile]),
       ...paths.skillsDirs,
@@ -175,10 +180,6 @@ export const makeHarness = (spec: HarnessSpec) => (paths: HarnessPaths) => {
           merge,
         );
         plan.push(textWrite(file, text));
-      } else if (pack.instructions.trim() !== "") {
-        yield* Effect.logWarning(
-          `Left out the instructions: this harness keeps them in its own settings, not in ${dir}. Add them there.`,
-        );
       }
       const mcpFile = path.join(dir, paths.mcp);
       const existing = yield* readOptionalText(mcpFile);
@@ -295,7 +296,7 @@ export const mergeInstructions = (existing: string | undefined, text: string, me
   return existing?.trim() ? `${existing.trimEnd()}\n\n${block}\n` : `${block}\n`;
 };
 
-const isInside = (path: Path.Path, root: string, file: string) => {
+export const isInside = (path: Path.Path, root: string, file: string) => {
   const rel = path.relative(root, file);
   return !(rel === ".." || rel.startsWith(`..${path.sep}`) || path.isAbsolute(rel));
 };
@@ -310,7 +311,7 @@ export const realPathInside = Effect.fnUntraced(function* (root: string, file: s
 });
 
 // The real path `file` has or would have once created, resolving links in its existing parents.
-const plannedRealPath: (
+export const plannedRealPath: (
   file: string,
 ) => Effect.Effect<string, never, FileSystem.FileSystem | Path.Path> = Effect.fnUntraced(
   function* (file) {
@@ -357,11 +358,22 @@ const linkChainTarget = Effect.fnUntraced(function* (file: string, removed: Read
       return current;
     },
   );
-  return yield* walk(path.sep, path.resolve(file));
+  return yield* walk(path.resolve(), file);
 });
 
 // A write follows every link in its target, so what must stay inside the directory being written
 // to is the end of that chain, including the path a dangling link names.
+export const writeTarget = Effect.fnUntraced(function* (
+  file: string,
+  removed: ReadonlyArray<string> = [],
+) {
+  const path = yield* Path.Path;
+  const named = yield* linkChainTarget(file, removed);
+  return named === undefined || removed.some((entry) => isInside(path, entry, named))
+    ? named
+    : yield* plannedRealPath(named);
+});
+
 const writeTargetInside = Effect.fnUntraced(function* (
   root: string,
   file: string,
@@ -369,18 +381,22 @@ const writeTargetInside = Effect.fnUntraced(function* (
 ) {
   const path = yield* Path.Path;
   const realRoot = yield* plannedRealPath(root);
-  const named = yield* linkChainTarget(file, removed);
-  const real =
-    named === undefined || removed.some((entry) => isInside(path, entry, named))
-      ? named
-      : yield* plannedRealPath(named);
-  if (real === undefined || !isInside(path, realRoot, real)) {
-    // One directory spelled two ways in one sentence reads like a tool bug, so the refused path is
-    // resolved through its parents, without following the link itself.
-    const at = path.join(yield* plannedRealPath(path.dirname(file)), path.basename(file));
-    return yield* new ContextPackPathError({ path: at, root: realRoot, target: real, write: true });
+  const inside = (real: string | undefined) => real !== undefined && isInside(path, realRoot, real);
+  const real = yield* writeTarget(file, removed);
+  if (real !== undefined && inside(real)) return real;
+  // The refusal names the outermost entry under the root that leads out, so a linked parent
+  // directory, not a file under it that is no link at all.
+  const top = path.resolve(root);
+  let [link, target] = [file, real];
+  for (let at = path.dirname(file); at !== top && isInside(path, top, at); at = path.dirname(at)) {
+    const next = yield* writeTarget(at, removed);
+    if (inside(next)) break;
+    [link, target] = [at, next];
   }
-  return real;
+  // One directory spelled two ways in one sentence reads like a tool bug, so the link is named
+  // through its resolved parents.
+  const at = path.join(yield* plannedRealPath(path.dirname(link)), path.basename(link));
+  return yield* new ContextPackPathError({ path: at, root: realRoot, target, write: true });
 });
 
 // Writing either directory would clobber the other when one lies inside the other.
