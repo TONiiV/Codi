@@ -103,10 +103,14 @@ interface ProjectRef {
   readonly environmentId: EnvironmentId;
   readonly projectId: ProjectId;
 }
+/** A Codi project mounted in some project of `workspaceId`. */
+export interface WorkspaceMount extends ProjectRef {
+  readonly workspaceId: Telescope.WorkspaceId;
+}
 
-/** Workspaces any of `refs` is bound to; a project group binds all its members together. */
+/** Workspaces any of `refs` is mounted in; a project group moves all its members together. */
 export function boundWorkspaceIds(
-  bindings: ReadonlyArray<Telescope.ProjectBinding>,
+  bindings: ReadonlyArray<WorkspaceMount>,
   refs: ReadonlyArray<ProjectRef>,
 ): ReadonlySet<Telescope.WorkspaceId> {
   return new Set(
@@ -138,10 +142,10 @@ export function workspacesToLeave(
   return [...bound].filter((id) => id !== next && own.some((workspace) => workspace.id === id));
 }
 
-/** One binding per workspace a project is bound to, as `boundWorkspaceIds` reads them. */
+/** One mount per workspace a project is mounted in, as `boundWorkspaceIds` reads them. */
 export function bindingsFromSummary(
   projects: ReadonlyArray<Telescope.ProjectBindingSummary>,
-): ReadonlyArray<Telescope.ProjectBinding> {
+): ReadonlyArray<WorkspaceMount> {
   return projects.flatMap(({ workspaceIds, ...project }) =>
     workspaceIds.map((workspaceId) => ({ workspaceId, ...project })),
   );
@@ -237,11 +241,16 @@ export function createTelescopeWorkspaceAtoms<R, E>(
     target: Parameters<typeof inWorkspace>[0],
     registry: AtomRegistry.AtomRegistry,
   ) => Effect.sync(() => registry.refresh(members(inWorkspace(target))));
-  /** Bumped by this client's bind and unbind, so views built on bindings re-read them. */
+  /** Bumped by this client's project changes, so views built on projects re-read them. */
   const bindingsRevisionAtom = Atom.make(0).pipe(
     Atom.keepAlive,
     Atom.withLabel("telescope:bindings-revision"),
   );
+  const projects = createEnvironmentRpcQueryAtomFamily(runtime, {
+    label: "telescope:project:list",
+    tag: WS_METHODS.projectList,
+    refreshTrigger: () => bindingsRevisionAtom,
+  });
   const refreshBindings = (
     { environmentId }: { environmentId: EnvironmentId },
     registry: AtomRegistry.AtomRegistry,
@@ -258,6 +267,7 @@ export function createTelescopeWorkspaceAtoms<R, E>(
     get,
     members,
     bindingSummary,
+    projects,
     switchTo,
     dashboard,
     storedWorkspaceIdAtom,
@@ -300,15 +310,35 @@ export function createTelescopeWorkspaceAtoms<R, E>(
       onSuccess: refreshMembers,
       onSettled: rereadRole,
     }),
-    bind: createEnvironmentRpcCommand(runtime, {
-      label: "telescope:project:bind",
-      tag: WS_METHODS.projectBind,
+    createProject: createEnvironmentRpcCommand(runtime, {
+      label: "telescope:project:create",
+      tag: WS_METHODS.projectCreate,
       onSuccess: refreshBindings,
+      onSettled: rereadRole,
     }),
-    unbind: createEnvironmentRpcCommand(runtime, {
-      label: "telescope:project:unbind",
-      tag: WS_METHODS.projectUnbind,
+    updateProject: createEnvironmentRpcCommand(runtime, {
+      label: "telescope:project:update",
+      tag: WS_METHODS.projectUpdate,
       onSuccess: refreshBindings,
+      onSettled: rereadRole,
+    }),
+    deleteProject: createEnvironmentRpcCommand(runtime, {
+      label: "telescope:project:delete",
+      tag: WS_METHODS.projectDelete,
+      onSuccess: refreshBindings,
+      onSettled: rereadRole,
+    }),
+    addMount: createEnvironmentRpcCommand(runtime, {
+      label: "telescope:project:add-mount",
+      tag: WS_METHODS.projectAddMount,
+      onSuccess: refreshBindings,
+      onSettled: rereadRole,
+    }),
+    removeMount: createEnvironmentRpcCommand(runtime, {
+      label: "telescope:project:remove-mount",
+      tag: WS_METHODS.projectRemoveMount,
+      onSuccess: refreshBindings,
+      onSettled: rereadRole,
     }),
   };
 }

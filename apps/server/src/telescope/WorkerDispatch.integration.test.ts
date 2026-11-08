@@ -336,9 +336,10 @@ const seed = Effect.gen(function* () {
   });
   const pa = agents.find((agent) => agent.kind === "chief_of_staff")!;
   const chief = Telescope.AgentId.make("agent-gripper-chief");
-  yield* db.insert(workspace.id, "project_bindings", {
+  yield* db.insert(workspace.id, "project_mounts", {
     environment_id: environmentId,
     project_id: gripper,
+    telescope_project_id: "telescope-gripper",
   });
   yield* db.insert(workspace.id, "agents", {
     agent_id: chief,

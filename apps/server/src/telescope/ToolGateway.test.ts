@@ -64,10 +64,10 @@ const setup = Effect.gen(function* () {
   });
   const { code } = yield* workspaces.invite(as.ann, { workspaceId, role: "member" });
   const bea = yield* workspaces.accept(as.bea, { code, displayName: "Bea" });
-  yield* workspaces.bind(as.ann, {
+  yield* workspaces.createProject(as.ann, {
     workspaceId,
-    environmentId: EnvironmentId.make("env-local"),
-    projectId: web,
+    name: "Project",
+    mounts: [{ environmentId: EnvironmentId.make("env-local"), projectId: web }],
   });
   const agents = yield* AgentService.AgentService;
   const { agents: mine } = yield* agents.listMine(as.owner, { workspaceId });

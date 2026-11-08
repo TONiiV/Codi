@@ -393,10 +393,15 @@ it.effect("never reaches another workspace's board", () =>
 /** Ann's PA and her Chief Agent of `web`, each with a run; the Chief's run acts through the PA. */
 const chain = Effect.gen(function* () {
   const { workspaceId, chief: pa, call, db } = yield* setup;
-  yield* (yield* WorkspaceService.WorkspaceService).bind(ann, {
+  yield* (yield* WorkspaceService.WorkspaceService).createProject(ann, {
     workspaceId,
-    environmentId: EnvironmentId.make("env-elsewhere"),
-    projectId: ProjectId.make("project-web"),
+    name: "Project",
+    mounts: [
+      {
+        environmentId: EnvironmentId.make("env-elsewhere"),
+        projectId: ProjectId.make("project-web"),
+      },
+    ],
   });
   const { agents } = yield* (yield* AgentService.AgentService).listMine(ann, { workspaceId });
   const chief = agents.find((agent) => agent.kind === "chief_agent");
@@ -526,10 +531,15 @@ it.effect("delegate to another member's agent is not found", () =>
         yield* pa.call("delegate", { toAgentId: Telescope.AgentId.make(toAgentId), brief }),
         { code: "invalid_request", message: "Agent not found." },
       );
-    yield* (yield* WorkspaceService.WorkspaceService).bind(ann, {
+    yield* (yield* WorkspaceService.WorkspaceService).createProject(ann, {
       workspaceId,
-      environmentId: EnvironmentId.make("env-elsewhere"),
-      projectId: ProjectId.make("project-app"),
+      name: "Project",
+      mounts: [
+        {
+          environmentId: EnvironmentId.make("env-elsewhere"),
+          projectId: ProjectId.make("project-app"),
+        },
+      ],
     });
     const { agents } = yield* (yield* AgentService.AgentService).listMine(ann, { workspaceId });
     const sibling = agents.find((row) => row.kind === "chief_agent" && row.id !== chief.id);

@@ -49,18 +49,27 @@ const InvitationRow = Schema.Struct({
   expires_at: Schema.String,
   accepted_at: Schema.NullOr(Schema.String),
 });
-const BindingRow = Schema.Struct({
+const ProjectRow = Schema.Struct({
+  telescope_project_id: Telescope.TelescopeProjectId,
+  workspace_id: Telescope.WorkspaceId,
+  name: Schema.String,
+  lead_subject_id: Schema.NullOr(Schema.String),
+  created_at: Schema.String,
+});
+/** `project_id` is the mounted Codi project. */
+const MountRow = Schema.Struct({
   workspace_id: Telescope.WorkspaceId,
   environment_id: EnvironmentId,
   project_id: ProjectId,
-  lead_subject_id: Schema.NullOr(Schema.String),
+  telescope_project_id: Telescope.TelescopeProjectId,
 });
 
 const decodeWorkspaces = Schema.decodeUnknownEffect(Schema.Array(WorkspaceRow));
 const decodeMembers = Schema.decodeUnknownEffect(Schema.Array(MemberRow));
 const decodeSessionLinks = Schema.decodeUnknownEffect(Schema.Array(SessionLinkRow));
 const decodeInvitations = Schema.decodeUnknownEffect(Schema.Array(InvitationRow));
-const decodeBindings = Schema.decodeUnknownEffect(Schema.Array(BindingRow));
+const decodeProjects = Schema.decodeUnknownEffect(Schema.Array(ProjectRow));
+const decodeMounts = Schema.decodeUnknownEffect(Schema.Array(MountRow));
 
 const toWorkspace = (row: typeof WorkspaceRow.Type): Telescope.Workspace => ({
   id: row.workspace_id,
@@ -77,12 +86,38 @@ const toMember = (row: typeof MemberRow.Type): Telescope.Member => ({
   joinedAt: row.joined_at,
   ...(row.revoked_at === null ? {} : { revokedAt: row.revoked_at }),
 });
-const toBinding = (row: typeof BindingRow.Type): Telescope.ProjectBinding => ({
+const toProject = (
+  row: typeof ProjectRow.Type,
+  mounts: ReadonlyArray<typeof MountRow.Type>,
+): Telescope.Project => ({
+  id: row.telescope_project_id,
   workspaceId: row.workspace_id,
-  environmentId: row.environment_id,
-  projectId: row.project_id,
+  name: row.name,
   ...(row.lead_subject_id === null ? {} : { leadSubjectId: row.lead_subject_id }),
+  mounts: mounts.flatMap((mount) =>
+    mount.telescope_project_id === row.telescope_project_id
+      ? [{ environmentId: mount.environment_id, projectId: mount.project_id }]
+      : [],
+  ),
+  createdAt: row.created_at,
 });
+
+/** Each mounted Codi project's lead: the lead of the Telescope project that mounts it. */
+export const mountLeads = (
+  db: TelescopeDb.TelescopeDb["Service"],
+  workspaceId: Telescope.WorkspaceId,
+) =>
+  Effect.all([
+    db.select(workspaceId, "project_mounts", decodeMounts),
+    db.select(workspaceId, "projects", decodeProjects),
+  ]).pipe(
+    Effect.map(([mounts, projects]) => {
+      const leads = new Map(projects.map((row) => [row.telescope_project_id, row.lead_subject_id]));
+      return new Map(
+        mounts.map((mount) => [mount.project_id, leads.get(mount.telescope_project_id) ?? null]),
+      );
+    }),
+  );
 
 const fail = (reason: Telescope.WorkspaceError["reason"], message: string) =>
   Effect.fail(new Telescope.WorkspaceError({ reason, message }));
@@ -122,7 +157,7 @@ type Invite = (
 ) => Effect.Effect<Telescope.Invitation, Failure>;
 
 /**
- * Workspaces, members, invitations and project bindings. The owner acts as `OWNER_MEMBER_ID`; any
+ * Workspaces, members, invitations and projects. The owner acts as `OWNER_MEMBER_ID`; any
  * other caller acts as the member its device key is linked to. Member ids fill `subjectId`.
  */
 export class WorkspaceService extends Context.Service<
@@ -143,9 +178,12 @@ export class WorkspaceService extends Context.Service<
       input: In<"telescope.member.revoke">,
     ) => Effect.Effect<{ member: Telescope.Member; deviceKeys: ReadonlyArray<string> }, Failure>;
     readonly restore: Method<"telescope.member.restore">;
-    readonly bind: Method<"telescope.project.bind">;
-    readonly unbind: Method<"telescope.project.unbind">;
-    readonly bindings: Method<"telescope.project.listBindings">;
+    readonly projects: Method<"telescope.project.list">;
+    readonly createProject: Method<"telescope.project.create">;
+    readonly updateProject: Method<"telescope.project.update">;
+    readonly deleteProject: Method<"telescope.project.delete">;
+    readonly addMount: Method<"telescope.project.addMount">;
+    readonly removeMount: Method<"telescope.project.removeMount">;
     readonly bindingSummary: Method<"telescope.project.bindingSummary">;
     /** Ids of the invitation codes that still work, in every workspace. */
     readonly liveInvitationIds: () => Effect.Effect<ReadonlySet<string>, Failure>;
@@ -426,7 +464,7 @@ const make = Effect.gen(function* () {
         yield* db.update(input.workspaceId, "members", { revoked_at: revokedAt }, key);
         yield* voidCodesOf(target);
         const lead = { lead_subject_id: input.subjectId };
-        yield* db.update(input.workspaceId, "project_bindings", { lead_subject_id: null }, lead);
+        yield* db.update(input.workspaceId, "projects", { lead_subject_id: null }, lead);
         const links = yield* db.select(input.workspaceId, "member_sessions", decodeSessionLinks, {
           member_id: input.subjectId,
         });
@@ -477,57 +515,140 @@ const make = Effect.gen(function* () {
       return yield* fail("not_found", "That project does not exist on this environment.");
   });
 
-  const bindingKey = (input: In<"telescope.project.unbind">) => ({
-    environment_id: input.environmentId,
-    project_id: input.projectId,
+  const requireProject = Effect.fn("WorkspaceService.requireProject")(function* (
+    workspaceId: Telescope.WorkspaceId,
+    projectId: Telescope.TelescopeProjectId,
+  ) {
+    const key = { telescope_project_id: projectId };
+    const [row] = yield* db.select(workspaceId, "projects", decodeProjects, key);
+    if (row === undefined)
+      return yield* fail("not_found", "That project is not in this workspace.");
+    return toProject(row, yield* db.select(workspaceId, "project_mounts", decodeMounts, key));
   });
 
-  const bind = Effect.fn("WorkspaceService.bind")(function* (
-    caller: Caller,
-    input: In<"telescope.project.bind">,
+  const insertMount = Effect.fn("WorkspaceService.insertMount")(function* (
+    workspaceId: Telescope.WorkspaceId,
+    projectId: Telescope.TelescopeProjectId,
+    mount: Telescope.ProjectMount,
   ) {
+    yield* requireLocalProject(mount.environmentId, mount.projectId);
+    const key = { environment_id: mount.environmentId, project_id: mount.projectId };
+    if ((yield* db.count(workspaceId, "project_mounts", key)) > 0)
+      return yield* fail("conflict", "A project of this workspace already mounts that directory.");
+    yield* db.insert(workspaceId, "project_mounts", { ...key, telescope_project_id: projectId });
+  });
+
+  const projectsOf = Effect.fn("WorkspaceService.projects")(function* (
+    caller: Caller,
+    { workspaceId }: In<"telescope.project.list">,
+  ) {
+    yield* requireMember(workspaceId, caller);
+    const [rows, mounts] = yield* Effect.all([
+      db.select(workspaceId, "projects", decodeProjects, {}, { orderBy: ["created_at"] }),
+      db.select(workspaceId, "project_mounts", decodeMounts, {}, { orderBy: ["rowid"] }),
+    ]);
+    return { projects: rows.map((row) => toProject(row, mounts)) };
+  });
+
+  const createProject = Effect.fn("WorkspaceService.createProject")(function* (
+    caller: Caller,
+    input: In<"telescope.project.create">,
+  ) {
+    const projectId = Telescope.TelescopeProjectId.make(yield* random.uuidV4());
     return yield* db.transaction(
       Effect.gen(function* () {
         yield* requireMember(input.workspaceId, caller, "admin");
-        yield* requireLocalProject(input.environmentId, input.projectId);
         if (input.leadSubjectId !== undefined)
           yield* requireActiveTarget(input.workspaceId, input.leadSubjectId);
-        yield* db.remove(input.workspaceId, "project_bindings", bindingKey(input));
-        yield* db.insert(input.workspaceId, "project_bindings", {
-          ...bindingKey(input),
+        yield* db.insert(input.workspaceId, "projects", {
+          telescope_project_id: projectId,
+          name: input.name,
           lead_subject_id: input.leadSubjectId ?? null,
+          created_at: yield* now,
         });
-        return input;
+        for (const mount of input.mounts ?? [])
+          yield* insertMount(input.workspaceId, projectId, mount);
+        return yield* requireProject(input.workspaceId, projectId);
       }),
     );
   });
 
-  const unbind = Effect.fn("WorkspaceService.unbind")(function* (
+  const updateProject = Effect.fn("WorkspaceService.updateProject")(function* (
     caller: Caller,
-    input: In<"telescope.project.unbind">,
+    { workspaceId, projectId, name, leadSubjectId }: In<"telescope.project.update">,
   ) {
-    yield* requireMember(input.workspaceId, caller, "admin");
-    yield* db.remove(input.workspaceId, "project_bindings", bindingKey(input));
-    return {};
+    return yield* db.transaction(
+      Effect.gen(function* () {
+        yield* requireMember(workspaceId, caller, "admin");
+        yield* requireProject(workspaceId, projectId);
+        if (leadSubjectId != null) yield* requireActiveTarget(workspaceId, leadSubjectId);
+        const set = {
+          ...(name === undefined ? {} : { name }),
+          ...(leadSubjectId === undefined ? {} : { lead_subject_id: leadSubjectId }),
+        };
+        if (Object.keys(set).length > 0)
+          yield* db.update(workspaceId, "projects", set, { telescope_project_id: projectId });
+        return yield* requireProject(workspaceId, projectId);
+      }),
+    );
   });
 
-  const bindings = Effect.fn("WorkspaceService.bindings")(function* (
+  // Tasks keep their project, so one with tasks stays until they move or it is emptied.
+  const deleteProject = Effect.fn("WorkspaceService.deleteProject")(function* (
     caller: Caller,
-    { workspaceId }: In<"telescope.project.listBindings">,
+    { workspaceId, projectId }: In<"telescope.project.delete">,
   ) {
-    yield* requireMember(workspaceId, caller);
-    const rows = yield* db.select(workspaceId, "project_bindings", decodeBindings);
-    return { bindings: rows.map(toBinding) };
+    return yield* db.transaction(
+      Effect.gen(function* () {
+        yield* requireMember(workspaceId, caller, "admin");
+        yield* requireProject(workspaceId, projectId);
+        if ((yield* db.count(workspaceId, "tasks", { project_id: projectId })) > 0)
+          return yield* fail("conflict", "Move this project's tasks to another project first.");
+        const key = { telescope_project_id: projectId };
+        yield* db.remove(workspaceId, "project_mounts", key);
+        yield* db.remove(workspaceId, "projects", key);
+        return {};
+      }),
+    );
   });
 
-  // Any member may see where projects are bound, so every sidebar can hide them (D16).
+  const addMount = Effect.fn("WorkspaceService.addMount")(function* (
+    caller: Caller,
+    { workspaceId, projectId, mount }: In<"telescope.project.addMount">,
+  ) {
+    return yield* db.transaction(
+      Effect.gen(function* () {
+        yield* requireMember(workspaceId, caller, "admin");
+        yield* requireProject(workspaceId, projectId);
+        yield* insertMount(workspaceId, projectId, mount);
+        return yield* requireProject(workspaceId, projectId);
+      }),
+    );
+  });
+
+  const removeMount = Effect.fn("WorkspaceService.removeMount")(function* (
+    caller: Caller,
+    { workspaceId, mount }: In<"telescope.project.removeMount">,
+  ) {
+    return yield* db.transaction(
+      Effect.gen(function* () {
+        yield* requireMember(workspaceId, caller, "admin");
+        const key = { environment_id: mount.environmentId, project_id: mount.projectId };
+        const [row] = yield* db.select(workspaceId, "project_mounts", decodeMounts, key);
+        if (row === undefined)
+          return yield* fail("not_found", "No project of this workspace mounts that directory.");
+        yield* db.remove(workspaceId, "project_mounts", key);
+        return yield* requireProject(workspaceId, row.telescope_project_id);
+      }),
+    );
+  });
+
+  // Any member may see where projects are mounted, so every sidebar can hide them (D16).
   const bindingSummary = Effect.fn("WorkspaceService.bindingSummary")(function* (caller: Caller) {
     if (!isOwner(caller) && (yield* db.workspaceIdsOf(deviceKey(caller))).length === 0)
       return yield* fail("forbidden", "You are not a member of any workspace.");
     const ids = yield* db.allWorkspaceIds;
-    const rows = yield* Effect.forEach(ids, (id) =>
-      db.select(id, "project_bindings", decodeBindings),
-    );
+    const rows = yield* Effect.forEach(ids, (id) => db.select(id, "project_mounts", decodeMounts));
     const projects = new Map<string, Telescope.ProjectBindingSummary>();
     for (const row of rows.flat()) {
       const key = `${row.environment_id}:${row.project_id}`;
@@ -569,9 +690,12 @@ const make = Effect.gen(function* () {
     setRole,
     revoke,
     restore,
-    bind,
-    unbind,
-    bindings,
+    projects: projectsOf,
+    createProject,
+    updateProject,
+    deleteProject,
+    addMount,
+    removeMount,
     bindingSummary,
     liveInvitationIds,
     devicesWithoutWorkspace,

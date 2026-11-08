@@ -5,6 +5,7 @@ import { isShownUnderParent } from "@t3tools/client-runtime/state/threads";
 import {
   boundWorkspaceIds,
   hiddenOutsideWorkspace,
+  type WorkspaceMount,
 } from "@t3tools/client-runtime/telescope/workspaces";
 import { backgroundWorkHoldsCompletion } from "@t3tools/shared/orchestrationV2PendingBackgroundWork";
 import { threadPullRequestSearchTerms } from "@t3tools/shared/threadPullRequests";
@@ -628,12 +629,12 @@ const sidebarProjectRefKey = (ref: SidebarProjectRef) => `${ref.environmentId}:$
 
 const NO_HIDDEN_PROJECT_KEYS: ReadonlySet<string> = new Set();
 
-/** Groups bound only to other workspaces leave the Code sidebar; unbound groups stay everywhere. */
+/** Groups mounted only in other workspaces leave the Code sidebar; the rest stay everywhere. */
 export function filterSidebarWorkspaceProjects<
   G extends { readonly memberProjectRefs: readonly SidebarProjectRef[] },
 >(
   groups: readonly G[],
-  bindings: ReadonlyArray<Telescope.ProjectBinding>,
+  bindings: ReadonlyArray<WorkspaceMount>,
   currentWorkspaceId: Telescope.WorkspaceId | null,
 ): { readonly groups: readonly G[]; readonly hiddenProjectKeys: ReadonlySet<string> } {
   if (bindings.length === 0) return { groups, hiddenProjectKeys: NO_HIDDEN_PROJECT_KEYS };

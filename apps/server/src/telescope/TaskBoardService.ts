@@ -322,6 +322,12 @@ const make = Effect.gen(function* () {
       if (stale && key === "conflictDecisionId") continue;
       mine[key] = set[key] ?? null;
     }
+    const { projectId } = mine;
+    if (
+      typeof projectId === "string" &&
+      (yield* db.count(current.workspaceId, "projects", { telescope_project_id: projectId })) === 0
+    )
+      return yield* fail("not_found", "That project is not in this workspace.");
     if (author.onBehalfOf !== undefined) {
       // Every open proposal holds its fields, not just the one the marker names.
       const where = { kind: "decision", status: "proposed" };
@@ -360,7 +366,7 @@ const make = Effect.gen(function* () {
     const [members, agents, bindings] = yield* Effect.all([
       db.select(current.workspaceId, "members", decodeMemberNames),
       db.select(current.workspaceId, "agents", decodeAgentNames),
-      db.select(current.workspaceId, "project_bindings", decodeBoundProjects),
+      db.select(current.workspaceId, "project_mounts", decodeBoundProjects),
     ]);
     const reach = {
       roles: new Set(members.filter((row) => row.revoked_at === null).map((row) => row.subject_id)),

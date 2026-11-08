@@ -82,9 +82,10 @@ describe("RPC authorization scopes", () => {
     }
   });
 
-  it("keeps telescope membership and project binding changes behind admin scope", () => {
+  it("keeps telescope membership and project changes behind admin scope", () => {
     for (const method of [
       Telescope.WS_METHODS.memberAccept,
+      Telescope.WS_METHODS.projectList,
       Telescope.WS_METHODS.projectBindingSummary,
       Telescope.WS_METHODS.runList,
       Telescope.WS_METHODS.runGet,
@@ -111,8 +112,11 @@ describe("RPC authorization scopes", () => {
       Telescope.WS_METHODS.memberSetRole,
       Telescope.WS_METHODS.memberRevoke,
       Telescope.WS_METHODS.memberRestore,
-      Telescope.WS_METHODS.projectBind,
-      Telescope.WS_METHODS.projectUnbind,
+      Telescope.WS_METHODS.projectCreate,
+      Telescope.WS_METHODS.projectUpdate,
+      Telescope.WS_METHODS.projectDelete,
+      Telescope.WS_METHODS.projectAddMount,
+      Telescope.WS_METHODS.projectRemoveMount,
       Telescope.WS_METHODS.agentUpdateCompany,
       Telescope.WS_METHODS.grantAuditList,
       Telescope.WS_METHODS.budgetSet,
