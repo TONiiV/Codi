@@ -28,6 +28,7 @@ const layer = Layer.mergeAll(TaskBoardService.layer, WorkspaceService.layer).pip
 const isWorkspaceError = Schema.is(Telescope.WorkspaceError);
 const isStale = Schema.is(Telescope.StaleTaskVersionError);
 const decodeLeaseAcquire = Schema.decodeUnknownSync(Telescope.LeaseAcquireInput);
+const encodeUpdateResult = Schema.encodeEffect(Telescope.TaskUpdateResult);
 const reasonOf = (error: { readonly _tag: string }) =>
   isWorkspaceError(error) ? error.reason : error._tag;
 
@@ -580,6 +581,66 @@ it.layer(layer)("Telescope task board", (it) => {
       const resentHeld = yield* Effect.flip(update(agent, 23, { status: "in_progress" }));
       assert.strictEqual(reasonOf(resentHeld), "forbidden");
       assert.deepStrictEqual((yield* board.listDecisions(alice, { workspaceId: a })).decisions, []);
+
+      yield* update(agent, 24, { title: "Agent's title v4" });
+      const bobsAgain = yield* update(bob, 25, { title: "Bob's title v2" });
+      const undone = yield* update(agent, 24, { title: "Agent's title" });
+      assert.deepStrictEqual(
+        [undone.title, undone.version, undone.overwrote],
+        ["Agent's title", 27, [{ key: "title", by: bobId, name: "Bob", at: bobsAgain.updatedAt }]],
+      );
+
+      // Bob's personal agent stays hidden from Alice, so the result names only Bob.
+      yield* sql`INSERT INTO telescope_agents ${sql.insert({
+        agent_id: "agent-bob",
+        workspace_id: a,
+        owner_subject_id: bobId,
+        kind: "chief_of_staff",
+        name: "Bob's secret helper",
+        standing_powers_json: "{}",
+        exposure: "hidden",
+        sync_with_board: 0,
+        dispatch_mode: "inbox",
+        channels_json: "[]",
+        created_at: task.createdAt,
+        updated_at: task.createdAt,
+      })}`;
+      const bobsAgent = { ...bob, authorId: "agent-bob", onBehalfOf: [bobId, "agent-bob"] };
+      const secret = yield* update(bobsAgent, 27, { title: "Secret plan" });
+      const unnamed = yield* update(alice, 27, { title: "Alice's plan" });
+      assert.deepStrictEqual(unnamed.overwrote, [
+        { key: "title", by: "agent-bob", name: "an agent for Bob", at: secret.updatedAt },
+      ]);
+      const wire = JSON.stringify(yield* encodeUpdateResult(unnamed));
+      assert.notInclude(wire, "secret helper");
+      const secretAgain = yield* update(bobsAgent, 29, { title: "Secret plan v2" });
+      const named = yield* update(forBob, 29, { title: "Bob's plan via co" });
+      assert.deepStrictEqual(named.overwrote, [
+        {
+          key: "title",
+          by: "agent-bob",
+          name: "Bob's secret helper for Bob",
+          at: secretAgain.updatedAt,
+        },
+      ]);
+
+      // Once shown, it is named only while its project is bound and Bob is still a member.
+      yield* sql`UPDATE telescope_agents SET kind = 'chief_agent', project_id = 'project-1',
+        exposure = 'visible' WHERE agent_id = 'agent-bob'`;
+      yield* sql`INSERT INTO telescope_project_bindings ${sql.insert({
+        workspace_id: a,
+        environment_id: "env-elsewhere",
+        project_id: "project-1",
+      })}`;
+      const shown = yield* update(bobsAgent, 31, { title: "Shown plan" });
+      const shownOver = yield* update(alice, 31, { title: "Alice's plan v2" });
+      yield* update(bobsAgent, 33, { title: "Last plan" });
+      yield* workspaces.revoke(alice.caller, { workspaceId: a, subjectId: bobId });
+      const former = yield* update(alice, 33, { title: "Alice's plan v3" });
+      assert.deepStrictEqual(
+        [shownOver.overwrote?.[0]?.name, shownOver.overwrote?.[0]?.at, former.overwrote?.[0]?.name],
+        ["Bob's secret helper for Bob", shown.updatedAt, "an agent for Bob"],
+      );
     }),
   );
 

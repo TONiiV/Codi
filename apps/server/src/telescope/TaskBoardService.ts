@@ -8,6 +8,7 @@ import type * as Rpc from "effect/rpc/Rpc";
 import * as Schema from "effect/Schema";
 
 import type { PersistenceDecodeError, PersistenceSqlError } from "../persistence/Errors.ts";
+import * as AgentService from "./AgentService.ts";
 import * as BoardChanges from "./BoardChanges.ts";
 import * as TelescopeDb from "./TelescopeDb.ts";
 import * as WorkspaceService from "./WorkspaceService.ts";
@@ -79,10 +80,28 @@ const decodeCommits = rowsAs(Telescope.TaskCommit, "commit_id");
 const decodeLeases = rowsAs(Telescope.Lease, "lease_id");
 const decodeTask = Schema.decodeUnknownEffect(Telescope.Task);
 const decodeMemberNames = Schema.decodeUnknownEffect(
-  Schema.Array(Schema.Struct({ subject_id: Schema.String, display_name: Schema.String })),
+  Schema.Array(
+    Schema.Struct({
+      subject_id: Schema.String,
+      display_name: Schema.String,
+      revoked_at: Schema.NullOr(Schema.String),
+    }),
+  ),
 );
 const decodeAgentNames = Schema.decodeUnknownEffect(
-  Schema.Array(Schema.Struct({ agent_id: Schema.String, name: Schema.String })),
+  Schema.Array(
+    Schema.Struct({
+      agent_id: Schema.String,
+      name: Schema.String,
+      owner_subject_id: Schema.NullOr(Schema.String),
+      kind: Schema.String,
+      project_id: Schema.NullOr(Schema.String),
+      exposure: Schema.String,
+    }),
+  ),
+);
+const decodeBoundProjects = Schema.decodeUnknownEffect(
+  Schema.Array(Schema.Struct({ project_id: Schema.String })),
 );
 
 const TASK_FIELDS = Object.keys(Telescope.TaskFields.fields) as ReadonlyArray<
@@ -317,9 +336,8 @@ const make = Effect.gen(function* () {
     }
     // Resending the value read is not a write, unless it undoes the writer's own later change.
     for (const key of Object.keys(mine)) {
-      const last = lastChange(key);
-      if (stale && sameJson(mine[key], read[key]) && !(last !== undefined && own(last)))
-        delete mine[key];
+      const undoes = later.some((commit) => key in commit.changedFields && own(commit));
+      if (stale && sameJson(mine[key], read[key]) && !undoes) delete mine[key];
     }
     const at = yield* now;
     const notes =
@@ -339,13 +357,26 @@ const make = Effect.gen(function* () {
       mergeReason: `based on version ${input.baseVersion}`,
     });
     if (replaced.length === 0) return next;
+    const [members, agents, bindings] = yield* Effect.all([
+      db.select(current.workspaceId, "members", decodeMemberNames),
+      db.select(current.workspaceId, "agents", decodeAgentNames),
+      db.select(current.workspaceId, "project_bindings", decodeBoundProjects),
+    ]);
+    const reach = {
+      roles: new Set(members.filter((row) => row.revoked_at === null).map((row) => row.subject_id)),
+      leads: new Set(bindings.map((row) => row.project_id)),
+    };
+    // An agent hidden from the writer's member stays unnamed, as `telescope.agent.get` hides it.
+    const seen = (row: (typeof agents)[number]) =>
+      AgentService.visibleTo(author.memberId, reach, {
+        ownerSubjectId: row.owner_subject_id,
+        kind: row.kind,
+        projectId: row.project_id ?? undefined,
+        exposure: row.exposure,
+      });
     const names = new Map([
-      ...(yield* db.select(current.workspaceId, "members", decodeMemberNames)).map(
-        (row) => [row.subject_id, row.display_name] as const,
-      ),
-      ...(yield* db.select(current.workspaceId, "agents", decodeAgentNames)).map(
-        (row) => [row.agent_id, row.name] as const,
-      ),
+      ...members.map((row) => [row.subject_id, row.display_name] as const),
+      ...agents.map((row) => [row.agent_id, seen(row) ? row.name : "an agent"] as const),
     ]);
     const nameOf = (id: string) => names.get(id) ?? id;
     const overwrote = replaced.map(({ key, last: { authorId, onBehalfOf, createdAt } }) => {
