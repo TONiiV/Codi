@@ -9,7 +9,7 @@ import { TelescopeSidebar } from "./TelescopeShell";
 
 vi.mock("./TelescopeChatList", () => ({ TelescopeChatList: () => null }));
 vi.mock("./TelescopeAccount", () => ({ TelescopeAccountFooter: () => null }));
-vi.mock("./TelescopeChatPage", () => ({ TelescopeChatPage: () => null }));
+vi.mock("./TelescopeChatPage", () => ({ TelescopeChatPage: () => null, AgentChat: () => null }));
 vi.mock("./MyTeamsPage", () => ({ MyTeamsPage: () => null }));
 vi.mock("./TelescopeDashboard", () => ({ TelescopeDashboard: () => null }));
 vi.mock("./TaskDrawer", () => ({ TaskDrawer: () => null }));

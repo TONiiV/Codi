@@ -57,9 +57,7 @@ describe("TelescopePanel", () => {
     using _host = { [Symbol.dispose]: hostRightPanel(agentThread, panelRef) };
     const store = useRightPanelStore.getState();
     store.openSideChat(panelRef, TELESCOPE_SIDE_CHAT);
-    await using screen = await render(
-      <TelescopePanel panelRef={panelRef} view="dashboard" layoutElement={null} />,
-    );
+    await using screen = await render(<TelescopePanel panelRef={panelRef} layoutElement={null} />);
     await expect.element(screen.getByText("side chat body")).toBeVisible();
 
     store.openFile(agentThread, "src/app.ts");
@@ -96,9 +94,7 @@ describe("TelescopePanel", () => {
       },
     });
     await useRightPanelStore.persist.rehydrate();
-    await using screen = await render(
-      <TelescopePanel panelRef={panelRef} view="dashboard" layoutElement={null} />,
-    );
+    await using screen = await render(<TelescopePanel panelRef={panelRef} layoutElement={null} />);
     await expect.element(screen.getByText("side chat body")).toBeVisible();
     expect(panelKinds()).toEqual(["side-chat"]);
   });

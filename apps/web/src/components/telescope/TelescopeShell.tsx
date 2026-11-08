@@ -193,7 +193,7 @@ export function TelescopePage({
           {children}
         </TelescopeMain>
         {panelRef === null ? null : (
-          <TelescopePanel panelRef={panelRef} view={view} layoutElement={layoutElement} />
+          <TelescopePanel panelRef={panelRef} layoutElement={layoutElement} />
         )}
       </div>
       {background ? null : <TaskDrawer />}

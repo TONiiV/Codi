@@ -1,6 +1,5 @@
 import { useAtomValue } from "@effect/atom-react";
 import { scopedThreadKey } from "@t3tools/client-runtime/environment";
-import { sideChatAgents } from "@t3tools/client-runtime/telescope/agents";
 import {
   AuthPreviewOperateScope,
   type EnvironmentId,
@@ -8,14 +7,12 @@ import {
   Telescope,
 } from "@t3tools/contracts";
 import { XIcon } from "lucide-react";
-import * as Schema from "effect/Schema";
 import { lazy, Suspense, useEffect, useEffectEvent, useRef } from "react";
 
 import { previewRuntimeTabId } from "../../browser/previewRuntimeTabId";
 import { isCommandPaletteOpen } from "../../commandPaletteBus";
 import { ComposerHandleContext } from "../../composerHandleContext";
 import { isElectron } from "../../env";
-import { useLocalStorage } from "../../hooks/useLocalStorage";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
 import { useRightPanelSurfaceClose } from "../../hooks/useRightPanelSurfaceClose";
 import { resolveShortcutCommand, shortcutLabelForCommand } from "../../keybindings";
@@ -44,19 +41,16 @@ import {
 } from "../chat/PanelLayoutControls";
 import { useRightPanelActions } from "../chat/useRightPanelActions";
 import { Button } from "../ui/button";
-import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { Spinner } from "../ui/spinner";
 import { agentDisplayName, telescopeAgents } from "./myTeamsShared";
 import { ErrorNote } from "./TelescopeAccountDialogs";
 import { AgentChat } from "./TelescopeChatPage";
 import { useTelescopeWorkspaces } from "./telescopeState";
-import { type TelescopeView, useChatAgentId, useTaskDrawerId } from "./telescopeViews";
+import { useTaskDrawerId } from "./telescopeViews";
 
 const PreviewPanel = lazy(() =>
   import("../preview/PreviewPanel").then((module) => ({ default: module.PreviewPanel })),
 );
-const AGENT_KEY = "t3code:telescope:side-chat-agent:v1";
-const StoredAgent = Schema.NullOr(Telescope.AgentId);
 const NO_TERMINALS: ReadonlyMap<string, string> = new Map();
 const NO_PENDING: ReadonlySet<string> = new Set();
 const PANEL_COMMANDS = ["rightPanel.toggle", "rightPanel.toggleMaximized", "rightPanel.close"];
@@ -73,59 +67,37 @@ const shortcutContext = () => ({
 function SideChat(props: {
   environmentId: EnvironmentId;
   workspace: Telescope.Workspace;
-  mainAgentId: Telescope.AgentId | null;
   onClose: () => void;
 }) {
   const { environmentId, workspace } = props;
-  const input = { workspaceId: workspace.id };
-  const mine = useEnvironmentQuery(telescopeAgents.listMine({ environmentId, input }));
-  const company = useEnvironmentQuery(
-    workspace.kind === "enterprise" ? telescopeAgents.listCompany({ environmentId, input }) : null,
+  const mine = useEnvironmentQuery(
+    telescopeAgents.listMine({ environmentId, input: { workspaceId: workspace.id } }),
   );
-  const [stored, setStored] = useLocalStorage(AGENT_KEY, null, StoredAgent);
-  const { choices, shown } = sideChatAgents(
-    mine.data?.agents ?? [],
-    company.data?.agents ?? [],
-    stored,
-    props.mainAgentId,
-  );
+  const assistant = mine.data?.agents.find((agent) => agent.kind === "chief_of_staff") ?? null;
   return (
     <div data-side-chat-pane className="flex h-full min-h-0 flex-col">
-      <div className="flex h-9 shrink-0 items-center gap-1 border-b border-border pr-1 pl-1.5">
-        <div className="min-w-0 flex-1">
-          {shown === null ? null : (
-            <Select value={shown.id} onValueChange={setStored}>
-              <SelectTrigger size="sm" variant="ghost" aria-label="Side chat 的 agent">
-                <SelectValue>{agentDisplayName(shown)}</SelectValue>
-              </SelectTrigger>
-              <SelectPopup>
-                {choices.map((agent) => (
-                  <SelectItem key={agent.id} value={agent.id}>
-                    {agentDisplayName(agent)}
-                  </SelectItem>
-                ))}
-              </SelectPopup>
-            </Select>
-          )}
-        </div>
+      <div className="flex h-9 shrink-0 items-center gap-1 border-b border-border pr-1 pl-3">
+        <span className="min-w-0 flex-1 truncate text-sm">
+          {assistant === null ? null : agentDisplayName(assistant)}
+        </span>
         <Button variant="ghost" size="icon-xs" aria-label="Close side chat" onClick={props.onClose}>
           <XIcon />
         </Button>
       </div>
-      {shown !== null ? (
+      {assistant !== null ? (
         <BackgroundThreadContext value>
           <ComposerHandleContext value={null}>
             <AgentChat
-              key={shown.id}
+              key={assistant.id}
               environmentId={environmentId}
               workspace={workspace}
-              agent={shown}
+              agent={assistant}
               sideChat
             />
           </ComposerHandleContext>
         </BackgroundThreadContext>
       ) : mine.data !== null ? (
-        <p className="m-auto text-muted-foreground text-sm">现在没有别的 agent 可以对话。</p>
+        <p className="m-auto text-muted-foreground text-sm">这个工作区里还没有你的个人助理。</p>
       ) : mine.error !== null ? (
         <ErrorNote text="读取失败" onRetry={mine.refresh} />
       ) : (
@@ -138,13 +110,11 @@ function SideChat(props: {
 /** Code's right panel on Telescope pages; closed, it mounts only the window's panel controls. */
 export function TelescopePanel(props: {
   readonly panelRef: ScopedThreadRef;
-  readonly view: TelescopeView;
   readonly layoutElement: HTMLElement | null;
 }) {
   const { panelRef } = props;
   const { environmentId } = panelRef;
   const workspace = useTelescopeWorkspaces().current;
-  const chatAgentId = useChatAgentId();
   const drawerOpen = useTaskDrawerId() !== null;
   const keybindings = useAtomValue(primaryServerKeybindingsAtom);
   const state = useRightPanelStore((store) =>
@@ -324,7 +294,6 @@ export function TelescopePanel(props: {
             <SideChat
               environmentId={environmentId}
               workspace={workspace}
-              mainAgentId={props.view === "chats" ? chatAgentId : null}
               onClose={() => closers.closeSurface(active)}
             />
           ) : null}
