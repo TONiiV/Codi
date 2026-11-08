@@ -62,18 +62,19 @@ describe("telescope view", () => {
       view: "tasks",
     });
     expect(telescopeSearchAt("/telescope", { view: "chats", agent: "a-1" }, null)).toEqual({
-      view: "chats",
+      view: "tasks",
       agent: "a-1",
     });
     expect(telescopeSearchAt("/telescope", { view: "chats", agent: " " }, null)).toEqual({
-      view: "chats",
+      view: "tasks",
     });
     expect(telescopeSearchAt("/telescope", { view: "chats", agent: ["a-1"] }, null)).toEqual({
-      view: "chats",
+      view: "tasks",
     });
-    expect(matchedSearch("/telescope?view=lighthouse")).toEqual({ view: "chats" });
-    expect(matchedSearch("/telescope?view=123")).toEqual({ view: "chats" });
-    expect(matchedSearch("/telescope")).toEqual({ view: "chats" });
+    expect(matchedSearch("/telescope?view=teams")).toEqual({ view: "tasks" });
+    expect(matchedSearch("/telescope?view=lighthouse")).toEqual({ view: "tasks" });
+    expect(matchedSearch("/telescope?view=123")).toEqual({ view: "tasks" });
+    expect(matchedSearch("/telescope")).toEqual({ view: "tasks" });
   });
 
   it("stays on behind a Settings or Usage modal opened from Telescope", () => {
@@ -87,7 +88,7 @@ describe("telescope view", () => {
     }).toEqual({
       settings: { view: "tasks" },
       board: { view: "tasks", layout: "board" },
-      usage: { view: "chats" },
+      usage: { view: "tasks" },
       fromCode: null,
       noOpener: null,
       utilityPage: null,
