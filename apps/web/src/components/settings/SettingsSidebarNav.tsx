@@ -30,6 +30,7 @@ import {
   Settings2Icon,
   ShieldCheckIcon,
   SmartphoneIcon,
+  TelescopeIcon,
   WrenchIcon,
   XIcon,
 } from "lucide-react";
@@ -39,7 +40,6 @@ import { useTranslation } from "react-i18next";
 import { cn } from "../../lib/utils";
 import { Button } from "../ui/button";
 import { Kbd } from "../ui/kbd";
-import { TelescopeGlyph } from "../telescope/ModeGlyphs";
 import {
   SidebarContent,
   SidebarFooter,
@@ -103,7 +103,7 @@ const SETTINGS_SECTION_ICONS: Readonly<
   "/settings/browser": GlobeIcon,
   "/settings/devices": SmartphoneIcon,
   "/settings/scheduled-tasks": CalendarClockIcon,
-  "/settings/telescope": TelescopeGlyph,
+  "/settings/telescope": TelescopeIcon,
   "/settings/source-control": GitBranchIcon,
   "/settings/worktrees": FolderTreeIcon,
   "/settings/connections": ServerIcon,
