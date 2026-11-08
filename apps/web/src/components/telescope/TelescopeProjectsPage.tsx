@@ -31,7 +31,7 @@ function AgentInitial({ agent, large = false }: { agent: Telescope.Agent; large?
         large ? "size-10" : "size-6",
       )}
     >
-      {[...agentDisplayName(agent)][0]}
+      {[...agentDisplayName(agent)][0]?.toUpperCase()}
     </span>
   );
 }
@@ -144,7 +144,7 @@ function Projects(props: {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <span className="font-mono text-muted-foreground">
+                      <span className="block max-w-48 truncate font-mono text-muted-foreground">
                         {project?.repositoryIdentity?.canonicalKey ?? "本地目录"}
                       </span>
                     </TableCell>
@@ -197,7 +197,7 @@ function Projects(props: {
                 className="flex flex-wrap items-center gap-3 px-3 py-2.5"
               >
                 <FolderGit2Icon className="size-4 shrink-0 text-muted-foreground" />
-                <span className="min-w-0 flex-1">
+                <span className="min-w-0 flex-1 basis-48">
                   <span className="block font-medium">{project.title}</span>
                   <span className="block truncate font-mono text-xs text-muted-foreground">
                     {project.workspaceRoot}
