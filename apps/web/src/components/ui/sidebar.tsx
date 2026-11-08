@@ -406,6 +406,8 @@ function SidebarTrigger({ className, onClick, ...props }: React.ComponentProps<t
       onClick={(event) => {
         onClick?.(event);
         toggleSidebar();
+        // A toggle left focused by a pointer click shows its ring on the next key press.
+        if (event.detail > 0) event.currentTarget.blur();
       }}
       size="icon"
       variant="ghost"

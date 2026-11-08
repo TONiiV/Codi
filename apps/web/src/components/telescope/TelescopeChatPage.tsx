@@ -4,6 +4,7 @@ import { offersOpenThread, openThreadFailureText } from "@t3tools/client-runtime
 import type { EnvironmentId, Telescope, ThreadId } from "@t3tools/contracts";
 import { MessagesSquareIcon } from "lucide-react";
 import { useState } from "react";
+import { flushSync } from "react-dom";
 import { AsyncResult } from "effect/reactivity";
 
 import { useQuietThreadShell } from "../../state/entities";
@@ -22,6 +23,7 @@ import {
   EmptyTitle,
 } from "../ui/empty";
 import { Spinner } from "../ui/spinner";
+import { useSidebar, useSidebarVisibility } from "../ui/sidebar";
 import { agentDisplayName, telescopeAgents } from "./myTeamsShared";
 import { ErrorNote } from "./TelescopeAccountDialogs";
 import { TelescopeNeedsYou } from "./TelescopeNeedsYou";
@@ -43,9 +45,22 @@ function ChatEmpty(props: { title: string; description: string; children?: React
   );
 }
 
-const PICK_A_CHAT = (
-  <ChatEmpty title="选一个对话" description="从左边选一个 agent，和它的对话会显示在这里。" />
-);
+/** The agent list lives in the sidebar, which is out of sight when collapsed or on a phone. */
+function PickAChat() {
+  const { toggleSidebar } = useSidebar();
+  const listShown = useSidebarVisibility();
+  const openList = (event: React.MouseEvent) => {
+    flushSync(toggleSidebar);
+    // This button unmounts as the list shows, which would drop keyboard focus to the body.
+    if (event.detail === 0)
+      document.querySelector<HTMLElement>('[data-sidebar="content"] button')?.focus();
+  };
+  return (
+    <ChatEmpty title="选一个对话" description="选一个 agent，和它的对话会显示在这里。">
+      {listShown ? undefined : <Button onClick={openList}>打开 agent 列表</Button>}
+    </ChatEmpty>
+  );
+}
 
 function Loading() {
   return (
@@ -152,13 +167,13 @@ function WorkspaceChat({
   const loading =
     (mine.data === null && mine.error === null) ||
     (enterprise && company.data === null && company.error === null);
-  return loading ? <Loading /> : PICK_A_CHAT;
+  return loading ? <Loading /> : <PickAChat />;
 }
 
 /** The 对话 main pane: the selected agent's resident thread in the real ChatView. */
 export function TelescopeChatPage() {
   const { environmentId, current } = useTelescopeWorkspaces();
   const agentId = useChatAgentId();
-  if (environmentId === null || current === null || agentId === null) return PICK_A_CHAT;
+  if (environmentId === null || current === null || agentId === null) return <PickAChat />;
   return <WorkspaceChat environmentId={environmentId} workspace={current} agentId={agentId} />;
 }

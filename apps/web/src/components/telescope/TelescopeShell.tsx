@@ -40,7 +40,7 @@ function TelescopeRail({ view, collapsed }: { view: TelescopeView; collapsed: bo
       aria-label="Telescope"
       className={cn(
         "flex w-12 shrink-0 flex-col items-center gap-1 py-2",
-        collapsed ? "flex-1" : "border-e",
+        collapsed ? "flex-1 border-t" : "border-e",
       )}
     >
       {TELESCOPE_VIEWS.map((item) => (
@@ -110,9 +110,18 @@ export function TelescopeSidebar({
   }
   return (
     <>
-      <SidebarChromeHeader isElectron={isElectron} />
+      {/* The stage artwork runs past the header; stop it at the border under the header. Clip
+          only that edge: under a top inset the phone sheet's toggle sits above the header. */}
+      <div className="shrink-0 [clip-path:inset(-100vmax_-100vmax_0)]">
+        <SidebarChromeHeader isElectron={isElectron} />
+      </div>
       {/* The mobile sheet sizes to its content, and most views' bodies are still empty. */}
-      <div className={cn("flex min-h-0 flex-1", isMobile && "w-[calc(100vw-(--spacing(12)))]")}>
+      <div
+        className={cn(
+          "flex min-h-0 flex-1 border-t",
+          isMobile && "w-[calc(100vw-(--spacing(12)))]",
+        )}
+      >
         <TelescopeRail view={view} collapsed={false} />
         <SidebarContent className="min-h-full">
           <SidebarGroup>
@@ -180,7 +189,8 @@ export function TelescopePage({
           </WorkspaceBreadcrumbItem>
         </WorkspaceBreadcrumb>
       </WorkspacePageHeader>
-      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+      {/* The top border, not the header's bottom one, lines up with the sidebar's under its header. */}
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto border-t">
         <BackgroundThreadContext value={background}>
           {children ??
             (view === "chats" ? (
