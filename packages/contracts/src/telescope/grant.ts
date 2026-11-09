@@ -36,6 +36,7 @@ export const GatewayTool = Schema.Literals([
   "decision_list",
   "decision_record",
   "agent_list",
+  "project_list",
   "delegate",
   "delegation_list",
   "delegation_report",

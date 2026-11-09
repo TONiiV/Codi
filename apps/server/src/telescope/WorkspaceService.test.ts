@@ -211,11 +211,17 @@ it.layer(layer)("WorkspaceService", (it) => {
       const inApp = { workspaceId, projectId: app.id, mount };
       assert.strictEqual(yield* reasonOf(service.addMount(b, inApp)), "forbidden");
       assert.deepStrictEqual(yield* service.addMount(a, inApp), { ...app, mounts: [mount] });
-      assert.strictEqual(
-        yield* reasonOf(service.createProject(a, { workspaceId, name: "Twin", mounts: [mount] })),
-        "conflict",
-        "a workspace mounts a directory once",
+      const twin = yield* service.createProject(a, { workspaceId, name: "Twin", mounts: [mount] });
+      assert.deepStrictEqual(
+        (yield* service.projects(a, { workspaceId })).projects.map((p) => [p.name, p.mounts]),
+        [
+          ["App", []],
+          ["Twin", [mount]],
+        ],
+        "a workspace mounts a directory once, so mounting it again moves it",
       );
+      yield* service.addMount(a, inApp);
+      yield* service.deleteProject(a, { workspaceId, projectId: twin.id });
       const renamed = yield* service.updateProject(a, {
         workspaceId,
         projectId: app.id,
@@ -250,35 +256,45 @@ it.layer(layer)("WorkspaceService", (it) => {
         ],
       );
       assert.strictEqual(yield* reasonOf(service.bindingSummary(c, {})), "forbidden");
-      yield* service.deleteProject(a, { workspaceId: personal.id, projectId: elsewhere.id });
 
       const board = yield* TaskBoardService.TaskBoardService;
-      const task = yield* board.createTask(
-        { caller: b },
-        { workspaceId, title: "Ship", projectId: app.id },
+      const ship = { workspaceId, title: "Ship", projectId: app.id };
+      const task = yield* board.createTask({ caller: b }, ship);
+      assert.strictEqual(
+        yield* reasonOf(board.createTask({ caller: b }, { ...ship, projectId: elsewhere.id })),
+        "not_found",
+        "a task belongs to a project of its own workspace",
       );
+      const unknown = Telescope.TelescopeProjectId.make("codi-project");
+      const reassign = { workspaceId, taskId: task.id, baseVersion: task.version };
       assert.strictEqual(
         yield* reasonOf(
-          board.createTask({ caller: b }, { workspaceId, title: "Lost", projectId: elsewhere.id }),
+          board.updateTask({ caller: b }, { ...reassign, set: { projectId: unknown } }),
         ),
         "not_found",
-        "a task belongs to a project of its workspace",
       );
-      assert.strictEqual(
-        yield* reasonOf(service.deleteProject(a, { workspaceId, projectId: app.id })),
-        "conflict",
-        "a project with tasks stays",
-      );
-      yield* board.updateTask(
-        { caller: b },
-        { workspaceId, taskId: task.id, baseVersion: task.version, set: { projectId: null } },
-      );
+      yield* service.deleteProject(a, { workspaceId: personal.id, projectId: elsewhere.id });
 
       const unmount = { workspaceId, mount };
       assert.strictEqual(yield* reasonOf(service.removeMount(b, unmount)), "forbidden");
       assert.deepStrictEqual(yield* service.removeMount(a, unmount), { ...renamed, mounts: [] });
       assert.strictEqual(yield* reasonOf(service.removeMount(a, unmount)), "not_found");
       assert.deepStrictEqual((yield* service.bindingSummary(a, {})).projects, []);
+
+      const doomed = yield* service.createProject(a, { workspaceId, name: "Doomed" });
+      const filed = yield* board.createTask({ caller: b }, { ...ship, projectId: doomed.id });
+      const drop = { workspaceId, projectId: doomed.id };
+      assert.strictEqual(yield* reasonOf(board.deleteProject({ caller: b }, drop)), "forbidden");
+      yield* board.deleteProject({ caller: a }, drop);
+      const unassigned = yield* board.getTask({ caller: b }, { workspaceId, taskId: filed.id });
+      assert.deepStrictEqual(
+        [unassigned.projectId, unassigned.version],
+        [undefined, filed.version + 1],
+        "deleting a project unassigns its tasks",
+      );
+      assert.deepStrictEqual((yield* service.projects(a, { workspaceId })).projects, [
+        { ...renamed, mounts: [] },
+      ]);
 
       const owner = { workspaceId, subjectId: OWNER };
       assert.deepStrictEqual(

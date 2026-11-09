@@ -2439,7 +2439,7 @@ export const layerWsRpc = (
         [Telescope.WS_METHODS.projectUpdate]: (input) =>
           telescopeStorage(telescope.updateProject(caller, input)),
         [Telescope.WS_METHODS.projectDelete]: (input) =>
-          telescopeStorage(telescope.deleteProject(caller, input)),
+          telescopeStorage(board.deleteProject(actor, input)),
         [Telescope.WS_METHODS.projectAddMount]: (input) =>
           telescopeStorage(telescope.addMount(caller, input)),
         [Telescope.WS_METHODS.projectRemoveMount]: (input) =>

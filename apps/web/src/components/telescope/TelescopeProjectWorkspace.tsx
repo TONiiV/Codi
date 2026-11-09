@@ -1,12 +1,9 @@
 import { useAtomValue } from "@effect/atom-react";
-import {
-  boundWorkspaceIds,
-  failureText,
-  WORKSPACE_ERROR_TEXT,
-} from "@t3tools/client-runtime/telescope/workspaces";
+import { boundWorkspaceIds, failureText } from "@t3tools/client-runtime/telescope/workspaces";
 import type { Telescope } from "@t3tools/contracts";
 import { useState, type ReactNode } from "react";
 
+import { requestConfirmDialog } from "../../confirmDialog";
 import type { SidebarProjectSnapshot } from "../../sidebarProjectGrouping";
 import { useProjects } from "../../state/entities";
 import { useEnvironmentQuery } from "../../state/query";
@@ -17,7 +14,12 @@ import { Button } from "../ui/button";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { FormDialog, TextField } from "./TelescopeAccountDialogs";
 import { QueryStatus, type Scoped, StatusRow } from "./telescopeSettingsParts";
-import { telescope, useTelescopeWorkspaces, WORKSPACE_KIND_LABEL } from "./telescopeState";
+import {
+  telescope,
+  telescopeBoard,
+  useTelescopeWorkspaces,
+  WORKSPACE_KIND_LABEL,
+} from "./telescopeState";
 
 const UNBOUND = "unbound";
 const NEW_PROJECT = "new";
@@ -137,19 +139,17 @@ export function ProjectWorkspaceRow({ group }: { group: SidebarProjectSnapshot }
   const move = async (next: string) => {
     setBusy(true);
     const target = next.startsWith(PROJECT) ? next.slice(PROJECT.length) : null;
-    const leave = refs.flatMap((ref) =>
-      workspaces.flatMap((own) =>
-        boundWorkspaceIds(bindings, [ref]).has(own.id) &&
-        !(own.id === current.id && target !== null && holderOf(ref)?.id === target)
-          ? [() => removeMount({ environmentId, input: { workspaceId: own.id, mount: ref } })]
-          : [],
-      ),
-    );
+    const destination = next.startsWith(WORKSPACE)
+      ? next.slice(WORKSPACE.length)
+      : next === UNBOUND
+        ? null
+        : current.id;
     const into = (workspaceId: Telescope.WorkspaceId) => () =>
       createProject({
         environmentId,
         input: { workspaceId, name: group.displayName, mounts: refs },
       });
+    // The server moves a directory between projects of one workspace in a single write.
     const join =
       next === UNBOUND
         ? []
@@ -166,8 +166,15 @@ export function ProjectWorkspaceRow({ group }: { group: SidebarProjectSnapshot }
                     input: { workspaceId: current.id, projectId, mount },
                   });
                 });
-    // A refused step stops the move, so the project never lands in two workspaces.
-    for (const step of [...leave, ...join]) {
+    const leave = refs.flatMap((ref) =>
+      workspaces.flatMap((own) =>
+        own.id !== destination && boundWorkspaceIds(bindings, [ref]).has(own.id)
+          ? [() => removeMount({ environmentId, input: { workspaceId: own.id, mount: ref } })]
+          : [],
+      ),
+    );
+    // Joining first means a refused step leaves the directory in one workspace too many, never none.
+    for (const step of [...join, ...leave]) {
       if ((await step())._tag !== "Success") break;
     }
     setBusy(false);
@@ -208,11 +215,6 @@ export function ProjectWorkspaceRow({ group }: { group: SidebarProjectSnapshot }
     />
   );
 }
-
-const DELETE_ERROR_TEXT = {
-  ...WORKSPACE_ERROR_TEXT,
-  conflict: "这个项目还有任务。先把任务移到别的项目，再删除它。",
-};
 
 function ProjectNameDialog(
   props: Scoped & { project: Telescope.Project | null; onClose: () => void },
@@ -265,6 +267,7 @@ export function ProjectsSection(props: Scoped) {
     label: "删除 Telescope 项目",
     reportFailure: false,
   });
+  const tasks = useEnvironmentQuery(mayEdit ? telescopeBoard.tasks(scoped) : null).data?.tasks;
   const [editing, setEditing] = useState<Telescope.Project | "new" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const mountTitle = (mount: Telescope.ProjectMount) =>
@@ -278,12 +281,24 @@ export function ProjectsSection(props: Scoped) {
     return lead === undefined ? mounts : `${mounts} · 负责人：${lead.displayName}`;
   };
   const drop = async (project: Telescope.Project) => {
+    const count = tasks?.filter((task) => task.projectId === project.id).length;
+    const orphans =
+      count === undefined
+        ? "它的任务会变成未分配"
+        : count === 0
+          ? "它没有任务"
+          : `它的 ${count} 个任务会变成未分配`;
+    const confirmed = await (requestConfirmDialog(
+      `删除「${project.name}」？${orphans}，挂着的目录会移出工作区。删除后不能撤回。`,
+      { variant: "destructive" },
+    ) ?? Promise.resolve(false));
+    if (!confirmed) return;
     setError(null);
     const result = await remove({
       environmentId,
       input: { workspaceId: workspace.id, projectId: project.id },
     });
-    setError(failureText(result, DELETE_ERROR_TEXT));
+    setError(failureText(result));
   };
   return (
     <SettingsSection

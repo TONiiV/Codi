@@ -181,6 +181,7 @@ export class WorkspaceService extends Context.Service<
     readonly projects: Method<"telescope.project.list">;
     readonly createProject: Method<"telescope.project.create">;
     readonly updateProject: Method<"telescope.project.update">;
+    /** Leaves its tasks pointing at it; `TaskBoardService.deleteProject` also unassigns them. */
     readonly deleteProject: Method<"telescope.project.delete">;
     readonly addMount: Method<"telescope.project.addMount">;
     readonly removeMount: Method<"telescope.project.removeMount">;
@@ -533,8 +534,8 @@ const make = Effect.gen(function* () {
   ) {
     yield* requireLocalProject(mount.environmentId, mount.projectId);
     const key = { environment_id: mount.environmentId, project_id: mount.projectId };
-    if ((yield* db.count(workspaceId, "project_mounts", key)) > 0)
-      return yield* fail("conflict", "A project of this workspace already mounts that directory.");
+    // A workspace mounts a directory once, so mounting it here moves it from its other project.
+    yield* db.remove(workspaceId, "project_mounts", key);
     yield* db.insert(workspaceId, "project_mounts", { ...key, telescope_project_id: projectId });
   });
 
@@ -602,8 +603,6 @@ const make = Effect.gen(function* () {
       Effect.gen(function* () {
         yield* requireMember(workspaceId, caller, "admin");
         yield* requireProject(workspaceId, projectId);
-        if ((yield* db.count(workspaceId, "tasks", { project_id: projectId })) > 0)
-          return yield* fail("conflict", "Move this project's tasks to another project first.");
         const key = { telescope_project_id: projectId };
         yield* db.remove(workspaceId, "project_mounts", key);
         yield* db.remove(workspaceId, "projects", key);

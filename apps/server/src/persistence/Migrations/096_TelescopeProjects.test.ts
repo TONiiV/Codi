@@ -24,6 +24,8 @@ layer("096_TelescopeProjects", (it) => {
       const bindings = [
         ["ws-1", "env-local", "codi-app", "lena"],
         ["ws-1", "env-remote", "codi-site", null],
+        // Tasks name only the Codi project id, so its bindings on two environments join one project.
+        ["ws-1", "env-remote", "codi-app", null],
         ["ws-2", "env-local", "codi-app", null],
       ] as const;
       for (const [workspace, environment, project, lead] of bindings)
@@ -62,13 +64,14 @@ layer("096_TelescopeProjects", (it) => {
         SELECT p.telescope_project_id, p.workspace_id, p.name, p.lead_subject_id,
           group_concat(m.environment_id || '/' || m.project_id) AS mounts
         FROM telescope_projects p
-        LEFT JOIN telescope_project_mounts m USING (telescope_project_id)
+        LEFT JOIN (SELECT * FROM telescope_project_mounts ORDER BY environment_id) m
+          USING (telescope_project_id)
         GROUP BY p.telescope_project_id ORDER BY p.workspace_id, p.name
       `;
       assert.deepStrictEqual(
         projects.map((row) => [row.workspace_id, row.name, row.lead_subject_id, row.mounts]),
         [
-          ["ws-1", "App", "lena", "env-local/codi-app"],
+          ["ws-1", "App", "lena", "env-local/codi-app,env-remote/codi-app"],
           ["ws-1", "codi-gone", null, null],
           ["ws-1", "codi-site", null, "env-remote/codi-site"],
           ["ws-2", "App", null, "env-local/codi-app"],
