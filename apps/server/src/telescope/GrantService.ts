@@ -19,9 +19,6 @@ const DEFAULT_AUDIT_LIMIT = 50;
 const decodeMembers = Schema.decodeUnknownEffect(
   Schema.Array(Schema.Struct({ role: Telescope.WorkspaceRole })),
 );
-const decodeBindings = Schema.decodeUnknownEffect(
-  Schema.Array(Schema.Struct({ lead_subject_id: Schema.NullOr(Schema.String) })),
-);
 const PowersJson = Schema.fromJsonString(Telescope.StandingPowers);
 const decodeRules = Schema.decodeUnknownEffect(
   Schema.Array(Schema.Struct({ powers_json: PowersJson })),
@@ -207,15 +204,13 @@ const make = Effect.gen(function* () {
       subject_id: memberId,
       revoked_at: null,
     });
-    const bindings =
-      projectId === undefined
-        ? []
-        : yield* db.select(workspaceId, "project_bindings", decodeBindings, project);
+    const leads =
+      projectId === undefined ? undefined : yield* WorkspaceService.mountLeads(db, workspaceId);
     const [rule] =
       projectId === undefined
         ? []
         : yield* db.select(workspaceId, "project_rules", decodeRules, project);
-    const isLead = bindings.some((binding) => binding.lead_subject_id === memberId);
+    const isLead = projectId !== undefined && leads?.get(projectId) === memberId;
     const layers: ReadonlyArray<GrantLayer> = [
       member === undefined
         ? { layer: "role", powers: NO_POWERS, reason: "Not an active member of this workspace." }
@@ -230,7 +225,7 @@ const make = Effect.gen(function* () {
         powers: effectivePowers,
         reason: `${agent.name} does not hold this power.`,
       })),
-      ...(projectId !== undefined && bindings.length === 0
+      ...(projectId !== undefined && leads?.has(projectId) === false
         ? [
             {
               layer: "project" as const,
@@ -339,7 +334,7 @@ const make = Effect.gen(function* () {
   const projectRules: Method<"telescope.projectRule.list"> = Effect.fn("GrantService.projectRules")(
     function* (caller, { workspaceId }) {
       yield* workspaces.get(caller, { workspaceId });
-      const bound = yield* db.select(workspaceId, "project_bindings", decodeProjectIds, undefined, {
+      const bound = yield* db.select(workspaceId, "project_mounts", decodeProjectIds, undefined, {
         orderBy: ["project_id"],
       });
       const stored = new Map(
@@ -367,8 +362,7 @@ const make = Effect.gen(function* () {
     const { self } = yield* workspaces.get(caller, { workspaceId });
     if (self.role !== "admin") return yield* fail("forbidden", "Only admins set project rules.");
     const where = { project_id: projectId };
-    const bindings = yield* db.select(workspaceId, "project_bindings", decodeBindings, where);
-    if (bindings.length === 0)
+    if ((yield* db.count(workspaceId, "project_mounts", where)) === 0)
       return yield* fail("not_found", "That project is not bound to this workspace.");
     const row = {
       project_id: projectId,

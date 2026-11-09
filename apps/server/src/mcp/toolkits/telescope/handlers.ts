@@ -7,6 +7,7 @@ import * as DelegationService from "../../../telescope/DelegationService.ts";
 import * as TaskBoardService from "../../../telescope/TaskBoardService.ts";
 import * as ToolGateway from "../../../telescope/ToolGateway.ts";
 import * as WorkerDispatch from "../../../telescope/WorkerDispatch.ts";
+import * as WorkspaceService from "../../../telescope/WorkspaceService.ts";
 import * as McpInvocationContext from "../../McpInvocationContext.ts";
 import * as McpToolAccess from "../../McpToolAccess.ts";
 import { type Failure, gated } from "./gate.ts";
@@ -116,6 +117,13 @@ const handlers = {
       input,
       onBoard((board, actor, workspaceId) =>
         board.createDecision(actor, { ...input, workspaceId }),
+      ),
+    ),
+  ),
+  project_list: McpToolAccess.readsAsCaller(() =>
+    gated("project_list", {}, (caller) =>
+      Effect.flatMap(WorkspaceService.WorkspaceService, (workspaces) =>
+        workspaces.projects(caller, { workspaceId: caller.workspaceId }),
       ),
     ),
   ),

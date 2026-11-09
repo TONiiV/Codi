@@ -624,13 +624,14 @@ it.layer(layer)("Telescope task board", (it) => {
         },
       ]);
 
-      // Once shown, it is named only while its project is bound and Bob is still a member.
+      // Once shown, it is named only while its project is mounted and Bob is still a member.
       yield* sql`UPDATE telescope_agents SET kind = 'chief_agent', project_id = 'project-1',
         exposure = 'visible' WHERE agent_id = 'agent-bob'`;
-      yield* sql`INSERT INTO telescope_project_bindings ${sql.insert({
+      yield* sql`INSERT INTO telescope_project_mounts ${sql.insert({
         workspace_id: a,
         environment_id: "env-elsewhere",
         project_id: "project-1",
+        telescope_project_id: "telescope-1",
       })}`;
       const shown = yield* update(bobsAgent, 31, { title: "Shown plan" });
       const shownOver = yield* update(alice, 31, { title: "Alice's plan v2" });

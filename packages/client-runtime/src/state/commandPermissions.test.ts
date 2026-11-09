@@ -209,6 +209,11 @@ describe("command permissions", () => {
     Telescope.WS_METHODS.routingSet,
     Telescope.WS_METHODS.routingDelete,
     Telescope.WS_METHODS.projectRuleSet,
+    Telescope.WS_METHODS.projectCreate,
+    Telescope.WS_METHODS.projectUpdate,
+    Telescope.WS_METHODS.projectDelete,
+    Telescope.WS_METHODS.projectAddMount,
+    Telescope.WS_METHODS.projectRemoveMount,
   ])("offers %s to telescope admins, not members", (method) =>
     Effect.scoped(
       Effect.gen(function* () {

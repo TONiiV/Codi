@@ -74,12 +74,16 @@ const setup = Effect.gen(function* () {
   const workspaceId = workspace.id;
   const { code } = yield* workspaces.invite(as.ann, { workspaceId, role: "member" });
   const bea = yield* workspaces.accept(as.bea, { code, displayName: "Bea" });
-  yield* workspaces.bind(as.ann, { workspaceId, environmentId, projectId: web });
-  yield* workspaces.bind(as.ann, {
+  yield* workspaces.createProject(as.ann, {
     workspaceId,
-    environmentId,
-    projectId: api,
+    name: "Project",
+    mounts: [{ environmentId, projectId: web }],
+  });
+  yield* workspaces.createProject(as.ann, {
+    workspaceId,
+    name: "Project",
     leadSubjectId: bea.subjectId,
+    mounts: [{ environmentId, projectId: api }],
   });
   const agents = yield* AgentService.AgentService;
   const db = yield* TelescopeDb.TelescopeDb;
@@ -215,7 +219,11 @@ it.layer(layer)("Telescope grants", (it) => {
         displayName: "Zed",
       });
       const docs = ProjectId.make("project-docs");
-      yield* workspaces.bind(as.zed, { workspaceId: other.id, environmentId, projectId: docs });
+      yield* workspaces.createProject(as.zed, {
+        workspaceId: other.id,
+        name: "Project",
+        mounts: [{ environmentId, projectId: docs }],
+      });
       const othersRules = grants
         .projectRules(as.zed, { workspaceId: other.id })
         .pipe(Effect.map(({ rules }) => rules));
@@ -253,10 +261,10 @@ it.layer(layer)("Telescope grants", (it) => {
       const listed = grants
         .projectRules(as.bea, { workspaceId })
         .pipe(Effect.map(({ rules }) => rules.map((r) => [r.projectId, r.stored, r.routing])));
-      yield* workspaces.bind(as.ann, {
+      yield* workspaces.createProject(as.ann, {
         workspaceId,
-        environmentId: EnvironmentId.make("env-other"),
-        projectId: web,
+        name: "Project",
+        mounts: [{ environmentId: EnvironmentId.make("env-other"), projectId: web }],
       });
       assert.deepStrictEqual(
         (yield* grants.projectRules(as.bea, { workspaceId })).rules,

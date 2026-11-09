@@ -2432,12 +2432,18 @@ export const layerWsRpc = (
           telescopeStorage(TelescopeInviteLink.revoke(inviteLinks, caller, input)),
         [Telescope.WS_METHODS.memberRestore]: (input) =>
           telescopeStorage(telescope.restore(caller, input)),
-        [Telescope.WS_METHODS.projectBind]: (input) =>
-          telescopeStorage(telescope.bind(caller, input)),
-        [Telescope.WS_METHODS.projectUnbind]: (input) =>
-          telescopeStorage(telescope.unbind(caller, input)),
-        [Telescope.WS_METHODS.projectListBindings]: (input) =>
-          telescopeStorage(telescope.bindings(caller, input)),
+        [Telescope.WS_METHODS.projectList]: (input) =>
+          telescopeStorage(telescope.projects(caller, input)),
+        [Telescope.WS_METHODS.projectCreate]: (input) =>
+          telescopeStorage(telescope.createProject(caller, input)),
+        [Telescope.WS_METHODS.projectUpdate]: (input) =>
+          telescopeStorage(telescope.updateProject(caller, input)),
+        [Telescope.WS_METHODS.projectDelete]: (input) =>
+          telescopeStorage(board.deleteProject(actor, input)),
+        [Telescope.WS_METHODS.projectAddMount]: (input) =>
+          telescopeStorage(telescope.addMount(caller, input)),
+        [Telescope.WS_METHODS.projectRemoveMount]: (input) =>
+          telescopeStorage(telescope.removeMount(caller, input)),
         [Telescope.WS_METHODS.projectBindingSummary]: (input) =>
           telescopeStorage(telescope.bindingSummary(caller, input)),
         [Telescope.WS_METHODS.taskCreate]: (input) =>

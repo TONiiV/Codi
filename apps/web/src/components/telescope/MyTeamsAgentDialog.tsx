@@ -89,14 +89,14 @@ export function AgentSettingsDialog({
   workspace,
   self,
   agent,
-  bindings,
+  projects,
   onClose,
 }: {
   environmentId: EnvironmentId;
   workspace: Telescope.Workspace;
   self: Telescope.Member;
   agent: Telescope.Agent;
-  bindings: ReadonlyArray<Telescope.ProjectBinding>;
+  projects: ReadonlyArray<Telescope.Project>;
   onClose: () => void;
 }) {
   const id = useId();
@@ -107,7 +107,7 @@ export function AgentSettingsDialog({
   );
   const [name, setName] = useState(agent.name);
   const [exposure, setExposure] = useState(agent.exposure);
-  const canMerge = company || ownerCanMergePRs(self, agent, bindings);
+  const canMerge = company || ownerCanMergePRs(self, agent, projects);
   const shownPowers = cappedPowers(agent.standingPowers, canMerge);
   const [powers, setPowers] = useState(shownPowers);
   const [syncWithBoard, setSyncWithBoard] = useState(agent.syncWithBoard);

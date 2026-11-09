@@ -43,7 +43,7 @@ export function QueryStatus({
 export const noAdminScopeText = (what: string) =>
   `这个连接没有 Telescope 管理权限，只能查看${what}。`;
 
-/** Bound projects and the harnesses this server runs, under the names the page shows. */
+/** Mounted projects and the harnesses this server runs, under the names the page shows. */
 export function useRoutingNames(environmentId: EnvironmentId, workspace: Telescope.Workspace) {
   const { bindings } = useTelescopeWorkspaces();
   const bound = useEnvironmentQuery(telescope.bindingSummary({ environmentId, input: {} }));
@@ -70,7 +70,7 @@ export function useRoutingNames(environmentId: EnvironmentId, workspace: Telesco
     id === undefined
       ? "全部项目"
       : (projects.find((entry) => entry.value === id)?.label ??
-        (unbound(id) ? `${id}（已解除绑定）` : id));
+        (unbound(id) ? `${id}（已移出工作区）` : id));
   const harness = (id: Telescope.RoutingRule["harness"]) =>
     harnesses.find((entry) => entry.value === id)?.label ?? id;
   const rule = (rule: Telescope.RoutingRule) =>

@@ -414,12 +414,12 @@ export const roleCommand = Command.make("role").pipe(
   Command.withSubcommands([roleSetCommand]),
 );
 
-/** `resolveProjectId` is `t3 project`'s own resolver, injected to keep the modules acyclic. */
+/** `resolveProject` is `t3 project`'s own resolver, injected to keep the modules acyclic. */
 export const makeProjectBindCommand = <E, R>(
-  resolveProjectId: (
+  resolveProject: (
     flags: CliAuthLocationFlags,
     identifier: string,
-  ) => Effect.Effect<ProjectId, E, R>,
+  ) => Effect.Effect<{ readonly id: ProjectId; readonly title: string }, E, R>,
 ) =>
   Command.make("bind", {
     ...common,
@@ -429,19 +429,21 @@ export const makeProjectBindCommand = <E, R>(
     ),
     lead: memberFlag("lead", "Member id of the project's lead.").pipe(Flag.optional),
   }).pipe(
-    Command.withDescription("Bind a project on this environment to a Telescope workspace."),
+    Command.withDescription(
+      "Bind a project on this environment to a Telescope workspace, as a Telescope project that mounts it.",
+    ),
     Command.withHandler((flags) =>
-      resolveProjectId(flags, flags.project).pipe(
-        Effect.flatMap((projectId) =>
+      resolveProject(flags, flags.project).pipe(
+        Effect.flatMap((project) =>
           runAsOwner(
             flags,
             (service) =>
               localEnvironmentId.pipe(
                 Effect.flatMap((environmentId) =>
-                  service.bind(OWNER, {
+                  service.createProject(OWNER, {
                     workspaceId: flags.org,
-                    environmentId,
-                    projectId,
+                    name: project.title.trim() || project.id,
+                    mounts: [{ environmentId, projectId: project.id }],
                     ...Option.match(flags.lead, {
                       onNone: () => ({}),
                       onSome: (leadSubjectId) => ({ leadSubjectId }),
@@ -449,8 +451,8 @@ export const makeProjectBindCommand = <E, R>(
                   }),
                 ),
               ),
-            (binding) =>
-              `Bound ${binding.projectId} to ${binding.workspaceId}${binding.leadSubjectId === undefined ? "" : `, led by ${binding.leadSubjectId}`}.`,
+            (bound) =>
+              `Bound ${project.id} to ${bound.workspaceId} as project ${bound.id}${bound.leadSubjectId === undefined ? "" : `, led by ${bound.leadSubjectId}`}.`,
           ),
         ),
       ),
@@ -462,17 +464,16 @@ export const projectUnbindCommand = Command.make("unbind", {
   org: orgFlag,
   project: projectFlag,
 }).pipe(
-  Command.withDescription("Remove a project's binding to a Telescope workspace."),
+  Command.withDescription("Unmount a project on this environment from its Telescope project."),
   Command.withHandler((flags) =>
     runAsOwner(
       flags,
       (service) =>
         localEnvironmentId.pipe(
           Effect.flatMap((environmentId) =>
-            service.unbind(OWNER, {
+            service.removeMount(OWNER, {
               workspaceId: flags.org,
-              environmentId,
-              projectId: flags.project,
+              mount: { environmentId, projectId: flags.project },
             }),
           ),
         ),
@@ -482,19 +483,23 @@ export const projectUnbindCommand = Command.make("unbind", {
 );
 
 export const projectBindingsCommand = Command.make("bindings", { ...common, org: orgFlag }).pipe(
-  Command.withDescription("List the projects bound to a Telescope workspace."),
+  Command.withDescription("List a Telescope workspace's projects and the projects they mount."),
   Command.withHandler((flags) =>
     runAsOwner(
       flags,
-      (service) => service.bindings(OWNER, { workspaceId: flags.org }),
-      ({ bindings }) =>
+      (service) => service.projects(OWNER, { workspaceId: flags.org }),
+      ({ projects }) =>
         table(
-          ["ENVIRONMENT", "PROJECT", "LEAD"],
-          bindings.map((binding) => [
-            binding.environmentId,
-            binding.projectId,
-            binding.leadSubjectId ?? "",
-          ]),
+          ["TELESCOPE PROJECT", "NAME", "LEAD", "ENVIRONMENT", "PROJECT"],
+          projects.flatMap((project) =>
+            (project.mounts.length === 0 ? [undefined] : project.mounts).map((mount) => [
+              project.id,
+              project.name,
+              project.leadSubjectId ?? "",
+              mount?.environmentId ?? "",
+              mount?.projectId ?? "",
+            ]),
+          ),
         ),
     ),
   ),

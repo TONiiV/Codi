@@ -158,6 +158,7 @@ const everyTool = (
     call("decision_list", {}),
     call("decision_record", { title: "Ship Friday", text: "Agreed with Bob." }),
     call("agent_list", {}),
+    call("project_list", {}),
     call("delegate", { toAgentId: Telescope.AgentId.make("agent-1"), brief }),
     call("delegation_list", {}),
     call("delegation_report", { delegationId, state: "COMPLETED", report: done }),
@@ -217,6 +218,23 @@ it.effect("works the board as the run's agent through every board tool", () =>
     assert.include(
       agents.map((agent) => agent.id),
       chief.id,
+    );
+    const project = yield* (yield* WorkspaceService.WorkspaceService).createProject(ann, {
+      workspaceId,
+      name: "App",
+    });
+    assert.deepStrictEqual(yield* call("project_list", {}), { projects: [project] });
+    const filed = { title: "Filed", projectId: project.id };
+    assert.deepInclude(yield* call("open_ticket", filed), filed);
+    assert.deepInclude(
+      yield* call("open_ticket", {
+        title: "Lost",
+        projectId: Telescope.TelescopeProjectId.make("codi-project"),
+      }),
+      {
+        code: "invalid_request",
+        message: "That project is not in this workspace.",
+      },
     );
 
     const board = yield* TaskBoardService.TaskBoardService;
@@ -281,7 +299,7 @@ it.effect("works the board as the run's agent through every board tool", () =>
       entries.map((entry) => entry.outcome).toSorted(),
       Array.from({ length: entries.length }, () => "allowed"),
     );
-    assert.strictEqual(entries.length, 14, "every call is audited");
+    assert.strictEqual(entries.length, 17, "every call is audited");
 
     yield* (yield* SqlClient.SqlClient)`DROP TABLE telescope_tasks`;
     assert.deepInclude(yield* call("ticket_list", {}), {
@@ -393,10 +411,15 @@ it.effect("never reaches another workspace's board", () =>
 /** Ann's PA and her Chief Agent of `web`, each with a run; the Chief's run acts through the PA. */
 const chain = Effect.gen(function* () {
   const { workspaceId, chief: pa, call, db } = yield* setup;
-  yield* (yield* WorkspaceService.WorkspaceService).bind(ann, {
+  yield* (yield* WorkspaceService.WorkspaceService).createProject(ann, {
     workspaceId,
-    environmentId: EnvironmentId.make("env-elsewhere"),
-    projectId: ProjectId.make("project-web"),
+    name: "Project",
+    mounts: [
+      {
+        environmentId: EnvironmentId.make("env-elsewhere"),
+        projectId: ProjectId.make("project-web"),
+      },
+    ],
   });
   const { agents } = yield* (yield* AgentService.AgentService).listMine(ann, { workspaceId });
   const chief = agents.find((agent) => agent.kind === "chief_agent");
@@ -526,10 +549,15 @@ it.effect("delegate to another member's agent is not found", () =>
         yield* pa.call("delegate", { toAgentId: Telescope.AgentId.make(toAgentId), brief }),
         { code: "invalid_request", message: "Agent not found." },
       );
-    yield* (yield* WorkspaceService.WorkspaceService).bind(ann, {
+    yield* (yield* WorkspaceService.WorkspaceService).createProject(ann, {
       workspaceId,
-      environmentId: EnvironmentId.make("env-elsewhere"),
-      projectId: ProjectId.make("project-app"),
+      name: "Project",
+      mounts: [
+        {
+          environmentId: EnvironmentId.make("env-elsewhere"),
+          projectId: ProjectId.make("project-app"),
+        },
+      ],
     });
     const { agents } = yield* (yield* AgentService.AgentService).listMine(ann, { workspaceId });
     const sibling = agents.find((row) => row.kind === "chief_agent" && row.id !== chief.id);

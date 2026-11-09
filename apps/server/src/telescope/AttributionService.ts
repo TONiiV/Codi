@@ -1,4 +1,4 @@
-import { ProjectId, Telescope, ThreadId } from "@t3tools/contracts";
+import { Telescope, ThreadId } from "@t3tools/contracts";
 import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
@@ -26,7 +26,7 @@ const Tasks = rows({
   item_id: Telescope.TaskId,
   title: Telescope.Text,
   status: Telescope.OpenTaskStatus,
-  project_id: Schema.NullOr(ProjectId),
+  project_id: Schema.NullOr(Telescope.TelescopeProjectId),
   owner_subject_id: Schema.NullOr(Schema.String),
   owner_agent_id: Schema.NullOr(Schema.String),
   conflict_decision_id: Schema.NullOr(Telescope.DecisionId),

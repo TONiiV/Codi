@@ -1,6 +1,9 @@
 import { useAtomValue } from "@effect/atom-react";
 import { createTelescopeBoardAtoms } from "@t3tools/client-runtime/telescope/taskBoard";
-import { createTelescopeWorkspaceAtoms } from "@t3tools/client-runtime/telescope/workspaces";
+import {
+  createTelescopeWorkspaceAtoms,
+  type WorkspaceMount,
+} from "@t3tools/client-runtime/telescope/workspaces";
 import { Telescope } from "@t3tools/contracts";
 import { Atom } from "effect/reactivity";
 
@@ -32,7 +35,7 @@ export const telescopeBoard = createTelescopeBoardAtoms(connectionAtomRuntime);
 export const WORKSPACE_KIND_LABEL = { enterprise: "企业", personal: "个人" } as const;
 
 const noWorkspaceAtom = Atom.make<Telescope.Workspace | null>(null);
-const noBindingsAtom = Atom.make<ReadonlyArray<Telescope.ProjectBinding>>([]);
+const noBindingsAtom = Atom.make<ReadonlyArray<WorkspaceMount>>([]);
 
 /** Telescope lives on the primary environment: one machine shared by its members. */
 export function useTelescopeWorkspaces() {

@@ -1,6 +1,6 @@
 import * as Schema from "effect/Schema";
 
-import { PositiveInt, ProjectId, ThreadId } from "../baseSchemas.ts";
+import { PositiveInt, ThreadId } from "../baseSchemas.ts";
 import {
   AgentId,
   AgentRunId,
@@ -13,6 +13,7 @@ import {
   SubjectId,
   TaskCommitId,
   TaskId,
+  TelescopeProjectId,
   Text,
   Timestamp,
   WorkspaceId,
@@ -42,7 +43,7 @@ export const Task = Schema.Struct({
   kind: Schema.Literal("task"),
   id: TaskId,
   workspaceId: WorkspaceId,
-  projectId: Schema.optionalKey(ProjectId),
+  projectId: Schema.optionalKey(TelescopeProjectId),
   title: Text,
   status: TaskStatus,
   ownerSubjectId: Schema.optionalKey(SubjectId),
