@@ -1,7 +1,14 @@
 import * as Schema from "effect/Schema";
 
 import { EnvironmentId, ProjectId } from "../baseSchemas.ts";
-import { InvitationId, SubjectId, Text, Timestamp, WorkspaceId } from "./common.ts";
+import {
+  InvitationId,
+  SubjectId,
+  TelescopeProjectId,
+  Text,
+  Timestamp,
+  WorkspaceId,
+} from "./common.ts";
 
 export const WorkspaceKind = Schema.Literals(["enterprise", "personal"]);
 /** `viewer` (只读) reads what a member reads and writes nothing. */
@@ -53,13 +60,20 @@ export const Invitation = Schema.Struct({
 });
 export type Invitation = typeof Invitation.Type;
 
-export const ProjectBinding = Schema.Struct({
+/** A Codi project directory on some environment; a workspace mounts each one at most once. */
+export const ProjectMount = Schema.Struct({ environmentId: EnvironmentId, projectId: ProjectId });
+export type ProjectMount = typeof ProjectMount.Type;
+
+/** A workspace's unit of planning: tasks belong to it, and its lead leads every mount. */
+export const Project = Schema.Struct({
+  id: TelescopeProjectId,
   workspaceId: WorkspaceId,
-  environmentId: EnvironmentId,
-  projectId: ProjectId,
+  name: Text,
   leadSubjectId: Schema.optionalKey(SubjectId),
+  mounts: Schema.Array(ProjectMount),
+  createdAt: Timestamp,
 });
-export type ProjectBinding = typeof ProjectBinding.Type;
+export type Project = typeof Project.Type;
 
 const InWorkspace = { workspaceId: WorkspaceId };
 
@@ -116,15 +130,28 @@ export const MemberSetRoleInput = Schema.Struct({
 });
 export const MemberRevokeInput = Schema.Struct({ ...InWorkspace, subjectId: SubjectId });
 
-export const ProjectUnbindInput = Schema.Struct({
+export const ProjectListResult = Schema.Struct({ projects: Schema.Array(Project) });
+export const ProjectCreateInput = Schema.Struct({
   ...InWorkspace,
-  environmentId: EnvironmentId,
-  projectId: ProjectId,
+  name: Text,
+  leadSubjectId: Schema.optionalKey(SubjectId),
+  mounts: Schema.optionalKey(Schema.Array(ProjectMount)),
 });
-export const ProjectListBindingsResult = Schema.Struct({
-  bindings: Schema.Array(ProjectBinding),
+const InProject = { ...InWorkspace, projectId: TelescopeProjectId };
+/** `leadSubjectId: null` clears the lead. */
+export const ProjectUpdateInput = Schema.Struct({
+  ...InProject,
+  name: Schema.optionalKey(Text),
+  leadSubjectId: Schema.optionalKey(Schema.NullOr(SubjectId)),
 });
-/** Where each bound project on this environment is bound, with no names, members or leads. */
+export const ProjectScopedInput = Schema.Struct(InProject);
+export const ProjectMountInput = Schema.Struct({ ...InProject, mount: ProjectMount });
+/** A workspace mounts a directory at most once, so the mount alone names the project it leaves. */
+export const ProjectUnmountInput = Schema.Struct({ ...InWorkspace, mount: ProjectMount });
+/**
+ * Where each mounted Codi project on this environment is mounted, with no names, members or
+ * leads. The name predates mounts; older clients read it to hide projects in their sidebar.
+ */
 export const ProjectBindingSummaryResult = Schema.Struct({
   projects: Schema.Array(
     Schema.Struct({

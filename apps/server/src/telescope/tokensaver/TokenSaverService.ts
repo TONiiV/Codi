@@ -214,11 +214,11 @@ const make = Effect.gen(function* () {
         message: "The report window is empty.",
       });
     const environmentId = yield* environment.getEnvironmentId;
-    const { bindings } = yield* workspaces.bindings(actor.caller, { workspaceId });
+    const listed = yield* workspaces.projects(actor.caller, { workspaceId });
     const projects = new Set(
-      bindings
-        .filter((binding) => binding.environmentId === environmentId)
-        .map(({ projectId }) => projectId),
+      listed.projects.flatMap(({ mounts }) =>
+        mounts.flatMap((mount) => (mount.environmentId === environmentId ? [mount.projectId] : [])),
+      ),
     );
     // A proposal nobody has decided yet is the report for this workspace (D31): skip the transcripts.
     const { decisions } = yield* board.listDecisions(actor, { workspaceId });

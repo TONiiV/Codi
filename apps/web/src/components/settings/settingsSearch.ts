@@ -1328,6 +1328,12 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["telescope workspace members roles admin revoke remove restore 成员与角色"],
   },
   {
+    id: "telescope-projects",
+    title: "Telescope projects",
+    to: "/settings/telescope",
+    searchTerms: ["telescope projects tasks mounts directories rename delete 项目"],
+  },
+  {
     id: "telescope-agents",
     title: "Company agents",
     to: "/settings/telescope",

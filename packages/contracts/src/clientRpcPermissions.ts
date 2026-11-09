@@ -81,8 +81,11 @@ export const CLIENT_GUARDED_RPC_SCOPES = {
   [TELESCOPE_WS_METHODS.memberSetRole]: AuthTelescopeAdminScope,
   [TELESCOPE_WS_METHODS.memberRevoke]: AuthTelescopeAdminScope,
   [TELESCOPE_WS_METHODS.memberRestore]: AuthTelescopeAdminScope,
-  [TELESCOPE_WS_METHODS.projectBind]: AuthTelescopeAdminScope,
-  [TELESCOPE_WS_METHODS.projectUnbind]: AuthTelescopeAdminScope,
+  [TELESCOPE_WS_METHODS.projectCreate]: AuthTelescopeAdminScope,
+  [TELESCOPE_WS_METHODS.projectUpdate]: AuthTelescopeAdminScope,
+  [TELESCOPE_WS_METHODS.projectDelete]: AuthTelescopeAdminScope,
+  [TELESCOPE_WS_METHODS.projectAddMount]: AuthTelescopeAdminScope,
+  [TELESCOPE_WS_METHODS.projectRemoveMount]: AuthTelescopeAdminScope,
   [TELESCOPE_WS_METHODS.agentUpdateCompany]: AuthTelescopeAdminScope,
   // Creates a Codi thread, as thread.create does; the service lets only the agent's owner.
   [TELESCOPE_WS_METHODS.agentOpenThread]: AuthOrchestrationOperateScope,

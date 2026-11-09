@@ -1,6 +1,5 @@
 import * as Schema from "effect/Schema";
 
-import { ProjectId } from "../baseSchemas.ts";
 import {
   AgentId,
   BoardItemId,
@@ -11,6 +10,7 @@ import {
   Strings,
   SubjectId,
   TaskId,
+  TelescopeProjectId,
   Text,
   Timestamp,
   WorkspaceId,
@@ -41,7 +41,7 @@ const Title = Text.check(Schema.isMaxLength(BOARD_LIMITS.titleLength));
 export const TaskFields = Schema.Struct({
   title: Schema.optionalKey(Title),
   status: Schema.optionalKey(TaskStatus),
-  projectId: Schema.optionalKey(Schema.NullOr(ProjectId)),
+  projectId: Schema.optionalKey(Schema.NullOr(TelescopeProjectId)),
   ownerSubjectId: Schema.optionalKey(Schema.NullOr(SubjectId)),
   ownerAgentId: Schema.optionalKey(Schema.NullOr(AgentId)),
   forgeIssue: Schema.optionalKey(Schema.NullOr(ForgeIssueRef)),
@@ -88,7 +88,7 @@ export const TaskThreadInput = Schema.Struct({
 });
 export const TaskListInput = Schema.Struct({
   ...InWorkspace,
-  projectId: Schema.optionalKey(ProjectId),
+  projectId: Schema.optionalKey(TelescopeProjectId),
   status: Schema.optionalKey(TaskStatus),
 });
 /** Each task carries only its latest `listedFreeTextEntries` free-text entries; `get` has all. */

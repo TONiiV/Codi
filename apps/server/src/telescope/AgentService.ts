@@ -39,13 +39,7 @@ const decodeMembers = Schema.decodeUnknownEffect(
     }),
   ),
 );
-const decodeBindings = Schema.decodeUnknownEffect(
-  Schema.Array(
-    Schema.Struct({ project_id: ProjectId, lead_subject_id: Schema.NullOr(Schema.String) }),
-  ),
-);
-
-/** Active members' roles and each bound project's lead, read fresh for every check. */
+/** Active members' roles and each mounted project's lead, read fresh for every check. */
 interface Ownership {
   readonly roles: ReadonlyMap<string, Telescope.WorkspaceRole>;
   readonly leads: ReadonlyMap<ProjectId, string | null>;
@@ -55,7 +49,7 @@ const canMergePRs = (ownership: Ownership, owner: string, projectId: ProjectId |
   ownership.roles.get(owner) === "admin" ||
   (projectId !== undefined && ownership.leads.get(projectId) === owner);
 
-/** Who is still an active member, and which projects are still bound. */
+/** Who is still an active member, and which projects are still mounted. */
 interface Reach {
   readonly roles: { has(subjectId: string): boolean };
   readonly leads: { has(projectId: string): boolean };
@@ -68,7 +62,7 @@ interface Seen {
   readonly exposure: string;
 }
 
-/** Agents of former members, and Chief Agents of unbound projects, are out of reach. */
+/** Agents of former members, and Chief Agents of unmounted projects, are out of reach. */
 const reachable = (reach: Reach, agent: Seen) =>
   agent.ownerSubjectId === null ||
   (reach.roles.has(agent.ownerSubjectId) &&
@@ -279,17 +273,21 @@ const make = Effect.gen(function* () {
 
   const boundProjectIds = (caller: WorkspaceService.Caller, workspaceId: Telescope.WorkspaceId) =>
     workspaces
-      .bindings(caller, { workspaceId })
-      .pipe(Effect.map(({ bindings }) => bindings.map((binding) => binding.projectId)));
+      .projects(caller, { workspaceId })
+      .pipe(
+        Effect.map(({ projects }) =>
+          projects.flatMap((project) => project.mounts.map((mount) => mount.projectId)),
+        ),
+      );
 
   const ownershipOf = (workspaceId: Telescope.WorkspaceId) =>
     Effect.all([
       db.select(workspaceId, "members", decodeMembers, { revoked_at: null }),
-      db.select(workspaceId, "project_bindings", decodeBindings),
+      WorkspaceService.mountLeads(db, workspaceId),
     ]).pipe(
-      Effect.map(([members, bindings]): Ownership => ({
+      Effect.map(([members, leads]): Ownership => ({
         roles: new Map(members.map((member) => [member.subject_id, member.role])),
-        leads: new Map(bindings.map((binding) => [binding.project_id, binding.lead_subject_id])),
+        leads,
       })),
     );
 

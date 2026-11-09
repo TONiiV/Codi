@@ -63,14 +63,25 @@ const setup = (kind: "enterprise" | "personal" = "enterprise") =>
     const workspaceId = workspace.id;
     const { code } = yield* workspaces.invite(as.ann, { workspaceId, role: "member" });
     const bea = yield* workspaces.accept(as.bea, { code, displayName: "Bea" });
-    yield* workspaces.bind(as.ann, { workspaceId, environmentId, projectId: web });
-    yield* workspaces.bind(as.ann, {
+    const mount = (projectId: ProjectId, lead: { leadSubjectId?: string } = {}) =>
+      workspaces
+        .createProject(as.ann, {
+          workspaceId,
+          name: projectId,
+          mounts: [{ environmentId, projectId }],
+          ...lead,
+        })
+        .pipe(Effect.map((project) => project.id));
+    const projects = {
+      web: yield* mount(web),
+      api: yield* mount(api, { leadSubjectId: bea.subjectId }),
+    };
+    return {
       workspaceId,
-      environmentId,
-      projectId: api,
-      leadSubjectId: bea.subjectId,
-    });
-    return { workspaceId, beaId: bea.subjectId, agents: yield* AgentService.AgentService };
+      beaId: bea.subjectId,
+      agents: yield* AgentService.AgentService,
+      projects,
+    };
   });
 
 /** Agents a member got earlier: the owner's defaults, handed to them. */
@@ -183,7 +194,7 @@ it.layer(layer)("Telescope agents", (it) => {
 
   it.effect("caps standing powers by the owner's role and keeps settings to the owner", () =>
     Effect.gen(function* () {
-      const { workspaceId, beaId, agents } = yield* setup();
+      const { workspaceId, beaId, agents, projects } = yield* setup();
       const workspaces = yield* WorkspaceService.WorkspaceService;
       const { code } = yield* workspaces.invite(as.ann, { workspaceId, role: "project_lead" });
       const patId = (yield* workspaces.accept(as.pat, { code, displayName: "Pat" })).subjectId;
@@ -239,7 +250,11 @@ it.layer(layer)("Telescope agents", (it) => {
         );
       }
 
-      yield* workspaces.bind(as.ann, { workspaceId, environmentId, projectId: api });
+      yield* workspaces.updateProject(as.ann, {
+        workspaceId,
+        projectId: projects.api,
+        leadSubjectId: null,
+      });
       const demoted = yield* agents.get(as.bea, { workspaceId, agentId: apiAgent.id });
       assert.deepStrictEqual(
         [demoted.agent.standingPowers.mergePRs, demoted.effectivePowers.mergePRs],
@@ -347,8 +362,11 @@ it.layer(layer)("Telescope agents", (it) => {
       yield* open(webAgent, "contactable");
       assert.include(yield* companyView(), webAgent.id);
       const workspaces = yield* WorkspaceService.WorkspaceService;
-      yield* workspaces.unbind(as.ann, { workspaceId, environmentId, projectId: web });
-      assert.notInclude(yield* companyView(), webAgent.id, "unbound projects take their agent");
+      yield* workspaces.removeMount(as.ann, {
+        workspaceId,
+        mount: { environmentId, projectId: web },
+      });
+      assert.notInclude(yield* companyView(), webAgent.id, "unmounted projects take their agent");
       assert.strictEqual(yield* reasonOf(reach(webAgent, "contact")), "not_found");
 
       yield* workspaces.revoke(as.ann, { workspaceId, subjectId: beaId });

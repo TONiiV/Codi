@@ -1,7 +1,16 @@
 import * as Schema from "effect/Schema";
 
-import { ProjectId, ThreadId } from "../baseSchemas.ts";
-import { AgentId, AgentRunId, Count, DecisionId, TaskId, Text, Timestamp } from "./common.ts";
+import { ThreadId } from "../baseSchemas.ts";
+import {
+  AgentId,
+  AgentRunId,
+  Count,
+  DecisionId,
+  TaskId,
+  TelescopeProjectId,
+  Text,
+  Timestamp,
+} from "./common.ts";
 import { RunTokens } from "./runtime.ts";
 
 export const OpenTaskStatus = Schema.Literals([
@@ -23,7 +32,7 @@ export const DashboardTask = Schema.Struct({
   id: TaskId,
   title: Text,
   status: OpenTaskStatus,
-  projectId: Schema.optionalKey(ProjectId),
+  projectId: Schema.optionalKey(TelescopeProjectId),
   holder: Schema.optionalKey(DashboardHolder),
   /** When the task entered its current status. */
   statusSince: Timestamp,

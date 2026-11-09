@@ -216,7 +216,7 @@ export const RPC_REQUIRED_SCOPES = {
   [Telescope.WS_METHODS.workspaceGet]: AuthTelescopeMemberScope,
   [Telescope.WS_METHODS.memberAccept]: AuthTelescopeMemberScope,
   [Telescope.WS_METHODS.memberList]: AuthTelescopeMemberScope,
-  [Telescope.WS_METHODS.projectListBindings]: AuthTelescopeMemberScope,
+  [Telescope.WS_METHODS.projectList]: AuthTelescopeMemberScope,
   [Telescope.WS_METHODS.projectBindingSummary]: AuthTelescopeMemberScope,
   [Telescope.WS_METHODS.taskCreate]: AuthTelescopeMemberScope,
   [Telescope.WS_METHODS.taskUpdate]: AuthTelescopeMemberScope,

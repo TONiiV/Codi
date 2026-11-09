@@ -39,6 +39,9 @@ export const RoutingRuleId = makeEntityId("TelescopeRoutingRuleId");
 export type RoutingRuleId = typeof RoutingRuleId.Type;
 export const ChannelBindingId = makeEntityId("TelescopeChannelBindingId");
 export type ChannelBindingId = typeof ChannelBindingId.Type;
+/** A Telescope project, which mounts Codi projects; not a Codi `ProjectId`. */
+export const TelescopeProjectId = makeEntityId("TelescopeProjectId");
+export type TelescopeProjectId = typeof TelescopeProjectId.Type;
 
 /** A board commit targets either kind of board item. */
 export const BoardItemId = Schema.Union([TaskId, DecisionId]);

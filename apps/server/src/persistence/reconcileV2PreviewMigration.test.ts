@@ -73,6 +73,7 @@ describe("V2 preview upgrade", () => {
         [93, "TelescopeRouting"],
         [94, "TelescopeAuditOptionalPower"],
         [95, "TelescopeStopMemberAgents"],
+        [96, "TelescopeProjects"],
         [97, "TelescopeTaskThreads"],
       ]);
       assert.deepStrictEqual(yield* runMigrations(), []);
@@ -190,6 +191,7 @@ describe("V2 preview upgrade", () => {
         [93, "TelescopeRouting"],
         [94, "TelescopeAuditOptionalPower"],
         [95, "TelescopeStopMemberAgents"],
+        [96, "TelescopeProjects"],
         [97, "TelescopeTaskThreads"],
       ]);
     }).pipe(Effect.provide(NodeSqliteClient.layer({ filename: ":memory:" }))),

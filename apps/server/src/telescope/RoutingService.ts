@@ -190,7 +190,7 @@ const make = Effect.gen(function* () {
     const { projectId } = rule;
     if (
       projectId !== undefined &&
-      (yield* db.count(workspaceId, "project_bindings", { project_id: projectId })) === 0
+      (yield* db.count(workspaceId, "project_mounts", { project_id: projectId })) === 0
     )
       return yield* fail("not_found", "That project is not bound to this workspace.");
     const row = {

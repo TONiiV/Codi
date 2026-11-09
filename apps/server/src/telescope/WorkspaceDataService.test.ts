@@ -222,7 +222,7 @@ it.layer(layer)("WorkspaceDataService", (it) => {
         yield* service.revoke(alice, { workspaceId, subjectId: carolId });
         const unused = yield* service.invite(alice, { workspaceId, role: "member" });
         const aliceId = (yield* service.get(alice, { workspaceId })).self.subjectId;
-        yield* seed(workspaceId, "telescope_project_bindings", "bound", { project_id: "bound" });
+        yield* seed(workspaceId, "telescope_project_mounts", "bound", { project_id: "bound" });
         for (const [agent, owner, exposure, project] of [
           ["agent-alice", aliceId, "hidden", null],
           ["agent-bob", bobId, "hidden", null],

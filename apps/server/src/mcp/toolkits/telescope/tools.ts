@@ -9,6 +9,7 @@ import * as DelegationService from "../../../telescope/DelegationService.ts";
 import * as TaskBoardService from "../../../telescope/TaskBoardService.ts";
 import * as ToolGateway from "../../../telescope/ToolGateway.ts";
 import * as WorkerDispatch from "../../../telescope/WorkerDispatch.ts";
+import * as WorkspaceService from "../../../telescope/WorkspaceService.ts";
 import * as McpInvocationContext from "../../McpInvocationContext.ts";
 
 const dependencies = [
@@ -19,6 +20,7 @@ const dependencies = [
   AgentService.AgentService,
   DelegationService.DelegationService,
   WorkerDispatch.WorkerDispatch,
+  WorkspaceService.WorkspaceService,
 ];
 /** The thread's Telescope run names the workspace, so no tool takes one. */
 const boardTool = <
@@ -57,7 +59,7 @@ const AgentTaskFields = Telescope.TaskFields.mapFields(Struct.omit(["conflictDec
 
 const TicketListTool = boardTool("ticket_list", {
   title: "List tickets",
-  description: `List the tickets on your Telescope board, optionally by \`projectId\` or \`status\`. Each ticket shows only its latest notes; \`ticket_get\` has all. Board tickets are not \`delegate_task\` tasks. ${BOARD_TEXT}`,
+  description: `List the tickets on your Telescope board, optionally by \`projectId\` (an \`id\` from \`project_list\`) or \`status\`. Each ticket shows only its latest notes; \`ticket_get\` has all. Board tickets are not \`delegate_task\` tasks. ${BOARD_TEXT}`,
   parameters: Telescope.TaskListInput.mapFields(Struct.omit(["workspaceId"])),
   success: Telescope.TaskListResult,
   readonly: true,
@@ -74,7 +76,7 @@ const TicketGetTool = boardTool("ticket_get", {
 const OpenTicketTool = boardTool("open_ticket", {
   title: "Open ticket",
   description:
-    "Open a ticket on the Telescope board for work that should be tracked. Check `ticket_list` first so you do not open a duplicate. `goalChain`: the project and company goals it serves.",
+    "Open a ticket on the Telescope board for work that should be tracked. Check `ticket_list` first so you do not open a duplicate. `projectId`: an `id` from `project_list`, not a Code project id. `goalChain`: the project and company goals it serves.",
   parameters: Telescope.TaskCreateInput.mapFields(
     Struct.omit(["workspaceId", "conflictDecisionId"]),
   ),
@@ -84,7 +86,7 @@ const OpenTicketTool = boardTool("open_ticket", {
 
 const TicketUpdateTool = boardTool("ticket_update", {
   title: "Update ticket",
-  description: `Change a Telescope ticket's fields with \`set\`, or append a \`note\`; notes are never edited. \`baseVersion\`: the \`version\` you read. Your write lands even if the ticket changed since you read it; \`overwrote\` lists what someone else had changed that you replaced. Tell your member what you replaced. \`set.threads\` replaces the ticket's Code threads; keep the ones you read. Only a member moves a ticket out of needs_decision. If you are blocked until a member answers, set \`status\` to needs_decision and say why in \`note\`. ${BOARD_TEXT}`,
+  description: `Change a Telescope ticket's fields with \`set\`, or append a \`note\`; notes are never edited. \`set.projectId\`: an \`id\` from \`project_list\`. \`baseVersion\`: the \`version\` you read. Your write lands even if the ticket changed since you read it; \`overwrote\` lists what someone else had changed that you replaced. Tell your member what you replaced. \`set.threads\` replaces the ticket's Code threads; keep the ones you read. Only a member moves a ticket out of needs_decision. If you are blocked until a member answers, set \`status\` to needs_decision and say why in \`note\`. ${BOARD_TEXT}`,
   parameters: Telescope.TaskUpdateInput.mapFields((fields) => ({
     ...Struct.omit(fields, ["workspaceId"]),
     set: Schema.optionalKey(AgentTaskFields),
@@ -135,6 +137,15 @@ const DecisionRecordTool = boardTool("decision_record", {
   parameters: Telescope.DecisionCreateInput.mapFields(Struct.omit(["workspaceId"])),
   success: Telescope.Decision,
   readonly: false,
+});
+
+const ProjectListTool = boardTool("project_list", {
+  title: "List projects",
+  description:
+    "List the projects of your Telescope workspace: each one's `id`, `name`, lead, and the Code project directories it mounts (`mounts`). A ticket's `projectId` is one of these ids.",
+  parameters: Tool.EmptyParams,
+  success: Telescope.ProjectListResult,
+  readonly: true,
 });
 
 const AgentListTool = boardTool("agent_list", {
@@ -218,6 +229,7 @@ export const TelescopeToolkit = Toolkit.make(
   TicketLeaseReleaseTool,
   DecisionListTool,
   DecisionRecordTool,
+  ProjectListTool,
   AgentListTool,
   DelegateTool,
   DispatchWorkerTool,

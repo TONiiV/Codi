@@ -46,11 +46,13 @@ const member = (role: Telescope.WorkspaceRole): Telescope.Member => ({
   role,
   joinedAt: "2026-11-06T00:00:00.000Z",
 });
-const binding = (leadSubjectId?: string, projectId = app): Telescope.ProjectBinding => ({
+const project = (leadSubjectId?: string, projectId = app): Telescope.Project => ({
+  id: Telescope.TelescopeProjectId.make(`telescope-${projectId}`),
   workspaceId,
-  environmentId: EnvironmentId.make("local"),
-  projectId,
+  name: projectId,
   ...(leadSubjectId === undefined ? {} : { leadSubjectId }),
+  mounts: [{ environmentId: EnvironmentId.make("local"), projectId }],
+  createdAt: "2026-11-06T00:00:00.000Z",
 });
 const ALL_POWERS: Telescope.StandingPowers = {
   openTickets: true,
@@ -73,39 +75,39 @@ describe("telescope agent exposure", () => {
 
 describe("telescope standing power cap", () => {
   it.each([
-    { who: "an admin", role: "admin", projectId: undefined, bindings: [], expected: true },
+    { who: "an admin", role: "admin", projectId: undefined, projects: [], expected: true },
     {
       who: "the agent project lead",
       role: "project_lead",
       projectId: app,
-      bindings: [binding("me")],
+      projects: [project("me")],
       expected: true,
     },
     {
       who: "a lead whose project has another lead",
       role: "project_lead",
       projectId: app,
-      bindings: [binding("someone-else")],
+      projects: [project("someone-else")],
       expected: false,
     },
     {
       who: "the lead of another project",
       role: "project_lead",
       projectId: app,
-      bindings: [binding("someone-else"), binding("me", docs)],
+      projects: [project("someone-else"), project("me", docs)],
       expected: false,
     },
     {
-      who: "a lead with an unbound agent",
+      who: "a lead with an agent outside any project",
       role: "project_lead",
       projectId: undefined,
-      bindings: [binding("me")],
+      projects: [project("me")],
       expected: false,
     },
-    { who: "a member", role: "member", projectId: app, bindings: [binding()], expected: false },
-  ] as const)("$who may merge: $expected", ({ role, projectId, bindings, expected }) => {
+    { who: "a member", role: "member", projectId: app, projects: [project()], expected: false },
+  ] as const)("$who may merge: $expected", ({ role, projectId, projects, expected }) => {
     const agent = projectId === undefined ? {} : { projectId };
-    expect(ownerCanMergePRs(member(role), agent, bindings)).toBe(expected);
+    expect(ownerCanMergePRs(member(role), agent, projects)).toBe(expected);
   });
 
   it("keeps a stored merge right off above the cap and leaves other powers alone", () => {
@@ -201,19 +203,19 @@ describe("telescope agent chat", () => {
 });
 
 describe("telescope agent queries", () => {
-  it.effect("re-read the caller's agents and the bindings after this client binds a project", () =>
+  it.effect("re-read the caller's agents and the projects after this client mounts a project", () =>
     Effect.gen(function* () {
       const env = EnvironmentId.make("local");
-      let bindings: ReadonlyArray<Telescope.ProjectBinding> = [];
+      let projects: ReadonlyArray<Telescope.Project> = [];
       const listMine = vi.fn(() => Effect.succeed({ agents: [] }));
       const client = {
         [Telescope.WS_METHODS.agentListMine]: listMine,
-        [Telescope.WS_METHODS.projectListBindings]: () => Effect.sync(() => ({ bindings })),
+        [Telescope.WS_METHODS.projectList]: () => Effect.sync(() => ({ projects })),
         [Telescope.WS_METHODS.projectBindingSummary]: () => Effect.succeed({ projects: [] }),
-        [Telescope.WS_METHODS.projectBind]: (input: Telescope.ProjectBinding) =>
+        [Telescope.WS_METHODS.projectCreate]: () =>
           Effect.sync(() => {
-            bindings = [input];
-            return input;
+            projects = [project("me")];
+            return projects[0];
           }),
       };
       const supervisor = {
@@ -263,21 +265,21 @@ describe("telescope agent queries", () => {
       );
       const scoped = { environmentId: env, input: { workspaceId } };
       const mine = agents.listMine(scoped);
-      const bound = agents.bindings(scoped);
+      const bound = workspaces.projects(scoped);
       registry.mount(mine);
       registry.mount(bound);
       const read = <A, E>(atom: Atom.Atom<AsyncResult.AsyncResult<A, E>>) =>
         AtomRegistry.getResult(registry, atom, { suspendOnWaiting: true });
-      expect(yield* read(bound)).toEqual({ bindings: [] });
+      expect(yield* read(bound)).toEqual({ projects: [] });
       yield* read(mine);
       expect(listMine).toHaveBeenCalledTimes(1);
 
-      const input = { workspaceId, environmentId: env, projectId: app, leadSubjectId: "me" };
+      const input = { workspaceId, name: "app", mounts: project().mounts, leadSubjectId: "me" };
       const result = yield* Effect.promise(() =>
-        workspaces.bind.run(registry, { environmentId: env, input }),
+        workspaces.createProject.run(registry, { environmentId: env, input }),
       );
       expect(result._tag).toBe("Success");
-      expect(yield* read(bound)).toEqual({ bindings: [input] });
+      expect(yield* read(bound)).toEqual({ projects: [project("me")] });
       yield* read(mine);
       expect(listMine).toHaveBeenCalledTimes(2);
     }),

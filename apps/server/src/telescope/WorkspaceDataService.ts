@@ -25,7 +25,8 @@ const KEYS = {
   members: ["subject_id"],
   member_sessions: ["member_id", "device_key"],
   invitations: ["invitation_id"],
-  project_bindings: ["environment_id", "project_id"],
+  projects: ["telescope_project_id"],
+  project_mounts: ["environment_id", "project_id"],
   project_rules: ["project_id"],
   agents: ["agent_id"],
   tasks: ["item_id"],
@@ -264,7 +265,7 @@ const make = Effect.gen(function* () {
     const active = all("members").filter((member) => member.revoked_at === null);
     const reach = {
       roles: new Set(active.map((member) => member.subject_id)),
-      leads: new Set(all("project_bindings").map((binding) => binding.project_id)),
+      leads: new Set(all("project_mounts").map((mount) => mount.project_id)),
     };
     const text = (column: Row[string] | undefined) => (typeof column === "string" ? column : null);
     const hiddenAgents = new Set<unknown>(
