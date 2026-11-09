@@ -44,7 +44,7 @@ const tasksOf = (target: BoardTarget) =>
 const failureText = (error: unknown) =>
   error instanceof Error && error.message.length > 0 ? error.message : "请稍后再试。";
 
-/** For the thread menus: absent while there is no workspace, or no grant, to link into. */
+/** For thread menus: absent with no workspace or grant to link into, or before the board loads. */
 export function readLinkedTask(threadRef: ScopedThreadRef): Telescope.Task | null | undefined {
   const environmentId = readPrimaryEnvironmentId();
   if (environmentId === null) return undefined;
@@ -52,8 +52,12 @@ export function readLinkedTask(threadRef: ScopedThreadRef): Telescope.Task | nul
   if (workspace === null) return undefined;
   if (!appAtomRegistry.get(telescopeBoard.linkThread.permissionAtom(environmentId)))
     return undefined;
-  const tasks = appAtomRegistry.get(tasksOf({ environmentId, workspaceId: workspace.id }));
-  return AsyncResult.getOrElse(tasks, () => null)?.tasks.find(holds(threadRef)) ?? null;
+  const board = AsyncResult.getOrElse(
+    appAtomRegistry.get(tasksOf({ environmentId, workspaceId: workspace.id })),
+    () => null,
+  );
+  if (board === null) return undefined;
+  return board.tasks.find(holds(threadRef)) ?? null;
 }
 
 export async function unlinkThreadFromTask(threadRef: ScopedThreadRef, task: Telescope.Task) {
