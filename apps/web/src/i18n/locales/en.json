@@ -1084,7 +1084,7 @@
       "beta": "Beta",
       "groupSidebarThreadsIntoProjectFolders": "Group sidebar threads into project folders. Pinned threads stay on top, and Snoozed and Settled stay below the folders.",
       "boringSidebarGroupByProject": "Boring sidebar (group by project)",
-      "inTheBoringSidebarShowFolder": "In the boring sidebar, show folder threads on two lines: the title, then the branch, pull request, and agent.",
+      "inTheBoringSidebarShowFolder": "Show folder threads on two lines: the title, then the branch, pull request, and agent.",
       "twoLineFolderRows": "Two-line folder rows",
       "shareAThreadWithAGuest": "Share a thread with a guest who watches it live in a browser and sends messages you approve. Sign in to T3 Connect to use guest links.",
       "signIn": "Sign in",
@@ -1760,7 +1760,7 @@
       "keepThreadsWithAPr": "Keep threads with a PR",
       "inactivityDoesNotSettleThreadsWith": "Inactivity does not settle threads with a pull request. Merge and close still do.",
       "textGeneration": "Text generation",
-      "usedForThreadTitlesAndOther": "Used for thread titles and other generated text on connected devices with this provider. Source control can override it.",
+      "usedForThreadTitlesAndOther": "For thread titles and other generated text. Source control has its own setting. Text generators from Providers also appear here.",
       "textGenerationModel": "text generation model",
       "connectAnEnvironmentToChooseIts": "Connect an environment to choose its text generation model.",
       "noTextGenerationProvidersAvailable": "No text generation providers available.",
@@ -1927,18 +1927,18 @@
       "token": "Token",
       "labelToken": "{{label}} token",
       "noTokenSavedTheServerUses": "No token saved; the server uses {{tokenEnvVar}} or the {{cliName}} login.",
-      "writingReview": "Writing & review",
-      "sourceControlWritingStyle": "source control writing style",
-      "sourceControlWritingStyle2": "Source control writing style",
-      "customSourceControlInstructionsForAll": "Custom source control instructions for all selected environments",
+      "writingReview": "Commits & pull requests",
+      "sourceControlWritingStyle": "commit and pull request writing",
+      "sourceControlWritingStyle2": "Commit and pull request writing",
+      "customSourceControlInstructionsForAll": "Custom commit and pull request instructions for all selected environments",
       "writeTheInstructionsEachSelectedEnvironment": "Write the instructions each selected environment should use.",
       "applyInstructionsToAll": "Apply instructions to all",
       "writeCustomInstructionsForAll": "Write custom instructions for all",
-      "keepTitlesConciseUseShortBullet": "Keep titles concise. Use short bullet points in descriptions.",
-      "customSourceControlWritingInstructions": "Custom source control writing instructions",
+      "keepTitlesConciseUseShortBullet": "Keep commit subjects under 60 characters. Keep pull request descriptions short and plain.",
+      "customSourceControlWritingInstructions": "Custom commit and pull request instructions",
       "addAGuideTabToPull": "Add a Guide tab to pull requests. An agent explains the changes and points out decisions that need review.",
       "reviewGuides": "Review guides",
-      "modelThatReadsAPullRequest": "Model that reads a pull request to write its review guide. It reads the change itself over many steps, so a stronger model helps. Off uses the source control writer model.",
+      "modelThatReadsAPullRequest": "Must be a coding agent: it reads the pull request over many steps. Off uses the writer model, or Codex or Claude if that model is a text generator.",
       "connectAnEnvironmentToChooseIts2": "Connect an environment to choose its review guide model.",
       "reviewGuideModel": "Review guide model",
       "reviewGuideModelNotSaved": "Review guide model not saved",
@@ -1947,10 +1947,10 @@
       "reviewGuideInstructions": "review guide instructions",
       "reviewGuideInstructions2": "Review guide instructions",
       "showServiceInterfacesBeforeImplementationsSkip": "Show service interfaces before implementations. Skip test files unless they change behavior. Keep summaries to two sentences.",
-      "useTheRepositorySTemplateFor": "Use the repository's template for change request descriptions when available.",
-      "changeRequestTemplates": "change request templates",
-      "followChangeRequestTemplates": "Follow change request templates",
-      "modelForSourceControlTextAnd": "Model for source control text and branch or bookmark names. When disabled, use the text generation model configured for this environment.",
+      "useTheRepositorySTemplateFor": "Use the repository's pull request template when it has one.",
+      "changeRequestTemplates": "pull request templates",
+      "followChangeRequestTemplates": "Follow pull request templates",
+      "modelForSourceControlTextAnd": "Model for commit messages, pull request text, and branch or bookmark names. When disabled, use the text generation model configured for this environment.",
       "connectAnEnvironmentToChooseIts3": "Connect an environment to choose its source control writer model.",
       "sourceControlWriterModel": "Source control writer model",
       "sourceControlWriterModelNotSaved": "Source control writer model not saved",
@@ -2666,15 +2666,15 @@
       "scwMode": {
         "repoConventions": {
           "label": "Repository conventions",
-          "description": "In each project, matches recent change descriptions and change request titles."
+          "description": "Commit messages and pull request titles and descriptions match each project's history."
         },
         "conventionalCommits": {
           "label": "Conventional Commits",
-          "description": "Use Conventional Commit prefixes and keep change request text concise."
+          "description": "Conventional Commit prefixes, with short pull request titles and descriptions."
         },
         "custom": {
           "label": "Custom instructions",
-          "description": "Use your instructions for change descriptions and change requests in every project."
+          "description": "Your instructions shape commit messages and pull request titles and descriptions."
         }
       },
       "themeSort": {
