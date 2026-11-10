@@ -15,7 +15,11 @@ import type { SetStateAction } from "react";
 import { applyClaudePromptEffortPrefix, resolvePromptInjectedEffort } from "@t3tools/shared/model";
 import { getProviderModelCapabilities } from "../providerModels";
 import { sanitizeThreadErrorMessage } from "@t3tools/client-runtime/errors";
-import type { EnvironmentThread, ThreadStructure } from "@t3tools/client-runtime/state/shell";
+import type {
+  EnvironmentThread,
+  EnvironmentThreadShell,
+  ThreadStructure,
+} from "@t3tools/client-runtime/state/shell";
 import {
   ANTIGRAVITY_DEFAULT_MODEL,
   PROVIDER_SEND_TURN_MAX_ATTACHMENTS,

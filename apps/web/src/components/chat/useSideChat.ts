@@ -95,7 +95,7 @@ export function useSideChat(input: {
         input: { threadId: targetThreadId, runtimeMode, createdAt: new Date().toISOString() },
       });
       if (mode._tag === "Failure") {
-        reportFailure(mode, "Could not set the side chat's permission mode.");
+        reportFailure(mode, "Could not set the side chat's permission mode.", "send");
         discard();
         return false;
       }

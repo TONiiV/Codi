@@ -3,6 +3,7 @@ import { scopeThreadRef } from "@t3tools/client-runtime/environment";
 import { leaseRecheckDelay } from "@t3tools/client-runtime/telescope/taskBoard";
 import {
   AuthOrchestrationOperateScope,
+  DEFAULT_RUNTIME_MODE,
   type EnvironmentId,
   type Telescope,
   type ThreadId,
@@ -162,6 +163,11 @@ function SideChatButton({
         : SIDE_CHAT_BLOCKED[block];
   const sideChat = useSideChat({
     threadRef,
+    // The side chat keeps the mode and model its source thread has.
+    readSettings: () => ({
+      runtimeMode: thread?.runtimeMode ?? DEFAULT_RUNTIME_MODE,
+      modelSelection: undefined,
+    }),
     onError: (_message, stage) =>
       toastManager.add({
         type: "error",

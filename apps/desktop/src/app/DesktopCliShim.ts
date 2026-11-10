@@ -10,7 +10,7 @@ import { makeComponentLogger } from "./DesktopObservability.ts";
 // AppImage mounts change each run; the launcher must mount the image itself.
 const { logInfo, logWarning } = makeComponentLogger("desktop-cli-shim");
 
-const MARKER = "Written by Codi: runs the desktop app's bundled t3 CLI.";
+export const MARKER = "Written by Codi: runs the desktop app's bundled t3 CLI.";
 // Launchers written before the rename carry this marker and still belong to the app.
 const LEGACY_MARKER = "Written by T3 Code: runs the desktop app's bundled t3 CLI.";
 
