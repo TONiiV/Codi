@@ -23,7 +23,7 @@ const EXPECTED_PROMPT = '{"type":"expect_outbound"';
 const RUNTIME_INFO_TEXT = /running in T3 Code through|in T3 Code's files viewer/g;
 const renameLine = (file, line) => {
   if (SKIP_LINE.test(line)) return line;
-  if (!file.endsWith(".ndjson")) return line.replaceAll("T3 Code", "Codi");
+  if (!file.endsWith(".ndjson")) return line.replaceAll(/T3(?: |%20)Code/g, "Codi");
   return line.startsWith(EXPECTED_PROMPT)
     ? line.replaceAll(RUNTIME_INFO_TEXT, (text) => text.replace("T3 Code", "Codi"))
     : line;
@@ -32,7 +32,7 @@ const renameLine = (file, line) => {
 export const isRenamed = (file) => TEXT_FILE.test(file) && !SKIP_PATH.test(file);
 
 export const renameText = (file, source) =>
-  source.includes("T3 Code")
+  /T3(?: |%20)Code/.test(source)
     ? source
         .split("\n")
         .map((line) => renameLine(file, line))

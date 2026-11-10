@@ -89,6 +89,10 @@ jobs:
                apps/web/src/i18n/locales/en.json. When upstream reworded that string, update the
                value in en.json. Text upstream added stays an English literal: add no keys.
                Fork helpers take a t argument, such as searchableSetting(id, t).
+               The settings search catalog is the exception to "add no keys": every item in
+               settingsSearch.ts needs settings.items.<id> and settings.itemTerms.<id> in en.json
+               and zh-CN.json, matching the catalog's title and search terms, and an item
+               upstream removed loses them.
              - The theme backdrop, brand assets under brand/, the language setting, the fork's own
                README.md, and runs-on: ubuntu-24.04 in workflows.
           3. Both sides added different things at the same place: keep both.
