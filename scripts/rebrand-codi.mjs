@@ -6,11 +6,9 @@ import * as NodeFS from "node:fs";
 
 const TEXT_FILE =
   /\.(?:[cm]?[jt]sx?|md|mdx|astro|html|ya?ml|json|ndjson|txt|webmanifest|xml|kt|podspec|sh)$/;
-// Vendored code, model evals, native helpers, third-party patches, the fork's own README and the
-// skill that replaces the official app (both name upstream on purpose),
-// the installer banners drawn next to the old logo, files that name existing installs, tests whose
-// fixtures are matched by a "t3" query, a legacy path pattern, both brand names or spaced-out
-// input that must normalize back to the upstream name, and the two rename scripts.
+// Not renamed: vendored code, evals, native helpers, patches, files that name upstream or old
+// installs on purpose (the fork's README, the desktop-release skill, installers, app identity),
+// tests whose fixtures need the upstream name, and the rename scripts.
 const SKIP_PATH =
   /^(?:\.repos|evals|native|patches|\.agents\/skills\/codi-desktop-release)\/|^README\.md$|(?:^|\/)(?:pnpm-lock\.yaml|tweets\.ts|install\.(?:sh|ps1)|installer\.nsh|rebrand-codi\.mjs|resolve-rebrand-conflicts\.mjs|upstream-sync\.yml|paletteSearch\.test\.ts|speech\.test\.ts|t3McpToolPresentation\.test\.ts|DesktopAppIdentity(?:\.test)?\.ts|DesktopUserData(?:\.test)?\.ts|DesktopLegacyLocalStorage(?:\.test)?\.ts)$/;
 // The retired Alpha name that old installs keep, a launcher path whose space is the fixture, the

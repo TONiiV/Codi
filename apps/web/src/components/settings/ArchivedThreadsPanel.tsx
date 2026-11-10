@@ -167,7 +167,8 @@ export function ArchivedThreadsPanel() {
       pending.delete(key);
       setPendingKeys(new Set(pending));
     });
-    reportFailure(result._tag === "Failure" ? result : result.value, 
+    reportFailure(
+      result._tag === "Failure" ? result : result.value,
       action === "unarchive"
         ? t("settings.text.failedToUnarchiveThread")
         : t("settings.text.failedToDeleteThread"),
