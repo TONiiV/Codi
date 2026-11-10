@@ -8,7 +8,9 @@ import {
   shouldRenderFrame,
   THEME_BACKDROP_FRAME_INTERVAL_MS,
   useThemeBackdropEnabled,
+  useThemeBackdropStyle,
   useThemeBackdropUnavailable,
+  type ThemeBackdropStyle,
 } from "../themeBackdrop";
 import { getStandardPaintedThemeColors, getThemeColorVariable } from "../themePalette";
 
@@ -18,7 +20,7 @@ void main() {
   gl_Position = vec4(corner * 2.0 - 1.0, 0.0, 1.0);
 }`;
 
-const FRAGMENT_SHADER = `#version 300 es
+const FLUID_FRAGMENT_SHADER = `#version 300 es
 precision highp float;
 uniform vec2 uRes; uniform float uTime;
 uniform vec3 uNight; uniform vec3 uBlue; uniform vec3 uGlow;
@@ -47,14 +49,86 @@ void main(){
   fragColor = vec4(col, 1.0);
 }`;
 
+// A monochrome glyph atlas (a "character texture") sampled per cell. Characters run from blank
+// (space, the darkest cells) to dense (@, the brightest), like a terminal luminance ramp.
+const GLYPHS = " .:-=+*#%@";
+const GLYPH_ATLAS_SIZE = 16;
+
+const ASCII_FRAGMENT_SHADER = `#version 300 es
+precision highp float;
+uniform vec2 uRes; uniform float uTime;
+uniform vec3 uNight; uniform vec3 uBlue; uniform vec3 uGlow;
+uniform sampler2D uGlyphs; uniform float uGlyphCount;
+out vec4 fragColor;
+float hash(vec2 p){ p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
+float noise(vec2 p){
+  vec2 i = floor(p), f = fract(p);
+  vec2 u = f * f * (3.0 - 2.0 * f);
+  float a = hash(i), b = hash(i + vec2(1, 0)), c = hash(i + vec2(0, 1)), d = hash(i + vec2(1, 1));
+  return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+}
+float fbm(vec2 p){
+  float s = 0.0, a = 0.5;
+  for (int i = 0; i < 5; ++i) { s += a * noise(p); p *= 2.0; a *= 0.5; }
+  return s;
+}
+void main(){
+  float cell = max(4.0, uRes.y / 56.0);
+  vec2 id = floor(gl_FragCoord.xy / cell);
+  vec2 uv = fract(gl_FragCoord.xy / cell);
+  float t = uTime;
+  vec2 p = id / 48.0;
+  float v = fbm(p + vec2(0.12 * t, -0.08 * t));
+  v = fbm(p + 4.0 * v + 0.05 * t);
+  float glyph = texture(uGlyphs, vec2((floor(v * uGlyphCount) + uv.x) / uGlyphCount, uv.y)).r;
+  // Faint characters over the theme canvas keep the content on top readable.
+  vec3 col = mix(uNight, mix(uBlue, uGlow, v), glyph * 0.3);
+  fragColor = vec4(col, 1.0);
+}`;
+
+/** Draws each glyph once into an offscreen canvas, uploaded as an R8 mask texture. */
+function createGlyphAtlas(gl: WebGL2RenderingContext): WebGLTexture | null {
+  const canvas = document.createElement("canvas");
+  canvas.width = GLYPHS.length * GLYPH_ATLAS_SIZE;
+  canvas.height = GLYPH_ATLAS_SIZE;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return null;
+  ctx.fillStyle = "#fff";
+  ctx.font = `${GLYPH_ATLAS_SIZE}px monospace`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  for (let i = 0; i < GLYPHS.length; i += 1) {
+    ctx.fillText(GLYPHS[i]!, (i + 0.5) * GLYPH_ATLAS_SIZE, GLYPH_ATLAS_SIZE / 2);
+  }
+  const texture = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, texture);
+  gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+  gl.texImage2D(
+    gl.TEXTURE_2D,
+    0,
+    gl.R8,
+    canvas.width,
+    canvas.height,
+    0,
+    gl.RED,
+    gl.UNSIGNED_BYTE,
+    canvas,
+  );
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  return texture;
+}
+
 const TIME_SCALE = 0.15;
 const ACTIVE_ATTRIBUTE = "data-theme-backdrop";
 
-function compileProgram(gl: WebGL2RenderingContext): WebGLProgram | null {
+function compileProgram(gl: WebGL2RenderingContext, fragmentSource: string): WebGLProgram | null {
   const program = gl.createProgram();
   for (const [type, source] of [
     [gl.VERTEX_SHADER, VERTEX_SHADER],
-    [gl.FRAGMENT_SHADER, FRAGMENT_SHADER],
+    [gl.FRAGMENT_SHADER, fragmentSource],
   ] as const) {
     const shader = gl.createShader(type);
     if (!shader) return null;
@@ -93,6 +167,7 @@ function readThemeColors(root: HTMLElement) {
 function startThemeBackdrop(
   canvas: HTMLCanvasElement,
   onRestored: () => void,
+  style: ThemeBackdropStyle,
 ): (() => void) | null {
   const gl = canvas.getContext("webgl2", {
     alpha: false,
@@ -101,7 +176,9 @@ function startThemeBackdrop(
     stencil: false,
     powerPreference: "low-power",
   });
-  const program = gl ? compileProgram(gl) : null;
+  const program = gl
+    ? compileProgram(gl, style === "ascii" ? ASCII_FRAGMENT_SHADER : FLUID_FRAGMENT_SHADER)
+    : null;
   if (!gl || !program) return null;
   gl.useProgram(program);
   const uRes = gl.getUniformLocation(program, "uRes");
@@ -109,6 +186,14 @@ function startThemeBackdrop(
   const uNight = gl.getUniformLocation(program, "uNight");
   const uBlue = gl.getUniformLocation(program, "uBlue");
   const uGlow = gl.getUniformLocation(program, "uGlow");
+  if (style === "ascii") {
+    const glyphs = createGlyphAtlas(gl);
+    if (!glyphs) return null;
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, glyphs);
+    gl.uniform1i(gl.getUniformLocation(program, "uGlyphs"), 0);
+    gl.uniform1f(gl.getUniformLocation(program, "uGlyphCount"), GLYPHS.length);
+  }
 
   const root = document.documentElement;
   const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -212,26 +297,35 @@ function startThemeBackdrop(
   };
 }
 
-/** Animated fluid canvas behind the app shell, tinted by the active theme. Off by default. */
+/** Animated canvas behind the app shell, tinted by the active theme. Off by default. */
 export function ThemeBackdrop() {
   const [enabled] = useThemeBackdropEnabled();
+  const [style] = useThemeBackdropStyle();
   const unavailable = useThemeBackdropUnavailable();
   // A restored context remounts the canvas, so the program is rebuilt from scratch.
   const [restoreCount, setRestoreCount] = useState(0);
   if (!enabled || unavailable) return null;
-  return <ThemeBackdropCanvas key={restoreCount} onRestored={setRestoreCount} />;
+  return <ThemeBackdropCanvas key={restoreCount} onRestored={setRestoreCount} style={style} />;
 }
 
-function ThemeBackdropCanvas({ onRestored }: { onRestored: Dispatch<SetStateAction<number>> }) {
+function ThemeBackdropCanvas({
+  onRestored,
+  style,
+}: {
+  onRestored: Dispatch<SetStateAction<number>>;
+  style: ThemeBackdropStyle;
+}) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
-  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Owns the WebGL context, its rAF loop, and the window/theme listeners; torn down on unmount.
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Owns the WebGL context, its rAF loop, and the window/theme listeners; torn down on unmount or style change.
   useEffect(() => {
     const canvas = canvasRef.current;
-    const stop = canvas ? startThemeBackdrop(canvas, () => onRestored((count) => count + 1)) : null;
+    const stop = canvas
+      ? startThemeBackdrop(canvas, () => onRestored((count) => count + 1), style)
+      : null;
     if (!stop) setThemeBackdropUnavailable(true);
     return stop ?? undefined;
-  }, [onRestored]);
+  }, [onRestored, style]);
 
   return (
     <canvas

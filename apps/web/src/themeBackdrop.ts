@@ -6,10 +6,25 @@ import { useSyncExternalStore } from "react";
 import { useLocalStorage } from "./hooks/useLocalStorage";
 
 const THEME_BACKDROP_STORAGE_KEY = "t3code.themeBackdrop";
+const THEME_BACKDROP_STYLE_STORAGE_KEY = "t3code.themeBackdropStyle";
 
 /** Per-device, like the theme itself: each browser and desktop install opts in separately. */
 export function useThemeBackdropEnabled() {
   return useLocalStorage(THEME_BACKDROP_STORAGE_KEY, false, Schema.Boolean);
+}
+
+export const THEME_BACKDROP_STYLES = ["fluid", "ascii"] as const;
+export type ThemeBackdropStyle = (typeof THEME_BACKDROP_STYLES)[number];
+
+const ThemeBackdropStyleSchema = Schema.Literals(THEME_BACKDROP_STYLES);
+
+/** Which shader the enabled backdrop uses; fluid by default, ASCII waves as the alternative. */
+export function useThemeBackdropStyle() {
+  return useLocalStorage(
+    THEME_BACKDROP_STYLE_STORAGE_KEY,
+    "fluid" as ThemeBackdropStyle,
+    ThemeBackdropStyleSchema,
+  );
 }
 
 let unavailable = false;
