@@ -9,7 +9,7 @@ import type * as EffectAcpErrors from "effect-acp/errors";
 import * as AcpSessionRuntime from "@t3tools/provider-acp/server/AcpSessionRuntime";
 
 /** `dsh` serves its ACP v1 agent over stdio when launched with this profile. */
-export const DEEPSEEK_ACP_ARGS = ["--profile", "acp"] as const;
+const DEEPSEEK_ACP_ARGS = ["--profile", "acp"] as const;
 
 type DeepSeekAcpRuntimeSettings = Pick<DeepSeekSettings, "binaryPath">;
 

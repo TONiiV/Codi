@@ -32,7 +32,7 @@ import * as ProviderEventLoggers from "@t3tools/provider-core/server/ProviderEve
 import type * as ProviderHost from "@t3tools/provider-core/server/ProviderHost";
 import { makeDeepSeekAcpRuntime } from "./acpSupport.ts";
 
-export const DEEPSEEK_PROVIDER = ProviderDriverKind.make("deepseek");
+const DEEPSEEK_PROVIDER = ProviderDriverKind.make("deepseek");
 const DEEPSEEK_MODEL_CONFIG_ID = "model";
 const DEFAULT_DEEPSEEK_SETTINGS = Schema.decodeSync(DeepSeekSettings)({});
 
@@ -91,7 +91,7 @@ function makeDeepSeekAcpAdapterFlavor(options: DeepSeekAdapterV2Options): AcpAda
   };
 }
 
-export const makeDeepSeekAdapterV2 = Effect.fn("makeDeepSeekAdapterV2")(function* (
+const makeDeepSeekAdapterV2 = Effect.fn("makeDeepSeekAdapterV2")(function* (
   options: DeepSeekAdapterV2Options,
 ) {
   return yield* makeAcpAdapterV2({
