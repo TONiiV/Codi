@@ -5,9 +5,9 @@ Codi can run installed ACP commands or coding agents from the official
 own models, tools, and sign-in, while Codi provides projects, threads, checkpoints, and task
 delegation.
 
-Agents that Codi supports as their own providers, such as Codex, Claude, Cursor, Grok, OpenCode,
-Pi, and [Antigravity](./providers-antigravity.md), don't appear in the Registry list. Enable them in
-**Settings → Providers** instead.
+Agents that Codi supports as their own providers, such as Codex, Claude, Cursor, DeepSeek, Grok,
+OpenCode, Pi, and [Antigravity](./providers-antigravity.md), don't appear in the Registry list. Enable
+them in **Settings → Providers** instead.
 
 Codi prefers the current ACP v2 preview protocol and uses its richer messages, usage, plans,
 configuration, compaction, and agent-terminal updates when the agent supports them. It also
@@ -32,7 +32,7 @@ code; review an agent's source and license before adding it.
 
 In **Settings → Providers → Add provider**, select **Show more**, then **Local ACP command**. Enter the executable
 name or path on the selected environment, add one literal argument per row, and choose a display
-name. For DeepSeek Harness, use `dsh` with arguments `--profile` and `acp`.
+name.
 
 Local commands require no registry entry or download. Environment overrides apply to the command;
 credentials and skills remain managed by the installed agent or its wrapper. Models and reasoning
