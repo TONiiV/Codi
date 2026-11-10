@@ -24,7 +24,9 @@ import { useTheme } from "../../hooks/useTheme";
 import {
   setThemeBackdropUnavailable,
   useThemeBackdropEnabled,
+  useThemeBackdropStyle,
   useThemeBackdropUnavailable,
+  type ThemeBackdropStyle,
 } from "../../themeBackdrop";
 import { useScopedSettings, useUpdateScopedSettings } from "./useScopedSettings";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
@@ -93,6 +95,11 @@ const EFFORT_DISPLAY_LABELS: Record<EffortDisplay, string> = {
   bars: "settings.text.bars",
 };
 
+const BACKDROP_STYLE_LABELS: Record<ThemeBackdropStyle, string> = {
+  fluid: "settings.text.backgroundStyleFluid",
+  ascii: "settings.text.backgroundStyleAscii",
+};
+
 export function AppearanceSettingsPanel() {
   const { t } = useTranslation();
   const {
@@ -110,6 +117,7 @@ export function AppearanceSettingsPanel() {
   const settings = useScopedSettings();
   const updateSettings = useUpdateScopedSettings();
   const [themeBackdropEnabled, setThemeBackdropEnabled] = useThemeBackdropEnabled();
+  const [themeBackdropStyle, setThemeBackdropStyle] = useThemeBackdropStyle();
   const themeBackdropUnavailable = useThemeBackdropUnavailable();
   const environmentStageLabel = useEnvironmentStageLabel();
   const environmentStageVariant = resolveSidebarStageBackdropVariant(environmentStageLabel);
@@ -199,6 +207,32 @@ export function AppearanceSettingsPanel() {
             />
           }
         />
+        {themeBackdropEnabled && !themeBackdropUnavailable ? (
+          <SettingsRow
+            {...searchableSetting("theme-backdrop-style", t)}
+            description={t("settings.text.chooseHowTheAnimatedBackgroundLooks")}
+            control={
+              <Select
+                value={themeBackdropStyle}
+                onValueChange={(value) => {
+                  if (value === "fluid" || value === "ascii") setThemeBackdropStyle(value);
+                }}
+              >
+                <SelectTrigger
+                  size="sm"
+                  className="w-full sm:w-40"
+                  aria-label={t("settings.text.animatedBackgroundStyle")}
+                >
+                  <SelectValue>{t(BACKDROP_STYLE_LABELS[themeBackdropStyle])}</SelectValue>
+                </SelectTrigger>
+                <SelectPopup align="end" alignItemWithTrigger={false}>
+                  <SelectItem value="fluid">{t("settings.text.backgroundStyleFluid")}</SelectItem>
+                  <SelectItem value="ascii">{t("settings.text.backgroundStyleAscii")}</SelectItem>
+                </SelectPopup>
+              </Select>
+            }
+          />
+        ) : null}
         <SettingsRow
           {...searchableSetting("setting-appearance-contrast", t)}
           description={t("settings.text.adjustTheContrastOfColorsAnd")}

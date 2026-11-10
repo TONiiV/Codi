@@ -391,6 +391,14 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["fluid shader wallpaper motion webgl dynamic backdrop"],
   },
   {
+    id: "theme-backdrop-style",
+    title: "Animated background style",
+    to: "/settings/appearance",
+    // Shown only while the backdrop is on, so a search lands on the switch that reveals it.
+    targetId: "theme-backdrop",
+    searchTerms: ["ascii glyphs characters grass wind meadow fluid style type animated background"],
+  },
+  {
     id: "environment-identification",
     title: "Environment identification",
     to: "/settings/appearance",
