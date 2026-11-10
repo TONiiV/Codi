@@ -14,83 +14,13 @@ import {
   type ThemeBackdropStyle,
 } from "../themeBackdrop";
 import { getStandardPaintedThemeColors, getThemeColorVariable } from "../themePalette";
-
-const VERTEX_SHADER = `#version 300 es
-void main() {
-  vec2 corner = vec2(float((gl_VertexID << 1) & 2), float(gl_VertexID & 2));
-  gl_Position = vec4(corner * 2.0 - 1.0, 0.0, 1.0);
-}`;
-
-const FLUID_FRAGMENT_SHADER = `#version 300 es
-precision highp float;
-uniform vec2 uRes; uniform float uTime;
-uniform vec3 uNight; uniform vec3 uBlue; uniform vec3 uGlow;
-out vec4 fragColor;
-float hash(vec2 p){ p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
-float noise(vec2 p){
-  vec2 i = floor(p), f = fract(p);
-  vec2 u = f * f * (3.0 - 2.0 * f);
-  float a = hash(i), b = hash(i + vec2(1, 0)), c = hash(i + vec2(0, 1)), d = hash(i + vec2(1, 1));
-  return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
-}
-float fbm(vec2 p){
-  float s = 0.0, a = 0.5;
-  for (int i = 0; i < 6; ++i) { s += a * noise(p); p *= 2.0; a *= 0.5; }
-  return s;
-}
-void main(){
-  vec2 p = gl_FragCoord.xy / uRes.y * 3.0;
-  float t = uTime;
-  vec2 q = vec2(fbm(p + 0.15 * t), fbm(p + 5.2 - 0.12 * t));
-  vec2 p1 = p + 4.0 * q;
-  vec2 r = vec2(fbm(p1 + 1.7), fbm(p1 + 9.2));
-  float v = fbm(p1 + 4.0 * r + 0.5 * t);
-  vec3 col = mix(uNight, uBlue, v);
-  col = mix(col, uGlow, smoothstep(0.55, 1.05, length(q)));
-  fragColor = vec4(col, 1.0);
-}`;
+import ASCII_FRAGMENT_SHADER from "./theme-backdrop/ascii-grass.frag.glsl?raw";
+import FLUID_FRAGMENT_SHADER from "./theme-backdrop/fluid.frag.glsl?raw";
+import VERTEX_SHADER from "./theme-backdrop/fullscreen.vert.glsl?raw";
 
 const GLYPH_WIDTH = 5;
 const GLYPH_HEIGHT = 7;
 const GLYPH_COUNT = 33;
-
-const ASCII_FRAGMENT_SHADER = `#version 300 es
-precision highp float;
-uniform vec2 uRes; uniform float uTime;
-uniform vec2 uGrid;
-uniform vec3 uNight; uniform vec3 uBlue;
-uniform sampler2D uImage;
-uniform sampler2D uGlyphs; uniform float uGlyphCount;
-out vec4 fragColor;
-float luma(vec3 color){ return dot(color, vec3(0.2126, 0.7152, 0.0722)); }
-void main(){
-  vec2 cell = gl_FragCoord.xy / uRes * uGrid;
-  vec2 id = floor(cell);
-  vec2 uv = fract(cell);
-  float imageAspect = 640.0 / 1050.0;
-  float viewAspect = uRes.x / uRes.y;
-  vec2 crop = viewAspect > imageAspect
-    ? vec2(1.0, imageAspect / viewAspect)
-    : vec2(viewAspect / imageAspect, 1.0);
-  vec2 imageUv = ((id + 0.5) / uGrid - 0.5) * crop + 0.5;
-  float gust = sin(imageUv.x * 12.0 + imageUv.y * 7.0 - uTime * 2.3);
-  gust += 0.4 * sin(imageUv.x * 23.0 - imageUv.y * 12.0 + uTime * 1.6);
-  imageUv += vec2(0.014 * gust, 0.005 * sin(imageUv.x * 10.0 - uTime * 1.8));
-  imageUv = clamp(imageUv, 0.001, 0.999);
-  float brightness = luma(texture(uImage, imageUv).rgb);
-  float gx = luma(texture(uImage, imageUv + vec2(0.004, 0.0)).rgb) - brightness;
-  float gy = luma(texture(uImage, imageUv + vec2(0.0, 0.004)).rgb) - brightness;
-  float direction = atan(gx, -gy) + 0.22 * gust;
-  float bin = mod(floor(direction * 8.0 / 3.14159265 + 0.5), 8.0);
-  float weight = brightness < 0.12 ? 0.0 : brightness < 0.3 ? 1.0 : brightness < 0.55 ? 2.0 : 3.0;
-  float glyphIndex = length(vec2(gx, gy)) < 0.008 && brightness < 0.16
-    ? 0.0 : 1.0 + weight * 8.0 + bin;
-  float glyph = texture(uGlyphs, vec2((glyphIndex + uv.x) / uGlyphCount, uv.y)).r;
-  vec3 base = mix(uNight, uBlue, brightness * 0.7);
-  vec3 ink = mix(uNight, uBlue, clamp(0.35 + brightness * 0.9, 0.0, 1.0));
-  vec3 col = mix(base, ink, glyph * 0.65);
-  fragColor = vec4(col, 1.0);
-}`;
 
 /** A compact 5×7 atlas of eight headings in four weights, plus a shadow dot. */
 function createGlyphAtlas(gl: WebGL2RenderingContext): WebGLTexture | null {
