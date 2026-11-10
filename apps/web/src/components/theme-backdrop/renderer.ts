@@ -16,6 +16,8 @@ import VERTEX_SHADER from "./fullscreen.vert.glsl?raw";
 const GLYPH_WIDTH = 5;
 const GLYPH_HEIGHT = 7;
 const GLYPH_COUNT = 33;
+const CELL_WIDTH = 4;
+const CELL_HEIGHT = 6;
 
 /** A compact 5×7 atlas of eight headings in four weights, plus a shadow dot. */
 function createGlyphAtlas(gl: WebGL2RenderingContext): WebGLTexture | null {
@@ -200,8 +202,8 @@ export function startThemeBackdrop(
       style === "ascii"
         ? asciiBackdropRenderSize(window.innerWidth, window.innerHeight)
         : backdropRenderSize(window.innerWidth, window.innerHeight, window.devicePixelRatio);
-    const nextGridWidth = Math.max(1, Math.ceil(width / GLYPH_WIDTH));
-    const nextGridHeight = Math.max(1, Math.ceil(height / GLYPH_HEIGHT));
+    const nextGridWidth = Math.max(1, Math.ceil(width / CELL_WIDTH));
+    const nextGridHeight = Math.max(1, Math.ceil(height / CELL_HEIGHT));
     if (
       renderWidth === width &&
       renderHeight === height &&
