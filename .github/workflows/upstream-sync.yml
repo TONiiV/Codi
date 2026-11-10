@@ -73,45 +73,14 @@ jobs:
           curl -fsSL https://claude.ai/install.sh | bash
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
-          cat > "$RUNNER_TEMP/policy.md" <<EOF
-          This repository is TONiiV/Codi (product name "Codi"), a fork of pingdotgg/t3code
-          (upstream, product name "T3 Code"). A nightly job merges upstream into the fork.
-
-          Policy, in this order:
-          1. Upstream wins. Take upstream's logic, structure, copy and file layout. When upstream
-             deleted or replaced a file or a feature, accept that (git rm a file it deleted), even
-             when the fork had changes there. This includes .macroscope/ and everything else that
-             is not listed in rule 2.
-          2. Keep these fork things on top of upstream's version:
-             - Telescope: apps/server/src/telescope, apps/web/src/components/telescope,
-               Telescope RPCs, settings, layers and navigation.
-             - i18n in apps/web: a t("key") call stays when its key exists in
-               apps/web/src/i18n/locales/en.json. When upstream reworded that string, update the
-               value in en.json. Text upstream added stays an English literal: add no keys.
-               Fork helpers take a t argument, such as searchableSetting(id, t).
-               The settings search catalog is the exception to "add no keys": every item in
-               settingsSearch.ts needs settings.items.<id> and settings.itemTerms.<id> in en.json
-               and zh-CN.json, matching the catalog's title and search terms, and an item
-               upstream removed loses them.
-             - The theme backdrop, brand assets under brand/, the language setting, the fork's own
-               README.md, and runs-on: ubuntu-24.04 in workflows.
-          3. Both sides added different things at the same place: keep both.
-          4. Write product text as upstream has it ("T3 Code"). A script renames it afterwards.
-          5. A fork quarantine ("// quarantine: #N <why>" above an it.skip) on a test upstream
-             changed or renamed: take upstream's test and put the same comment and .skip on it.
-             If upstream deleted that scenario, drop the quarantine.
-          6. Never skip, disable or delete a test to make a check pass. Except for a conflicted
-             file, never edit .github/, scripts/ or files under .repos/.
-
-          Telescope design: adapting Telescope code to a changed upstream API is fine. When a
-          change alters how Telescope behaves or looks, make your best choice and add one line
-          per change to $RUNNER_TEMP/telescope-review.md. The job then opens a pull request
-          for the maintainer instead of pushing to main.
-
-          Report: append to $RUNNER_TEMP/claude-report.md in Chinese, one short line per file
-          you changed. End with two lists: fork changes that upstream's side replaced, and new
-          upstream UI text that still needs i18n keys.
-          EOF
+          # The skill is read before the merge, so upstream's side never changes the rules.
+          {
+            awk 'NR == 1 && /^---$/ { front = 1; next } front && /^---$/ { front = 0; next } !front' \
+              .agents/skills/codi-upstream-merge/SKILL.md
+            echo
+            echo "Files for this run: the report file is $RUNNER_TEMP/claude-report.md and the"
+            echo "Telescope review file is $RUNNER_TEMP/telescope-review.md."
+          } > "$RUNNER_TEMP/policy.md"
 
           cat > "$RUNNER_TEMP/claude-run.sh" <<'EOF'
           #!/usr/bin/env bash
