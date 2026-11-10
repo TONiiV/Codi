@@ -1,6 +1,6 @@
 ---
 name: codi-upstream-sync
-description: Diagnose and fix the nightly Upstream sync workflow that merges pingdotgg/t3code into Codi, catch main up with upstream by hand, and land or repair the upstream-sync branch and pull request. Use when the sync failed, main is far behind upstream, or a merge of upstream/main needs resolving.
+description: Diagnose and fix the nightly Upstream sync workflow that merges pingdotgg/t3code into Codi, catch main up with upstream by hand, and land or repair the upstream-sync branch and pull request. Use when the sync failed, main is far behind upstream, or the upstream-sync pull request needs landing. For the merge rules themselves, use codi-upstream-merge.
 ---
 
 # Codi upstream sync
@@ -12,17 +12,10 @@ failures seen so far, and how to do the merge by hand.
 
 ## Conflict policy
 
-The maintainer set it. The workflow prompt (`policy.md` in the workflow) carries the same rules.
-
-1. Upstream wins: its logic, structure, copy and file layout, including deletions and replaced
-   features. `.macroscope/` and anything not in rule 2 follow upstream.
-2. Keep on top of upstream: Telescope (server, web, RPCs, settings, layers, navigation); i18n
-   `t("key")` calls whose key is in `apps/web/src/i18n/locales/en.json`; the theme backdrop;
-   brand assets; the language setting; the fork's own `README.md`; `runs-on: ubuntu-24.04`.
-3. Both sides added different things at one spot: keep both.
-4. Product text goes in as "T3 Code". `scripts/rebrand-codi.mjs` renames it afterwards.
-5. A change to Telescope's behavior or look goes to a pull request for the maintainer, never
-   straight to main.
+[codi-upstream-merge](../codi-upstream-merge/SKILL.md) holds the maintainer's policy and the
+fix patterns. The workflow passes that file to its Claude step as the prompt, so edit the policy
+there, not in the workflow. In short: upstream wins; the fork keeps Telescope, i18n `t()` calls
+and a few named assets; a change to Telescope's design goes to a pull request.
 
 ## Diagnose a failed run
 
