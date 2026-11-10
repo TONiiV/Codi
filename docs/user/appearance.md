@@ -56,9 +56,10 @@ without replaying its transitions.
 
 Turn on **Settings → Appearance → Animated background** to show a slow animated backdrop behind the
 main area. Choose **Animated background style** to pick between **Fluid**, soft waves of color, and
-**ASCII waves**, which draws the motion as characters. Its colors come from your current theme's
-canvas and accent, so switching themes or editing those colors in the theme editor changes it right
-away. When reduced motion is enabled in your operating system, or the device has no graphics
+**ASCII grass waves**, which draws a moving grass texture as characters. The grass image supplies
+shape and motion, while its colors come from your current theme's canvas and accent. Switching
+themes or editing those colors in the theme editor changes it right away. When reduced motion is
+enabled in your operating system, or the device has no graphics
 acceleration, it shows a still image instead. It also holds still while the window is not focused,
 so a window left open in the background costs nothing. If the device cannot run WebGL2 at all, the
 setting says it is unavailable.

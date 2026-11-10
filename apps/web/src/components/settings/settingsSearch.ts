@@ -396,7 +396,7 @@ export const SETTINGS_SEARCH_ITEMS = [
     to: "/settings/appearance",
     // Shown only while the backdrop is on, so a search lands on the switch that reveals it.
     targetId: "theme-backdrop",
-    searchTerms: ["ascii glyphs characters waves fluid style type animated background"],
+    searchTerms: ["ascii glyphs characters grass wind meadow fluid style type animated background"],
   },
   {
     id: "environment-identification",

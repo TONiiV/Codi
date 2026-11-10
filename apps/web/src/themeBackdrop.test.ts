@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 
 import {
+  asciiBackdropRenderSize,
   backdropRenderSize,
   isSoftwareRenderer,
   resolveBackdropColors,
@@ -16,6 +17,16 @@ describe("backdropRenderSize", () => {
     { css: [0, 0], dpr: 2, expected: { width: 1, height: 1 } },
   ])("renders $css at dpr $dpr as $expected.width x $expected.height", ({ css, dpr, expected }) => {
     expect(backdropRenderSize(css[0]!, css[1]!, dpr)).toEqual(expected);
+  });
+});
+
+describe("asciiBackdropRenderSize", () => {
+  it.each([
+    [1440, 900, { width: 1440, height: 900 }],
+    [3840, 2160, { width: 1920, height: 1080 }],
+    [0, 0, { width: 1, height: 1 }],
+  ])("scales %d x %d to a sharp bounded canvas", (width, height, expected) => {
+    expect(asciiBackdropRenderSize(width, height)).toEqual(expected);
   });
 });
 

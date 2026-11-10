@@ -18,7 +18,7 @@ export type ThemeBackdropStyle = (typeof THEME_BACKDROP_STYLES)[number];
 
 const ThemeBackdropStyleSchema = Schema.Literals(THEME_BACKDROP_STYLES);
 
-/** Which shader the enabled backdrop uses; fluid by default, ASCII waves as the alternative. */
+/** Which shader the enabled backdrop uses; fluid by default, ASCII grass waves as the alternative. */
 export function useThemeBackdropStyle() {
   return useLocalStorage(
     THEME_BACKDROP_STYLE_STORAGE_KEY,
@@ -54,6 +54,15 @@ export const THEME_BACKDROP_FRAME_INTERVAL_MS = 1000 / 30;
 
 export function backdropRenderSize(cssWidth: number, cssHeight: number, devicePixelRatio: number) {
   const scale = devicePixelRatio * RESOLUTION_SCALE;
+  return {
+    width: Math.max(1, Math.round(cssWidth * scale)),
+    height: Math.max(1, Math.round(cssHeight * scale)),
+  };
+}
+
+/** Keep ASCII strokes sharp at normal sizes without making 4K canvases repaint at native size. */
+export function asciiBackdropRenderSize(cssWidth: number, cssHeight: number) {
+  const scale = Math.min(1, Math.sqrt((1920 * 1080) / Math.max(1, cssWidth * cssHeight)));
   return {
     width: Math.max(1, Math.round(cssWidth * scale)),
     height: Math.max(1, Math.round(cssHeight * scale)),

@@ -1,6 +1,7 @@
 import { type Dispatch, type SetStateAction, useEffect, useRef, useState } from "react";
 
 import {
+  asciiBackdropRenderSize,
   backdropRenderSize,
   isSoftwareRenderer,
   resolveBackdropColors,
@@ -49,73 +50,83 @@ void main(){
   fragColor = vec4(col, 1.0);
 }`;
 
-// A monochrome glyph atlas (a "character texture") sampled per cell. Characters run from blank
-// (space, the darkest cells) to dense (@, the brightest), like a terminal luminance ramp.
-const GLYPHS = " .:-=+*#%@";
-const GLYPH_ATLAS_SIZE = 16;
+const GLYPH_WIDTH = 5;
+const GLYPH_HEIGHT = 7;
+const GLYPH_COUNT = 33;
 
 const ASCII_FRAGMENT_SHADER = `#version 300 es
 precision highp float;
 uniform vec2 uRes; uniform float uTime;
-uniform vec3 uNight; uniform vec3 uBlue; uniform vec3 uGlow;
+uniform vec2 uGrid;
+uniform vec3 uNight; uniform vec3 uBlue;
+uniform sampler2D uImage;
 uniform sampler2D uGlyphs; uniform float uGlyphCount;
 out vec4 fragColor;
-float hash(vec2 p){ p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
-float noise(vec2 p){
-  vec2 i = floor(p), f = fract(p);
-  vec2 u = f * f * (3.0 - 2.0 * f);
-  float a = hash(i), b = hash(i + vec2(1, 0)), c = hash(i + vec2(0, 1)), d = hash(i + vec2(1, 1));
-  return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
-}
-float fbm(vec2 p){
-  float s = 0.0, a = 0.5;
-  for (int i = 0; i < 5; ++i) { s += a * noise(p); p *= 2.0; a *= 0.5; }
-  return s;
-}
+float luma(vec3 color){ return dot(color, vec3(0.2126, 0.7152, 0.0722)); }
 void main(){
-  float cell = max(4.0, uRes.y / 56.0);
-  vec2 id = floor(gl_FragCoord.xy / cell);
-  vec2 uv = fract(gl_FragCoord.xy / cell);
-  float t = uTime;
-  vec2 p = id / 48.0;
-  float v = fbm(p + vec2(0.12 * t, -0.08 * t));
-  v = fbm(p + 4.0 * v + 0.05 * t);
-  float glyph = texture(uGlyphs, vec2((floor(v * uGlyphCount) + uv.x) / uGlyphCount, uv.y)).r;
-  // Faint characters over the theme canvas keep the content on top readable.
-  vec3 col = mix(uNight, mix(uBlue, uGlow, v), glyph * 0.3);
+  vec2 cell = gl_FragCoord.xy / uRes * uGrid;
+  vec2 id = floor(cell);
+  vec2 uv = fract(cell);
+  float imageAspect = 640.0 / 1050.0;
+  float viewAspect = uRes.x / uRes.y;
+  vec2 crop = viewAspect > imageAspect
+    ? vec2(1.0, imageAspect / viewAspect)
+    : vec2(viewAspect / imageAspect, 1.0);
+  vec2 imageUv = ((id + 0.5) / uGrid - 0.5) * crop + 0.5;
+  float gust = sin(imageUv.x * 12.0 + imageUv.y * 7.0 - uTime * 2.3);
+  gust += 0.4 * sin(imageUv.x * 23.0 - imageUv.y * 12.0 + uTime * 1.6);
+  imageUv += vec2(0.014 * gust, 0.005 * sin(imageUv.x * 10.0 - uTime * 1.8));
+  imageUv = clamp(imageUv, 0.001, 0.999);
+  float brightness = luma(texture(uImage, imageUv).rgb);
+  float gx = luma(texture(uImage, imageUv + vec2(0.004, 0.0)).rgb) - brightness;
+  float gy = luma(texture(uImage, imageUv + vec2(0.0, 0.004)).rgb) - brightness;
+  float direction = atan(gx, -gy) + 0.22 * gust;
+  float bin = mod(floor(direction * 8.0 / 3.14159265 + 0.5), 8.0);
+  float weight = brightness < 0.12 ? 0.0 : brightness < 0.3 ? 1.0 : brightness < 0.55 ? 2.0 : 3.0;
+  float glyphIndex = length(vec2(gx, gy)) < 0.008 && brightness < 0.16
+    ? 0.0 : 1.0 + weight * 8.0 + bin;
+  float glyph = texture(uGlyphs, vec2((glyphIndex + uv.x) / uGlyphCount, uv.y)).r;
+  vec3 base = mix(uNight, uBlue, brightness * 0.7);
+  vec3 ink = mix(uNight, uBlue, clamp(0.35 + brightness * 0.9, 0.0, 1.0));
+  vec3 col = mix(base, ink, glyph * 0.65);
   fragColor = vec4(col, 1.0);
 }`;
 
-/** Draws each glyph once into an offscreen canvas, uploaded as an R8 mask texture. */
+/** A compact 5×7 atlas of eight headings in four weights, plus a shadow dot. */
 function createGlyphAtlas(gl: WebGL2RenderingContext): WebGLTexture | null {
-  const canvas = document.createElement("canvas");
-  canvas.width = GLYPHS.length * GLYPH_ATLAS_SIZE;
-  canvas.height = GLYPH_ATLAS_SIZE;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return null;
-  ctx.fillStyle = "#fff";
-  ctx.font = `${GLYPH_ATLAS_SIZE}px monospace`;
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  for (let i = 0; i < GLYPHS.length; i += 1) {
-    ctx.fillText(GLYPHS[i]!, (i + 0.5) * GLYPH_ATLAS_SIZE, GLYPH_ATLAS_SIZE / 2);
+  const width = GLYPH_COUNT * GLYPH_WIDTH;
+  const pixels = new Uint8Array(width * GLYPH_HEIGHT);
+  pixels[3 * width + 2] = 180;
+  for (let weight = 0; weight < 4; weight += 1) {
+    for (let bin = 0; bin < 8; bin += 1) {
+      const angle = (bin * Math.PI) / 8;
+      const dx = Math.cos(angle);
+      const dy = Math.sin(angle);
+      const glyph = 1 + weight * 8 + bin;
+      for (let y = 1; y < GLYPH_HEIGHT - 1; y += 1) {
+        for (let x = 1; x < GLYPH_WIDTH - 1; x += 1) {
+          let covered = 0;
+          for (let sy = 0; sy < 4; sy += 1) {
+            for (let sx = 0; sx < 4; sx += 1) {
+              const px = x + (sx + 0.5) / 4 - 2.5;
+              const py = y + (sy + 0.5) / 4 - 3.5;
+              const along = px * dx + py * dy;
+              const across = Math.abs(-px * dy + py * dx);
+              if (Math.abs(along) < 1.1 + weight * 0.6 && across < 0.35 + weight * 0.16)
+                covered += 1;
+            }
+          }
+          pixels[y * width + glyph * GLYPH_WIDTH + x] = Math.round((covered / 16) * 255);
+        }
+      }
+    }
   }
   const texture = gl.createTexture();
   gl.bindTexture(gl.TEXTURE_2D, texture);
   gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
-  gl.texImage2D(
-    gl.TEXTURE_2D,
-    0,
-    gl.R8,
-    canvas.width,
-    canvas.height,
-    0,
-    gl.RED,
-    gl.UNSIGNED_BYTE,
-    canvas,
-  );
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, width, GLYPH_HEIGHT, 0, gl.RED, gl.UNSIGNED_BYTE, pixels);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
   return texture;
@@ -182,17 +193,41 @@ function startThemeBackdrop(
   if (!gl || !program) return null;
   gl.useProgram(program);
   const uRes = gl.getUniformLocation(program, "uRes");
+  const uGrid = gl.getUniformLocation(program, "uGrid");
   const uTime = gl.getUniformLocation(program, "uTime");
   const uNight = gl.getUniformLocation(program, "uNight");
   const uBlue = gl.getUniformLocation(program, "uBlue");
   const uGlow = gl.getUniformLocation(program, "uGlow");
+  let glyphTexture: WebGLTexture | null = null;
+  let imageTexture: WebGLTexture | null = null;
+  let image: HTMLImageElement | null = null;
   if (style === "ascii") {
-    const glyphs = createGlyphAtlas(gl);
-    if (!glyphs) return null;
+    glyphTexture = createGlyphAtlas(gl);
+    imageTexture = gl.createTexture();
+    if (!glyphTexture || !imageTexture) return null;
     gl.activeTexture(gl.TEXTURE0);
-    gl.bindTexture(gl.TEXTURE_2D, glyphs);
+    gl.bindTexture(gl.TEXTURE_2D, glyphTexture);
     gl.uniform1i(gl.getUniformLocation(program, "uGlyphs"), 0);
-    gl.uniform1f(gl.getUniformLocation(program, "uGlyphCount"), GLYPHS.length);
+    gl.uniform1f(gl.getUniformLocation(program, "uGlyphCount"), GLYPH_COUNT);
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, imageTexture);
+    gl.texImage2D(
+      gl.TEXTURE_2D,
+      0,
+      gl.RGBA,
+      1,
+      1,
+      0,
+      gl.RGBA,
+      gl.UNSIGNED_BYTE,
+      new Uint8Array([16, 24, 12, 255]),
+    );
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.uniform1i(gl.getUniformLocation(program, "uImage"), 1);
+    image = new Image();
   }
 
   const root = document.documentElement;
@@ -233,20 +268,33 @@ function startThemeBackdrop(
   // new program, whose uRes would otherwise stay 0.
   let renderWidth = 0;
   let renderHeight = 0;
+  let gridWidth = 0;
+  let gridHeight = 0;
   const resize = () => {
-    const { width, height } = backdropRenderSize(
-      window.innerWidth,
-      window.innerHeight,
-      window.devicePixelRatio,
-    );
-    if (renderWidth === width && renderHeight === height) return;
+    const { width, height } =
+      style === "ascii"
+        ? asciiBackdropRenderSize(window.innerWidth, window.innerHeight)
+        : backdropRenderSize(window.innerWidth, window.innerHeight, window.devicePixelRatio);
+    const nextGridWidth = Math.max(1, Math.ceil(width / GLYPH_WIDTH));
+    const nextGridHeight = Math.max(1, Math.ceil(height / GLYPH_HEIGHT));
+    if (
+      renderWidth === width &&
+      renderHeight === height &&
+      (style !== "ascii" || (gridWidth === nextGridWidth && gridHeight === nextGridHeight))
+    )
+      return;
     renderWidth = width;
     renderHeight = height;
+    gridWidth = nextGridWidth;
+    gridHeight = nextGridHeight;
     // Resizing clears the drawing buffer, so repaint now rather than flash the clear color.
     canvas.width = width;
     canvas.height = height;
     gl.viewport(0, 0, width, height);
     gl.uniform2f(uRes, width, height);
+    if (style === "ascii") {
+      gl.uniform2f(uGrid, gridWidth, gridHeight);
+    }
     if (colorsKey && !document.hidden) draw();
   };
   const syncColors = () => {
@@ -271,6 +319,20 @@ function startThemeBackdrop(
   resize();
   syncColors();
   schedule();
+  if (image && imageTexture) {
+    const texture = imageTexture;
+    const source = image;
+    source.onload = () => {
+      gl.activeTexture(gl.TEXTURE1);
+      gl.bindTexture(gl.TEXTURE_2D, texture);
+      gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, gl.RGB, gl.UNSIGNED_BYTE, source);
+      gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+      drawIfStill();
+    };
+    source.onerror = () => setThemeBackdropUnavailable(true);
+    source.src = "/backdrops/living-ascii-grass.jpg";
+  }
   root.setAttribute(ACTIVE_ATTRIBUTE, "");
   themeObserver.observe(root, { attributes: true, attributeFilter: ["class", "style"] });
   window.addEventListener("resize", resize);
@@ -283,6 +345,10 @@ function startThemeBackdrop(
 
   return () => {
     cancelAnimationFrame(frame);
+    if (image) {
+      image.onload = null;
+      image.onerror = null;
+    }
     root.removeAttribute(ACTIVE_ATTRIBUTE);
     themeObserver.disconnect();
     window.removeEventListener("resize", resize);
@@ -292,6 +358,9 @@ function startThemeBackdrop(
     reducedMotion.removeEventListener("change", schedule);
     canvas.removeEventListener("webglcontextlost", onContextLost);
     canvas.removeEventListener("webglcontextrestored", onRestored);
+    gl.deleteTexture(glyphTexture);
+    gl.deleteTexture(imageTexture);
+    gl.deleteProgram(program);
     // A lost context stays on the canvas, so a StrictMode replay on the same element would get a dead one.
     if (!canvas.isConnected) gl.getExtension("WEBGL_lose_context")?.loseContext();
   };
@@ -332,6 +401,7 @@ function ThemeBackdropCanvas({
       ref={canvasRef}
       aria-hidden
       className="pointer-events-none fixed inset-0 -z-10 size-full select-none"
+      style={{ imageRendering: style === "ascii" ? "pixelated" : undefined }}
     />
   );
 }
