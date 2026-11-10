@@ -6,12 +6,13 @@ import * as NodeFS from "node:fs";
 
 const TEXT_FILE =
   /\.(?:[cm]?[jt]sx?|md|mdx|astro|html|ya?ml|json|ndjson|txt|webmanifest|xml|kt|podspec|sh)$/;
-// Vendored code, model evals, native helpers, third-party patches,
+// Vendored code, model evals, native helpers, third-party patches, the fork's own README and the
+// skill that replaces the official app (both name upstream on purpose),
 // the installer banners drawn next to the old logo, files that name existing installs, tests whose
 // fixtures are matched by a "t3" query, a legacy path pattern, both brand names or spaced-out
-// input that must normalize back to the upstream name, and this file.
+// input that must normalize back to the upstream name, and the two rename scripts.
 const SKIP_PATH =
-  /^(?:\.repos|evals|native|patches)\/|(?:^|\/)(?:pnpm-lock\.yaml|tweets\.ts|install\.(?:sh|ps1)|installer\.nsh|rebrand-codi\.mjs|upstream-sync\.yml|paletteSearch\.test\.ts|speech\.test\.ts|t3McpToolPresentation\.test\.ts|DesktopAppIdentity(?:\.test)?\.ts|DesktopUserData(?:\.test)?\.ts|DesktopLegacyLocalStorage(?:\.test)?\.ts)$/;
+  /^(?:\.repos|evals|native|patches|\.agents\/skills\/codi-desktop-release)\/|^README\.md$|(?:^|\/)(?:pnpm-lock\.yaml|tweets\.ts|install\.(?:sh|ps1)|installer\.nsh|rebrand-codi\.mjs|resolve-rebrand-conflicts\.mjs|upstream-sync\.yml|paletteSearch\.test\.ts|speech\.test\.ts|t3McpToolPresentation\.test\.ts|DesktopAppIdentity(?:\.test)?\.ts|DesktopUserData(?:\.test)?\.ts|DesktopLegacyLocalStorage(?:\.test)?\.ts)$/;
 // The retired Alpha name that old installs keep, a launcher path whose space is the fixture, the
 // marker old launchers carry, and the client name sent to providers. Beta, Dev and Nightly are
 // current product names and must be renamed.
@@ -30,23 +31,31 @@ const renameLine = (file, line) => {
     : line;
 };
 
-const files = NodeChildProcess.execFileSync("git", ["ls-files", "-z"], {
-  encoding: "utf8",
-  maxBuffer: 1 << 28,
-})
-  .split("\0")
-  .filter((file) => TEXT_FILE.test(file) && !SKIP_PATH.test(file));
+export const isRenamed = (file) => TEXT_FILE.test(file) && !SKIP_PATH.test(file);
 
-let changed = 0;
-for (const file of files) {
-  const source = NodeFS.readFileSync(file, "utf8");
-  if (!source.includes("T3 Code")) continue;
-  const next = source
-    .split("\n")
-    .map((line) => renameLine(file, line))
-    .join("\n");
-  if (next === source) continue;
-  NodeFS.writeFileSync(file, next);
-  changed++;
+export const renameText = (file, source) =>
+  source.includes("T3 Code")
+    ? source
+        .split("\n")
+        .map((line) => renameLine(file, line))
+        .join("\n")
+    : source;
+
+if (import.meta.main) {
+  const files = NodeChildProcess.execFileSync("git", ["ls-files", "-z"], {
+    encoding: "utf8",
+    maxBuffer: 1 << 28,
+  })
+    .split("\0")
+    .filter(isRenamed);
+
+  let changed = 0;
+  for (const file of files) {
+    const source = NodeFS.readFileSync(file, "utf8");
+    const next = renameText(file, source);
+    if (next === source) continue;
+    NodeFS.writeFileSync(file, next);
+    changed++;
+  }
+  console.log(`Renamed T3 Code to Codi in ${changed} files.`);
 }
-console.log(`Renamed T3 Code to Codi in ${changed} files.`);
