@@ -13,7 +13,7 @@ export function useThemeBackdropEnabled() {
   return useLocalStorage(THEME_BACKDROP_STORAGE_KEY, false, Schema.Boolean);
 }
 
-export const THEME_BACKDROP_STYLES = ["fluid", "ascii"] as const;
+const THEME_BACKDROP_STYLES = ["fluid", "ascii"] as const;
 export type ThemeBackdropStyle = (typeof THEME_BACKDROP_STYLES)[number];
 
 const ThemeBackdropStyleSchema = Schema.Literals(THEME_BACKDROP_STYLES);
