@@ -86,7 +86,7 @@ const OpenTicketTool = boardTool("open_ticket", {
 
 const TicketUpdateTool = boardTool("ticket_update", {
   title: "Update ticket",
-  description: `Change a Telescope ticket's fields with \`set\`, or append a \`note\`; notes are never edited. \`set.projectId\`: an \`id\` from \`project_list\`. \`baseVersion\`: the \`version\` you read. Your write lands even if the ticket changed since you read it; \`overwrote\` lists what someone else had changed that you replaced. Tell your member what you replaced. Only a member moves a ticket out of needs_decision. If you are blocked until a member answers, set \`status\` to needs_decision and say why in \`note\`. ${BOARD_TEXT}`,
+  description: `Change a Telescope ticket's fields with \`set\`, or append a \`note\`; notes are never edited. \`set.projectId\`: an \`id\` from \`project_list\`. \`baseVersion\`: the \`version\` you read. Your write lands even if the ticket changed since you read it; \`overwrote\` lists what someone else had changed that you replaced. Tell your member what you replaced. \`set.threads\` replaces the ticket's Code threads; keep the ones you read. Only a member moves a ticket out of needs_decision. If you are blocked until a member answers, set \`status\` to needs_decision and say why in \`note\`. ${BOARD_TEXT}`,
   parameters: Telescope.TaskUpdateInput.mapFields((fields) => ({
     ...Struct.omit(fields, ["workspaceId"]),
     set: Schema.optionalKey(AgentTaskFields),

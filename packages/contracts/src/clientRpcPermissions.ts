@@ -10,6 +10,7 @@ import {
   AuthSettingsWriteScope,
   AuthSourceControlWriteScope,
   AuthTelescopeAdminScope,
+  AuthTelescopeMemberScope,
   AuthTerminalOperateScope,
   type AuthEnvironmentScope,
 } from "./auth.ts";
@@ -108,6 +109,9 @@ export const CLIENT_GUARDED_RPC_SCOPES = {
   [TELESCOPE_WS_METHODS.projectRuleSet]: AuthTelescopeAdminScope,
   [TELESCOPE_WS_METHODS.routingSet]: AuthTelescopeAdminScope,
   [TELESCOPE_WS_METHODS.routingDelete]: AuthTelescopeAdminScope,
+  // Offered from Code threads, whose sessions may lack Telescope scopes on this environment.
+  [TELESCOPE_WS_METHODS.taskLinkThread]: AuthTelescopeMemberScope,
+  [TELESCOPE_WS_METHODS.taskUnlinkThread]: AuthTelescopeMemberScope,
 } as const;
 export type ClientGuardedRpcTag = keyof typeof CLIENT_GUARDED_RPC_SCOPES;
 

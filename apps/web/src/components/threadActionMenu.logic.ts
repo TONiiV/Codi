@@ -21,6 +21,8 @@ export type ThreadActionMenuId =
   | "regenerate-title"
   | "mark-unread"
   | "share-guest"
+  | "link-task"
+  | "unlink-task"
   | "copy"
   | "copy-path"
   | "copy-branch"
@@ -95,6 +97,8 @@ export interface ThreadActionMenuState {
   readonly canShareWithGuest?: boolean;
   /** A No project thread with its own folder, on a server that can promote it. */
   readonly canTurnIntoProject?: boolean;
+  /** The Telescope task holding the thread, `null` when none; absent with no board to link to. */
+  readonly linkedTask?: { readonly title: string } | null | undefined;
 }
 
 /** Local navigation, read markers, and copying remain available to read-only clients. */
@@ -105,6 +109,8 @@ export function threadActionRequiresOperate(action: ThreadActionMenuId): boolean
     "project-settings",
     "mark-unread",
     "share-guest",
+    "link-task",
+    "unlink-task",
     "copy",
     "copy-path",
     "copy-branch",
@@ -181,6 +187,17 @@ export function buildThreadActionMenuItems(
     ...(state.canShareWithGuest
       ? [{ id: "share-guest" as const, label: "Share with guest", icon: "user-plus" }]
       : []),
+    ...(state.linkedTask === undefined
+      ? []
+      : [
+          state.linkedTask === null
+            ? { id: "link-task" as const, label: "关联到任务…", icon: "link" }
+            : {
+                id: "unlink-task" as const,
+                label: `解除关联「${state.linkedTask.title}」`,
+                icon: "unlink",
+              },
+        ]),
     ...(state.projectFilter
       ? [
           {

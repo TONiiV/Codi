@@ -359,6 +359,16 @@ export function createTelescopeBoardAtoms<R, E>(
       tag: WS_METHODS.taskUpdate,
       onSettled: refreshBoard,
     }),
+    linkThread: createEnvironmentRpcCommand(runtime, {
+      label: "telescope:task:link-thread",
+      tag: WS_METHODS.taskLinkThread,
+      onSettled: refreshBoard,
+    }),
+    unlinkThread: createEnvironmentRpcCommand(runtime, {
+      label: "telescope:task:unlink-thread",
+      tag: WS_METHODS.taskUnlinkThread,
+      onSettled: refreshBoard,
+    }),
     createDecision: createEnvironmentRpcCommand(runtime, {
       label: "telescope:decision:create",
       tag: WS_METHODS.decisionCreate,

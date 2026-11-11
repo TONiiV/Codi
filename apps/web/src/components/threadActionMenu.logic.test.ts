@@ -35,7 +35,11 @@ describe("buildThreadActionMenuItems", () => {
         isPinned: reversed,
         isSettled: reversed,
         isSnoozed: reversed,
+        linkedTask: reversed ? { title: "Casing" } : null,
       });
+      // Telescope checks its own grant, so a read-only Code session still links and unlinks.
+      const taskItem = items.find((item) => item.id === (reversed ? "unlink-task" : "link-task"));
+      expect(taskItem?.disabled).toBeUndefined();
       const expected = reversed
         ? [
             "unpin",

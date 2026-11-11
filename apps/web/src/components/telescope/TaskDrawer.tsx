@@ -1,4 +1,4 @@
-import { RegistryContext } from "@effect/atom-react";
+import { RegistryContext, useAtomValue } from "@effect/atom-react";
 import { scopeThreadRef } from "@t3tools/client-runtime/environment";
 import { leaseRecheckDelay } from "@t3tools/client-runtime/telescope/taskBoard";
 import {
@@ -9,7 +9,7 @@ import {
   type ThreadId,
 } from "@t3tools/contracts";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { ExternalLinkIcon, MessageSquarePlusIcon } from "lucide-react";
+import { ExternalLinkIcon, MessageSquarePlusIcon, UnlinkIcon } from "lucide-react";
 import { type ReactNode, useContext, useEffect, useState } from "react";
 
 import { useThreadShell } from "../../state/entities";
@@ -29,6 +29,7 @@ import { Spinner } from "../ui/spinner";
 import { toastManager } from "../ui/toast";
 import { ErrorNote } from "./TelescopeAccountDialogs";
 import { telescopeBoard } from "./telescopeState";
+import { unlinkThreadFromTask } from "./ThreadTaskLink";
 import {
   type BoardTarget,
   NeedsYouBadge,
@@ -124,29 +125,57 @@ function ThreadLink({
   );
 }
 
-/** Forks the task's thread into a side chat that opens on the task, then shows that thread. */
-function SideChatButton({
+function LinkedThreads({
   environmentId,
   task,
 }: {
   environmentId: EnvironmentId;
   task: Telescope.Task;
 }) {
+  const mayUnlink = useAtomValue(telescopeBoard.unlinkThread.permissionAtom(environmentId));
+  if (task.threads.length === 0) return <p className="text-muted-foreground">没有关联对话</p>;
+  return (
+    <ul className="flex flex-col items-start">
+      {task.threads.map((thread) => (
+        <li key={`${thread.environmentId}:${thread.threadId}`} className="flex items-center gap-1">
+          <ThreadLink environmentId={thread.environmentId} threadId={thread.threadId} />
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            aria-label="解除关联"
+            title="解除关联（对话不会被删除）"
+            disabled={!mayUnlink}
+            onClick={() =>
+              void unlinkThreadFromTask(scopeThreadRef(thread.environmentId, thread.threadId), task)
+            }
+          >
+            <UnlinkIcon />
+          </Button>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/** Forks the task's first thread into a side chat that opens on the task, then shows that thread. */
+function SideChatButton({ task }: { task: Telescope.Task }) {
   const navigate = useNavigate();
   const registry = useContext(RegistryContext);
   const [pending, setPending] = useState(false);
+  const [first] = task.threads;
   const threadRef =
-    task.threadId === undefined ? null : scopeThreadRef(environmentId, task.threadId);
+    first === undefined ? null : scopeThreadRef(first.environmentId, first.threadId);
+  const environmentId = threadRef?.environmentId ?? null;
   const capabilities = useEnvironment(environmentId)?.serverConfig?.environment.capabilities;
   const canOperate = useEnvironmentScope(environmentId, AuthOrchestrationOperateScope);
   const shell = useThreadShell(threadRef);
   // The shell omits idle subagents; their family read still carries the lineage.
   const family = useEnvironmentQuery(
     threadRef !== null && shell === null
-      ? threadFamilies.familyAtom(environmentId, threadRef.threadId)
+      ? threadFamilies.familyAtom(threadRef.environmentId, threadRef.threadId)
       : null,
   );
-  const thread = shell ?? family.data?.threads.find((row) => row.id === task.threadId) ?? null;
+  const thread = shell ?? family.data?.threads.find((row) => row.id === first?.threadId) ?? null;
   const familyFailed = family.data === null && family.error !== null;
   // The shell and the family read carry active threads only.
   const block =
@@ -203,7 +232,9 @@ function SideChatButton({
       {familyFailed && threadRef !== null ? (
         <ErrorNote
           text="没有读到关联对话的状态"
-          onRetry={() => threadFamilies.refresh(registry, environmentId, threadRef.threadId)}
+          onRetry={() =>
+            threadFamilies.refresh(registry, threadRef.environmentId, threadRef.threadId)
+          }
         />
       ) : hint === null ? null : (
         <p className="text-xs text-muted-foreground">{hint}</p>
@@ -273,11 +304,7 @@ function TaskDetail({ target, taskId }: { target: BoardTarget; taskId: Telescope
           ) : (
             <p className="text-muted-foreground">没有关联 issue</p>
           )}
-          {task.threadId ? (
-            <ThreadLink environmentId={environmentId} threadId={task.threadId} />
-          ) : (
-            <p className="text-muted-foreground">没有关联对话</p>
-          )}
+          <LinkedThreads environmentId={environmentId} task={task} />
         </Field>
         <Field label={`汇报 ${reports.length}`}>
           {reports.length === 0 ? (
@@ -295,7 +322,7 @@ function TaskDetail({ target, taskId }: { target: BoardTarget; taskId: Telescope
             </ol>
           )}
         </Field>
-        <SideChatButton environmentId={environmentId} task={task} />
+        <SideChatButton task={task} />
       </div>
     </>
   );

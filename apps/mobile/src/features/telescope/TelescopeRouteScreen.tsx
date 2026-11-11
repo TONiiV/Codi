@@ -5,6 +5,7 @@ import {
   type AtomCommandResult,
 } from "@t3tools/client-runtime/state/runtime";
 import { failureText, WORKSPACE_ERROR_TEXT } from "@t3tools/client-runtime/telescope/workspaces";
+import { scopeThreadRef } from "@t3tools/client-runtime/environment";
 import { EnvironmentId, Telescope } from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
 import { AsyncResult } from "effect/reactivity";
@@ -18,6 +19,7 @@ import * as Dialog from "../../components/ui/Dialog";
 import { ScreenScrollView as ScrollView } from "../../components/ui/ScreenScrollView";
 import { SegmentedControl } from "../../components/ui/SegmentedControl";
 import { SelectionRow } from "../../components/ui/SelectionRow";
+import { useThreadShell } from "../../state/entities";
 import { useEnvironments } from "../../state/environments";
 import { mobilePreferencesAtom, updateMobilePreferencesAtom } from "../../state/preferences";
 import { type EnvironmentQueryView, useEnvironmentQuery } from "../../state/query";
@@ -308,6 +310,16 @@ function DecisionList(props: {
   );
 }
 
+/** Read-only: linking happens in Code on web and desktop. */
+function LinkedThread({ thread }: { readonly thread: Telescope.TaskThread }) {
+  const title = useThreadShell(scopeThreadRef(thread.environmentId, thread.threadId))?.title;
+  return (
+    <Text className="text-xs text-foreground-muted" numberOfLines={1}>
+      {`关联对话：${title ?? "不在这台设备上"}`}
+    </Text>
+  );
+}
+
 function ReviewList(props: {
   readonly target: Target;
   readonly query: EnvironmentQueryView<typeof Telescope.TaskListResult.Type>;
@@ -348,6 +360,9 @@ function ReviewList(props: {
                 {lastNote.text}
               </Text>
             ) : null}
+            {task.threads.map((thread) => (
+              <LinkedThread key={`${thread.environmentId}:${thread.threadId}`} thread={thread} />
+            ))}
             <View className="flex-row flex-wrap gap-2 pt-1">
               <Button
                 size="compact"

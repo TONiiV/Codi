@@ -82,7 +82,7 @@ export function useBoardNames({ environmentId, workspaceId }: BoardTarget) {
   return (id: string) => names.get(id);
 }
 
-const errorText = (error: unknown) =>
+export const errorText = (error: unknown) =>
   error instanceof Error && error.message.length > 0 ? error.message : "请稍后再试。";
 const STALE = {
   type: "warning",

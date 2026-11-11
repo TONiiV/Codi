@@ -1,6 +1,6 @@
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import { assert, it } from "@effect/vitest";
-import { AuthSessionId, EnvironmentId, Telescope } from "@t3tools/contracts";
+import { AuthSessionId, EnvironmentId, Telescope, ThreadId } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
@@ -16,13 +16,12 @@ import * as WorkspaceService from "./WorkspaceService.ts";
 const database = Layer.effectDiscard(runMigrations()).pipe(
   Layer.provideMerge(SqlitePersistence.layerMemory),
 );
+const here = Layer.succeed(ServerEnvironment.ServerEnvironmentIdentity, {
+  getEnvironmentId: Effect.succeed(EnvironmentId.make("env-elsewhere")),
+});
 const layer = Layer.mergeAll(TaskBoardService.layer, WorkspaceService.layer).pipe(
   Layer.provideMerge(Layer.merge(database, NodeCrypto.layer)),
-  Layer.provide(
-    Layer.succeed(ServerEnvironment.ServerEnvironmentIdentity, {
-      getEnvironmentId: Effect.succeed(EnvironmentId.make("env-elsewhere")),
-    }),
-  ),
+  Layer.provide(here),
 );
 
 const isWorkspaceError = Schema.is(Telescope.WorkspaceError);
@@ -347,6 +346,185 @@ it.layer(layer)("Telescope task board", (it) => {
     }),
   );
 
+  it.effect("links a thread to one task at a time and unlinks it without touching others", () =>
+    Effect.gen(function* () {
+      const { board, a, b, agent } = yield* setup;
+      const thread = (id: string) => ({
+        environmentId: EnvironmentId.make("env-laptop"),
+        threadId: ThreadId.make(id),
+      });
+      const first = yield* board.createTask(alice, {
+        workspaceId: a,
+        title: "Gripper",
+        threads: [thread("t-1"), thread("t-1")],
+      });
+      assert.deepStrictEqual(first.threads, [thread("t-1")]);
+      const second = yield* board.createTask(alice, { workspaceId: a, title: "Casing" });
+      const link = (taskId: Telescope.TaskId, id: string, workspaceId = a) =>
+        board.linkThread(alice, { workspaceId, taskId, ...thread(id) });
+
+      const linked = yield* link(second.id, "t-2");
+      assert.deepStrictEqual([linked.version, linked.threads], [2, [thread("t-2")]]);
+      assert.strictEqual((yield* link(second.id, "t-2")).version, 2, "relinking changes nothing");
+      const both = yield* link(second.id, "t-3");
+      assert.deepStrictEqual(both.threads, [thread("t-2"), thread("t-3")]);
+
+      const taken = yield* link(second.id, "t-1").pipe(Effect.flip);
+      assert.deepStrictEqual(
+        [reasonOf(taken), taken.message],
+        ["conflict", 'This thread already belongs to the task "Gripper".'],
+      );
+      const viaUpdate = yield* board
+        .updateTask(agent, {
+          workspaceId: a,
+          taskId: second.id,
+          baseVersion: both.version,
+          set: { threads: [...both.threads, thread("t-1")] },
+        })
+        .pipe(Effect.flip);
+      assert.strictEqual(reasonOf(viaUpdate), "conflict");
+      const elsewhere = yield* board.createTask(alice, { workspaceId: b, title: "Other" });
+      const crossed = yield* link(elsewhere.id, "t-2", b).pipe(Effect.flip);
+      assert.strictEqual(reasonOf(crossed), "conflict");
+
+      const unlinked = yield* board.unlinkThread(alice, {
+        workspaceId: a,
+        taskId: second.id,
+        ...thread("t-2"),
+      });
+      assert.deepStrictEqual(unlinked.threads, [thread("t-3")]);
+      assert.deepStrictEqual((yield* link(elsewhere.id, "t-2", b)).threads, [thread("t-2")]);
+      const { tasks } = yield* board.listTasks(alice, { workspaceId: a });
+      assert.deepStrictEqual(tasks.map((task) => [task.title, task.threads]).toSorted(), [
+        ["Casing", [thread("t-3")]],
+        ["Gripper", [thread("t-1")]],
+      ]);
+      const { commits } = yield* board.listCommits(alice, { workspaceId: a, taskId: second.id });
+      assert.deepStrictEqual(
+        commits.map((commit) => commit.changedFields.threads),
+        [undefined, [thread("t-2")], [thread("t-2"), thread("t-3")], [thread("t-3")]],
+      );
+
+      // Resending the list it read is not a write, so it cannot unlink what a later write linked.
+      const stale = yield* board.updateTask(agent, {
+        workspaceId: a,
+        taskId: second.id,
+        baseVersion: 1,
+        set: { status: "in_progress", threads: [] },
+      });
+      assert.deepStrictEqual(
+        [stale.status, stale.threads, stale.overwrote],
+        ["in_progress", [thread("t-3")], undefined],
+      );
+
+      // A task read without links: undoing the writer's own later link lands, as for any field.
+      const third = yield* board.createTask(alice, { workspaceId: a, title: "Cover" });
+      const own = (baseVersion: number, threads: ReadonlyArray<ReturnType<typeof thread>>) =>
+        board.updateTask(agent, {
+          workspaceId: a,
+          taskId: third.id,
+          baseVersion,
+          set: { threads },
+        });
+      yield* own(1, [thread("t-9")]);
+      yield* board.updateTask(alice, {
+        workspaceId: a,
+        taskId: third.id,
+        baseVersion: 2,
+        set: { title: "Cover v2" },
+      });
+      assert.deepStrictEqual((yield* own(1, [])).threads, []);
+    }),
+  );
+
+  it.effect("stamps the threads migration 097 moved with this environment on start", () =>
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      const { board, a, agent } = yield* setup;
+      const task = yield* board.createTask(alice, { workspaceId: a, title: "Moved" });
+      yield* sql`INSERT INTO telescope_task_threads ${sql.insert({
+        workspace_id: a,
+        task_id: task.id,
+        environment_id: "",
+        thread_id: "t-moved",
+        linked_by: "server",
+        linked_at: task.createdAt,
+      })}`;
+      yield* Layer.build(Layer.fresh(TaskBoardService.layer)).pipe(
+        Effect.provide(here),
+        Effect.scoped,
+      );
+      const reread = yield* board.getTask(alice, { workspaceId: a, taskId: task.id });
+      const moved = {
+        environmentId: EnvironmentId.make("env-elsewhere"),
+        threadId: ThreadId.make("t-moved"),
+      };
+      assert.deepStrictEqual(reread.threads, [moved]);
+
+      // Before 097 the link was a `threadId` field, so the commit log still names it.
+      yield* sql`UPDATE telescope_task_commits
+        SET changed_fields_json = json_set(changed_fields_json, '$.threadId', 't-moved')
+        WHERE task_id = ${task.id}`;
+      const added = {
+        environmentId: EnvironmentId.make("env-elsewhere"),
+        threadId: ThreadId.make("t-added"),
+      };
+      const updateOf = (
+        taskId: Telescope.TaskId,
+        baseVersion: number,
+        set: object,
+        actor: TaskBoardService.Actor = alice,
+      ) => board.updateTask(actor, { workspaceId: a, taskId, baseVersion, set });
+      const update = (baseVersion: number, set: object, actor: TaskBoardService.Actor = alice) =>
+        updateOf(task.id, baseVersion, set, actor);
+      yield* board.linkThread(alice, { workspaceId: a, taskId: task.id, ...added });
+      const keeps = yield* update(1, { status: "in_progress", threads: [moved] }, agent);
+      assert.deepStrictEqual(keeps.threads, [moved, added]);
+
+      // The writer read `[moved]`; resending it must not bring back what a member unlinked.
+      yield* board.unlinkThread(alice, { workspaceId: a, taskId: task.id, ...moved });
+      const resent = yield* update(1, { threads: [moved] }, agent);
+      assert.deepStrictEqual(
+        [resent.threads, resent.version, resent.overwrote],
+        [[added], 4, undefined],
+      );
+
+      // A stale write that changes the list it read lands, so it can remove a link and swap it.
+      const unlinkedStale = yield* update(1, { threads: [] });
+      assert.deepStrictEqual(unlinkedStale.threads, []);
+      const fresh = {
+        environmentId: EnvironmentId.make("env-elsewhere"),
+        threadId: ThreadId.make("t-new"),
+      };
+      const swapped = yield* update(1, { threads: [fresh] });
+      assert.deepStrictEqual(swapped.threads, [fresh]);
+
+      // A pre-097 link commit made after the writer's base counts like any later thread change.
+      const legacyLink = (taskId: Telescope.TaskId, threadId: string) =>
+        sql`UPDATE telescope_task_commits
+          SET changed_fields_json = json_object('threadId', ${threadId})
+          WHERE task_id = ${taskId} AND changed_fields_json LIKE '%"threads"%'`;
+      const elsewhere = (id: string) => ({
+        environmentId: EnvironmentId.make("env-elsewhere"),
+        threadId: ThreadId.make(id),
+      });
+      const ownLink = yield* board.createTask(alice, { workspaceId: a, title: "Own" });
+      yield* updateOf(ownLink.id, 1, { threads: [elsewhere("t-z")] }, agent);
+      yield* legacyLink(ownLink.id, "t-z");
+      yield* updateOf(ownLink.id, 2, { title: "Own v2" });
+      assert.deepStrictEqual((yield* updateOf(ownLink.id, 1, { threads: [] }, agent)).threads, []);
+
+      const theirs = yield* board.createTask(alice, { workspaceId: a, title: "Theirs" });
+      yield* board.linkThread(alice, { workspaceId: a, taskId: theirs.id, ...elsewhere("t-x") });
+      yield* legacyLink(theirs.id, "t-x");
+      const replaced = yield* updateOf(theirs.id, 1, { threads: [elsewhere("t-y")] }, agent);
+      assert.deepStrictEqual(
+        [replaced.threads, replaced.overwrote?.map((o) => [o.key, o.name])],
+        [[elsewhere("t-y")], [["threads", "Alice"]]],
+      );
+    }),
+  );
+
   it.effect("gives a task one lease holder, kept by heartbeats and released on expiry", () =>
     Effect.gen(function* () {
       const { workspaces, board, a, aliceId, agent } = yield* setup;
@@ -666,7 +844,7 @@ it.layer(layer)("Telescope task board", (it) => {
         });
       // Older servers opened these for stale writes; a write no longer does.
       const sql = yield* SqlClient.SqlClient;
-      const seedConflict = (title: string) =>
+      const seedConflict = (title: string, legacy: object = {}) =>
         Effect.gen(function* () {
           const proposal = yield* board.createDecision(alice, {
             workspaceId: a,
@@ -674,7 +852,7 @@ it.layer(layer)("Telescope task board", (it) => {
             text: "",
             status: "proposed",
           });
-          const conflict = JSON.stringify({ taskId: task.id, incoming: { title } });
+          const conflict = JSON.stringify({ taskId: task.id, incoming: { title, ...legacy } });
           yield* sql`UPDATE telescope_tasks SET conflict_json = ${conflict} WHERE item_id = ${proposal.id}`;
           yield* sql`UPDATE telescope_tasks SET conflict_decision_id = ${proposal.id} WHERE item_id = ${task.id}`;
           return proposal.id;
@@ -759,6 +937,21 @@ it.layer(layer)("Telescope task board", (it) => {
         (yield* decisions).filter((d) => d.status === "proposed"),
         [],
       );
+
+      // An older server's proposal may carry `threadId`, a column migration 097 dropped.
+      yield* decide(yield* seedConflict("Plan F", { threadId: "t-old" }), "incoming");
+      const legacy = yield* current;
+      assert.deepStrictEqual(
+        [legacy.title, legacy.conflictDecisionId, legacy.threads],
+        ["Plan F", undefined, [{ environmentId: "env-elsewhere", threadId: "t-old" }]],
+      );
+
+      // `threadId` is the link, so the proposal holds it against agents, and `null` unlinks.
+      const unlink = yield* seedConflict("Plan G", { threadId: null });
+      const held = yield* Effect.flip(update(agent, legacy.version, { threads: [] }));
+      assert.strictEqual(reasonOf(held), "forbidden");
+      yield* decide(unlink, "incoming");
+      assert.deepStrictEqual((yield* current).threads, []);
     }),
   );
 });

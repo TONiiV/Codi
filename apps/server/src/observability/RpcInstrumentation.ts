@@ -257,6 +257,8 @@ const RPC_AGGREGATES = {
   [Telescope.WS_METHODS.taskUpdate]: "telescope",
   [Telescope.WS_METHODS.taskGet]: "telescope",
   [Telescope.WS_METHODS.taskList]: "telescope",
+  [Telescope.WS_METHODS.taskLinkThread]: "telescope",
+  [Telescope.WS_METHODS.taskUnlinkThread]: "telescope",
   [Telescope.WS_METHODS.decisionCreate]: "telescope",
   [Telescope.WS_METHODS.decisionList]: "telescope",
   [Telescope.WS_METHODS.commitList]: "telescope",

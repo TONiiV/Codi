@@ -1,6 +1,5 @@
 import * as Schema from "effect/Schema";
 
-import { ThreadId } from "../baseSchemas.ts";
 import {
   AgentId,
   BoardItemId,
@@ -16,7 +15,15 @@ import {
   Timestamp,
   WorkspaceId,
 } from "./common.ts";
-import { Decision, ForgeIssueRef, Lease, Task, TaskCommit, TaskStatus } from "./board.ts";
+import {
+  Decision,
+  ForgeIssueRef,
+  Lease,
+  Task,
+  TaskCommit,
+  TaskStatus,
+  TaskThread,
+} from "./board.ts";
 
 const InWorkspace = { workspaceId: WorkspaceId };
 
@@ -38,7 +45,8 @@ export const TaskFields = Schema.Struct({
   ownerSubjectId: Schema.optionalKey(Schema.NullOr(SubjectId)),
   ownerAgentId: Schema.optionalKey(Schema.NullOr(AgentId)),
   forgeIssue: Schema.optionalKey(Schema.NullOr(ForgeIssueRef)),
-  threadId: Schema.optionalKey(Schema.NullOr(ThreadId)),
+  /** Replaces the whole list. */
+  threads: Schema.optionalKey(Schema.Array(TaskThread)),
   goalChain: Schema.optionalKey(Strings),
   /** Only older servers set the conflict marker; a client can only clear it once settled. */
   conflictDecisionId: Schema.optionalKey(Schema.Null),
@@ -72,6 +80,12 @@ export const TaskUpdateResult = Schema.Struct({
   conflict: Schema.optionalKey(Schema.Struct({ decisionId: DecisionId })),
 });
 export const TaskGetInput = Schema.Struct({ ...InWorkspace, taskId: TaskId });
+/** Linking a thread already linked to this task, or unlinking one it lacks, changes nothing. */
+export const TaskThreadInput = Schema.Struct({
+  ...InWorkspace,
+  taskId: TaskId,
+  ...TaskThread.fields,
+});
 export const TaskListInput = Schema.Struct({
   ...InWorkspace,
   projectId: Schema.optionalKey(TelescopeProjectId),
