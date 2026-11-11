@@ -6,6 +6,7 @@ import { AntigravityDriver, type AntigravityDriverEnv } from "./Drivers/Antigrav
 import { ClaudeDriver, type ClaudeDriverEnv } from "./Drivers/ClaudeDriver.ts";
 import { CodexDriver, type CodexDriverEnv } from "./Drivers/CodexDriver.ts";
 import { CursorDriver, type CursorDriverEnv } from "@t3tools/provider-cursor/server";
+import { DeepSeekDriver, type DeepSeekDriverEnv } from "@t3tools/provider-deepseek/server";
 import { FxDriver, type FxDriverEnv } from "@t3tools/provider-fx/server";
 import { GrokDriver, type GrokDriverEnv } from "@t3tools/provider-grok/server";
 import { OpenCodeDriver, type OpenCodeDriverEnv } from "@t3tools/provider-opencode/server";
@@ -23,6 +24,7 @@ export type BuiltInDriversEnv =
   | ClaudeDriverEnv
   | CodexDriverEnv
   | CursorDriverEnv
+  | DeepSeekDriverEnv
   | FxDriverEnv
   | GrokDriverEnv
   | KiroDriverEnv
@@ -34,6 +36,7 @@ export const BUILT_IN_DRIVERS: ReadonlyArray<AnyProviderDriver<BuiltInDriversEnv
   CodexDriver,
   ClaudeDriver,
   CursorDriver,
+  DeepSeekDriver,
   GrokDriver,
   FxDriver,
   OpenCodeDriver,
@@ -52,7 +55,8 @@ export type BuiltInUsageReadersEnv =
   | ProviderUsageReaderEnv<typeof AntigravityDriver>
   | ProviderUsageReaderEnv<typeof CursorDriver>
   | ProviderUsageReaderEnv<typeof PiDriver>
-  | ProviderUsageReaderEnv<typeof MuseDriver>;
+  | ProviderUsageReaderEnv<typeof MuseDriver>
+  | ProviderUsageReaderEnv<typeof DeepSeekDriver>;
 
 /** Order matters: aggregation keeps the first duplicate record. */
 export const BUILT_IN_USAGE_DRIVERS: ReadonlyArray<
@@ -66,4 +70,5 @@ export const BUILT_IN_USAGE_DRIVERS: ReadonlyArray<
   MuseDriver,
   AntigravityDriver,
   CursorDriver,
+  DeepSeekDriver,
 ];

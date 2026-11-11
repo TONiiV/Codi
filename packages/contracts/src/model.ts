@@ -117,6 +117,7 @@ export type CustomModelSetting = typeof CustomModelSetting.Type;
 const CODEX_DRIVER_KIND = ProviderDriverKind.make("codex");
 const CLAUDE_DRIVER_KIND = ProviderDriverKind.make("claudeAgent");
 const CURSOR_DRIVER_KIND = ProviderDriverKind.make("cursor");
+const DEEPSEEK_DRIVER_KIND = ProviderDriverKind.make("deepseek");
 const GROK_DRIVER_KIND = ProviderDriverKind.make("grok");
 const FX_DRIVER_KIND = ProviderDriverKind.make("fx");
 const KIRO_DRIVER_KIND = ProviderDriverKind.make("kiro");
@@ -199,6 +200,7 @@ export const PROVIDER_DISPLAY_NAMES: Partial<Record<ProviderDriverKind, string>>
   [CODEX_DRIVER_KIND]: "Codex",
   [CLAUDE_DRIVER_KIND]: "Claude",
   [CURSOR_DRIVER_KIND]: "Cursor",
+  [DEEPSEEK_DRIVER_KIND]: "DeepSeek",
   [GROK_DRIVER_KIND]: "Grok",
   [FX_DRIVER_KIND]: "fx",
   [KIRO_DRIVER_KIND]: "Kiro",

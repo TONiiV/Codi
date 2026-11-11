@@ -475,6 +475,10 @@
       "types": "./src/markdownTaskList.ts",
       "import": "./src/markdownTaskList.ts"
     },
+    "./markdownBlocks": {
+      "types": "./src/markdownBlocks.ts",
+      "import": "./src/markdownBlocks.ts"
+    },
     "./markdownListIndentation": {
       "types": "./src/markdownListIndentation.ts",
       "import": "./src/markdownListIndentation.ts"

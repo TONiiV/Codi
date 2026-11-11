@@ -1,6 +1,7 @@
 import * as Migrator from "effect/sql/Migrator";
 import * as Effect from "effect/Effect";
 import * as SqlClient from "effect/sql/SqlClient";
+import { moveLegacyCodiMigrations, runCodiMigrations } from "./CodiMigrations.ts";
 import { reconcileV2PreviewMigration } from "./reconcileV2PreviewMigration.ts";
 
 import Migration0001 from "./Migrations/001_OrchestrationEvents.ts";
@@ -83,21 +84,6 @@ import Migration0077 from "./Migrations/077_RepairBooleanSettledOverride.ts";
 import Migration0078 from "./Migrations/078_DropOrchestrationEventCorrelationIndex.ts";
 import Migration0079 from "./Migrations/079_DelegatedRecoveryIndexes.ts";
 import Migration0080 from "./Migrations/080_ScheduledTaskThreadMode.ts";
-import Migration0081 from "./Migrations/081_RunAttemptNativeThreadIndex.ts";
-import Migration0082 from "./Migrations/082_Telescope.ts";
-import Migration0083 from "./Migrations/083_TelescopeMemberSessions.ts";
-import Migration0084 from "./Migrations/084_TelescopeRunIndexes.ts";
-import Migration0086 from "./Migrations/086_TelescopeTaskConflict.ts";
-import Migration0087 from "./Migrations/087_TelescopeWakeMergedInto.ts";
-import Migration0088 from "./Migrations/088_TelescopeDecisionConflict.ts";
-import Migration0089 from "./Migrations/089_TelescopeGrants.ts";
-import Migration0090 from "./Migrations/090_TelescopeBudgetCalls.ts";
-import Migration0092 from "./Migrations/092_TelescopeDelegationThreads.ts";
-import Migration0093 from "./Migrations/093_TelescopeRouting.ts";
-import Migration0094 from "./Migrations/094_TelescopeAuditOptionalPower.ts";
-import Migration0095 from "./Migrations/095_TelescopeStopMemberAgents.ts";
-import Migration0096 from "./Migrations/096_TelescopeProjects.ts";
-import Migration0097 from "./Migrations/097_TelescopeTaskThreads.ts";
 
 const migrationEntries = [
   [1, "OrchestrationEvents", Migration0001],
@@ -181,21 +167,6 @@ const migrationEntries = [
   [78, "DropOrchestrationEventCorrelationIndex", Migration0078],
   [79, "DelegatedRecoveryIndexes", Migration0079],
   [80, "ScheduledTaskThreadMode", Migration0080],
-  [81, "RunAttemptNativeThreadIndex", Migration0081],
-  [82, "Telescope", Migration0082],
-  [83, "TelescopeMemberSessions", Migration0083],
-  [84, "TelescopeRunIndexes", Migration0084],
-  [86, "TelescopeTaskConflict", Migration0086],
-  [87, "TelescopeWakeMergedInto", Migration0087],
-  [88, "TelescopeDecisionConflict", Migration0088],
-  [89, "TelescopeGrants", Migration0089],
-  [90, "TelescopeBudgetCalls", Migration0090],
-  [92, "TelescopeDelegationThreads", Migration0092],
-  [93, "TelescopeRouting", Migration0093],
-  [94, "TelescopeAuditOptionalPower", Migration0094],
-  [95, "TelescopeStopMemberAgents", Migration0095],
-  [96, "TelescopeProjects", Migration0096],
-  [97, "TelescopeTaskThreads", Migration0097],
 ] as const;
 
 export const migrationManifest = migrationEntries.map(([id, name]) => [id, name] as const);
@@ -255,6 +226,7 @@ export const runMigrations = Effect.fn("runMigrations")(function* ({
 }: RunMigrationsOptions = {}) {
   const includesV2 =
     toMigrationInclusive === undefined || toMigrationInclusive >= FIRST_V2_MIGRATION_ID;
+  yield* moveLegacyCodiMigrations();
   const previewMigrations = includesV2 ? yield* reconcileV2PreviewMigration() : [];
   if (includesV2) {
     yield* assertV2MigrationsCanRun(toMigrationInclusive);
@@ -263,7 +235,12 @@ export const runMigrations = Effect.fn("runMigrations")(function* ({
     ...previewMigrations,
     ...(yield* run({ loader: makeMigrationLoader(toMigrationInclusive) })),
   ];
-  const migrations = executedMigrations.map(([id, name]) => `${id}_${name}`);
+  // Codi's migrations build on upstream's V2 schema, so they run after it.
+  const codiMigrations = includesV2 ? yield* runCodiMigrations(toMigrationInclusive) : [];
+  const migrations = [
+    ...executedMigrations.map(([id, name]) => `${id}_${name}`),
+    ...codiMigrations.map(([id, name]) => `codi ${id}_${name}`),
+  ];
   yield* migrations.length === 0
     ? Effect.logDebug("Database schema is current")
     : Effect.log("Migrations ran successfully").pipe(Effect.annotateLogs({ migrations }));
