@@ -1,24 +1,36 @@
 ---
 name: codi-desktop-release
-description: Build Codi as a local macOS desktop release from main and install it as /Applications/Codi.app in place of the official T3 Code app, keeping the developer's ~/.t3 database, T3 Connect relay config, signed-in account and projects. Use when asked to build, rebuild, update or reinstall the local Codi desktop app.
+description: Build, update, or reinstall the local Codi desktop app from main on macOS or Windows while preserving its database, relay configuration, account, and projects.
 ---
 
-# Build and install Codi desktop (replaces T3 Code)
+# Build and install Codi desktop
 
 Codi runs as the developer's only desktop app. It reuses everything the
-official T3 Code app owned, so no migration step exists:
+official T3 Code app owned, so no migration step exists.
 
-| What                                                | Where                                     | Why Codi sees it                                     |
-| --------------------------------------------------- | ----------------------------------------- | ---------------------------------------------------- |
-| Threads, projects, settings, secrets                | `~/.t3/userdata` (`statev2.sqlite`)       | `T3CODE_HOME` is left at its default                 |
-| Clerk login, saved environments, connection catalog | `~/Library/Application Support/t3code-v2` | userData name is unchanged                           |
-| Keychain key for `safeStorage`                      | `t3code Safe Storage`                     | runtime app name is fixed in `DesktopAppIdentity.ts` |
-| Relay URL, Clerk keys                               | baked at build time                       | from `.env` (copied from `.env.example`)             |
+## Platform routing
 
-Only the bundle identity changes: `appId com.tonic.codi`, `productName Codi`.
-A distinct bundle id keeps LaunchServices from mixing it up with an official
-download. The build has no update feed, so it never auto-updates back to
-official T3 Code.
+- **macOS:** use `update-codi.sh`; the detailed macOS procedure remains below.
+- **Windows x64:** use `update-codi.ps1` and read
+  [references/windows.md](references/windows.md) before installing prerequisites
+  or troubleshooting a failed build.
+- **Other hosts:** stop and report that this skill has no install workflow for
+  the platform or architecture.
+
+Shared state locations:
+
+| What                                                | Where                                                                            | Why Codi sees it                                     |
+| --------------------------------------------------- | -------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| Threads, projects, settings, secrets                | `~/.t3/userdata` (`statev2.sqlite`)                                              | `T3CODE_HOME` is left at its default                 |
+| Clerk login, saved environments, connection catalog | macOS: `~/Library/Application Support/t3code-v2`; Windows: `%APPDATA%\t3code-v2` | userData name is unchanged                           |
+| macOS Keychain key for `safeStorage`                | `t3code Safe Storage`                                                            | runtime app name is fixed in `DesktopAppIdentity.ts` |
+| Relay URL, Clerk keys                               | baked at build time                                                              | from `.env` (copied from `.env.example`)             |
+
+Only the bundle identity changes: `appId com.tonic.codi`, `productName Codi`
+(Windows also raises the payload file limit; see
+[references/windows.md](references/windows.md)). A distinct bundle id keeps
+LaunchServices from mixing it up with an official download. The build has no
+update feed, so it never auto-updates back to official T3 Code.
 
 ## Hard rules
 
@@ -30,7 +42,24 @@ official T3 Code.
   on the live database, and the official app cannot roll them back.
 - Never commit the identity patch. It is local-only.
 
-## Update in one command
+## Windows update
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/skills/codi-desktop-release/update-codi.ps1
+```
+
+The script stops if official T3 Code is running, uses a detached `origin/main`
+worktree, applies the local identity, builds and verifies an x64 NSIS
+installer, gracefully closes only processes running from the installed Codi
+directory, snapshots `statev2.sqlite` when present, installs, verifies the
+installed version, cleans up, and launches. It never installs prerequisites: it stops when the Rust MSVC toolchain or target
+is missing, and changing Visual Studio, Rust, or Python needs explicit user
+authorization. Pass `-Branch <name>` to build another branch and `-NoLaunch` to
+skip the final launch. Run it in the background when invoking it as an agent; it
+closes the running Codi, so never run it from inside a Codi thread without the
+developer's go-ahead.
+
+## macOS update
 
 ```bash
 .agents/skills/codi-desktop-release/update-codi.sh          # origin/main
