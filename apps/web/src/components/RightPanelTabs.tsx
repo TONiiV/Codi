@@ -154,7 +154,7 @@ export interface RightPanelTabsProps {
   /** Overrides the default reason while side chats are available but cannot start. */
   sideChatDisabledReason?: string | null;
   /** The surfaces this host offers in its launcher and "+" menu; all of them when absent. */
-  surfaceKinds?: ReadonlyArray<RightPanelSurface["kind"]>;
+  surfaceKinds?: ReadonlyArray<string>;
   pullRequestStatusSeeds?: Readonly<Record<string, PullRequestTabStatusSeed>>;
   children: ReactNode;
 }
@@ -1181,7 +1181,7 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
       : []),
   ] as const;
   const offeredAddSurfaceActions = addSurfaceActions.filter(
-    (action) => props.surfaceKinds?.some((kind) => kind === action.kind) ?? true,
+    (action) => props.surfaceKinds?.includes(action.kind) ?? true,
   );
 
   const handleAddSurfaceMenuKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
