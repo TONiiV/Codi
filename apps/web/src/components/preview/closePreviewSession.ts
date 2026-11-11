@@ -7,6 +7,7 @@ import type {
 } from "@t3tools/contracts";
 
 import { useClosedViewStore } from "~/closedViewStore";
+import { isTelescopePanelRef } from "~/rightPanelStore";
 import { beginPreviewSessionClose, cancelPreviewSessionClose } from "~/previewStateStore";
 
 interface ClosePreviewSessionInput<E> {
@@ -29,7 +30,7 @@ export async function closePreviewSession<E>(
   });
   if (result._tag === "Failure") {
     cancelPreviewSessionClose(input.threadRef, input.snapshot, input.tabId);
-  } else if (input.snapshot) {
+  } else if (input.snapshot && !isTelescopePanelRef(input.threadRef)) {
     useClosedViewStore.getState().remember({
       kind: "browser",
       threadRef: input.threadRef,

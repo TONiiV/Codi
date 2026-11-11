@@ -97,9 +97,15 @@ export function telescopePanelRef(environmentId: EnvironmentId): ScopedThreadRef
   return scopeThreadRef(environmentId, ThreadId.make("telescope-panel"));
 }
 
+const isTelescopePanelKey = (threadKey: string) => threadKey.endsWith(":telescope-panel");
+
+/** Telescope's panel has no thread, so a closed tab could never be reopened; its closes are not recorded. */
+export const isTelescopePanelRef = (ref: ScopedThreadRef) =>
+  isTelescopePanelKey(scopedThreadKey(ref));
+
 // Telescope's panel holds only the kinds it offers, whoever asks.
 const hiddenInPanel = (threadKey: string, kind: RightPanelKind) =>
-  threadKey.endsWith(":telescope-panel") && !TELESCOPE_PANEL_SURFACES.includes(kind);
+  isTelescopePanelKey(threadKey) && !TELESCOPE_PANEL_SURFACES.includes(kind);
 
 export interface ThreadRightPanelState {
   isOpen: boolean;
@@ -1202,7 +1208,7 @@ useRightPanelStore.subscribe((next, previous) => {
   for (const [threadKey, revision] of Object.entries(next.closeRevisionByThreadKey)) {
     if (revision === previous.closeRevisionByThreadKey[threadKey]) continue;
     const threadRef = parseScopedThreadKey(threadKey);
-    if (!threadRef) continue;
+    if (!threadRef || isTelescopePanelRef(threadRef)) continue;
     const before = previous.byThreadKey[threadKey] ?? EMPTY_THREAD_STATE;
     const after = next.byThreadKey[threadKey] ?? EMPTY_THREAD_STATE;
     const removed = before.surfaces.filter(

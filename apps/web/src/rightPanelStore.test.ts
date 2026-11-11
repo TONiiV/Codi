@@ -77,6 +77,16 @@ describe("rightPanelStore", () => {
     unhost();
   });
 
+  it("records no closed tabs for Telescope's panel, which has no thread to reopen them in", () => {
+    const panel = telescopePanelRef("env-1" as EnvironmentId);
+    const store = useRightPanelStore.getState();
+    store.openSideChat(panel, TELESCOPE_SIDE_CHAT);
+    store.open(panel, "preview");
+    store.closeSurface(panel, `side-chat:${TELESCOPE_SIDE_CHAT}`);
+    store.closeAllSurfaces(panel);
+    expect(useClosedViewStore.getState().entries).toEqual([]);
+  });
+
   it("keeps a Code thread's open launcher through a payload saved at the shipped version", async () => {
     useRightPanelStore.getState().show(refA);
     const { storage, name } = useRightPanelStore.persist.getOptions();
