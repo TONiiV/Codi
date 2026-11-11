@@ -13,6 +13,7 @@ import {
 } from "~/previewStateStore";
 
 import { useClosedViewStore } from "~/closedViewStore";
+import { telescopePanelRef } from "~/rightPanelStore";
 
 import { closePreviewSession } from "./closePreviewSession";
 
@@ -68,5 +69,15 @@ describe("closePreviewSession", () => {
       { kind: "browser", threadRef, snapshot },
     ]);
     expect(closePreview).toHaveBeenCalledWith({ threadId: "thread-1", tabId: "tab-1" });
+  });
+
+  it("does not remember a browser tab closed in Telescope's panel", async () => {
+    await closePreviewSession({
+      closePreview: () => Promise.resolve(AsyncResult.success(undefined)),
+      snapshot,
+      tabId: snapshot.tabId,
+      threadRef: telescopePanelRef(threadRef.environmentId),
+    });
+    expect(useClosedViewStore.getState().entries).toEqual([]);
   });
 });

@@ -16,6 +16,7 @@ import { setActivePreviewTab, useThreadPreviewState } from "../previewStateStore
 import {
   selectActiveRightPanelSurface,
   selectThreadRightPanelState,
+  TELESCOPE_SIDE_CHAT,
   useRightPanelStore,
   type RightPanelSurface,
 } from "../rightPanelStore";
@@ -72,6 +73,7 @@ export function useRightPanelSurfaceClose(input: {
     }
     if (
       surface.kind === "side-chat" &&
+      surface.threadId !== TELESCOPE_SIDE_CHAT &&
       readEnvironmentScope(ref.environmentId, AuthOrchestrationOperateScope) &&
       // A live shell without the side chat means it is already deleted.
       !(

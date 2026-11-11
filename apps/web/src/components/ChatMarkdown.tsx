@@ -152,7 +152,7 @@ import { isElectron } from "../env";
 import { readLocalApi } from "../localApi";
 import { cn } from "../lib/utils";
 import { resolveRemoteOpenState, useRemoteOpenResolution } from "../remoteOpen";
-import { useRightPanelStore } from "../rightPanelStore";
+import { rightPanelOffers, useRightPanelStore } from "../rightPanelStore";
 import { readThreadShell, useProjects } from "../state/entities";
 import { serverEnvironment } from "../state/server";
 import { shellEnvironment } from "../state/shell";
@@ -838,7 +838,7 @@ function useChatMarkdownState({
         targetPath={fileLinkMeta.targetPath}
         iconPath={fileLinkMeta.filePath}
         workspaceRelativePath={fileLinkMeta.workspaceRelativePath}
-        panelPath={panelPath}
+        panelPath={!threadRef || rightPanelOffers(threadRef, "file") ? panelPath : null}
         line={fileLinkMeta.line}
         label={fileLinkLabel(
           {

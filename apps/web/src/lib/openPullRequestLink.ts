@@ -11,10 +11,11 @@ import {
 import { sourceControlClients } from "@t3tools/client-runtime/source-control-clients";
 
 import { canOpenLinksInApp } from "../browser/browserLinkTarget";
+import { openUrlInPreview } from "../browser/openFileInPreview";
 import { useOpenLink } from "../browser/useOpenLink";
 import { useClientSettings } from "../hooks/useSettings";
 import { stackedThreadToast, toastManager } from "../components/ui/toast";
-import { selectActiveRightPanel, useRightPanelStore } from "../rightPanelStore";
+import { rightPanelOffers, selectActiveRightPanel, useRightPanelStore } from "../rightPanelStore";
 import {
   selectThreadBranchBaseRef,
   selectThreadDiffPanelSelection,
@@ -25,7 +26,9 @@ import { appAtomRegistry } from "../rpc/atomRegistry";
 import { readProject, readProjects, readThreadShell, useProjects } from "../state/entities";
 import { environmentServerConfigsAtom, serverEnvironment } from "../state/server";
 import { usePrimaryEnvironmentId } from "../state/environments";
+import { previewEnvironment } from "../state/preview";
 import { reviewEnvironment } from "../state/review";
+import { useAtomCommand } from "../state/use-atom-command";
 import { useAtomQueryRunner } from "../state/use-atom-query-runner";
 
 export function usePullRequestPreviewTarget(environmentId: EnvironmentId | null, url: string) {
@@ -70,6 +73,7 @@ export function useOpenChangeRequestLink(
     refresh: true,
   });
   const openLink = useOpenLink(threadRef);
+  const openPreview = useAtomCommand(previewEnvironment.open, { reportFailure: false });
   return (event, targetUrl, targetThreadRef, targetEnvironmentId, onCommitUnavailable) => {
     if (!openInApp || shouldOpenPullRequestExternally(event)) return false;
     const resolvedThreadRef = targetThreadRef ?? threadRef;
@@ -88,6 +92,12 @@ export function useOpenChangeRequestLink(
         lendHostProject: resolvedPanelRef !== undefined,
       });
       if (target === null) return false;
+      // A panel without pull request tabs, Telescope's, opens the link in its Browser.
+      if (resolvedPanelRef && !rightPanelOffers(resolvedPanelRef, "pull-request")) {
+        if (!canOpenLinksInApp(resolvedPanelRef)) return false;
+        void openUrlInPreview({ threadRef: resolvedPanelRef, url: targetUrl, openPreview });
+        return true;
+      }
       const { project, repository, number, host } = target;
       const pullRequestsSearch = {
         repository,

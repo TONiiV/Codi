@@ -1,8 +1,13 @@
 import { useNavigate } from "@tanstack/react-router";
-import type { CSSProperties, ReactNode } from "react";
+import { type CSSProperties, type ReactNode, useState } from "react";
 
 import { isElectron } from "../../env";
 import { cn } from "../../lib/utils";
+import {
+  selectThreadRightPanelState,
+  telescopePanelRef,
+  useRightPanelStore,
+} from "../../rightPanelStore";
 import { TELESCOPE_PATH, useNavigateToAppMode } from "../sidebar/mainAppLocation";
 import { SidebarChromeFooter, SidebarChromeHeader } from "../sidebar/SidebarChrome";
 import { Button } from "../ui/button";
@@ -23,6 +28,8 @@ import { TelescopeAccountFooter } from "./TelescopeAccount";
 import { TelescopeChatList } from "./TelescopeChatList";
 import { TelescopeChatPage } from "./TelescopeChatPage";
 import { TelescopeDashboard } from "./TelescopeDashboard";
+import { TelescopePanel } from "./TelescopePanel";
+import { useTelescopeWorkspaces } from "./telescopeState";
 import {
   VISIBLE_TELESCOPE_VIEWS,
   telescopeViewEntry,
@@ -172,37 +179,55 @@ export function TelescopePage({
   background?: boolean;
   children?: ReactNode;
 }) {
+  const { environmentId } = useTelescopeWorkspaces();
+  const panelRef = background || environmentId === null ? null : telescopePanelRef(environmentId);
+  const panel = useRightPanelStore((store) =>
+    selectThreadRightPanelState(store.byThreadKey, panelRef),
+  );
+  const maximized = panel.isOpen && panel.maximized === true;
+  const [layoutElement, setLayoutElement] = useState<HTMLDivElement | null>(null);
   return (
     <SidebarInset className="h-dvh min-h-0 overflow-hidden overscroll-y-none" inert={background}>
-      <WorkspacePageHeader
-        electron={isElectron}
-        className="md:[[data-sidebar-state=collapsed]_&]:pl-(--telescope-collapsed-left)"
-        style={TITLEBAR_INSET}
-      >
-        <WorkspaceBreadcrumb ariaLabel="Telescope breadcrumb">
-          <WorkspaceBreadcrumbItem>
-            <span>Telescope</span>
-          </WorkspaceBreadcrumbItem>
-          <WorkspaceBreadcrumbSeparator />
-          <WorkspaceBreadcrumbItem current>
-            <h1>{telescopeViewEntry(view).label}</h1>
-          </WorkspaceBreadcrumbItem>
-        </WorkspaceBreadcrumb>
-      </WorkspacePageHeader>
-      {/* The top border, not the header's bottom one, lines up with the sidebar's under its header. */}
-      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto border-t">
-        <BackgroundThreadContext value={background}>
-          {children ??
-            (view === "chats" ? (
-              <TelescopeChatPage />
-            ) : view === "teams" ? (
-              <MyTeamsPage />
-            ) : view === "dashboard" ? (
-              <TelescopeDashboard />
-            ) : (
-              <TelescopeEmptyState view={view} />
-            ))}
-        </BackgroundThreadContext>
+      <div ref={setLayoutElement} className="relative flex min-h-0 flex-1 overflow-hidden">
+        <div
+          className={cn("flex min-h-0 min-w-0 flex-col", maximized ? "w-0 flex-none" : "flex-1")}
+          inert={maximized}
+        >
+          <WorkspacePageHeader
+            electron={isElectron}
+            reserveNativeControls={isElectron && !panel.isOpen}
+            className="md:[[data-sidebar-state=collapsed]_&]:pl-(--telescope-collapsed-left)"
+            style={TITLEBAR_INSET}
+          >
+            <WorkspaceBreadcrumb ariaLabel="Telescope breadcrumb">
+              <WorkspaceBreadcrumbItem>
+                <span>Telescope</span>
+              </WorkspaceBreadcrumbItem>
+              <WorkspaceBreadcrumbSeparator />
+              <WorkspaceBreadcrumbItem current>
+                <h1>{telescopeViewEntry(view).label}</h1>
+              </WorkspaceBreadcrumbItem>
+            </WorkspaceBreadcrumb>
+          </WorkspacePageHeader>
+          {/* The top border, not the header's bottom one, lines up with the sidebar's under its header. */}
+          <div className="flex min-h-0 flex-1 flex-col overflow-y-auto border-t">
+            <BackgroundThreadContext value={background}>
+              {children ??
+                (view === "chats" ? (
+                  <TelescopeChatPage />
+                ) : view === "teams" ? (
+                  <MyTeamsPage />
+                ) : view === "dashboard" ? (
+                  <TelescopeDashboard />
+                ) : (
+                  <TelescopeEmptyState view={view} />
+                ))}
+            </BackgroundThreadContext>
+          </div>
+        </div>
+        {panelRef === null ? null : (
+          <TelescopePanel panelRef={panelRef} layoutElement={layoutElement} />
+        )}
       </div>
       {background ? null : <TaskDrawer />}
     </SidebarInset>

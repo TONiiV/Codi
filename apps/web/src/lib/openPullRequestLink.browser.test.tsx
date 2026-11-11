@@ -6,9 +6,22 @@ import { page } from "vite-plus/test/browser";
 
 import { act, render, stubGlobal } from "../../test/render";
 
-const state = vi.hoisted(() => ({ preview: vi.fn(), openLink: vi.fn() }));
+const state = vi.hoisted(() => ({
+  preview: vi.fn(),
+  openLink: vi.fn(),
+  openUrlInPreview: vi.fn(),
+  inApp: false,
+}));
 vi.mock("../state/use-atom-query-runner", () => ({ useAtomQueryRunner: () => state.preview }));
 vi.mock("../browser/useOpenLink", () => ({ useOpenLink: () => state.openLink }));
+vi.mock(import("../browser/browserLinkTarget"), async (original) => ({
+  ...(await original()),
+  canOpenLinksInApp: () => state.inApp,
+}));
+vi.mock(import("../browser/openFileInPreview"), async (original) => ({
+  ...(await original()),
+  openUrlInPreview: state.openUrlInPreview,
+}));
 vi.mock(import("../state/environments"), async (original) => ({
   ...(await original()),
   usePrimaryEnvironmentId: () => EnvironmentId.make("local"),
@@ -32,7 +45,7 @@ import { DEFAULT_CLIENT_SETTINGS } from "@t3tools/contracts/settings";
 import { __setClientSettingsForTests } from "../hooks/useSettings";
 import { ToastProvider } from "../components/ui/toast";
 import { AppAtomRegistryProvider } from "../rpc/atomRegistry";
-import { useRightPanelStore } from "../rightPanelStore";
+import { hostRightPanel, telescopePanelRef, useRightPanelStore } from "../rightPanelStore";
 import { useDiffPanelStore } from "../diffPanelStore";
 import { useOpenChangeRequestLink } from "./openPullRequestLink";
 
@@ -68,6 +81,8 @@ function CommitLink({ url = commitUrl }: { url?: string }) {
 function setup() {
   state.preview.mockReset().mockResolvedValue(AsyncResult.success({ sources: [] }));
   state.openLink.mockReset().mockResolvedValue(undefined);
+  state.openUrlInPreview.mockReset().mockResolvedValue(AsyncResult.success(undefined));
+  state.inApp = false;
   __setClientSettingsForTests({
     ...DEFAULT_CLIENT_SETTINGS,
     pullRequestLinksOpenInApp: true,
@@ -157,4 +172,24 @@ it("opens an available commit in the closed Diff pane without the pane resetting
   );
   // ChatView resets a pane opened without an explicit request to Changes unless this is set.
   expect(useDiffPanelStore.getState().consumeKeepSelectionOnOpen(threadRef)).toBe(true);
+});
+
+it("opens a pull request in Telescope's Browser, which has no pull request tabs", async () => {
+  setup();
+  state.inApp = true;
+  using _host = {
+    [Symbol.dispose]: hostRightPanel(threadRef, telescopePanelRef(environmentId)),
+  };
+  const url = "https://github.com/Effect-TS/effect/pull/1";
+  await using screen = await render(
+    <AppAtomRegistryProvider>
+      <CommitLink url={url} />
+    </AppAtomRegistryProvider>,
+  );
+  await screen.getByRole("link", { name: "Commit" }).click();
+  // It opens the hosting panel's Browser for the chat's thread.
+  expect(state.openUrlInPreview).toHaveBeenCalledExactlyOnceWith(
+    expect.objectContaining({ threadRef, url }),
+  );
+  expect(useRightPanelStore.getState().byThreadKey).toEqual({});
 });

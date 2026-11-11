@@ -88,6 +88,25 @@ export const PULL_REQUESTS_PANEL_REF = scopeThreadRef(
 
 const isPullRequestsPanelKey = (threadKey: string) => threadKey.endsWith(":pull-requests-panel");
 
+export const TELESCOPE_PANEL_SURFACES: ReadonlyArray<RightPanelKind> = ["preview", "side-chat"];
+/** Telescope's one side chat tab; it talks to the member's assistant, so it names no real thread. */
+export const TELESCOPE_SIDE_CHAT = ThreadId.make("telescope-agent-chat");
+
+/** Telescope pages share one panel; its browser tabs belong to no Code thread. */
+export function telescopePanelRef(environmentId: EnvironmentId): ScopedThreadRef {
+  return scopeThreadRef(environmentId, ThreadId.make("telescope-panel"));
+}
+
+const isTelescopePanelKey = (threadKey: string) => threadKey.endsWith(":telescope-panel");
+
+/** Telescope's panel has no thread, so a closed tab could never be reopened; its closes are not recorded. */
+export const isTelescopePanelRef = (ref: ScopedThreadRef) =>
+  isTelescopePanelKey(scopedThreadKey(ref));
+
+// Telescope's panel holds only the kinds it offers, whoever asks.
+const hiddenInPanel = (threadKey: string, kind: RightPanelKind) =>
+  isTelescopePanelKey(threadKey) && !TELESCOPE_PANEL_SURFACES.includes(kind);
+
 export interface ThreadRightPanelState {
   isOpen: boolean;
   activeSurfaceId: string | null;
@@ -312,7 +331,28 @@ const updateThreadStateMap = (
   updater: (current: ThreadRightPanelState) => ThreadRightPanelState,
 ): Record<string, ThreadRightPanelState> => {
   const current = byThreadKey[threadKey] ?? EMPTY_THREAD_STATE;
-  const next = updater(current);
+  let next = updater(current);
+  if (next.surfaces.some((surface) => hiddenInPanel(threadKey, surface.kind))) {
+    // Refuse an opener that adds a disallowed tab; drop ones already saved so the panel heals.
+    if (
+      next.surfaces.some(
+        (surface) =>
+          hiddenInPanel(threadKey, surface.kind) &&
+          !current.surfaces.some((entry) => entry.id === surface.id),
+      )
+    ) {
+      return byThreadKey;
+    }
+    const surfaces = next.surfaces.filter((surface) => !hiddenInPanel(threadKey, surface.kind));
+    next = {
+      ...next,
+      isOpen: next.isOpen && surfaces.length > 0,
+      surfaces,
+      activeSurfaceId: surfaces.some((surface) => surface.id === next.activeSurfaceId)
+        ? next.activeSurfaceId
+        : (surfaces[0]?.id ?? null),
+    };
+  }
   if (
     !next.isOpen &&
     next.activeSurfaceId === null &&
@@ -403,6 +443,9 @@ export function hostRightPanel(guest: ScopedThreadRef, host: ScopedThreadRef): (
 export function rightPanelHostRef(ref: ScopedThreadRef): ScopedThreadRef {
   return panelHosts.get(scopedThreadKey(ref)) ?? ref;
 }
+
+export const rightPanelOffers = (ref: ScopedThreadRef, kind: RightPanelKind) =>
+  !hiddenInPanel(scopedThreadKey(rightPanelHostRef(ref)), kind);
 
 const userAction = (
   state: RightPanelStoreState,
@@ -1185,7 +1228,7 @@ useRightPanelStore.subscribe((next, previous) => {
   for (const [threadKey, revision] of Object.entries(next.closeRevisionByThreadKey)) {
     if (revision === previous.closeRevisionByThreadKey[threadKey]) continue;
     const threadRef = parseScopedThreadKey(threadKey);
-    if (!threadRef) continue;
+    if (!threadRef || isTelescopePanelRef(threadRef)) continue;
     const before = previous.byThreadKey[threadKey] ?? EMPTY_THREAD_STATE;
     const after = next.byThreadKey[threadKey] ?? EMPTY_THREAD_STATE;
     const removed = before.surfaces.filter(
