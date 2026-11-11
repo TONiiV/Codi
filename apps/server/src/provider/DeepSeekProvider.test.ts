@@ -112,7 +112,7 @@ describe("DeepSeekProvider", () => {
         assert.deepEqual(model.capabilities?.optionDescriptors, [
           {
             id: "reasoning_effort",
-            label: "Effort",
+            label: "Reasoning",
             type: "select",
             role: "reasoning",
             currentValue: "high",
