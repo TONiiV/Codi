@@ -27,8 +27,9 @@ import {
 } from "../ui/dialog";
 import { Spinner } from "../ui/spinner";
 import { toastManager } from "../ui/toast";
-import { type BoardTarget, StatusBadge, useBoardTarget } from "./TasksParts";
+import { type BoardTarget, errorText, StatusBadge, useBoardTarget } from "./TasksParts";
 import { telescope, telescopeBoard } from "./telescopeState";
+import { threadOutsideProject } from "./threadTaskProject";
 import { telescopeSearch } from "./telescopeViews";
 
 const holds = (threadRef: ScopedThreadRef) => (task: Telescope.Task) =>
@@ -41,8 +42,6 @@ const tasksOf = (target: BoardTarget) =>
     environmentId: target.environmentId,
     input: { workspaceId: target.workspaceId },
   });
-const failureText = (error: unknown) =>
-  error instanceof Error && error.message.length > 0 ? error.message : "请稍后再试。";
 
 /** For thread menus: absent with no workspace or grant to link into, or before the board loads. */
 export function readLinkedTask(threadRef: ScopedThreadRef): Telescope.Task | null | undefined {
@@ -81,7 +80,7 @@ export async function unlinkThreadFromTask(threadRef: ScopedThreadRef, task: Tel
     toastManager.add({
       type: "error",
       title: "没能解除关联",
-      description: failureText(squashAtomCommandFailure(result)),
+      description: errorText(squashAtomCommandFailure(result)),
     });
 }
 
@@ -118,7 +117,21 @@ function LinkTaskDialog(props: {
 }) {
   const { threadRef, target } = props;
   const query = useEnvironmentQuery(tasksOf(target));
-  const threadTitle = useThreadShell(threadRef)?.title ?? "这个对话";
+  const shell = useThreadShell(threadRef);
+  const threadTitle = shell?.title ?? "这个对话";
+  const projects = useEnvironmentQuery(
+    telescope.projects({
+      environmentId: target.environmentId,
+      input: { workspaceId: target.workspaceId },
+    }),
+  ).data?.projects;
+  const outside = (task: Telescope.Task) =>
+    shell !== null &&
+    projects !== undefined &&
+    threadOutsideProject(task, projects, {
+      environmentId: threadRef.environmentId,
+      projectId: shell.projectId,
+    });
   const link = useAtomCommand(telescopeBoard.linkThread, { reportFailure: false });
   const [pending, setPending] = useState<Telescope.TaskId | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -138,7 +151,7 @@ function LinkTaskDialog(props: {
     });
     setPending(null);
     if (result._tag === "Success") return props.onClose();
-    if (!isAtomCommandInterrupted(result)) setError(failureText(squashAtomCommandFailure(result)));
+    if (!isAtomCommandInterrupted(result)) setError(errorText(squashAtomCommandFailure(result)));
   };
   return (
     <Dialog open onOpenChange={(open) => (open ? undefined : props.onClose())}>
@@ -184,6 +197,11 @@ function LinkTaskDialog(props: {
                         <span className="min-w-0 truncate">{task.title}</span>
                         {pending === task.id ? <Spinner /> : <StatusBadge status={task.status} />}
                       </Button>
+                      {outside(task) ? (
+                        <p className="px-3 text-xs text-muted-foreground">
+                          这个对话不在任务所属项目的目录里，仍可关联。
+                        </p>
+                      ) : null}
                     </li>
                   ))}
               </ul>
