@@ -10,6 +10,7 @@ import {
   BUILD_MIGRATION_HEAD,
   databaseMigrationHead,
 } from "../persistence/databaseMigrationHead.ts";
+import { codiMigrationManifest } from "../persistence/CodiMigrations.ts";
 import { migrationManifest } from "../persistence/Migrations.ts";
 
 import { runServicePreflight } from "./servicePreflight.ts";
@@ -46,13 +47,16 @@ it.layer(NodeServices.layer)("service preflight database", (it) => {
       db.exec("CREATE TABLE effect_sql_migrations (migration_id INTEGER PRIMARY KEY, name TEXT)");
       const insert = db.prepare("INSERT INTO effect_sql_migrations VALUES (?, ?)");
       for (const [id, name] of migrationManifest) insert.run(id, name);
+      // Builds before codi_sql_migrations recorded Codi's ids here, above upstream's head.
+      for (const [id, name] of codiMigrationManifest) insert.run(id, name);
       const preflight = () =>
         runServicePreflight({ databasePath, launcherProtocol: SERVICE_LAUNCHER_PROTOCOL });
 
       expect(preflight().status).toBe("ready");
       expect(databaseMigrationHead(databasePath)).toBe(BUILD_MIGRATION_HEAD);
 
-      const newerId = Math.max(...migrationManifest.map(([id]) => id)) + 1;
+      const newerId =
+        Math.max(...[...migrationManifest, ...codiMigrationManifest].map(([id]) => id)) + 1;
       insert.run(newerId, "FromNightly");
       db.close();
       const result = preflight();

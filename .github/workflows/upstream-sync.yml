@@ -4,7 +4,8 @@
 #    Code resolves the rest with upstream winning, and what it still leaves takes upstream's side.
 # 2. Re-apply the rename and the agent context budget by script.
 # 3. Run check:changed. On a failure Claude fixes what the merge broke and the check runs again.
-# 4. Checks pass and Telescope's design is untouched → pushed to main. Otherwise the result is
+# 4. Checks pass and nothing waits for the maintainer (a Telescope design change, an edit outside
+#    the conflicts) → pushed to main. Otherwise the result is
 #    pushed to the upstream-sync branch with a pull request, and the next run continues from that
 #    branch instead of starting over. Merge that pull request with a merge commit, never a squash:
 #    later merges need upstream's history.
@@ -79,7 +80,7 @@ jobs:
               .agents/skills/codi-upstream-merge/SKILL.md
             echo
             echo "Files for this run: the report file is $RUNNER_TEMP/claude-report.md and the"
-            echo "Telescope review file is $RUNNER_TEMP/telescope-review.md."
+            echo "review file is $RUNNER_TEMP/review.md."
           } > "$RUNNER_TEMP/policy.md"
 
           cat > "$RUNNER_TEMP/claude-run.sh" <<'EOF'
@@ -136,9 +137,29 @@ jobs:
           EOF
               "$RUNNER_TEMP/claude-run.sh" "$RUNNER_TEMP/prompt.md" \
                 || fail "Claude Code failed while resolving conflicts"
-              git ls-files -s | awk '$3 == 0' | outside | diff -q "$RUNNER_TEMP/index-before" - >/dev/null \
-                || fail "Claude changed files outside the conflicts"
-              git diff --name-only | sed 's/^/-\t/' | outside | cut -f2 | xargs -r git checkout --
+              # Changes outside the conflicts stay but go to the maintainer. Where the policy forbids
+              # them, the file returns to the merge's version.
+              git ls-files -s | awk '$3 == 0' | outside > "$RUNNER_TEMP/index-after"
+              {
+                diff "$RUNNER_TEMP/index-before" "$RUNNER_TEMP/index-after" | sed -n 's/^[<>] [^\t]*\t//p'
+                git diff --name-only | sed 's/^/-\t/' | outside | cut -f2
+              } | sort -u > "$RUNNER_TEMP/outside"
+              while IFS= read -r file; do
+                case "$file" in
+                  .github/* | scripts/* | .repos/*)
+                    blob=$(awk -F '\t' -v f="$file" '$2 == f { split($1, a, " "); print a[2] }' "$RUNNER_TEMP/index-before")
+                    if [ -n "$blob" ]; then
+                      git cat-file blob "$blob" > "$file" && git add -- "$file"
+                    else
+                      git rm -qf --ignore-unmatch -- "$file"
+                    fi
+                    ;;
+                  *)
+                    git add -A -- "$file"
+                    echo "- 冲突以外的文件也被改了：\`$file\`" >> "$RUNNER_TEMP/review.md"
+                    ;;
+                esac
+              done < "$RUNNER_TEMP/outside"
               # Upstream wins for whatever Claude left, so one hard file never blocks the sync.
               unmerged > "$RUNNER_TEMP/left"
               xargs -r grep -lE '^(<<<<<<<|>>>>>>>) ' < "$RUNNER_TEMP/conflicts" >> "$RUNNER_TEMP/left" 2>/dev/null || true
@@ -224,17 +245,17 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           PASSED: ${{ steps.check.outputs.passed }}
         run: |
-          # A Telescope change the maintainer has not merged yet keeps the sync on the pull request.
+          # A change waiting for the maintainer keeps the sync on the pull request until it is merged.
           GH_TOKEN=$GITHUB_TOKEN gh pr list --head "$SYNC_BRANCH" --base main --state open --json body --jq '.[].body' 2>/dev/null \
-            | awk '/^### Telescope/ { on = 1; next } /^### / { on = 0 } on && NF' > "$RUNNER_TEMP/held" || true
+            | awk '/^### 需要你确认/ { on = 1; next } /^### / { on = 0 } on && NF' > "$RUNNER_TEMP/held" || true
           if [ -s "$RUNNER_TEMP/held" ]; then
-            cat "$RUNNER_TEMP/telescope-review.md" >> "$RUNNER_TEMP/held" 2>/dev/null || true
-            sort -u "$RUNNER_TEMP/held" > "$RUNNER_TEMP/telescope-review.md"
+            cat "$RUNNER_TEMP/review.md" >> "$RUNNER_TEMP/held" 2>/dev/null || true
+            sort -u "$RUNNER_TEMP/held" > "$RUNNER_TEMP/review.md"
           fi
           {
             echo "Upstream is ${{ steps.fetch.outputs.behind }} commits ahead of \`${{ steps.fetch.outputs.before }}\`."
-            if [ -s "$RUNNER_TEMP/telescope-review.md" ]; then
-              echo; echo "### Telescope 设计变更，需要你确认"; cat "$RUNNER_TEMP/telescope-review.md"
+            if [ -s "$RUNNER_TEMP/review.md" ]; then
+              echo; echo "### 需要你确认的改动"; cat "$RUNNER_TEMP/review.md"
             fi
             if [ "$PASSED" != true ]; then
               echo; echo "### check:changed 仍未通过"; echo '```'
@@ -247,7 +268,7 @@ jobs:
             fi
           } > "$RUNNER_TEMP/body.md"
 
-          if [ "$PASSED" = true ] && [ ! -s "$RUNNER_TEMP/telescope-review.md" ]; then
+          if [ "$PASSED" = true ] && [ ! -s "$RUNNER_TEMP/review.md" ]; then
             git push origin HEAD:main
             git push origin ":refs/heads/$SYNC_BRANCH" 2>/dev/null || true
             { echo "## Merged into main"; cat "$RUNNER_TEMP/body.md"; } >> "$GITHUB_STEP_SUMMARY"
