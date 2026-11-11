@@ -43,28 +43,31 @@ describe("DeepSeekDriver", () => {
       assert.equal(sourceCheckout.installPath, "/home/dev/deepseek-harness/apps/cli/lib/bin.js");
     }).pipe(Effect.provide(NodeServices.layer)),
   );
-  it.effect(
-    "selects a model by its Harness route and puts the starting model back on default",
-    () =>
-      Effect.gen(function* () {
-        const started = '["deepseek-official","deepseek-flash"]';
-        const modelOptions = (currentValue: string) => [
-          {
-            id: "model",
-            name: "Model",
-            category: "model",
-            type: "select",
-            currentValue,
-            options: [],
-          },
-        ];
+  it.effect("selects a model by its Harness route and puts default on dsh's default route", () =>
+    Effect.gen(function* () {
+      const route = (model: string) => JSON.stringify(["deepseek-official", model]);
+      const modelOptions = (currentValue: string | undefined) =>
+        currentValue === undefined
+          ? []
+          : [
+              {
+                id: "model",
+                name: "Model",
+                category: "model",
+                type: "select",
+                currentValue,
+                options: [],
+              },
+            ];
+      // `started` is the model the new, loaded, or resumed session reports at setup.
+      const session = (started: string | undefined) => {
         let current = started;
-        const writes: Array<[string, string | boolean]> = [];
+        const writes: Array<string | boolean> = [];
         const runtime = {
           getConfigOptions: Effect.sync(() => modelOptions(current)),
-          setConfigOption: (configId: string, value: string | boolean) =>
+          setConfigOption: (_configId: string, value: string | boolean) =>
             Effect.sync(() => {
-              writes.push([configId, value]);
+              writes.push(value);
               current = String(value);
               return {};
             }),
@@ -78,16 +81,28 @@ describe("DeepSeekDriver", () => {
             startResult,
             modelSelection: { instanceId: ProviderInstanceId.make("deepseek"), model },
           });
+        return { select, writes };
+      };
 
-        yield* select("default");
-        yield* select("deepseek-v4-pro");
-        yield* select("default");
+      const fresh = session(route("deepseek-v4-flash"));
+      yield* fresh.select("deepseek-v4-flash");
+      yield* fresh.select("deepseek-v4-pro");
+      yield* fresh.select("default");
+      assert.deepEqual(fresh.writes, [route("deepseek-v4-pro"), route("deepseek-v4-flash")]);
 
-        assert.deepEqual(writes, [
-          ["model", '["deepseek-official","deepseek-v4-pro"]'],
-          ["model", started],
-        ]);
-      }),
+      const resumed = session(route("deepseek-v4-pro"));
+      yield* resumed.select("deepseek-v4-flash");
+      assert.deepEqual(resumed.writes, [route("deepseek-v4-flash")]);
+
+      const resumedLegacy = session(route("deepseek-v4-pro"));
+      yield* resumedLegacy.select("default");
+      yield* resumedLegacy.select("");
+      assert.deepEqual(resumedLegacy.writes, [route("deepseek-v4-flash")]);
+
+      const noModelOption = session(undefined);
+      yield* noModelOption.select("default");
+      assert.deepEqual(noModelOption.writes, [route("deepseek-v4-flash")]);
+    }),
   );
   it("launches the ACP profile from the configured binary", () => {
     assert.deepEqual(buildDeepSeekAcpSpawnInput(decodeSettings({}), "/work"), {

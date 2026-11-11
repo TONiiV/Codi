@@ -1,9 +1,7 @@
-import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, describe, it } from "@effect/vitest";
 import { DeepSeekSettings } from "@t3tools/provider-deepseek/settings";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
@@ -58,7 +56,7 @@ const check = (
       options.environment ?? {},
     ).pipe(Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, cli.spawner));
     return { snapshot, invoked: cli.invoked };
-  }).pipe(Effect.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer)));
+  }).pipe(Effect.provide(NodeServices.layer));
 
 describe("DeepSeekProvider", () => {
   it.effect("is disabled while the provider is off", () =>
@@ -103,7 +101,7 @@ describe("DeepSeekProvider", () => {
       assert.deepEqual(
         snapshot.models.map((model) => [model.slug, model.name]),
         [
-          ["default", "DeepSeek default"],
+          ["deepseek-v4-flash", "DeepSeek-V4-Flash"],
           ["deepseek-flash", "DeepSeek-V4.1-Flash"],
           ["deepseek-v4-pro", "DeepSeek-V4-Pro"],
         ],

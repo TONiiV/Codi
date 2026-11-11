@@ -28,6 +28,7 @@ import type * as McpProviderSessions from "@t3tools/provider-core/server/McpProv
 import * as ProviderEventLoggers from "@t3tools/provider-core/server/ProviderEventLoggers";
 import type * as ProviderHost from "@t3tools/provider-core/server/ProviderHost";
 import { makeDeepSeekAcpRuntime } from "./acpSupport.ts";
+import { DEEPSEEK_DEFAULT_MODEL } from "./status.ts";
 
 const DEEPSEEK_PROVIDER = ProviderDriverKind.make("deepseek");
 const DEEPSEEK_MODEL_CONFIG_ID = "model";
@@ -45,25 +46,20 @@ export interface DeepSeekAdapterV2Options {
   readonly nativeLogging?: Parameters<typeof makeAcpAdapterV2>[0]["nativeLogging"];
 }
 
-/**
- * dsh's `model` option marks no default, so "default" restores the model the
- * session reported at setup, before T3 changed it.
- */
 export const applyDeepSeekModel = Effect.fn("DeepSeekAdapterV2.applyModelSelection")(function* ({
   runtime,
-  startResult,
   modelSelection,
 }: Parameters<NonNullable<AcpAdapterV2Flavor["applyModelSelection"]>>[0]) {
   const requested = modelSelection.model.trim();
-  const isDefault = requested.length === 0 || requested === "default";
-  const target = isDefault
-    ? findModelConfigOption(startResult.sessionSetupResult.configOptions)?.currentValue
-    : deepSeekModelConfigValue(requested);
+  // Threads saved before the explicit default model still carry "default".
+  const model =
+    requested.length === 0 || requested === "default" ? DEEPSEEK_DEFAULT_MODEL : requested;
+  const target = deepSeekModelConfigValue(model);
   const current = findModelConfigOption(yield* runtime.getConfigOptions)?.currentValue;
-  if (target !== undefined && target !== current) {
+  if (target !== current) {
     yield* runtime.setConfigOption(DEEPSEEK_MODEL_CONFIG_ID, target, { allowUnlistedValue: true });
   }
-  return isDefault ? undefined : requested;
+  return model;
 });
 
 function makeDeepSeekAcpAdapterFlavor(options: DeepSeekAdapterV2Options): AcpAdapterV2Flavor {

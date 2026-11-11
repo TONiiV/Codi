@@ -20,8 +20,8 @@ For a source checkout or other unrecognized installation, update it with the too
 
 ## Models
 
-New threads start on DeepSeek's own default model. Select **DeepSeek-V4.1-Flash** or
-**DeepSeek-V4-Pro** in the model picker to use a specific model. For another model, add its ID
+New threads start on **DeepSeek-V4-Flash**, the model DeepSeek Harness uses by default. Select
+**DeepSeek-V4.1-Flash** or **DeepSeek-V4-Pro** in the model picker to use another model. For another model, add its ID
 under **Custom models** in the instance settings. A model your account cannot use stops the turn
 with an error.
 
