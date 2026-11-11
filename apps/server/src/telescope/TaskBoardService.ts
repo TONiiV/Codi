@@ -52,7 +52,7 @@ const parseJson = (text: unknown) => {
 const RawRows = Schema.Array(Schema.Record(Schema.String, Schema.Unknown));
 const decodeRaw = Schema.decodeUnknownEffect(RawRows);
 /** Null columns become absent keys; columns the schema does not name are dropped by decoding. */
-const rowsAs = <S extends Schema.Top>(schema: S, idColumn: string) => {
+const rowsAs = <S extends Schema.Top>(schema: S, idColumn?: string) => {
   const decode = Schema.decodeUnknownEffect(Schema.Array(schema));
   return (rows: unknown) =>
     decodeRaw(rows).pipe(
@@ -83,7 +83,6 @@ const decodeLeases = rowsAs(Telescope.Lease, "lease_id");
 const decodeTask = Schema.decodeUnknownEffect(Telescope.Task);
 const decodeLinks = rowsAs(
   Schema.Struct({ taskId: Telescope.TaskId, ...Telescope.TaskThread.fields }),
-  "",
 );
 const decodeMemberNames = Schema.decodeUnknownEffect(
   Schema.Array(
@@ -389,23 +388,20 @@ const make = Effect.gen(function* () {
     // One agent can act for several members; its change for another member is not its own.
     const own = (commit: Telescope.TaskCommit) =>
       commit.authorId === author.authorId && commit.onBehalfOf?.[0] === author.onBehalfOf?.[0];
-    const read: Record<string, unknown> = { ...BLANK };
-    for (const commit of commits)
-      if (commit.baseVersion < input.baseVersion) Object.assign(read, commit.changedFields);
-    // Without a commit that recorded the list read (migration 097 moves links without one), a
-    // stale write can add links but not take them away.
-    const listRead = commits.some(
-      (c) => c.baseVersion < input.baseVersion && "threads" in c.changedFields,
-    );
+    const env = yield* environment.getEnvironmentId;
+    const read: Record<string, unknown> = { ...BLANK, threads: [] };
+    for (const commit of commits) {
+      if (commit.baseVersion >= input.baseVersion) continue;
+      // Before migration 097 the link was a `threadId` field, and 097 moved it without a commit.
+      const { threadId, ...fields } = commit.changedFields;
+      if (threadId !== undefined)
+        read.threads = typeof threadId === "string" ? [{ environmentId: env, threadId }] : [];
+      Object.assign(read, fields);
+    }
     const set =
       input.set?.threads === undefined
         ? (input.set ?? {})
-        : {
-            ...input.set,
-            threads: uniqueThreads(
-              stale && !listRead ? [...current.threads, ...input.set.threads] : input.set.threads,
-            ),
-          };
+        : { ...input.set, threads: uniqueThreads(input.set.threads) };
     const mine: Record<string, Schema.Json> = {};
     for (const key of TASK_FIELDS) {
       if (!(key in set) || sameJson(set[key], current[key])) continue;
@@ -424,7 +420,9 @@ const make = Effect.gen(function* () {
       const where = { kind: "decision", status: "proposed" };
       const proposals = yield* db.select(current.workspaceId, "tasks", decodeDecisions, where);
       const held = proposals.flatMap(({ conflict }) =>
-        conflict?.taskId === current.id ? Object.keys(conflict.incoming) : [],
+        conflict?.taskId === current.id
+          ? Object.keys(conflict.incoming).map((key) => (key === "threadId" ? "threads" : key))
+          : [],
       );
       if (current.status === "needs_decision") held.push("status");
       const blocked = held.filter((key) => key in mine);
@@ -589,7 +587,12 @@ const make = Effect.gen(function* () {
     const { threadId, ...chosen } = decision.chosen === "incoming" ? incoming : {};
     const env = yield* environment.getEnvironmentId;
     const free = typeof threadId === "string" && !(yield* db.taskOfThread(env, threadId));
-    const threads = free ? { threads: [...task.threads, { environmentId: env, threadId }] } : {};
+    const threads =
+      threadId === null
+        ? { threads: [] }
+        : free
+          ? { threads: [...task.threads, { environmentId: env, threadId }] }
+          : {};
     yield* applyCommit(author, task, { ...chosen, ...threads, conflictDecisionId: null }, [], at, {
       mergeLevel: 0,
       mergeReason: `settled by decision ${decision.id}`,

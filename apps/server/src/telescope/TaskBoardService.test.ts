@@ -416,13 +416,31 @@ it.layer(layer)("Telescope task board", (it) => {
         [stale.status, stale.threads, stale.overwrote],
         ["in_progress", [thread("t-3")], undefined],
       );
+
+      // A task read without links: undoing the writer's own later link lands, as for any field.
+      const third = yield* board.createTask(alice, { workspaceId: a, title: "Cover" });
+      const own = (baseVersion: number, threads: ReadonlyArray<object>) =>
+        board.updateTask(agent, {
+          workspaceId: a,
+          taskId: third.id,
+          baseVersion,
+          set: { threads },
+        });
+      yield* own(1, [thread("t-9")]);
+      yield* board.updateTask(alice, {
+        workspaceId: a,
+        taskId: third.id,
+        baseVersion: 2,
+        set: { title: "Cover v2" },
+      });
+      assert.deepStrictEqual((yield* own(1, [])).threads, []);
     }),
   );
 
   it.effect("stamps the threads migration 097 moved with this environment on start", () =>
     Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
-      const { board, a } = yield* setup;
+      const { board, a, agent } = yield* setup;
       const task = yield* board.createTask(alice, { workspaceId: a, title: "Moved" });
       yield* sql`INSERT INTO telescope_task_threads ${sql.insert({
         workspace_id: a,
@@ -443,19 +461,37 @@ it.layer(layer)("Telescope task board", (it) => {
       };
       assert.deepStrictEqual(reread.threads, [moved]);
 
-      // No commit recorded the moved link, yet a stale write resending it keeps a later link.
+      // Before 097 the link was a `threadId` field, so the commit log still names it.
+      yield* sql`UPDATE telescope_task_commits
+        SET changed_fields_json = json_set(changed_fields_json, '$.threadId', 't-moved')
+        WHERE task_id = ${task.id}`;
       const added = {
         environmentId: EnvironmentId.make("env-elsewhere"),
         threadId: ThreadId.make("t-added"),
       };
+      const update = (baseVersion: number, set: object, actor: TaskBoardService.Actor = alice) =>
+        board.updateTask(actor, { workspaceId: a, taskId: task.id, baseVersion, set });
       yield* board.linkThread(alice, { workspaceId: a, taskId: task.id, ...added });
-      const stale = yield* board.updateTask(alice, {
-        workspaceId: a,
-        taskId: task.id,
-        baseVersion: 1,
-        set: { status: "in_progress", threads: [moved] },
-      });
-      assert.deepStrictEqual(stale.threads, [moved, added]);
+      const keeps = yield* update(1, { status: "in_progress", threads: [moved] }, agent);
+      assert.deepStrictEqual(keeps.threads, [moved, added]);
+
+      // The writer read `[moved]`; resending it must not bring back what a member unlinked.
+      yield* board.unlinkThread(alice, { workspaceId: a, taskId: task.id, ...moved });
+      const resent = yield* update(1, { threads: [moved] }, agent);
+      assert.deepStrictEqual(
+        [resent.threads, resent.version, resent.overwrote],
+        [[added], 4, undefined],
+      );
+
+      // A stale write that changes the list it read lands, so it can remove a link and swap it.
+      const unlinkedStale = yield* update(1, { threads: [] });
+      assert.deepStrictEqual(unlinkedStale.threads, []);
+      const fresh = {
+        environmentId: EnvironmentId.make("env-elsewhere"),
+        threadId: ThreadId.make("t-new"),
+      };
+      const swapped = yield* update(1, { threads: [fresh] });
+      assert.deepStrictEqual(swapped.threads, [fresh]);
     }),
   );
 
@@ -879,6 +915,13 @@ it.layer(layer)("Telescope task board", (it) => {
         [legacy.title, legacy.conflictDecisionId, legacy.threads],
         ["Plan F", undefined, [{ environmentId: "env-elsewhere", threadId: "t-old" }]],
       );
+
+      // `threadId` is the link, so the proposal holds it against agents, and `null` unlinks.
+      const unlink = yield* seedConflict("Plan G", { threadId: null });
+      const held = yield* Effect.flip(update(agent, legacy.version, { threads: [] }));
+      assert.strictEqual(reasonOf(held), "forbidden");
+      yield* decide(unlink, "incoming");
+      assert.deepStrictEqual((yield* current).threads, []);
     }),
   );
 });
