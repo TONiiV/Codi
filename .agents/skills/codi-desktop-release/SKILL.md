@@ -19,12 +19,12 @@ official T3 Code app owned, so no migration step exists.
 
 Shared state locations:
 
-| What                                                | Where                                     | Why Codi sees it                                     |
-| --------------------------------------------------- | ----------------------------------------- | ---------------------------------------------------- |
-| Threads, projects, settings, secrets                | `~/.t3/userdata` (`statev2.sqlite`)       | `T3CODE_HOME` is left at its default                 |
-| Clerk login, saved environments, connection catalog | macOS: `~/Library/Application Support/t3code-v2`; Windows: `%APPDATA%\t3code-v2` | userData name is unchanged |
-| Keychain key for `safeStorage`                      | `t3code Safe Storage`                     | runtime app name is fixed in `DesktopAppIdentity.ts` |
-| Relay URL, Clerk keys                               | baked at build time                       | from `.env` (copied from `.env.example`)             |
+| What                                                | Where                                                                            | Why Codi sees it                                     |
+| --------------------------------------------------- | -------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| Threads, projects, settings, secrets                | `~/.t3/userdata` (`statev2.sqlite`)                                              | `T3CODE_HOME` is left at its default                 |
+| Clerk login, saved environments, connection catalog | macOS: `~/Library/Application Support/t3code-v2`; Windows: `%APPDATA%\t3code-v2` | userData name is unchanged                           |
+| Keychain key for `safeStorage`                      | `t3code Safe Storage`                                                            | runtime app name is fixed in `DesktopAppIdentity.ts` |
+| Relay URL, Clerk keys                               | baked at build time                                                              | from `.env` (copied from `.env.example`)             |
 
 Only the bundle identity changes: `appId com.tonic.codi`, `productName Codi`.
 A distinct bundle id keeps LaunchServices from mixing it up with an official
