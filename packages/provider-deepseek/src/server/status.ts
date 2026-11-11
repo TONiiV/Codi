@@ -30,6 +30,23 @@ const DEEPSEEK_PRESENTATION = {
   displayName: "DeepSeek",
 } as const;
 const EMPTY_CAPABILITIES: ModelCapabilities = createModelCapabilities({ optionDescriptors: [] });
+const DEEPSEEK_CAPABILITIES: ModelCapabilities = createModelCapabilities({
+  optionDescriptors: [
+    {
+      id: "reasoning_effort",
+      label: "Reasoning",
+      type: "select",
+      role: "reasoning",
+      currentValue: "high",
+      options: [
+        { id: "off", label: "Off" },
+        { id: "low", label: "Low" },
+        { id: "high", label: "High", isDefault: true },
+        { id: "max", label: "Max" },
+      ],
+    },
+  ],
+});
 const DEEPSEEK_DEFAULT_MODEL_SLUG = "default";
 const DEEPSEEK_BUILT_IN_MODELS: ReadonlyArray<ServerProviderModel> = [
   {
@@ -37,7 +54,21 @@ const DEEPSEEK_BUILT_IN_MODELS: ReadonlyArray<ServerProviderModel> = [
     name: "DeepSeek default",
     isCustom: false,
     isDefault: true,
-    capabilities: EMPTY_CAPABILITIES,
+    capabilities: DEEPSEEK_CAPABILITIES,
+  },
+  {
+    slug: "deepseek-flash",
+    name: "DeepSeek-V4.1-Flash",
+    isCustom: false,
+    isDefault: false,
+    capabilities: DEEPSEEK_CAPABILITIES,
+  },
+  {
+    slug: "deepseek-v4-pro",
+    name: "DeepSeek-V4-Pro",
+    isCustom: false,
+    isDefault: false,
+    capabilities: DEEPSEEK_CAPABILITIES,
   },
 ];
 const DEEPSEEK_API_KEY_ENV = "DEEPSEEK_API_KEY";

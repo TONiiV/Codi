@@ -36,6 +36,10 @@ const DEEPSEEK_PROVIDER = ProviderDriverKind.make("deepseek");
 const DEEPSEEK_MODEL_CONFIG_ID = "model";
 const DEFAULT_DEEPSEEK_SETTINGS = Schema.decodeSync(DeepSeekSettings)({});
 
+export function deepSeekModelConfigValue(model: string): string {
+  return JSON.stringify(["deepseek-official", model]);
+}
+
 export interface DeepSeekAdapterV2Options {
   readonly instanceId: Parameters<typeof makeAcpAdapterV2>[0]["instanceId"];
   readonly settings: DeepSeekSettings;
@@ -57,7 +61,7 @@ const applyDeepSeekModel = Effect.fn("DeepSeekAdapterV2.applyModelSelection")(fu
 ) {
   const requested = modelSelection.model.trim();
   if (requested.length === 0 || requested === "default") return undefined;
-  yield* runtime.setConfigOption(DEEPSEEK_MODEL_CONFIG_ID, requested, {
+  yield* runtime.setConfigOption(DEEPSEEK_MODEL_CONFIG_ID, deepSeekModelConfigValue(requested), {
     allowUnlistedValue: true,
   });
   return requested;
@@ -74,11 +78,12 @@ function makeDeepSeekAcpAdapterFlavor(options: DeepSeekAdapterV2Options): AcpAda
   const makeRuntime =
     options.makeRuntime ??
     ((input: AcpAdapterV2RuntimeInput) => {
-      const { runtimePolicy: _runtimePolicy, processEnvironment, ...runtimeInput } = input;
+      const { runtimePolicy, processEnvironment, ...runtimeInput } = input;
       return makeDeepSeekAcpRuntime({
         ...runtimeInput,
         settings: options.settings,
         environment: { ...options.environment, ...processEnvironment },
+        runtimeMode: runtimePolicy.runtimeMode,
       });
     });
   return {

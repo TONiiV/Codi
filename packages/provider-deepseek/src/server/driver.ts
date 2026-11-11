@@ -3,9 +3,13 @@ import { DeepSeekSettings } from "../settings.ts";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
+import * as HttpClient from "effect/http/HttpClient";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 
+import * as ProviderLatestVersions from "@t3tools/provider-core/server/ProviderLatestVersions";
 import type * as ProviderHost from "@t3tools/provider-core/server/ProviderHost";
 import {
   defaultProviderContinuationIdentity,
@@ -15,7 +19,12 @@ import {
 import { ProviderDriverError } from "@t3tools/provider-core/server/errors";
 import { mergeProviderInstanceEnvironment } from "@t3tools/provider-core/server/instanceEnvironment";
 import { withInstanceIdentity } from "@t3tools/provider-core/server/instanceIdentity";
-import { makeManualOnlyProviderMaintenanceCapabilities } from "@t3tools/provider-core/server/maintenanceResolver";
+import {
+  enrichProviderSnapshotWithVersionAdvisory,
+  makeCachedProviderMaintenanceResolution,
+  makePackageManagedProviderMaintenanceResolver,
+  resolveProviderMaintenanceCapabilitiesEffect,
+} from "@t3tools/provider-core/server/maintenanceResolver";
 import { makeManagedServerProvider } from "@t3tools/provider-core/server/managedProvider";
 import {
   haveProviderSnapshotSettingsChanged,
@@ -25,13 +34,14 @@ import {
 import type { ProviderTextGeneration } from "@t3tools/provider-core/server/textGeneration";
 import { type DeepSeekAdapterV2DriverEnv, makeDeepSeekAdapterV2Driver } from "./adapter.ts";
 import { buildInitialDeepSeekProviderSnapshot, checkDeepSeekProviderStatus } from "./status.ts";
+import { deepSeekUsageReader } from "./usage.ts";
 
 const DRIVER_KIND = ProviderDriverKind.make("deepseek");
 const decodeDeepSeekSettings = Schema.decodeSync(DeepSeekSettings);
-// dsh has no self-update command, so Codi offers no one-click update.
-const MAINTENANCE = makeManualOnlyProviderMaintenanceCapabilities({
+export const DEEPSEEK_UPDATE = makePackageManagedProviderMaintenanceResolver({
   provider: DRIVER_KIND,
-  packageName: null,
+  npmPackageName: "@deepseek-ai/dsh",
+  nativeUpdate: null,
 });
 
 const unsupportedTextGeneration: ProviderTextGeneration = (() => {
@@ -56,9 +66,13 @@ export type DeepSeekDriverEnv =
   | DeepSeekAdapterV2DriverEnv
   | ChildProcessSpawner.ChildProcessSpawner
   | SecureRandom.SecureRandom
+  | FileSystem.FileSystem
+  | Path.Path
+  | HttpClient.HttpClient
+  | ProviderLatestVersions.ProviderLatestVersions
   | ProviderHost.ProviderHost;
 
-export const DeepSeekDriver: ProviderDriver<DeepSeekSettings, DeepSeekDriverEnv> = {
+export const DeepSeekDriver: ProviderDriver<DeepSeekSettings, DeepSeekDriverEnv, Path.Path> = {
   driverKind: DRIVER_KIND,
   metadata: {
     displayName: "DeepSeek",
@@ -66,6 +80,7 @@ export const DeepSeekDriver: ProviderDriver<DeepSeekSettings, DeepSeekDriverEnv>
   },
   configSchema: DeepSeekSettings,
   defaultConfig: (): DeepSeekSettings => decodeDeepSeekSettings({}),
+  usage: deepSeekUsageReader,
   create: Effect.fn("DeepSeekDriver.create")(function* ({
     instanceId,
     displayName,
@@ -76,6 +91,10 @@ export const DeepSeekDriver: ProviderDriver<DeepSeekSettings, DeepSeekDriverEnv>
   }) {
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
     const crypto = yield* SecureRandom.SecureRandom;
+    const fileSystem = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const httpClient = yield* HttpClient.HttpClient;
+    const latestVersions = yield* ProviderLatestVersions.ProviderLatestVersions;
     const processEnv = yield* mergeProviderInstanceEnvironment(
       environment,
       yield* HostProcess.Environment,
@@ -92,9 +111,19 @@ export const DeepSeekDriver: ProviderDriver<DeepSeekSettings, DeepSeekDriverEnv>
       continuationGroupKey: continuationIdentity.continuationKey,
     });
     const effectiveConfig = { ...config, enabled } satisfies DeepSeekSettings;
+    const resolveMaintenance = yield* makeCachedProviderMaintenanceResolution(
+      resolveProviderMaintenanceCapabilitiesEffect(DEEPSEEK_UPDATE, {
+        binaryPath: effectiveConfig.binaryPath,
+        env: processEnv,
+      }).pipe(
+        Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
+        Effect.provideService(FileSystem.FileSystem, fileSystem),
+        Effect.provideService(Path.Path, path),
+      ),
+    );
     const snapshotSettings = yield* makeProviderSnapshotSettingsSource(effectiveConfig);
     const snapshot = yield* makeManagedServerProvider<ProviderSnapshotSettings<DeepSeekSettings>>({
-      resolveMaintenance: () => Effect.succeed(MAINTENANCE),
+      resolveMaintenance,
       getSettings: snapshotSettings.getSettings,
       streamSettings: snapshotSettings.streamSettings,
       haveSettingsChanged: haveProviderSnapshotSettingsChanged,
@@ -105,6 +134,17 @@ export const DeepSeekDriver: ProviderDriver<DeepSeekSettings, DeepSeekDriverEnv>
         Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
         Effect.provideService(SecureRandom.SecureRandom, crypto),
       ),
+      enrichSnapshot: ({ settings, snapshot, publishSnapshot }) =>
+        resolveMaintenance().pipe(
+          Effect.flatMap((maintenanceCapabilities) =>
+            enrichProviderSnapshotWithVersionAdvisory(snapshot, maintenanceCapabilities, {
+              enableProviderUpdateChecks: settings.enableProviderUpdateChecks,
+            }),
+          ),
+          Effect.provideService(HttpClient.HttpClient, httpClient),
+          Effect.provideService(ProviderLatestVersions.ProviderLatestVersions, latestVersions),
+          Effect.flatMap(publishSnapshot),
+        ),
     }).pipe(
       Effect.mapError(
         (cause) =>

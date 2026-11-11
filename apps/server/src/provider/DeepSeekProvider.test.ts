@@ -102,8 +102,29 @@ describe("DeepSeekProvider", () => {
       assert.equal(snapshot.auth.status, "authenticated");
       assert.deepEqual(
         snapshot.models.map((model) => [model.slug, model.name]),
-        [["default", "DeepSeek default"]],
+        [
+          ["default", "DeepSeek default"],
+          ["deepseek-flash", "DeepSeek-V4.1-Flash"],
+          ["deepseek-v4-pro", "DeepSeek-V4-Pro"],
+        ],
       );
+      for (const model of snapshot.models) {
+        assert.deepEqual(model.capabilities?.optionDescriptors, [
+          {
+            id: "reasoning_effort",
+            label: "Effort",
+            type: "select",
+            role: "reasoning",
+            currentValue: "high",
+            options: [
+              { id: "off", label: "Off" },
+              { id: "low", label: "Low" },
+              { id: "high", label: "High", isDefault: true },
+              { id: "max", label: "Max" },
+            ],
+          },
+        ]);
+      }
     }),
   );
 });
