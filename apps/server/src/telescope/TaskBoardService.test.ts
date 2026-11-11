@@ -419,7 +419,7 @@ it.layer(layer)("Telescope task board", (it) => {
 
       // A task read without links: undoing the writer's own later link lands, as for any field.
       const third = yield* board.createTask(alice, { workspaceId: a, title: "Cover" });
-      const own = (baseVersion: number, threads: ReadonlyArray<object>) =>
+      const own = (baseVersion: number, threads: ReadonlyArray<ReturnType<typeof thread>>) =>
         board.updateTask(agent, {
           workspaceId: a,
           taskId: third.id,
