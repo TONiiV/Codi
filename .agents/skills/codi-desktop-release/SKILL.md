@@ -23,13 +23,14 @@ Shared state locations:
 | --------------------------------------------------- | -------------------------------------------------------------------------------- | ---------------------------------------------------- |
 | Threads, projects, settings, secrets                | `~/.t3/userdata` (`statev2.sqlite`)                                              | `T3CODE_HOME` is left at its default                 |
 | Clerk login, saved environments, connection catalog | macOS: `~/Library/Application Support/t3code-v2`; Windows: `%APPDATA%\t3code-v2` | userData name is unchanged                           |
-| Keychain key for `safeStorage`                      | `t3code Safe Storage`                                                            | runtime app name is fixed in `DesktopAppIdentity.ts` |
+| macOS Keychain key for `safeStorage`                | `t3code Safe Storage`                                                            | runtime app name is fixed in `DesktopAppIdentity.ts` |
 | Relay URL, Clerk keys                               | baked at build time                                                              | from `.env` (copied from `.env.example`)             |
 
-Only the bundle identity changes: `appId com.tonic.codi`, `productName Codi`.
-A distinct bundle id keeps LaunchServices from mixing it up with an official
-download. The build has no update feed, so it never auto-updates back to
-official T3 Code.
+Only the bundle identity changes: `appId com.tonic.codi`, `productName Codi`
+(Windows also raises the payload file limit; see
+[references/windows.md](references/windows.md)). A distinct bundle id keeps
+LaunchServices from mixing it up with an official download. The build has no
+update feed, so it never auto-updates back to official T3 Code.
 
 ## Hard rules
 
@@ -48,11 +49,15 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/skills/codi-desk
 ```
 
 The script uses a detached `origin/main` worktree, applies the local identity,
-builds and verifies an x64 NSIS installer, gracefully closes only an installed
-Codi process resolved by exact executable path, snapshots `statev2.sqlite` when
+builds and verifies an x64 NSIS installer, gracefully closes only processes
+running from the installed Codi directory, snapshots `statev2.sqlite` when
 present, installs, verifies the installed version, cleans up, and launches.
-It never installs prerequisites: changing Visual Studio, Rust, or Python needs
-explicit user authorization.
+It never installs prerequisites: it stops when the Rust MSVC toolchain or target
+is missing, and changing Visual Studio, Rust, or Python needs explicit user
+authorization. Pass `-Branch <name>` to build another branch and `-NoLaunch` to
+skip the final launch. Run it in the background when invoking it as an agent; it
+closes the running Codi, so never run it from inside a Codi thread without the
+developer's go-ahead.
 
 ## macOS update
 

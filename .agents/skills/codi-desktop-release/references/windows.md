@@ -7,8 +7,11 @@ Use this reference only on a Windows x64 host.
 The repository build preflight is authoritative. A native x64 installer needs:
 
 - Python 3 discoverable by node-gyp.
-- Rust with `x86_64-pc-windows-msvc`. Set a worktree-local override to
-  `stable-x86_64-pc-windows-msvc`; a GNU default toolchain is insufficient.
+- Rust toolchain `stable-x86_64-pc-windows-msvc` with the
+  `x86_64-pc-windows-msvc` target already installed. The updater builds with
+  `RUSTUP_TOOLCHAIN` set to it, so a GNU default toolchain is fine and no
+  `rustup override` is written. It stops if the toolchain or target is missing;
+  adding them needs explicit user authorization.
 - The latest Visual Studio instance returned by `vswhere` must contain the x64
   C++ tools, a Windows SDK, and the latest toolset's
   `VC\Tools\MSVC\<version>\lib\spectre\x64` directory.
@@ -27,12 +30,15 @@ Obtain explicit user authorization immediately before doing it.
 
 - Snapshot `%USERPROFILE%\.t3\userdata\statev2.sqlite` with SQLite `VACUUM INTO`
   when it exists. Do not copy a live database byte-for-byte.
-- Resolve an existing app from its uninstall registry entry or the current
+- Resolve an existing app from its uninstall registry entry (named
+  `Codi <version>`; its `DisplayIcon` holds the exe path) or the current
   `%LOCALAPPDATA%\Programs\t3code\Codi.exe` path. Keep
   `%LOCALAPPDATA%\Programs\Codi\Codi.exe` as a legacy fallback.
-- Close only processes whose executable path exactly matches that resolved app.
-  Request manual closure if graceful shutdown does not finish; never kill by
-  process-name or command-line pattern.
+- Close only processes whose executable path is inside that resolved app's
+  install directory, so an older `Codi (Beta).exe` there is closed too. Request
+  manual closure if graceful shutdown does not finish; never kill by
+  process-name or command-line pattern. Stop if an official `T3 Code*.exe` is
+  still running.
 - Run the NSIS installer with `/S`, then verify the installed executable's
   product version equals the artifact version before launch.
 - Remove `ELECTRON_RUN_AS_NODE` from the launch environment.

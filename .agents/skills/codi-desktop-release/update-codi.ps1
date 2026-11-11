@@ -18,11 +18,16 @@ function Find-CodiExecutable {
     "HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*",
     "HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*"
   )
+  # The NSIS entry is named "Codi <version>", has no InstallLocation, and sets DisplayIcon to "<exe>,0".
+  # Not every entry has those values, and a Chrome web app is also named "Codi" (its icon is a .ico).
   $entry = Get-ItemProperty $roots -ErrorAction SilentlyContinue |
-    Where-Object { $_.DisplayName -eq "Codi" } |
+    Where-Object {
+      $_.PSObject.Properties["DisplayName"] -and $_.PSObject.Properties["DisplayIcon"] -and
+      $_.DisplayName -match '^Codi \d' -and $_.DisplayIcon -match '\.exe,\d+$'
+    } |
     Select-Object -First 1
-  if ($null -ne $entry -and $entry.InstallLocation) {
-    $candidate = Join-Path $entry.InstallLocation "Codi.exe"
+  if ($null -ne $entry) {
+    $candidate = $entry.DisplayIcon -replace ',\d+$'
     if (Test-Path -LiteralPath $candidate) { return $candidate }
   }
   foreach ($candidate in @(
@@ -62,7 +67,7 @@ if ([Runtime.InteropServices.RuntimeInformation]::OSArchitecture -ne "X64") {
   throw "update-codi.ps1 currently supports Windows x64 only"
 }
 
-$Repo = (& git -C $PSScriptRoot rev-parse --show-toplevel).Trim()
+$Repo = & git -C $PSScriptRoot rev-parse --show-toplevel
 if ($LASTEXITCODE -ne 0) { throw "Could not resolve repository root" }
 $Vp = Join-Path $Repo "node_modules\.bin\vp.cmd"
 if (!(Test-Path -LiteralPath $Vp)) { throw "Missing $Vp; run vp i in $Repo first" }
@@ -88,8 +93,12 @@ try {
 
     Step "Dependencies and Rust MSVC target"
     Invoke-Checked $Vp @("i")
-    Invoke-Checked rustup @("target", "add", "--toolchain", "stable-x86_64-pc-windows-msvc", "x86_64-pc-windows-msvc")
-    Invoke-Checked rustup @("override", "set", "stable-x86_64-pc-windows-msvc")
+    $rustToolchain = "stable-x86_64-pc-windows-msvc"
+    $rustTargets = & rustup target list --installed --toolchain $rustToolchain
+    if ($LASTEXITCODE -ne 0 -or $rustTargets -notcontains "x86_64-pc-windows-msvc") {
+      throw "Rust toolchain $rustToolchain with target x86_64-pc-windows-msvc is not installed; install it after the user authorizes"
+    }
+    $env:RUSTUP_TOOLCHAIN = $rustToolchain
 
     Step "Local Codi identity"
     $buildScript = Join-Path $Worktree "scripts\build-desktop-artifact.ts"
@@ -116,8 +125,11 @@ try {
     Remove-Item Env:ELECTRON_RUN_AS_NODE -ErrorAction SilentlyContinue
     Remove-Item Env:GITHUB_REPOSITORY -ErrorAction SilentlyContinue
     Remove-Item Env:T3CODE_DESKTOP_UPDATE_REPOSITORY -ErrorAction SilentlyContinue
+    $ErrorActionPreference = "Continue"
     & $Vp run dist:desktop:win:x64 *>&1 | Tee-Object -FilePath $BuildLog
+    $ErrorActionPreference = "Stop"
     if ($LASTEXITCODE -ne 0) { throw "Windows desktop build failed; see $BuildLog" }
+    Remove-Item Env:RUSTUP_TOOLCHAIN -ErrorAction SilentlyContinue
 
     $installer = Get-ChildItem (Join-Path $Worktree "release") -Filter "Codi-*-x64.exe" |
       Sort-Object LastWriteTime -Descending | Select-Object -First 1
@@ -134,26 +146,29 @@ try {
   $installedBefore = Find-CodiExecutable
   if ($installedBefore) {
     Step "Close installed Codi"
+    $installDir = [IO.Path]::GetFullPath((Split-Path -Parent $installedBefore)).TrimEnd('\') + "\"
     $running = Get-Process | Where-Object {
-      try { $_.Path -and [IO.Path]::GetFullPath($_.Path) -eq [IO.Path]::GetFullPath($installedBefore) } catch { $false }
+      try { $_.Path -and [IO.Path]::GetFullPath($_.Path).StartsWith($installDir, [StringComparison]::OrdinalIgnoreCase) } catch { $false }
     }
-    foreach ($process in $running) { [void]$process.CloseMainWindow() }
+    # A process that already exited (its siblings close together) throws here and needs no close.
+    foreach ($process in $running) { try { [void]$process.CloseMainWindow() } catch { } }
     foreach ($process in $running) {
-      try { Wait-Process -Id $process.Id -Timeout 30 -ErrorAction Stop } catch {
+      Wait-Process -Id $process.Id -Timeout 30 -ErrorAction SilentlyContinue
+      if (Get-Process -Id $process.Id -ErrorAction SilentlyContinue) {
         throw "Codi did not close gracefully (PID $($process.Id)); close it manually and rerun"
       }
     }
+  }
+  if (Get-Process | Where-Object { try { $_.Path -like "*\T3 Code*.exe" } catch { $false } }) {
+    throw "official T3 Code is running; quit it first"
   }
 
   if (Test-Path -LiteralPath $Database) {
     Step "Snapshot statev2.sqlite"
     $backup = Join-Path $Output ("t3-backup-" + (Get-Date -Format "yyyyMMdd-HHmmss"))
     New-Item -ItemType Directory -Path $backup -Force | Out-Null
-    $env:CODI_DB_SOURCE = $Database
-    $env:CODI_DB_BACKUP = Join-Path $backup "statev2.sqlite"
-    $snapshotCode = "new (require('bun:sqlite').Database)(process.env.CODI_DB_SOURCE,{readonly:true}).run('VACUUM INTO ?',process.env.CODI_DB_BACKUP)"
-    Invoke-Checked bun @("-e", $snapshotCode)
-    Remove-Item Env:CODI_DB_SOURCE,Env:CODI_DB_BACKUP -ErrorAction SilentlyContinue
+    $snapshotCode = "new (require('bun:sqlite').Database)(process.argv[1],{readonly:true}).run('VACUUM INTO ?',process.argv[2])"
+    Invoke-Checked bun @("-e", $snapshotCode, $Database, (Join-Path $backup "statev2.sqlite"))
     Write-Host "backup: $backup"
   }
 
@@ -163,14 +178,14 @@ try {
   $installed = Find-CodiExecutable
   if (!$installed) { throw "Installer finished but Codi.exe was not found" }
   $installedVersion = (Get-Item -LiteralPath $installed).VersionInfo.ProductVersion
-  if ($installedVersion -and !$installedVersion.StartsWith($version)) {
+  # The exe reports 0.1.8.0 for artifact 0.1.8, so compare the first three parts exactly.
+  if (!$installedVersion -or ([version]($installedVersion -replace '[-+].*$')).ToString(3) -ne ([version]($version -replace '[-+].*$')).ToString(3)) {
     throw "Installed version $installedVersion does not match artifact version $version"
   }
   Write-Host "installed: $installed ($installedVersion)"
 
   if (!$NoLaunch) {
     Step "Launch Codi"
-    Remove-Item Env:ELECTRON_RUN_AS_NODE -ErrorAction SilentlyContinue
     Start-Process -FilePath $installed
   }
 } finally {
