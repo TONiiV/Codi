@@ -82,9 +82,11 @@ describe("compressed transcripts", () => {
     await NodeFSP.mkdir(nested);
     const plain = NodePath.join(dir, "active.jsonl");
     const compressed = NodePath.join(nested, "archived.jsonl.zst");
+    const deepSeekCompressed = NodePath.join(nested, "session.v4.jsonl.zstd");
     const old = NodePath.join(nested, "old.jsonl.zst");
     await NodeFSP.writeFile(plain, claudeLine(1, 5));
     await NodeFSP.writeFile(compressed, NodeZlib.zstdCompressSync(claudeLine(2, 7)));
+    await NodeFSP.writeFile(deepSeekCompressed, NodeZlib.zstdCompressSync(claudeLine(4, 9)));
     await NodeFSP.writeFile(old, NodeZlib.zstdCompressSync(claudeLine(3, 11)));
     await NodeFSP.writeFile(NodePath.join(nested, "unrelated.zst"), "ignored");
     await NodeFSP.writeFile(NodePath.join(nested, "partial.jsonl.zst.tmp"), "ignored");
@@ -93,10 +95,65 @@ describe("compressed transcripts", () => {
     const listed = await listTranscriptFiles(dir, Date.parse("2026-01-01T00:00:00Z"));
     assert.deepStrictEqual(
       listed.files.map((file) => file.path).sort(),
-      [plain, compressed].sort(),
+      [plain, compressed, deepSeekCompressed].sort(),
     );
     assert.strictEqual(listed.failedPaths, 0);
     assert.isAbove(listed.files.find((file) => file.path === compressed)?.size ?? 0, 0);
+  });
+
+  it("reads DeepSeek usage from its compressed session log", async () => {
+    const file = NodePath.join(dir, "session.v4.jsonl.zstd");
+    const content = [
+      { type: "session", version: 4, id: "dsh-session" },
+      {
+        type: "request/header",
+        data: { header: { config: { provider: "deepseek-official", model: "deepseek-flash" } } },
+      },
+      {
+        type: "assistant/message",
+        time: Date.parse("2026-08-01T10:00:00Z"),
+        data: {
+          message: { id: "message-1" },
+          usage: {
+            inputTokens: 373,
+            cacheReadTokens: 30_720,
+            cacheWriteTokens: 10,
+            outputTokens: 77,
+            reasoningTokens: 20,
+          },
+        },
+      },
+    ]
+      .map((row) => JSON.stringify(row))
+      .join("\n");
+    await NodeFSP.writeFile(file, NodeZlib.zstdCompressSync(`${content}\n`));
+
+    for (const streamingThresholdBytes of [undefined, 1]) {
+      const result = await readTranscriptRecords(
+        file,
+        TEST_FORMATS.deepseek,
+        undefined,
+        streamingThresholdBytes === undefined ? undefined : { streamingThresholdBytes },
+      );
+      assert.deepStrictEqual(result?.records, [
+        {
+          provider: "deepseek",
+          timestampMs: Date.parse("2026-08-01T10:00:00Z"),
+          model: "deepseek-flash",
+          sessionId: "dsh-session",
+          totals: {
+            uncachedInputTokens: 373,
+            cachedInputTokens: 30_720,
+            cacheCreationTokens: 10,
+            outputTokens: 77,
+            reasoningTokens: 20,
+          },
+          reportedCostUsd: null,
+          speed: "standard",
+          dedupeKey: "dsh-session:message-1",
+        },
+      ]);
+    }
   });
 
   it.each([

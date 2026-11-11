@@ -27,6 +27,7 @@ import {
 } from "@t3tools/contracts";
 import * as Duration from "effect/Duration";
 import * as Clock from "effect/Clock";
+import * as DateTime from "effect/DateTime";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -129,6 +130,31 @@ const setup = Effect.gen(function* () {
     },
   };
 });
+
+const deepSeekSession = (time: number) =>
+  [
+    { type: "session", version: 4, id: "deepseek-session" },
+    {
+      type: "request/header",
+      data: { header: { config: { provider: "deepseek-official", model: "deepseek-flash" } } },
+    },
+    {
+      type: "assistant/message",
+      time,
+      data: {
+        message: { id: "deepseek-message" },
+        usage: {
+          inputTokens: 373,
+          cacheReadTokens: 30_720,
+          cacheWriteTokens: 10,
+          outputTokens: 77,
+          reasoningTokens: 20,
+        },
+      },
+    },
+  ]
+    .map((row) => JSON.stringify(row))
+    .join("\n") + "\n";
 
 const layerCursorUsageAccounts = <E, R>(
   reader: Layer.Layer<CursorAccountReader.CursorAccountReader, E, R>,
@@ -491,6 +517,56 @@ describe("Codex usage history", () => {
 });
 
 describe("UsageService", () => {
+  it.live("includes DeepSeek sessions and prices their token categories", () =>
+    Effect.gen(function* () {
+      const { home, settings } = yield* setup;
+      const currentTime = yield* DateTime.now;
+      const now = DateTime.toEpochMillis(currentTime);
+      const day = UsageDay.make(DateTime.formatIso(currentTime).slice(0, 10));
+      const sessionDir = NodePath.join(home, ".dsh", "sessions", "project", "deepseek-session");
+      yield* Effect.promise(async () => {
+        await NodeFSP.mkdir(sessionDir, { recursive: true });
+        const log = deepSeekSession(now);
+        const headerEnd = log.indexOf("\n") + 1;
+        await NodeFSP.writeFile(
+          NodePath.join(sessionDir, "session.v4.jsonl.zstd"),
+          Buffer.concat([
+            NodeZlib.zstdCompressSync(log.slice(0, headerEnd)),
+            NodeZlib.zstdCompressSync(log.slice(headerEnd)),
+          ]),
+        );
+      });
+      const summary = yield* Effect.gen(function* () {
+        const service = yield* UsageService.make;
+        return yield* service.readSummary({ timeZone: "UTC", sinceDay: day, untilDay: day });
+      }).pipe(
+        Effect.provide(
+          layerService({
+            prefix: "usage-deepseek",
+            home,
+            settings: {
+              ...settings,
+              usagePriceOverrides: {
+                "deepseek-flash": {
+                  inputCostPerMillionTokens: 2,
+                  outputCostPerMillionTokens: 4,
+                  cacheReadCostPerMillionTokens: 0.2,
+                  cacheWriteCostPerMillionTokens: 1,
+                },
+              },
+            },
+          }),
+        ),
+      );
+      const bucket = summary.buckets.find((entry) => entry.provider === "deepseek");
+      assert.strictEqual(bucket?.model, "deepseek-flash");
+      assert.strictEqual(bucket?.totals.uncachedInputTokens, 373);
+      assert.strictEqual(bucket?.totals.cachedInputTokens, 30_720);
+      assert.strictEqual(bucket?.totals.reasoningTokens, 20);
+      assert.strictEqual(bucket?.costSource, "modelPriced");
+      assert.closeTo(bucket?.costUsd ?? NaN, 0.007208, 1e-12);
+    }).pipe(Effect.scoped),
+  );
   it.live("counts compressed Codex rollouts across refresh, rewrites, and cache restarts", () =>
     Effect.gen(function* () {
       const { home, settings } = yield* setup;

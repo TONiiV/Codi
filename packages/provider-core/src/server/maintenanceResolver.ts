@@ -703,7 +703,11 @@ export const resolvePackageManagedProviderMaintenance = Effect.fn(
     commandPaths.some((commandPath) => normalizeCommandPath(commandPath).includes("/node_modules/"))
       ? manual
       : native;
-  if (commandPaths.some(isVitePlusGlobalCommandPath)) {
+  // Vite+ can expose npm globals from its bundled Node through a shim in its bin directory.
+  const vitePlusNodeNpmGlobal =
+    normalizeCommandPath(context.realCommandPath).includes("/vite-plus/js_runtime/node/") &&
+    npmGlobalPrefixFromCommandPath(context.realCommandPath, packageName) !== null;
+  if (commandPaths.some(isVitePlusGlobalCommandPath) && !vitePlusNodeNpmGlobal) {
     return makeProviderMaintenanceCapabilities({
       provider: definition.provider,
       packageName,
