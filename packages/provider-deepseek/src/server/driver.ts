@@ -1,7 +1,6 @@
 import { ProviderDriverKind, TextGenerationError } from "@t3tools/contracts";
 import { DeepSeekSettings } from "../settings.ts";
 import * as HostProcess from "@t3tools/shared/HostProcess";
-import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
@@ -10,7 +9,6 @@ import * as HttpClient from "effect/http/HttpClient";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 
 import * as ProviderLatestVersions from "@t3tools/provider-core/server/ProviderLatestVersions";
-import type * as ProviderHost from "@t3tools/provider-core/server/ProviderHost";
 import {
   defaultProviderContinuationIdentity,
   type ProviderDriver,
@@ -64,13 +62,8 @@ const unsupportedTextGeneration: ProviderTextGeneration = (() => {
 
 export type DeepSeekDriverEnv =
   | DeepSeekAdapterV2DriverEnv
-  | ChildProcessSpawner.ChildProcessSpawner
-  | SecureRandom.SecureRandom
-  | FileSystem.FileSystem
-  | Path.Path
   | HttpClient.HttpClient
-  | ProviderLatestVersions.ProviderLatestVersions
-  | ProviderHost.ProviderHost;
+  | ProviderLatestVersions.ProviderLatestVersions;
 
 export const DeepSeekDriver: ProviderDriver<DeepSeekSettings, DeepSeekDriverEnv, Path.Path> = {
   driverKind: DRIVER_KIND,
@@ -90,7 +83,6 @@ export const DeepSeekDriver: ProviderDriver<DeepSeekSettings, DeepSeekDriverEnv,
     config,
   }) {
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-    const crypto = yield* SecureRandom.SecureRandom;
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const httpClient = yield* HttpClient.HttpClient;
@@ -132,7 +124,6 @@ export const DeepSeekDriver: ProviderDriver<DeepSeekSettings, DeepSeekDriverEnv,
       checkProvider: checkDeepSeekProviderStatus(effectiveConfig, processEnv).pipe(
         Effect.map(stampIdentity),
         Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
-        Effect.provideService(SecureRandom.SecureRandom, crypto),
       ),
       enrichSnapshot: ({ settings, snapshot, publishSnapshot }) =>
         resolveMaintenance().pipe(

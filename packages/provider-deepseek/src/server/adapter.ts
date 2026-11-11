@@ -1,24 +1,21 @@
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import { resolveSelfInvocation, type SelfInvocation } from "@t3tools/shared/nodeRuntime";
-import { type ModelSelection, ProviderDriverKind } from "@t3tools/contracts";
+import { ProviderDriverKind } from "@t3tools/contracts";
 import { DeepSeekSettings } from "../settings.ts";
 import type * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import type * as FileSystem from "effect/FileSystem";
 import type * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
-import type * as Scope from "effect/Scope";
 import type * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
-import type * as EffectAcpErrors from "effect-acp/errors";
 
-import type * as AcpSessionRuntime from "@t3tools/provider-acp/server/AcpSessionRuntime";
 import {
   AcpProviderCapabilitiesV2,
   makeAcpAdapterV2,
   type AcpAdapterV2Flavor,
-  type AcpAdapterV2RuntimeInput,
 } from "@t3tools/provider-acp/server/adapter";
 import { makeAcpNativeLoggerFactory } from "@t3tools/provider-acp/server/nativeLogging";
+import { findModelConfigOption } from "@t3tools/provider-acp/server/runtimeModel";
 import {
   ProviderAdapterDriverCreateError,
   type ProviderAdapterDriver,
@@ -36,7 +33,7 @@ const DEEPSEEK_PROVIDER = ProviderDriverKind.make("deepseek");
 const DEEPSEEK_MODEL_CONFIG_ID = "model";
 const DEFAULT_DEEPSEEK_SETTINGS = Schema.decodeSync(DeepSeekSettings)({});
 
-export function deepSeekModelConfigValue(model: string): string {
+function deepSeekModelConfigValue(model: string): string {
   return JSON.stringify(["deepseek-official", model]);
 }
 
@@ -46,52 +43,42 @@ export interface DeepSeekAdapterV2Options {
   readonly environment: NodeJS.ProcessEnv;
   readonly selfInvocation: SelfInvocation;
   readonly nativeLogging?: Parameters<typeof makeAcpAdapterV2>[0]["nativeLogging"];
-  readonly makeRuntime?: (
-    input: AcpAdapterV2RuntimeInput,
-  ) => Effect.Effect<
-    AcpSessionRuntime.AcpSessionRuntime["Service"],
-    EffectAcpErrors.AcpError,
-    ChildProcessSpawner.ChildProcessSpawner | SecureRandom.SecureRandom | Scope.Scope
-  >;
 }
 
-const applyDeepSeekModel = Effect.fn("DeepSeekAdapterV2.applyModelSelection")(function* (
-  runtime: AcpSessionRuntime.AcpSessionRuntime["Service"],
-  modelSelection: ModelSelection,
-) {
+/**
+ * dsh's `model` option marks no default, so "default" restores the model the
+ * session reported at setup, before T3 changed it.
+ */
+export const applyDeepSeekModel = Effect.fn("DeepSeekAdapterV2.applyModelSelection")(function* ({
+  runtime,
+  startResult,
+  modelSelection,
+}: Parameters<NonNullable<AcpAdapterV2Flavor["applyModelSelection"]>>[0]) {
   const requested = modelSelection.model.trim();
-  if (requested.length === 0 || requested === "default") return undefined;
-  yield* runtime.setConfigOption(DEEPSEEK_MODEL_CONFIG_ID, deepSeekModelConfigValue(requested), {
-    allowUnlistedValue: true,
-  });
-  return requested;
+  const isDefault = requested.length === 0 || requested === "default";
+  const target = isDefault
+    ? findModelConfigOption(startResult.sessionSetupResult.configOptions)?.currentValue
+    : deepSeekModelConfigValue(requested);
+  const current = findModelConfigOption(yield* runtime.getConfigOptions)?.currentValue;
+  if (target !== undefined && target !== current) {
+    yield* runtime.setConfigOption(DEEPSEEK_MODEL_CONFIG_ID, target, { allowUnlistedValue: true });
+  }
+  return isDefault ? undefined : requested;
 });
 
-/** Writes a non-default model selection to dsh's `model` session option; "default" leaves dsh's own choice. */
-const applyDeepSeekModelSelection: NonNullable<AcpAdapterV2Flavor["applyModelSelection"]> = ({
-  runtime,
-  modelSelection,
-}) => applyDeepSeekModel(runtime, modelSelection);
-
-/** dsh exposes only the standard ACP surface, so the flavor carries no provider-specific behavior. */
 function makeDeepSeekAcpAdapterFlavor(options: DeepSeekAdapterV2Options): AcpAdapterV2Flavor {
-  const makeRuntime =
-    options.makeRuntime ??
-    ((input: AcpAdapterV2RuntimeInput) => {
-      const { runtimePolicy, processEnvironment, ...runtimeInput } = input;
-      return makeDeepSeekAcpRuntime({
-        ...runtimeInput,
-        settings: options.settings,
-        environment: { ...options.environment, ...processEnvironment },
-        runtimeMode: runtimePolicy.runtimeMode,
-      });
-    });
   return {
     driver: DEEPSEEK_PROVIDER,
     runtimeHarness: "DeepSeek",
     capabilities: AcpProviderCapabilitiesV2,
-    makeRuntime,
-    applyModelSelection: applyDeepSeekModelSelection,
+    makeRuntime: ({ runtimePolicy, processEnvironment, ...runtimeInput }) =>
+      makeDeepSeekAcpRuntime({
+        ...runtimeInput,
+        settings: options.settings,
+        environment: { ...options.environment, ...processEnvironment },
+        runtimeMode: runtimePolicy.runtimeMode,
+      }),
+    applyModelSelection: applyDeepSeekModel,
     promptFailure: (cause) => makeProviderFailure({ cause, class: "provider_error" }),
   };
 }

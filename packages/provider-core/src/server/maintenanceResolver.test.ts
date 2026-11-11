@@ -922,33 +922,54 @@ it.layer(
     }),
   );
 
+  const vitePlusUpdate = {
+    command: "vp i -g @anthropic-ai/claude-code",
+    lockKey: "vite-plus-global",
+  };
   it.effect.each([
     {
       name: "the default home",
       resolved: "/Users/theo/.vite-plus/bin/claude",
       real: "/Users/theo/.vite-plus/current/bin/vp",
       platform: "darwin",
+      update: vitePlusUpdate,
     },
     {
       name: "the XDG home",
       resolved: "/home/theo/.local/share/vite-plus/bin/claude",
       real: "/home/theo/.local/share/vite-plus/current/bin/vp",
       platform: "linux",
+      update: vitePlusUpdate,
     },
     {
       name: "the Windows home",
       resolved: "C:\\Users\\Theo\\AppData\\Local\\vite-plus\\bin\\claude.cmd",
       real: "C:\\Users\\Theo\\AppData\\Local\\vite-plus\\packages\\@anthropic-ai\\claude-code\\lib\\node_modules\\@anthropic-ai\\claude-code\\cli.js",
       platform: "win32",
+      update: vitePlusUpdate,
     },
-  ] as const)("updates a Vite+ global install in $name with vp", (fixture) =>
+    {
+      name: "an npm global of its bundled Node",
+      resolved: "/home/theo/.local/share/vite-plus/bin/claude",
+      real: "/home/theo/.local/share/vite-plus/js_runtime/node/26.13.0/lib/node_modules/@anthropic-ai/claude-code/cli.js",
+      platform: "linux",
+      update: {
+        executable: "npm",
+        args: [
+          "install",
+          "-g",
+          "--prefix",
+          "/home/theo/.local/share/vite-plus/js_runtime/node/26.13.0",
+          "--allow-scripts=@anthropic-ai/claude-code",
+          "@anthropic-ai/claude-code@latest",
+        ],
+      },
+    },
+  ] as const)("updates a Vite+ global install in $name", (fixture) =>
     Effect.gen(function* () {
       const capabilities = yield* resolveInstall({ definition: claudeUpdate, ...fixture });
 
-      expect(capabilities.update).toMatchObject({
-        command: "vp i -g @anthropic-ai/claude-code",
-        lockKey: "vite-plus-global",
-      });
+      expect(capabilities.update).toMatchObject(fixture.update);
     }),
   );
 

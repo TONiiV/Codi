@@ -2,10 +2,12 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, describe, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
+import { ProviderInstanceId } from "@t3tools/contracts";
+import type * as AcpSessionRuntime from "@t3tools/provider-acp/server/AcpSessionRuntime";
 
 import { DeepSeekSettings } from "../settings.ts";
 import { buildDeepSeekAcpSpawnInput } from "./acpSupport.ts";
-import { deepSeekModelConfigValue } from "./adapter.ts";
+import { applyDeepSeekModel } from "./adapter.ts";
 import { DEEPSEEK_UPDATE } from "./driver.ts";
 import { deepSeekAuthFromEnvironment } from "./status.ts";
 
@@ -30,23 +32,6 @@ describe("DeepSeekDriver", () => {
         "--allow-scripts=@deepseek-ai/dsh",
         "@deepseek-ai/dsh@latest",
       ]);
-      const vitePlusNodeGlobal = yield* DEEPSEEK_UPDATE.resolve({
-        binaryPath: "dsh",
-        resolvedCommandPath: "/home/dev/.local/share/vite-plus/bin/dsh",
-        realCommandPath:
-          "/home/dev/.local/share/vite-plus/js_runtime/node/26.13.0/lib/node_modules/@deepseek-ai/dsh/lib/bin.js",
-        env: {},
-        platform: "linux",
-      });
-      assert.equal(vitePlusNodeGlobal.update?.executable, "npm");
-      assert.deepEqual(vitePlusNodeGlobal.update?.args, [
-        "install",
-        "-g",
-        "--prefix",
-        "/home/dev/.local/share/vite-plus/js_runtime/node/26.13.0",
-        "--allow-scripts=@deepseek-ai/dsh",
-        "@deepseek-ai/dsh@latest",
-      ]);
       const sourceCheckout = yield* DEEPSEEK_UPDATE.resolve({
         binaryPath: "dsh",
         resolvedCommandPath: "/home/dev/.local/bin/dsh",
@@ -58,12 +43,52 @@ describe("DeepSeekDriver", () => {
       assert.equal(sourceCheckout.installPath, "/home/dev/deepseek-harness/apps/cli/lib/bin.js");
     }).pipe(Effect.provide(NodeServices.layer)),
   );
-  it("uses the Harness ACP route value for a selected model", () => {
-    assert.equal(
-      deepSeekModelConfigValue("deepseek-v4-pro"),
-      '["deepseek-official","deepseek-v4-pro"]',
-    );
-  });
+  it.effect(
+    "selects a model by its Harness route and puts the starting model back on default",
+    () =>
+      Effect.gen(function* () {
+        const started = '["deepseek-official","deepseek-flash"]';
+        const modelOptions = (currentValue: string) => [
+          {
+            id: "model",
+            name: "Model",
+            category: "model",
+            type: "select",
+            currentValue,
+            options: [],
+          },
+        ];
+        let current = started;
+        const writes: Array<[string, string | boolean]> = [];
+        const runtime = {
+          getConfigOptions: Effect.sync(() => modelOptions(current)),
+          setConfigOption: (configId: string, value: string | boolean) =>
+            Effect.sync(() => {
+              writes.push([configId, value]);
+              current = String(value);
+              return {};
+            }),
+        } as unknown as AcpSessionRuntime.AcpSessionRuntime["Service"];
+        const startResult = {
+          sessionSetupResult: { sessionId: "session-1", configOptions: modelOptions(started) },
+        } as unknown as AcpSessionRuntime.AcpSessionRuntimeStartResult;
+        const select = (model: string) =>
+          applyDeepSeekModel({
+            runtime,
+            startResult,
+            modelSelection: { instanceId: ProviderInstanceId.make("deepseek"), model },
+          });
+
+        yield* select("default");
+        yield* select("deepseek-v4-pro");
+        yield* select("default");
+
+        assert.deepEqual(writes, [
+          ["model", '["deepseek-official","deepseek-v4-pro"]'],
+          ["model", started],
+        ]);
+      }),
+  );
   it("launches the ACP profile from the configured binary", () => {
     assert.deepEqual(buildDeepSeekAcpSpawnInput(decodeSettings({}), "/work"), {
       command: "dsh",

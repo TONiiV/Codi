@@ -7,7 +7,6 @@ import {
 import type { DeepSeekSettings } from "../settings.ts";
 import { createModelCapabilities } from "@t3tools/shared/model";
 import { resolveSpawnCommand } from "@t3tools/shared/shell";
-import type * as SecureRandom from "effect/crypto/SecureRandom";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
@@ -129,11 +128,7 @@ const runDsh = Effect.fn("DeepSeekProvider.runDsh")(function* (
 export const checkDeepSeekProviderStatus = Effect.fn("checkDeepSeekProviderStatus")(function* (
   settings: DeepSeekSettings,
   environment: NodeJS.ProcessEnv,
-): Effect.fn.Return<
-  ServerProviderDraft,
-  never,
-  ChildProcessSpawner.ChildProcessSpawner | SecureRandom.SecureRandom
-> {
+): Effect.fn.Return<ServerProviderDraft, never, ChildProcessSpawner.ChildProcessSpawner> {
   const checkedAt = DateTime.formatIso(yield* DateTime.now);
   if (!settings.enabled) {
     return snapshot(settings, checkedAt, {
