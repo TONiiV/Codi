@@ -187,6 +187,17 @@ export function TelescopePanel(props: {
     return () => document.removeEventListener("keydown", onKeyDown);
   }, []);
 
+  const { toggleRightPanelStable, toggleRightPanelMaximizedStable } = actions;
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- subscribes to desktop bridge menu actions forwarded while a browser page has focus
+  useEffect(
+    () =>
+      window.desktopBridge?.onMenuAction((action) => {
+        if (action === "rightPanel.toggle") toggleRightPanelStable();
+        else if (action === "rightPanel.toggleMaximized") toggleRightPanelMaximizedStable();
+      }),
+    [toggleRightPanelStable, toggleRightPanelMaximizedStable],
+  );
+
   const active = presence.value?.activeSurface ?? null;
   const toggles = (
     <PanelLayoutControls
