@@ -77,6 +77,49 @@ describe("rightPanelStore", () => {
     unhost();
   });
 
+  it("heals saved Telescope panel state that holds a kind the panel does not offer on the first action", async () => {
+    const panel = telescopePanelRef("env-1" as EnvironmentId);
+    const actions: Record<string, (store: ReturnType<typeof useRightPanelStore.getState>) => void> =
+      {
+        toggleVisibility: (store) => store.toggleVisibility(panel),
+        setMaximized: (store) => store.setMaximized(panel, true),
+        openSideChat: (store) => store.openSideChat(panel, TELESCOPE_SIDE_CHAT),
+        closeBrowser: (store) => store.closeSurface(panel, "preview:new"),
+      };
+    for (const [name, act] of Object.entries(actions)) {
+      useRightPanelStore.setState({ byThreadKey: {} });
+      const { storage, name: key } = useRightPanelStore.persist.getOptions();
+      await storage!.setItem(key!, {
+        version: 14,
+        state: {
+          byThreadKey: {
+            "env-1:telescope-panel": {
+              isOpen: true,
+              activeSurfaceId: "diff",
+              surfaces: [
+                { id: "diff", kind: "diff" },
+                { id: "preview:new", kind: "preview", resourceId: null },
+              ],
+            },
+          },
+        },
+      });
+      await useRightPanelStore.persist.rehydrate();
+      act(useRightPanelStore.getState());
+      const after = selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, panel);
+      expect([name, after.surfaces.map((surface) => surface.kind).includes("diff")]).toEqual([
+        name,
+        false,
+      ]);
+      if (name === "toggleVisibility") expect(after.isOpen).toBe(false);
+      if (name === "setMaximized") expect(after.maximized).toBe(true);
+      if (name === "openSideChat") {
+        expect(after.surfaces.map((surface) => surface.kind)).toEqual(["preview", "side-chat"]);
+      }
+      if (name === "closeBrowser") expect(after.surfaces).toEqual([]);
+    }
+  });
+
   it("records no closed tabs for Telescope's panel, which has no thread to reopen them in", () => {
     const panel = telescopePanelRef("env-1" as EnvironmentId);
     const store = useRightPanelStore.getState();

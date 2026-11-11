@@ -331,8 +331,28 @@ const updateThreadStateMap = (
   updater: (current: ThreadRightPanelState) => ThreadRightPanelState,
 ): Record<string, ThreadRightPanelState> => {
   const current = byThreadKey[threadKey] ?? EMPTY_THREAD_STATE;
-  const next = updater(current);
-  if (next.surfaces.some((surface) => hiddenInPanel(threadKey, surface.kind))) return byThreadKey;
+  let next = updater(current);
+  if (next.surfaces.some((surface) => hiddenInPanel(threadKey, surface.kind))) {
+    // Refuse an opener that adds a disallowed tab; drop ones already saved so the panel heals.
+    if (
+      next.surfaces.some(
+        (surface) =>
+          hiddenInPanel(threadKey, surface.kind) &&
+          !current.surfaces.some((entry) => entry.id === surface.id),
+      )
+    ) {
+      return byThreadKey;
+    }
+    const surfaces = next.surfaces.filter((surface) => !hiddenInPanel(threadKey, surface.kind));
+    next = {
+      ...next,
+      isOpen: next.isOpen && surfaces.length > 0,
+      surfaces,
+      activeSurfaceId: surfaces.some((surface) => surface.id === next.activeSurfaceId)
+        ? next.activeSurfaceId
+        : (surfaces[0]?.id ?? null),
+    };
+  }
   if (
     !next.isOpen &&
     next.activeSurfaceId === null &&
