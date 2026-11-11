@@ -475,11 +475,13 @@ const withProjectSnapshot = Effect.fn("runProjectMutation")(function* <A>(
 const runProjectMutation = (flags: CliAuthLocationFlags, run: ProjectSnapshotRun<string>) =>
   withProjectSnapshot(flags, run).pipe(Effect.flatMap(Console.log));
 
-const resolveActiveProjectId = (flags: CliAuthLocationFlags, identifier: string) =>
+const resolveActiveProject = (flags: CliAuthLocationFlags, identifier: string) =>
   withProjectSnapshot(
     flags,
     ({ snapshot }) =>
-      findActiveProjectTarget({ snapshot, identifier }).pipe(Effect.map((project) => project.id)),
+      findActiveProjectTarget({ snapshot, identifier }).pipe(
+        Effect.map(({ id, title }) => ({ id, title })),
+      ),
     { quietLogs: true },
   );
 
@@ -616,7 +618,7 @@ export const projectCommand = Command.make("project").pipe(
     projectAddCommand,
     projectRemoveCommand,
     projectRenameCommand,
-    makeProjectBindCommand(resolveActiveProjectId),
+    makeProjectBindCommand(resolveActiveProject),
     projectUnbindCommand,
     projectBindingsCommand,
   ]),

@@ -5,9 +5,9 @@ Codi can run installed ACP commands or coding agents from the official
 own models, tools, and sign-in, while Codi provides projects, threads, checkpoints, and task
 delegation.
 
-Agents that Codi supports as their own providers, such as Codex, Claude, Cursor, Grok, OpenCode,
-Pi, and [Antigravity](./providers-antigravity.md), don't appear in the Registry list. Enable them in
-**Settings → Providers** instead.
+Agents that Codi supports as their own providers, such as Codex, Claude, Cursor, DeepSeek, Grok,
+OpenCode, Pi, and [Antigravity](./providers-antigravity.md), don't appear in the Registry list. Enable
+them in **Settings → Providers** instead.
 
 Codi prefers the current ACP v2 preview protocol and uses its richer messages, usage, plans,
 configuration, compaction, and agent-terminal updates when the agent supports them. It also
@@ -32,7 +32,7 @@ code; review an agent's source and license before adding it.
 
 In **Settings → Providers → Add provider**, select **Show more**, then **Local ACP command**. Enter the executable
 name or path on the selected environment, add one literal argument per row, and choose a display
-name. For DeepSeek Harness, use `dsh` with arguments `--profile` and `acp`.
+name.
 
 Local commands require no registry entry or download. Environment overrides apply to the command;
 credentials and skills remain managed by the installed agent or its wrapper. Models and reasoning
@@ -82,8 +82,7 @@ The model picker lists the models the agent reports. If the agent reports none, 
 your own model IDs under **Custom models** in the instance settings.
 
 Other settings the agent offers, such as reasoning effort or approval mode, appear in the
-composer's model picker, beside the model list, like they do for built-in providers. Agents with their own plan and
-build modes follow Codi's Plan and Build toggle. Models and options that change while an agent
+composer's model picker, beside the model list, like they do for built-in providers. Models and options that change while an agent
 is running update the picker without waiting for another provider probe.
 
 ## Commands and skills
@@ -99,9 +98,9 @@ backed by that native session. Importing the same agent session again returns th
 including when another client performs the import.
 
 The thread keeps the native session's title and last-update value as provider metadata without
-overwriting a title you set in Codi. Agents that report ACP context usage drive the composer's
-context meter and cumulative cost metadata. The meter is off by default; see
-[commands and skills](./composer.md#commands-and-skills) to enable it on web and desktop.
+overwriting a title you set in Codi. Agents that report ACP context usage drive the thread details
+context window and cumulative cost metadata. See
+[commands and skills](./composer.md#commands-and-skills) to show it on web and desktop.
 Text resources and links render as assistant output;
 binary resources, images, and audio that Codi cannot render yet appear as explicit placeholders
 instead of disappearing.

@@ -54,12 +54,15 @@ without replaying its transitions.
 
 ### Animated background
 
-Turn on **Settings → Appearance → Animated background** to show a slow fluid backdrop behind the
-main area. Its colors come from your current theme's canvas and accent, so switching themes or
-editing those colors in the theme editor changes it right away. When reduced motion is enabled in
-your operating system, or the device has no graphics acceleration, it shows a still image instead.
-It also holds still while the window is not focused, so a window left open in the background costs
-nothing. If the device cannot run WebGL2 at all, the setting says it is unavailable.
+Turn on **Settings → Appearance → Animated background** to show a slow animated backdrop behind the
+main area. Choose **Animated background style** to pick between **Fluid**, soft waves of color, and
+**ASCII grass waves**, which draws a moving grass texture as characters. The grass image supplies
+shape and motion, while its colors come from your current theme's canvas and accent. Switching
+themes or editing those colors in the theme editor changes it right away. When reduced motion is
+enabled in your operating system, or the device has no graphics
+acceleration, it shows a still image instead. It also holds still while the window is not focused,
+so a window left open in the background costs nothing. If the device cannot run WebGL2 at all, the
+setting says it is unavailable.
 
 The setting is saved separately in each browser and desktop app, so turning it on in the desktop
 app does not turn it on in app.t3.codes. The mobile app does not show it.
@@ -73,7 +76,9 @@ change. Export your theme as JSON to share it.
 ## Environment themes
 
 Environment themes and defaults come from the server serving your web app or the desktop app's
-main local environment. app.t3.codes and additional connections do not use them.
+main local environment. With the desktop app's local environment off, they come from the
+[background service](./background-service.md) on the same machine while the app is connected to
+it. app.t3.codes and other connections do not use them.
 
 Select a published theme in **Settings → Appearance** to follow its palette as the server updates
 it. **Duplicate** makes an independent copy you can edit. A saved custom theme with the same ID

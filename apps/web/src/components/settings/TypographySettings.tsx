@@ -42,15 +42,25 @@ import {
   revealSettingsSearchTarget,
   searchableSetting,
 } from "./settingsSearch";
+import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
+
+let fontDefaultFamilies: { readonly sans: string; readonly code: string } | undefined;
+
+function resolveFontDefaultFamilies(t: TFunction) {
+  if (fontDefaultFamilies !== undefined) return fontDefaultFamilies;
+  const families = {
+    sans: resolveDefaultFamilyLabel(DEFAULT_SANS_FONT_STACK) ?? t("settings.text.systemDefault"),
+    code: resolveDefaultFamilyLabel(DEFAULT_CODE_FONT_STACK) ?? t("settings.text.systemMonospace"),
+  };
+  if (document.fonts.status === "loaded") fontDefaultFamilies = families;
+  return families;
+}
 
 function useFontDefaultFamilies() {
   const { t } = useTranslation();
   const settings = useScopedSettings();
-  const [defaults] = useState(() => ({
-    sans: resolveDefaultFamilyLabel(DEFAULT_SANS_FONT_STACK) ?? t("settings.text.systemDefault"),
-    code: resolveDefaultFamilyLabel(DEFAULT_CODE_FONT_STACK) ?? t("settings.text.systemMonospace"),
-  }));
+  const [defaults] = useState(() => resolveFontDefaultFamilies(t));
   return {
     sans: defaults.sans,
     code: defaults.code,

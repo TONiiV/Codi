@@ -123,10 +123,10 @@ it.layer(layer)("Telescope token saver", (it) => {
           name: "Mine",
           displayName: "Alice",
         });
-        yield* workspaces.bind(alice.caller, {
+        yield* workspaces.createProject(alice.caller, {
           workspaceId,
-          environmentId,
-          projectId: ProjectId.make("bound"),
+          name: "Project",
+          mounts: [{ environmentId, projectId: ProjectId.make("bound") }],
         });
         const home = yield* writeTranscripts();
 
@@ -213,10 +213,10 @@ it.layer(layer)("Telescope token saver", (it) => {
               name: "Mine",
               displayName: "Alice",
             });
-            yield* workspaces.bind(alice.caller, {
+            yield* workspaces.createProject(alice.caller, {
               workspaceId,
-              environmentId: bindTo,
-              projectId: ProjectId.make("bound"),
+              name: "Project",
+              mounts: [{ environmentId: bindTo, projectId: ProjectId.make("bound") }],
             });
             const report = yield* tokenSaver
               .runWeekly(alice, { workspaceId, since, until })
@@ -295,10 +295,10 @@ it.effect("the weekly pass reports each due workspace once a week, as the owner"
         name: "Mine",
         displayName: "Alice",
       });
-      yield* workspaces.bind(alice.caller, {
+      yield* workspaces.createProject(alice.caller, {
         workspaceId,
-        environmentId,
-        projectId: ProjectId.make("bound"),
+        name: "Project",
+        mounts: [{ environmentId, projectId: ProjectId.make("bound") }],
       });
       return workspaceId;
     });

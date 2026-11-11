@@ -32,18 +32,19 @@ export function selectableExposures(
   );
 }
 
-/** Mirrors the server: only workspace admins and the agent's project lead may merge PRs. */
+/** Mirrors the server: only workspace admins and the lead of the agent's project may merge PRs. */
 export function ownerCanMergePRs(
   self: Telescope.Member,
   agent: Pick<Telescope.Agent, "projectId">,
-  bindings: ReadonlyArray<Telescope.ProjectBinding>,
+  projects: ReadonlyArray<Telescope.Project>,
 ): boolean {
   return (
     self.role === "admin" ||
     (agent.projectId !== undefined &&
-      bindings.some(
-        (binding) =>
-          binding.projectId === agent.projectId && binding.leadSubjectId === self.subjectId,
+      projects.some(
+        (project) =>
+          project.leadSubjectId === self.subjectId &&
+          project.mounts.some((mount) => mount.projectId === agent.projectId),
       ))
   );
 }
@@ -80,7 +81,7 @@ export function createTelescopeAgentAtoms<R, E>(
   bindingsRevision: Atom.Atom<number>,
   workspaceGet: Parameters<typeof rereadRoleWhenForbidden>[0],
 ) {
-  // The server creates a project's Chief Agent inside listMine, so a bind must re-read it.
+  // The server creates a project's Chief Agent inside listMine, so a new mount must re-read it.
   const listMine = createEnvironmentRpcQueryAtomFamily(runtime, {
     label: "telescope:agent:list-mine",
     tag: WS_METHODS.agentListMine,
@@ -93,11 +94,6 @@ export function createTelescopeAgentAtoms<R, E>(
   const get = createEnvironmentRpcQueryAtomFamily(runtime, {
     label: "telescope:agent:get",
     tag: WS_METHODS.agentGet,
-  });
-  const bindings = createEnvironmentRpcQueryAtomFamily(runtime, {
-    label: "telescope:project:list-bindings",
-    tag: WS_METHODS.projectListBindings,
-    refreshTrigger: () => bindingsRevision,
   });
 
   const refreshLists = (
@@ -124,7 +120,6 @@ export function createTelescopeAgentAtoms<R, E>(
     listMine,
     listCompany,
     get,
-    bindings,
     createCustom: createEnvironmentRpcCommand(runtime, {
       label: "telescope:agent:create-custom",
       tag: WS_METHODS.agentCreateCustom,

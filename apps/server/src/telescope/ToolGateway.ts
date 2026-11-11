@@ -29,6 +29,7 @@ const TOOL_POWERS: Readonly<Record<Telescope.GatewayTool, Telescope.GrantPower |
   decision_list: "openTickets",
   decision_record: "openTickets",
   agent_list: "openTickets",
+  project_list: "openTickets",
   delegate: "dispatchWorkers",
   delegation_list: "openTickets",
   delegation_report: "openTickets",

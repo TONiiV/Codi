@@ -194,7 +194,7 @@ export function ProjectRulesSection(props: Scoped) {
       <StatusRow text="项目规则只能收回 agent 角色本来有的权限，不能多给；允许的 harness 和模型限制路由能为这个项目的 agents 选什么。" />
       {query.data === null ? <QueryStatus query={query} what="项目规则" /> : null}
       {query.data !== null && rules.length === 0 ? (
-        <StatusRow text="这个工作区还没有绑定项目。" />
+        <StatusRow text="这个工作区还没有挂进来的目录。" />
       ) : null}
       {rules.map((rule) => (
         <SettingsRow

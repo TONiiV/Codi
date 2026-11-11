@@ -21,7 +21,7 @@ const {
 
 export const PROJECT_RULE_ERROR_TEXT: WorkspaceErrorText = {
   ...WORKSPACE_ERROR_TEXT,
-  not_found: "这个项目已解除绑定，请刷新后再试。",
+  not_found: "这个目录已移出工作区，请刷新后再试。",
   forbidden: "只有管理员能修改项目规则。",
 };
 

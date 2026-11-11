@@ -177,6 +177,11 @@ export class TaskBoardService extends Context.Service<
     readonly heartbeatLease: Method<"telescope.lease.heartbeat">;
     readonly releaseLease: Method<"telescope.lease.release">;
     readonly getLease: Method<"telescope.lease.get">;
+    /** Deletes a project and, in the same transaction, unassigns its tasks. */
+    readonly deleteProject: (
+      actor: Actor,
+      input: typeof Telescope.ProjectScopedInput.Type,
+    ) => Effect.Effect<{}, Telescope.WorkspaceError | PersistenceSqlError | PersistenceDecodeError>;
     /** Server-side: renews every lease these agents hold, each for its own span. */
     readonly renewHeldBy: (
       workspaceId: Telescope.WorkspaceId,
@@ -322,6 +327,12 @@ const make = Effect.gen(function* () {
       if (stale && key === "conflictDecisionId") continue;
       mine[key] = set[key] ?? null;
     }
+    const { projectId } = mine;
+    if (
+      typeof projectId === "string" &&
+      (yield* db.count(current.workspaceId, "projects", { telescope_project_id: projectId })) === 0
+    )
+      return yield* fail("not_found", "That project is not in this workspace.");
     if (author.onBehalfOf !== undefined) {
       // Every open proposal holds its fields, not just the one the marker names.
       const where = { kind: "decision", status: "proposed" };
@@ -360,7 +371,7 @@ const make = Effect.gen(function* () {
     const [members, agents, bindings] = yield* Effect.all([
       db.select(current.workspaceId, "members", decodeMemberNames),
       db.select(current.workspaceId, "agents", decodeAgentNames),
-      db.select(current.workspaceId, "project_bindings", decodeBoundProjects),
+      db.select(current.workspaceId, "project_mounts", decodeBoundProjects),
     ]);
     const reach = {
       roles: new Set(members.filter((row) => row.revoked_at === null).map((row) => row.subject_id)),
@@ -689,6 +700,31 @@ const make = Effect.gen(function* () {
     return {};
   });
 
+  const deleteProject = Effect.fn("TaskBoardService.deleteProject")(function* (
+    actor: Actor,
+    input: typeof Telescope.ProjectScopedInput.Type,
+  ) {
+    const { workspaceId, projectId } = input;
+    const author = yield* requireMember(actor, workspaceId, "write");
+    return yield* transact(
+      Effect.gen(function* () {
+        yield* workspaces.deleteProject(actor.caller, input);
+        const where = { kind: "task", project_id: projectId };
+        for (const task of yield* db.select(workspaceId, "tasks", decodeTasks, where)) {
+          const unassign = { workspaceId, taskId: task.id, baseVersion: task.version };
+          // Each write is at the version just read and adds no note, so neither error can occur.
+          yield* commitTask(author, { ...unassign, set: { projectId: null } }, task).pipe(
+            Effect.catchTags({
+              TelescopeStaleTaskVersionError: Effect.die,
+              TelescopeFreeTextLimitError: Effect.die,
+            }),
+          );
+        }
+        return {};
+      }),
+    );
+  });
+
   const getLease = Effect.fn("TaskBoardService.getLease")(function* (
     actor: Actor,
     { workspaceId, taskId }: In<"telescope.lease.get">,
@@ -712,6 +748,7 @@ const make = Effect.gen(function* () {
     heartbeatLease,
     releaseLease,
     getLease,
+    deleteProject,
     renewHeldBy,
   });
 });

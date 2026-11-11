@@ -65,12 +65,14 @@ export interface SettingsSearchItem {
   readonly cloudOnly?: boolean;
   readonly environmentOnly?: boolean;
   readonly providerSettingsOnly?: boolean;
-  readonly macProviderSettingsOnly?: boolean;
   readonly localBackendManagementOnly?: boolean;
   readonly localEnvironmentOnly?: boolean;
+  readonly primaryEnvironmentOnly?: boolean;
   readonly wslAvailableOnly?: boolean;
   readonly managedTunnelOnly?: boolean;
   readonly peerLinksOnly?: boolean;
+  readonly fastWorktreeCheckoutOnly?: boolean;
+  readonly textGeneratorsOnly?: boolean;
   readonly secondary?: boolean;
   readonly requiresThreadAutoSettlement?: boolean;
   /** For items whose title is built from a label, such as one per source control host. */
@@ -83,12 +85,15 @@ export interface SettingsSearchAvailability {
   readonly hasCloudPublicConfig: boolean;
   readonly hasEnvironment: boolean;
   readonly hasProviderSettingsEnvironment: boolean;
-  readonly hasMacProviderSettingsEnvironment: boolean;
   readonly canManageLocalBackend: boolean;
   readonly isWslSettingsRowVisible: boolean;
   readonly hasThreadAutoSettlement: boolean;
   readonly managedTunnelActive?: boolean;
   readonly hasPeerLinkHost?: boolean;
+  readonly hasFastWorktreeCheckoutEnvironment?: boolean;
+  /** An environment without a provider allow-list, which hides text generators. */
+  readonly hasTextGeneratorsEnvironment?: boolean;
+  readonly hasPrimaryEnvironment?: boolean;
 }
 
 export const SETTINGS_SECTION_LABELS: Readonly<Record<SettingsPath, string>> = {
@@ -386,6 +391,14 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["fluid shader wallpaper motion webgl dynamic backdrop"],
   },
   {
+    id: "theme-backdrop-style",
+    title: "Animated background style",
+    to: "/settings/appearance",
+    // Shown only while the backdrop is on, so a search lands on the switch that reveals it.
+    targetId: "theme-backdrop",
+    searchTerms: ["ascii glyphs characters grass wind meadow fluid style type animated background"],
+  },
+  {
     id: "environment-identification",
     title: "Environment identification",
     to: "/settings/appearance",
@@ -488,20 +501,22 @@ export const SETTINGS_SEARCH_ITEMS = [
     id: "boring-sidebar",
     title: "Boring sidebar (group by project)",
     to: "/settings/labs",
-    searchTerms: ["beta folders project tree legacy old classic sidebar"],
+    searchTerms: ["beta folders project tree classic sidebar"],
   },
   {
     id: "boring-sidebar-multiline",
     title: "Two-line folder rows",
     to: "/settings/labs",
+    // Shown inside the boring sidebar row only while it is on, so search lands on the parent.
+    targetId: "boring-sidebar",
     searchTerms: ["beta boring sidebar folder rows multiline branch pull request details"],
   },
   {
     id: "tool-call-visibility",
     title: "Tool calls in chat",
-    to: "/settings/labs",
+    to: "/settings/chat",
     searchTerms: [
-      "beta hide tool calls commands edits searches work log activity quiet chat zen final answers only",
+      "hide tool calls commands edits searches work log activity quiet chat zen final answers only",
     ],
   },
   {
@@ -519,6 +534,13 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["beta link another machine vps peer agents work there delegate"],
   },
   {
+    id: "prompt-suggestions-beta",
+    title: "Suggest next prompt",
+    to: "/settings/labs",
+    scope: "environment",
+    searchTerms: ["beta tab autocomplete predict next message claude codex ghost text"],
+  },
+  {
     id: "simlock-hosts",
     title: "Simlock device hosts (alpha)",
     to: "/settings/labs",
@@ -526,10 +548,20 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["beta alpha simlock callstack simulator emulator ios android pool lease gateway"],
   },
   {
+    id: "worktree-fast-checkout",
+    title: "Fast worktree checkout",
+    to: "/settings/labs",
+    scope: "environment",
+    fastWorktreeCheckoutOnly: true,
+    searchTerms: ["beta fast worktree checkout clone apfs copy-on-write cache macos speed"],
+  },
+  {
     id: "voice-transcription-destination",
-    title: "Send microphone audio to",
+    title: "Transcribe with",
     to: "/settings/voice",
-    searchTerms: ["speech voice dictation stt transcription environment machine consent privacy"],
+    searchTerms: [
+      "send microphone audio dictation destination speech voice stt transcription environment machine consent privacy cloud OpenAI Grok OpenRouter",
+    ],
   },
   {
     id: "voice-microphone",
@@ -591,7 +623,7 @@ export const SETTINGS_SEARCH_ITEMS = [
   },
   {
     id: "speech-post-processing",
-    title: "Clean up transcripts with a provider",
+    title: "Clean up transcripts",
     to: "/settings/voice",
     searchTerms: ["speech transcription polish clean provider prompt post-processing"],
   },
@@ -740,7 +772,7 @@ export const SETTINGS_SEARCH_ITEMS = [
     title: "Provider update checks",
     to: "/settings/maintenance",
     searchTerms: [
-      "installed cli versions newer available codex claude cursor grok fx kiro opencode",
+      "installed cli versions newer available codex claude cursor deepseek grok fx kiro opencode",
     ],
     scope: "environment-defaults",
   },
@@ -863,6 +895,13 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["phone tablet iPhone iPad iOS Android App Store Google Play QR"],
   },
   {
+    id: "welcome-page",
+    title: "Welcome page",
+    to: "/settings/about",
+    primaryEnvironmentOnly: true,
+    searchTerms: ["onboarding setup first run getting started agents import projects"],
+  },
+  {
     id: "privacy-policy",
     title: "Privacy policy",
     to: "/settings/about",
@@ -886,18 +925,6 @@ export const SETTINGS_SEARCH_ITEMS = [
     id: "open-source-licenses",
     title: "Open source licenses",
     to: "/settings/about",
-  },
-  {
-    id: "legacy-plan-mode",
-    title: "Plan mode (legacy)",
-    to: "/settings/labs",
-    searchTerms: ["build plan composer old"],
-  },
-  {
-    id: "legacy-context-window-indicator",
-    title: "Context window indicator (legacy)",
-    to: "/settings/labs",
-    searchTerms: ["composer meter usage tokens circle old"],
   },
   {
     id: "keybindings",
@@ -950,7 +977,7 @@ export const SETTINGS_SEARCH_ITEMS = [
     title: "Providers",
     to: "/settings/providers",
     searchTerms: [
-      "agents cli codex claude cursor grok fx kiro opencode antigravity google sign in sign out install subscription instances authentication api key models configuration binary path config directory codex_home shadow home endpoint arguments environment variables display name accent color custom favorite hidden auto compact native sessions import resume",
+      "agents cli codex claude cursor deepseek grok fx kiro opencode antigravity google sign in sign out install subscription instances authentication api key models configuration binary path config directory codex_home shadow home endpoint arguments environment variables display name accent color custom favorite hidden auto compact native sessions import resume",
     ],
   },
   {
@@ -963,12 +990,14 @@ export const SETTINGS_SEARCH_ITEMS = [
     providerSettingsOnly: true,
   },
   {
-    id: "cursor-keychain-usage",
-    title: "Cursor account usage",
+    id: "text-generators",
+    title: "Text generators",
     to: "/settings/providers",
-    searchTerms: ["cursor macOS keychain usage tokens cost limits permission"],
+    searchTerms: [
+      "model api api key openai openrouter anthropic ollama lm studio custom endpoint base url thread titles commit messages",
+    ],
     providerSettingsOnly: true,
-    macProviderSettingsOnly: true,
+    textGeneratorsOnly: true,
   },
   {
     id: "provider-health-check-interval",
@@ -1140,18 +1169,18 @@ export const SETTINGS_SEARCH_ITEMS = [
   ...sourceControlHostSearchItems(sourceControlClients.definitions),
   {
     id: "source-control-writing-style",
-    title: "Source control writing style",
+    title: "Commit and pull request writing",
     to: "/settings/source-control",
     searchTerms: [
-      "repository conventions conventional commits custom instructions change descriptions request titles",
+      "repository conventions conventional commits custom instructions commit messages change pr pull request merge request titles descriptions body style prompt write my own",
     ],
     environmentOnly: true,
   },
   {
     id: "follow-change-request-templates",
-    title: "Follow change request templates",
+    title: "Follow pull request templates",
     to: "/settings/source-control",
-    searchTerms: ["repository pr pull request description structure"],
+    searchTerms: ["repository pr pull request merge request change request description structure"],
     environmentOnly: true,
   },
   {
@@ -1328,6 +1357,12 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["telescope workspace members roles admin revoke remove restore 成员与角色"],
   },
   {
+    id: "telescope-projects",
+    title: "Telescope projects",
+    to: "/settings/telescope",
+    searchTerms: ["telescope projects tasks mounts directories rename delete 项目"],
+  },
+  {
     id: "telescope-agents",
     title: "Company agents",
     to: "/settings/telescope",
@@ -1405,7 +1440,6 @@ const SPLIT_SETTINGS_PATHS: ReadonlySet<string> = new Set([
 // Section anchors that moved but are not search results themselves.
 const MOVED_SECTION_ANCHORS: Readonly<Record<string, SettingsPath>> = {
   "authorized-clients": "/settings/access",
-  "legacy-features": "/settings/labs",
   "text-generation": "/settings/threads",
   about: "/settings/about",
 };
@@ -1539,13 +1573,16 @@ export function filterAvailableSettingsSearchItems(
       (!item.cloudOnly || availability.hasCloudPublicConfig) &&
       (!item.environmentOnly || availability.hasEnvironment) &&
       (!item.providerSettingsOnly || availability.hasProviderSettingsEnvironment) &&
-      (!item.macProviderSettingsOnly || availability.hasMacProviderSettingsEnvironment) &&
       (!item.localBackendManagementOnly || availability.canManageLocalBackend) &&
       (!item.localEnvironmentOnly || !availability.localEnvironmentDisabled) &&
+      (!item.primaryEnvironmentOnly || availability.hasPrimaryEnvironment === true) &&
       (!item.wslAvailableOnly || availability.isWslSettingsRowVisible) &&
       (!item.requiresThreadAutoSettlement || availability.hasThreadAutoSettlement) &&
       (!item.managedTunnelOnly || availability.managedTunnelActive === true) &&
-      (!item.peerLinksOnly || availability.hasPeerLinkHost === true),
+      (!item.peerLinksOnly || availability.hasPeerLinkHost === true) &&
+      (!item.fastWorktreeCheckoutOnly ||
+        availability.hasFastWorktreeCheckoutEnvironment === true) &&
+      (!item.textGeneratorsOnly || availability.hasTextGeneratorsEnvironment === true),
   );
 }
 

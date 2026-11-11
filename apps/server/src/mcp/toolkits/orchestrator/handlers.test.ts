@@ -218,10 +218,10 @@ const setup = Effect.gen(function* () {
     name: "Acme",
     displayName: "Ann",
   });
-  yield* workspaces.bind(ann, {
+  yield* workspaces.createProject(ann, {
     workspaceId,
-    environmentId: EnvironmentId.make("env-local"),
-    projectId: web,
+    name: "Project",
+    mounts: [{ environmentId: EnvironmentId.make("env-local"), projectId: web }],
   });
   const { agents } = yield* (yield* AgentService.AgentService).listMine(ann, { workspaceId });
   const db = yield* TelescopeDb.TelescopeDb;

@@ -42,6 +42,7 @@ import {
   WORKSPACE_ROLE_LABEL,
 } from "./TelescopeAccountDialogs";
 import { projectRules, ProjectRulesSection } from "./TelescopeProjectRules";
+import { ProjectsSection } from "./TelescopeProjectWorkspace";
 import {
   noAdminScopeText,
   QueryStatus,
@@ -226,7 +227,7 @@ function CompanyAgentsSection({ environmentId, workspace, self }: Scoped) {
           workspace={workspace}
           self={self}
           agent={editing}
-          bindings={[]}
+          projects={[]}
           onClose={() => setEditing(null)}
         />
       ) : null}
@@ -448,7 +449,7 @@ function RoutingRuleDialog(
   const set = useAtomCommand(routing.set, "保存路由规则");
   const unbound = names.unbound(draft.projectId ?? undefined);
   const parsed = unbound
-    ? { problem: "这个项目已解除绑定，请换一个项目。" }
+    ? { problem: "这个目录已移出工作区，请换一个项目。" }
     : Routing.parseRoutingRuleDraft(draft);
   const update = (fields: Partial<Routing.RoutingRuleDraft>) => {
     setDraft({ ...draft, ...fields });
@@ -734,6 +735,7 @@ function WorkspaceSettings(props: Scoped) {
   const company = workspace.kind === "enterprise";
   const lists = [
     useEnvironmentQuery(telescope.members(scoped)),
+    useEnvironmentQuery(telescope.projects(scoped)),
     useEnvironmentQuery(routing.list(scoped)),
     useEnvironmentQuery(projectRules.list(scoped)),
   ];
@@ -755,6 +757,7 @@ function WorkspaceSettings(props: Scoped) {
         />
       </SettingsSection>
       <MembersSection {...props} />
+      <ProjectsSection {...props} />
       {company ? <CompanyAgentsSection {...props} /> : null}
       <GovernanceSection {...props} />
       <RoutingSection {...props} />

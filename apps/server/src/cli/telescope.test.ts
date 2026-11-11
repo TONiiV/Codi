@@ -343,7 +343,7 @@ it.layer(layer)("telescope CLI", (it) => {
         yield* t3("member", "invite", "--org", org, "--role", "project_lead"),
         "Lena",
       );
-      const binding = yield* t3(
+      const bound = yield* t3(
         "project",
         "bind",
         root,
@@ -352,14 +352,13 @@ it.layer(layer)("telescope CLI", (it) => {
         "--lead",
         lead.subjectId,
         "--json",
-      ).pipe(Effect.flatMap(decodeJson(Telescope.ProjectBinding)));
+      ).pipe(Effect.flatMap(decodeJson(Telescope.Project)));
+      const environmentId = (yield* fs.readFileString(
+        path.join(baseDir, "userdata", "environment-id"),
+      )).trim();
       assert.deepEqual(
-        [binding.environmentId, binding.projectId, binding.leadSubjectId],
-        [
-          (yield* fs.readFileString(path.join(baseDir, "userdata", "environment-id"))).trim(),
-          projectId,
-          lead.subjectId,
-        ],
+        [bound.name, bound.mounts, bound.leadSubjectId],
+        ["alpha", [{ environmentId, projectId }], lead.subjectId],
       );
       assert.include(
         yield* failureOf(t3("project", "bind", path.join(baseDir, "missing"), "--org", org)),
@@ -371,16 +370,22 @@ it.layer(layer)("telescope CLI", (it) => {
       );
       assert.match(
         yield* t3("project", "bindings", "--org", org),
-        new RegExp(`^ENVIRONMENT\\s+PROJECT\\s+LEAD\\n\\S+\\s+${projectId}\\s+${lead.subjectId}$`),
+        new RegExp(
+          `^TELESCOPE PROJECT\\s+NAME\\s+LEAD\\s+ENVIRONMENT\\s+PROJECT\\n${bound.id}\\s+alpha\\s+${lead.subjectId}\\s+${environmentId}\\s+${projectId}$`,
+        ),
       );
       assert.strictEqual(
         yield* t3("project", "unbind", "--org", org, "--project", projectId),
         `Unbound ${projectId} from ${org}.`,
       );
-      const { bindings } = yield* t3("project", "bindings", "--org", org, "--json").pipe(
-        Effect.flatMap(decodeJson(Telescope.ProjectListBindingsResult)),
+      const { projects } = yield* t3("project", "bindings", "--org", org, "--json").pipe(
+        Effect.flatMap(decodeJson(Telescope.ProjectListResult)),
       );
-      assert.deepEqual(bindings, []);
+      assert.deepEqual(
+        projects.map((project) => project.mounts),
+        [[]],
+        "unbinding leaves the project",
+      );
     }),
   );
 });

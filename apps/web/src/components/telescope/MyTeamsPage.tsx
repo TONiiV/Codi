@@ -42,7 +42,7 @@ const READ_ERROR_TEXT: Partial<Record<Telescope.WorkspaceError["reason"], string
   storage: "服务器读取出错，请稍后再试。",
 };
 
-function QueryState<A>({
+export function QueryState<A>({
   query,
   children,
 }: {
@@ -127,7 +127,7 @@ function Teams({
   const tab = picked === "company" && !enterprise ? "mine" : picked;
   const [editing, setEditing] = useState<Telescope.Agent | null>(null);
   const [creating, setCreating] = useState(false);
-  const bindings = useEnvironmentQuery(telescopeAgents.bindings(scoped));
+  const projects = useEnvironmentQuery(telescope.projects(scoped));
   const mine = useEnvironmentQuery(telescopeAgents.listMine(scoped));
   const company = useEnvironmentQuery(enterprise ? telescopeAgents.listCompany(scoped) : null);
   const mayConfigureCompany =
@@ -179,8 +179,8 @@ function Teams({
               agents.length === 0 ? (
                 <p className="text-sm text-muted-foreground">还没有 agent。</p>
               ) : (
-                <QueryState query={bindings}>
-                  {(projects) => (
+                <QueryState query={projects}>
+                  {(listed) => (
                     <AgentList>
                       {agents.map((agent) => (
                         <AgentRow
@@ -188,7 +188,7 @@ function Teams({
                           agent={agent}
                           powers={cappedPowers(
                             agent.standingPowers,
-                            ownerCanMergePRs(self, agent, projects.bindings),
+                            ownerCanMergePRs(self, agent, listed.projects),
                           )}
                           action={settingsButton(agent)}
                         />
@@ -263,7 +263,7 @@ function Teams({
           workspace={workspace}
           self={self}
           agent={editing}
-          bindings={bindings.data?.bindings ?? []}
+          projects={projects.data?.projects ?? []}
           onClose={() => setEditing(null)}
         />
       ) : null}

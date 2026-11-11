@@ -33,6 +33,7 @@ import {
 import { startDefaultThemeAdoption } from "./hooks/useDefaultTheme";
 import { startEnvironmentThemeRepaint } from "./hooks/useEnvironmentTheme";
 import { readLocalStorageValue, subscribeLocalStorageKey } from "./hooks/useLocalStorage";
+import { startHostEnvironmentLookup } from "./state/primaryEnvironment";
 import {
   getClientSettings,
   startModelPreferencesMigration,
@@ -54,7 +55,7 @@ import { installChatRouteCommands } from "./shortcuts/chatRouteCommands";
 import { startWorkspaceFocus } from "./lib/workspaceFocus";
 import { installCommandPaletteCommands } from "./shortcuts/commandPaletteCommands";
 import { registerOpenFavoriteEditorCommand } from "./components/chat/OpenInPickerShortcut";
-import { environmentThreadShells } from "./state/threads";
+import { environmentThreadShells, threadEnvironment } from "./state/threads";
 import { resolveThreadRouteTarget } from "./threadRoutes";
 
 /** Keeps i18next on the Language setting; "system" follows navigator.language. */
@@ -190,6 +191,7 @@ export function startAppServices(): { router: AppRouter; languageReady: Promise<
   startClientAppearance();
   const languageReady = startLanguageSync();
   startDocumentTitle();
+  startHostEnvironmentLookup();
   startEnvironmentThemeRepaint();
   startBrowserChromeThemeSync(router);
   startDefaultThemeAdoption();
@@ -213,6 +215,7 @@ export function startAppServices(): { router: AppRouter; languageReady: Promise<
     threadShellAtom: environmentThreadShells.threadShellAtom,
     threadRefsAtom: environmentThreadShells.threadRefsAtom,
     shellStateAtom: environmentShell.stateAtom,
+    pendingThreadIdsAtom: threadEnvironment.pendingThreadIdsAtom,
   });
   startMainAppLocationTracking(router);
   startWorkspaceFocus(router);

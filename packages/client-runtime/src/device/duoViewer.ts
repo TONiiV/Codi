@@ -81,7 +81,7 @@ export function createDuoViewer(options: {
     canvas: options.canvas,
     alpha: true,
     antialias: true,
-    powerPreference: "low-power",
+    powerPreference: "high-performance",
   });
   renderer.outputColorSpace = SRGBColorSpace;
   const scene = new Scene();
