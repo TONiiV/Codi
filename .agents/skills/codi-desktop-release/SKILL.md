@@ -1,17 +1,28 @@
 ---
 name: codi-desktop-release
-description: Build Codi as a local macOS desktop release from main and install it as /Applications/Codi.app in place of the official T3 Code app, keeping the developer's ~/.t3 database, T3 Connect relay config, signed-in account and projects. Use when asked to build, rebuild, update or reinstall the local Codi desktop app.
+description: Build, update, or reinstall the local Codi desktop app from main on macOS or Windows while preserving its database, relay configuration, account, and projects.
 ---
 
-# Build and install Codi desktop (replaces T3 Code)
+# Build and install Codi desktop
 
 Codi runs as the developer's only desktop app. It reuses everything the
-official T3 Code app owned, so no migration step exists:
+official T3 Code app owned, so no migration step exists.
+
+## Platform routing
+
+- **macOS:** use `update-codi.sh`; the detailed macOS procedure remains below.
+- **Windows x64:** use `update-codi.ps1` and read
+  [references/windows.md](references/windows.md) before installing prerequisites
+  or troubleshooting a failed build.
+- **Other hosts:** stop and report that this skill has no install workflow for
+  the platform or architecture.
+
+Shared state locations:
 
 | What                                                | Where                                     | Why Codi sees it                                     |
 | --------------------------------------------------- | ----------------------------------------- | ---------------------------------------------------- |
 | Threads, projects, settings, secrets                | `~/.t3/userdata` (`statev2.sqlite`)       | `T3CODE_HOME` is left at its default                 |
-| Clerk login, saved environments, connection catalog | `~/Library/Application Support/t3code-v2` | userData name is unchanged                           |
+| Clerk login, saved environments, connection catalog | macOS: `~/Library/Application Support/t3code-v2`; Windows: `%APPDATA%\t3code-v2` | userData name is unchanged |
 | Keychain key for `safeStorage`                      | `t3code Safe Storage`                     | runtime app name is fixed in `DesktopAppIdentity.ts` |
 | Relay URL, Clerk keys                               | baked at build time                       | from `.env` (copied from `.env.example`)             |
 
@@ -30,7 +41,20 @@ official T3 Code.
   on the live database, and the official app cannot roll them back.
 - Never commit the identity patch. It is local-only.
 
-## Update in one command
+## Windows update
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/skills/codi-desktop-release/update-codi.ps1
+```
+
+The script uses a detached `origin/main` worktree, applies the local identity,
+builds and verifies an x64 NSIS installer, gracefully closes only an installed
+Codi process resolved by exact executable path, snapshots `statev2.sqlite` when
+present, installs, verifies the installed version, cleans up, and launches.
+It never installs prerequisites: changing Visual Studio, Rust, or Python needs
+explicit user authorization.
+
+## macOS update
 
 ```bash
 .agents/skills/codi-desktop-release/update-codi.sh          # origin/main
