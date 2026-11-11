@@ -84,7 +84,6 @@ interface ThreadDetailsPanelProps extends Pick<
   ) => Promise<ProjectScriptActionResult>;
   onDeleteProjectScript: (scriptId: string) => Promise<ProjectScriptActionResult>;
   usage: ThreadDetailsUsageInput;
-  hidden?: boolean;
 }
 
 export function ThreadDetailsPanel(props: ThreadDetailsPanelProps) {
@@ -92,9 +91,8 @@ export function ThreadDetailsPanel(props: ThreadDetailsPanelProps) {
   const [menuPosition, setMenuPosition] = useState<{ x: number; y: number } | null>(null);
   const fileScripts = useT3ProjectFileScripts(
     props.environmentId,
-    !props.hidden && props.activeProjectScripts && visible.scripts ? props.gitCwd : null,
+    props.activeProjectScripts && visible.scripts ? props.gitCwd : null,
   );
-  if (props.hidden) return null;
   const activeThreadRef = { environmentId: props.environmentId, threadId: props.threadId };
   const branchToolbarProps = {
     showGitControls: props.isGitRepo,
