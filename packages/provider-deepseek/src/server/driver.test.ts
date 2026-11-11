@@ -4,6 +4,7 @@ import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import { ProviderInstanceId } from "@t3tools/contracts";
 import type * as AcpSessionRuntime from "@t3tools/provider-acp/server/AcpSessionRuntime";
+import * as AcpErrors from "effect-acp/errors";
 
 import { DeepSeekSettings } from "../settings.ts";
 import { buildDeepSeekAcpSpawnInput } from "./acpSupport.ts";
@@ -46,6 +47,8 @@ describe("DeepSeekDriver", () => {
   it.effect("selects a model by its Harness route and puts default on dsh's default route", () =>
     Effect.gen(function* () {
       const route = (model: string) => JSON.stringify(["deepseek-official", model]);
+      // dsh's built-in catalog; like dsh, the fake rejects anything else but the current value.
+      const listed = [route("deepseek-flash"), route("deepseek-v4-pro")];
       const modelOptions = (currentValue: string | undefined) =>
         currentValue === undefined
           ? []
@@ -56,7 +59,7 @@ describe("DeepSeekDriver", () => {
                 category: "model",
                 type: "select",
                 currentValue,
-                options: [],
+                options: listed.map((value) => ({ value, name: value })),
               },
             ];
       // `started` is the model the new, loaded, or resumed session reports at setup.
@@ -66,11 +69,15 @@ describe("DeepSeekDriver", () => {
         const runtime = {
           getConfigOptions: Effect.sync(() => modelOptions(current)),
           setConfigOption: (_configId: string, value: string | boolean) =>
-            Effect.sync(() => {
-              writes.push(value);
-              current = String(value);
-              return {};
-            }),
+            value !== current && !listed.includes(String(value))
+              ? Effect.fail(
+                  AcpErrors.AcpRequestError.invalidParams(`unknown model option: ${String(value)}`),
+                )
+              : Effect.sync(() => {
+                  writes.push(value);
+                  current = String(value);
+                  return {};
+                }),
         } as unknown as AcpSessionRuntime.AcpSessionRuntime["Service"];
         const startResult = {
           sessionSetupResult: { sessionId: "session-1", configOptions: modelOptions(started) },
@@ -84,24 +91,25 @@ describe("DeepSeekDriver", () => {
         return { select, writes };
       };
 
+      // dsh's ACP profile starts new sessions on a route its catalog does not list.
       const fresh = session(route("deepseek-v4-flash"));
-      yield* fresh.select("deepseek-v4-flash");
+      yield* fresh.select("deepseek-v4-pro");
       yield* fresh.select("deepseek-v4-pro");
       yield* fresh.select("default");
-      assert.deepEqual(fresh.writes, [route("deepseek-v4-pro"), route("deepseek-v4-flash")]);
+      assert.deepEqual(fresh.writes, [route("deepseek-v4-pro"), route("deepseek-flash")]);
 
       const resumed = session(route("deepseek-v4-pro"));
-      yield* resumed.select("deepseek-v4-flash");
-      assert.deepEqual(resumed.writes, [route("deepseek-v4-flash")]);
+      yield* resumed.select("deepseek-flash");
+      assert.deepEqual(resumed.writes, [route("deepseek-flash")]);
 
       const resumedLegacy = session(route("deepseek-v4-pro"));
       yield* resumedLegacy.select("default");
       yield* resumedLegacy.select("");
-      assert.deepEqual(resumedLegacy.writes, [route("deepseek-v4-flash")]);
+      assert.deepEqual(resumedLegacy.writes, [route("deepseek-flash")]);
 
       const noModelOption = session(undefined);
       yield* noModelOption.select("default");
-      assert.deepEqual(noModelOption.writes, [route("deepseek-v4-flash")]);
+      assert.deepEqual(noModelOption.writes, [route("deepseek-flash")]);
     }),
   );
   it("launches the ACP profile from the configured binary", () => {

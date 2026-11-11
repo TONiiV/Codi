@@ -46,21 +46,14 @@ const DEEPSEEK_CAPABILITIES: ModelCapabilities = createModelCapabilities({
     },
   ],
 });
-/** The route dsh's ACP profile starts new sessions on. */
-export const DEEPSEEK_DEFAULT_MODEL = "deepseek-v4-flash";
+/** Mirrors dsh's built-in catalog; dsh refuses to switch to a model its listing does not name. */
+export const DEEPSEEK_DEFAULT_MODEL = "deepseek-flash";
 const DEEPSEEK_BUILT_IN_MODELS: ReadonlyArray<ServerProviderModel> = [
   {
     slug: DEEPSEEK_DEFAULT_MODEL,
-    name: "DeepSeek-V4-Flash",
-    isCustom: false,
-    isDefault: true,
-    capabilities: DEEPSEEK_CAPABILITIES,
-  },
-  {
-    slug: "deepseek-flash",
     name: "DeepSeek-V4.1-Flash",
     isCustom: false,
-    isDefault: false,
+    isDefault: true,
     capabilities: DEEPSEEK_CAPABILITIES,
   },
   {

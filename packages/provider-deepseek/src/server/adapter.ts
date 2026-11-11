@@ -51,7 +51,6 @@ export const applyDeepSeekModel = Effect.fn("DeepSeekAdapterV2.applyModelSelecti
   modelSelection,
 }: Parameters<NonNullable<AcpAdapterV2Flavor["applyModelSelection"]>>[0]) {
   const requested = modelSelection.model.trim();
-  // Threads saved before the explicit default model still carry "default".
   const model =
     requested.length === 0 || requested === "default" ? DEEPSEEK_DEFAULT_MODEL : requested;
   const target = deepSeekModelConfigValue(model);
