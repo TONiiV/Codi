@@ -64,6 +64,8 @@ export const make = Effect.gen(function* () {
   const homeDirectory = yield* HostProcess.HomeDirectory;
   const linuxDesktopEntryConfig = yield* LinuxDesktopEntryConfig;
   return yield* Effect.sync((): DesktopPreReadyElectronOptions["Service"] => {
+    // Hybrid-GPU machines otherwise bind Chromium's GPU process to the integrated adapter.
+    Electron.app.commandLine.appendSwitch("force_high_performance_gpu");
     const linuxPasswordStoreCommandLine =
       platform === "linux"
         ? readCommandLineSwitchValue(Electron.app.commandLine, "password-store")
