@@ -7,6 +7,7 @@ Use this reference only on a Windows x64 host.
 The repository build preflight is authoritative. A native x64 installer needs:
 
 - Python 3 discoverable by node-gyp.
+- `bun` on PATH, for the database snapshot.
 - Rust toolchain `stable-x86_64-pc-windows-msvc` with the
   `x86_64-pc-windows-msvc` target already installed. The updater builds with
   `RUSTUP_TOOLCHAIN` set to it, so a GNU default toolchain is fine and no
@@ -33,12 +34,14 @@ Obtain explicit user authorization immediately before doing it.
 - Resolve an existing app from its uninstall registry entry (named
   `Codi <version>`; its `DisplayIcon` holds the exe path) or the current
   `%LOCALAPPDATA%\Programs\t3code\Codi.exe` path. Keep
-  `%LOCALAPPDATA%\Programs\Codi\Codi.exe` as a legacy fallback.
+  `%LOCALAPPDATA%\Programs\Codi\Codi.exe` as a legacy fallback, and
+  `%LOCALAPPDATA%\Programs\t3code\Codi (Beta).exe` when only that is installed.
+- Stop before building if an official `T3 Code*.exe` is running. It can share
+  the install directory, so the close step skips it too.
 - Close only processes whose executable path is inside that resolved app's
   install directory, so an older `Codi (Beta).exe` there is closed too. Request
   manual closure if graceful shutdown does not finish; never kill by
-  process-name or command-line pattern. Stop if an official `T3 Code*.exe` is
-  still running.
+  process-name or command-line pattern.
 - Run the NSIS installer with `/S`, then verify the installed executable's
   product version equals the artifact version before launch.
 - Remove `ELECTRON_RUN_AS_NODE` from the launch environment.

@@ -48,11 +48,11 @@ update feed, so it never auto-updates back to official T3 Code.
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/skills/codi-desktop-release/update-codi.ps1
 ```
 
-The script uses a detached `origin/main` worktree, applies the local identity,
-builds and verifies an x64 NSIS installer, gracefully closes only processes
-running from the installed Codi directory, snapshots `statev2.sqlite` when
-present, installs, verifies the installed version, cleans up, and launches.
-It never installs prerequisites: it stops when the Rust MSVC toolchain or target
+The script stops if official T3 Code is running, uses a detached `origin/main`
+worktree, applies the local identity, builds and verifies an x64 NSIS
+installer, gracefully closes only processes running from the installed Codi
+directory, snapshots `statev2.sqlite` when present, installs, verifies the
+installed version, cleans up, and launches. It never installs prerequisites: it stops when the Rust MSVC toolchain or target
 is missing, and changing Visual Studio, Rust, or Python needs explicit user
 authorization. Pass `-Branch <name>` to build another branch and `-NoLaunch` to
 skip the final launch. Run it in the background when invoking it as an agent; it

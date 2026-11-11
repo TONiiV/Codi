@@ -32,7 +32,8 @@ function Find-CodiExecutable {
   }
   foreach ($candidate in @(
     (Join-Path $env:LOCALAPPDATA "Programs\t3code\Codi.exe"),
-    (Join-Path $env:LOCALAPPDATA "Programs\Codi\Codi.exe")
+    (Join-Path $env:LOCALAPPDATA "Programs\Codi\Codi.exe"),
+    (Join-Path $env:LOCALAPPDATA "Programs\t3code\Codi (Beta).exe")
   )) {
     if (Test-Path -LiteralPath $candidate) { return $candidate }
   }
@@ -71,6 +72,8 @@ $Repo = & git -C $PSScriptRoot rev-parse --show-toplevel
 if ($LASTEXITCODE -ne 0) { throw "Could not resolve repository root" }
 $Vp = Join-Path $Repo "node_modules\.bin\vp.cmd"
 if (!(Test-Path -LiteralPath $Vp)) { throw "Missing $Vp; run vp i in $Repo first" }
+if (!(Get-Command bun -ErrorAction SilentlyContinue)) { throw "bun is required for the DB snapshot" }
+if (Get-Process | Where-Object { $_.Path -like "*\T3 Code*.exe" }) { throw "official T3 Code is running; quit it first" }
 $Worktree = Join-Path $Repo ".worktrees\codi-release-win-$PID"
 $Output = Join-Path $env:USERPROFILE "codi-local"
 $BuildLog = Join-Path $Output "last-build-windows.log"
@@ -84,12 +87,7 @@ try {
   Push-Location $Worktree
   try {
     Write-Host "commit: $((& git log --oneline -1).Trim())"
-    $sourceEnv = if (Test-Path -LiteralPath (Join-Path $Repo ".env")) {
-      Join-Path $Repo ".env"
-    } else {
-      Join-Path $Worktree ".env.example"
-    }
-    Copy-Item -LiteralPath $sourceEnv -Destination (Join-Path $Worktree ".env")
+    Copy-Item -LiteralPath (Join-Path $Worktree ".env.example") -Destination (Join-Path $Worktree ".env")
 
     Step "Dependencies and Rust MSVC target"
     Invoke-Checked $Vp @("i")
@@ -146,21 +144,18 @@ try {
   $installedBefore = Find-CodiExecutable
   if ($installedBefore) {
     Step "Close installed Codi"
-    $installDir = [IO.Path]::GetFullPath((Split-Path -Parent $installedBefore)).TrimEnd('\') + "\"
+    $installDir = (Split-Path -Parent $installedBefore).TrimEnd('\') + "\"
+    # T3 Code can share this directory and is never closed.
     $running = Get-Process | Where-Object {
-      try { $_.Path -and [IO.Path]::GetFullPath($_.Path).StartsWith($installDir, [StringComparison]::OrdinalIgnoreCase) } catch { $false }
+      $_.Path -and $_.Path -notlike "*\T3 Code*.exe" -and $_.Path.StartsWith($installDir, [StringComparison]::OrdinalIgnoreCase)
     }
     # A process that already exited (its siblings close together) throws here and needs no close.
     foreach ($process in $running) { try { [void]$process.CloseMainWindow() } catch { } }
     foreach ($process in $running) {
-      Wait-Process -Id $process.Id -Timeout 30 -ErrorAction SilentlyContinue
-      if (Get-Process -Id $process.Id -ErrorAction SilentlyContinue) {
+      if (!$process.WaitForExit(30000)) {
         throw "Codi did not close gracefully (PID $($process.Id)); close it manually and rerun"
       }
     }
-  }
-  if (Get-Process | Where-Object { try { $_.Path -like "*\T3 Code*.exe" } catch { $false } }) {
-    throw "official T3 Code is running; quit it first"
   }
 
   if (Test-Path -LiteralPath $Database) {
