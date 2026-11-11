@@ -7,6 +7,11 @@ import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as SqlClient from "effect/sql/SqlClient";
 
+import {
+  CODI_MIGRATIONS_TABLE,
+  codiMigrationManifest,
+  runCodiMigrations,
+} from "./CodiMigrations.ts";
 import { migrationManifest, runMigrations } from "./Migrations.ts";
 
 const v2Migrations = migrationManifest.filter(([id]) => id >= 55);
@@ -66,6 +71,31 @@ describe("runMigrations", () => {
       }
       assert.deepStrictEqual(yield* history, before);
       assert.strictEqual(yield* v2TableCount, 0);
+    }).pipe(Effect.provide(NodeSqliteClient.layer({ filename: ":memory:" }))),
+  );
+
+  it.effect("runs an upstream migration below Codi's ids on a database older builds wrote", () =>
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      const [headId, headName] = migrationManifest.at(-1)!;
+      yield* runMigrations({ toMigrationInclusive: headId - 1 });
+      yield* runCodiMigrations();
+      // Older builds recorded Codi's migrations in upstream's table, above upstream's head.
+      yield* sql`
+        INSERT INTO effect_sql_migrations (migration_id, name)
+        SELECT migration_id, name FROM ${sql(CODI_MIGRATIONS_TABLE)}
+      `;
+      yield* sql`DROP TABLE ${sql(CODI_MIGRATIONS_TABLE)}`;
+
+      assert.deepStrictEqual(yield* runMigrations(), [[headId, headName]]);
+      assert.deepStrictEqual(yield* history, migrationManifest);
+      const codiRows = yield* sql<{ readonly migration_id: number; readonly name: string }>`
+        SELECT migration_id, name FROM ${sql(CODI_MIGRATIONS_TABLE)} ORDER BY migration_id
+      `;
+      assert.deepStrictEqual(
+        codiRows.map((row) => [row.migration_id, row.name] as const),
+        codiMigrationManifest,
+      );
     }).pipe(Effect.provide(NodeSqliteClient.layer({ filename: ":memory:" }))),
   );
 

@@ -35,11 +35,17 @@ What reaches you needs judgment.
    upstream deleted that scenario, drop the quarantine.
 6. **Never** skip, disable or delete a test to make a check pass. Except for a conflicted file,
    never edit `.github/`, `scripts/` or files under `.repos/`.
+7. **Migrations:** upstream's live in `apps/server/src/persistence/Migrations/` and
+   `Migrations.ts`, with upstream's ids. Codi's live in `Migrations/codi/` and `CodiMigrations.ts`,
+   with their own table and ids. Take upstream's migration files and entries as they are. Never
+   renumber, move or edit a migration that has shipped: databases already recorded it under its
+   id, and the migrator skips every id up to the highest one recorded.
 
-**Telescope design.** Adapting Telescope code to a changed upstream API is fine. When a change
-alters how Telescope behaves or looks, make your best choice and add one line per change to the
-Telescope review file the task names. The job then opens a pull request for the maintainer
-instead of pushing to main.
+**Changes for the maintainer.** Adapting Telescope code to a changed upstream API is fine. When a
+change alters how Telescope behaves or looks, or you had to edit a file outside the conflicts,
+make your best choice and add one line per change to the review file the task names. The job
+then opens a pull request for the maintainer instead of pushing to main. The job also lists every
+file you changed outside the conflicts there by itself.
 
 **Report.** Append to the report file the task names, in Chinese, one short line per file you
 changed. End with two lists: fork changes that upstream's side replaced, and new upstream UI

@@ -2,6 +2,7 @@
 import * as NodeFS from "node:fs";
 import * as NodeSqlite from "node:sqlite";
 
+import { isLegacyCodiMigration } from "./CodiMigrations.ts";
 import { migrationManifest } from "./Migrations.ts";
 
 export const BUILD_MIGRATION_HEAD = Math.max(...migrationManifest.map(([id]) => id));
@@ -24,10 +25,14 @@ export function recordedMigrations(
       )
       .get();
     if (hasTable === undefined) return [];
-    return db
-      .prepare("SELECT migration_id, name FROM effect_sql_migrations ORDER BY migration_id")
-      .all()
-      .map((row) => ({ id: Number(row.migration_id), name: String(row.name) }));
+    return (
+      db
+        .prepare("SELECT migration_id, name FROM effect_sql_migrations ORDER BY migration_id")
+        .all()
+        .map((row) => ({ id: Number(row.migration_id), name: String(row.name) }))
+        // Startup moves these to codi_sql_migrations; they are not from a newer build.
+        .filter(({ id, name }) => !isLegacyCodiMigration(id, name))
+    );
   } catch {
     return null;
   } finally {

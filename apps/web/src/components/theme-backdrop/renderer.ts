@@ -112,7 +112,7 @@ export function startThemeBackdrop(
     antialias: false,
     depth: false,
     stencil: false,
-    powerPreference: "low-power",
+    powerPreference: "high-performance",
   });
   const program = gl
     ? compileProgram(gl, style === "ascii" ? ASCII_FRAGMENT_SHADER : FLUID_FRAGMENT_SHADER)
