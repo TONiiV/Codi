@@ -79,7 +79,7 @@ export type RightPanelSurface =
   | { id: `side-chat:${string}`; kind: "side-chat"; threadId: ThreadId };
 
 const RIGHT_PANEL_STORAGE_KEY = "t3code:right-panel-state:v2";
-const RIGHT_PANEL_STORAGE_VERSION = 15;
+const RIGHT_PANEL_STORAGE_VERSION = 14;
 
 export const PULL_REQUESTS_PANEL_REF = scopeThreadRef(
   EnvironmentId.make("pull-requests-panel"),
@@ -97,7 +97,7 @@ export function telescopePanelRef(environmentId: EnvironmentId): ScopedThreadRef
   return scopeThreadRef(environmentId, ThreadId.make("telescope-panel"));
 }
 
-// Telescope's panel holds only the kinds it offers, whoever asks and whatever was stored.
+// Telescope's panel holds only the kinds it offers, whoever asks.
 const hiddenInPanel = (threadKey: string, kind: RightPanelKind) =>
   threadKey.endsWith(":telescope-panel") && !TELESCOPE_PANEL_SURFACES.includes(kind);
 
@@ -507,7 +507,6 @@ export function migratePersistedRightPanelState(persistedState: unknown): {
                 ? validThreadState.surfaces.flatMap<RightPanelSurface>((surface) => {
                     const kind = (surface as { kind?: string }).kind;
                     if (kind === "plan" || kind === "agents") return [];
-                    if (hiddenInPanel(threadKey, surface.kind)) return [];
                     if (
                       (surface.kind === "file" || surface.kind === "files") &&
                       "folderTrail" in surface &&

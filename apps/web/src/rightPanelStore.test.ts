@@ -13,6 +13,8 @@ import {
   selectActiveRightPanelSurface,
   selectThreadPanelVisibility,
   selectThreadRightPanelState,
+  TELESCOPE_SIDE_CHAT,
+  telescopePanelRef,
   useRightPanelStore,
 } from "./rightPanelStore";
 
@@ -55,6 +57,35 @@ describe("rightPanelStore", () => {
     expect(selectActiveRightPanelSurface(useRightPanelStore.getState().byThreadKey, refB)?.id).toBe(
       "file:src/app.ts",
     );
+  });
+
+  it("keeps Telescope's panel to the kinds it offers when a hosted chat opens other tabs", () => {
+    const panel = telescopePanelRef("env-1" as EnvironmentId);
+    const store = useRightPanelStore.getState();
+    const unhost = hostRightPanel(refB, panel);
+    store.openSideChat(panel, TELESCOPE_SIDE_CHAT);
+    store.openFile(refB, "src/app.ts");
+    store.open(refB, "diff");
+    store.openPullRequest(refB, { projectId: "p", repository: "o/r", number: 7 });
+    const kinds = () =>
+      selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, panel).surfaces.map(
+        (surface) => surface.kind,
+      );
+    expect(kinds()).toEqual(["side-chat"]);
+    store.open(panel, "preview");
+    expect(kinds()).toEqual(["side-chat", "preview"]);
+    unhost();
+  });
+
+  it("keeps a Code thread's open launcher through a payload saved at the shipped version", async () => {
+    useRightPanelStore.getState().show(refA);
+    const { storage, name } = useRightPanelStore.persist.getOptions();
+    const persisted = await storage!.getItem(name!);
+    await storage!.setItem(name!, { ...persisted!, version: 14 });
+    await useRightPanelStore.persist.rehydrate();
+    expect(
+      selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, refA).isOpen,
+    ).toBe(true);
   });
 
   it("records single and bulk tab closes, newest first", () => {
