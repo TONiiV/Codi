@@ -378,26 +378,29 @@ const make = Effect.gen(function* () {
         currentVersion: current.version,
       });
     const stale = input.baseVersion !== current.version;
+    const env = yield* environment.getEnvironmentId;
+    // Before migration 097 the link was a `threadId` field, and 097 moved it without a commit.
+    const withThreads = (commit: Telescope.TaskCommit) => {
+      const { threadId, ...fields } = commit.changedFields;
+      if (threadId === undefined) return commit;
+      const threads = typeof threadId === "string" ? [{ environmentId: env, threadId }] : [];
+      return { ...commit, changedFields: { ...fields, threads } };
+    };
     const commits = stale
       ? (yield* db.select(current.workspaceId, "task_commits", decodeCommits, {
           task_id: current.id,
-        })).toSorted((a, b) => a.baseVersion - b.baseVersion)
+        }))
+          .map(withThreads)
+          .toSorted((a, b) => a.baseVersion - b.baseVersion)
       : [];
     const later = commits.filter((commit) => commit.baseVersion >= input.baseVersion);
     const lastChange = (key: string) => later.findLast((commit) => key in commit.changedFields);
     // One agent can act for several members; its change for another member is not its own.
     const own = (commit: Telescope.TaskCommit) =>
       commit.authorId === author.authorId && commit.onBehalfOf?.[0] === author.onBehalfOf?.[0];
-    const env = yield* environment.getEnvironmentId;
     const read: Record<string, unknown> = { ...BLANK, threads: [] };
-    for (const commit of commits) {
-      if (commit.baseVersion >= input.baseVersion) continue;
-      // Before migration 097 the link was a `threadId` field, and 097 moved it without a commit.
-      const { threadId, ...fields } = commit.changedFields;
-      if (threadId !== undefined)
-        read.threads = typeof threadId === "string" ? [{ environmentId: env, threadId }] : [];
-      Object.assign(read, fields);
-    }
+    for (const commit of commits)
+      if (commit.baseVersion < input.baseVersion) Object.assign(read, commit.changedFields);
     const set =
       input.set?.threads === undefined
         ? (input.set ?? {})

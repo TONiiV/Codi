@@ -469,8 +469,14 @@ it.layer(layer)("Telescope task board", (it) => {
         environmentId: EnvironmentId.make("env-elsewhere"),
         threadId: ThreadId.make("t-added"),
       };
+      const updateOf = (
+        taskId: Telescope.TaskId,
+        baseVersion: number,
+        set: object,
+        actor: TaskBoardService.Actor = alice,
+      ) => board.updateTask(actor, { workspaceId: a, taskId, baseVersion, set });
       const update = (baseVersion: number, set: object, actor: TaskBoardService.Actor = alice) =>
-        board.updateTask(actor, { workspaceId: a, taskId: task.id, baseVersion, set });
+        updateOf(task.id, baseVersion, set, actor);
       yield* board.linkThread(alice, { workspaceId: a, taskId: task.id, ...added });
       const keeps = yield* update(1, { status: "in_progress", threads: [moved] }, agent);
       assert.deepStrictEqual(keeps.threads, [moved, added]);
@@ -492,6 +498,30 @@ it.layer(layer)("Telescope task board", (it) => {
       };
       const swapped = yield* update(1, { threads: [fresh] });
       assert.deepStrictEqual(swapped.threads, [fresh]);
+
+      // A pre-097 link commit made after the writer's base counts like any later thread change.
+      const legacyLink = (taskId: Telescope.TaskId, threadId: string) =>
+        sql`UPDATE telescope_task_commits
+          SET changed_fields_json = json_object('threadId', ${threadId})
+          WHERE task_id = ${taskId} AND changed_fields_json LIKE '%"threads"%'`;
+      const elsewhere = (id: string) => ({
+        environmentId: EnvironmentId.make("env-elsewhere"),
+        threadId: ThreadId.make(id),
+      });
+      const ownLink = yield* board.createTask(alice, { workspaceId: a, title: "Own" });
+      yield* updateOf(ownLink.id, 1, { threads: [elsewhere("t-z")] }, agent);
+      yield* legacyLink(ownLink.id, "t-z");
+      yield* updateOf(ownLink.id, 2, { title: "Own v2" });
+      assert.deepStrictEqual((yield* updateOf(ownLink.id, 1, { threads: [] }, agent)).threads, []);
+
+      const theirs = yield* board.createTask(alice, { workspaceId: a, title: "Theirs" });
+      yield* board.linkThread(alice, { workspaceId: a, taskId: theirs.id, ...elsewhere("t-x") });
+      yield* legacyLink(theirs.id, "t-x");
+      const replaced = yield* updateOf(theirs.id, 1, { threads: [elsewhere("t-y")] }, agent);
+      assert.deepStrictEqual(
+        [replaced.threads, replaced.overwrote?.map((o) => [o.key, o.name])],
+        [[elsewhere("t-y")], [["threads", "Alice"]]],
+      );
     }),
   );
 
