@@ -81,14 +81,9 @@ const decodeDecisions = rowsAs(Telescope.Decision, "item_id");
 const decodeCommits = rowsAs(Telescope.TaskCommit, "commit_id");
 const decodeLeases = rowsAs(Telescope.Lease, "lease_id");
 const decodeTask = Schema.decodeUnknownEffect(Telescope.Task);
-const decodeLinks = Schema.decodeUnknownEffect(
-  Schema.Array(
-    Schema.Struct({
-      task_id: Telescope.TaskId,
-      environment_id: Telescope.TaskThread.fields.environmentId,
-      thread_id: Telescope.TaskThread.fields.threadId,
-    }),
-  ),
+const decodeLinks = rowsAs(
+  Schema.Struct({ taskId: Telescope.TaskId, ...Telescope.TaskThread.fields }),
+  "",
 );
 const decodeMemberNames = Schema.decodeUnknownEffect(
   Schema.Array(
@@ -277,12 +272,12 @@ const make = Effect.gen(function* () {
     const links = yield* db.select(workspaceId, "task_threads", decodeLinks, linkWhere, {
       orderBy: ["linked_at"],
     });
-    const byTask = Map.groupBy(links, (link) => link.task_id);
+    const byTask = Map.groupBy(links, (link) => link.taskId);
     return tasks.map((task) => ({
       ...task,
-      threads: (byTask.get(task.id) ?? []).map((link) => ({
-        environmentId: link.environment_id,
-        threadId: link.thread_id,
+      threads: (byTask.get(task.id) ?? []).map(({ environmentId, threadId }) => ({
+        environmentId,
+        threadId,
       })),
     }));
   });
@@ -397,10 +392,20 @@ const make = Effect.gen(function* () {
     const read: Record<string, unknown> = { ...BLANK };
     for (const commit of commits)
       if (commit.baseVersion < input.baseVersion) Object.assign(read, commit.changedFields);
+    // Without a commit that recorded the list read (migration 097 moves links without one), a
+    // stale write can add links but not take them away.
+    const listRead = commits.some(
+      (c) => c.baseVersion < input.baseVersion && "threads" in c.changedFields,
+    );
     const set =
       input.set?.threads === undefined
         ? (input.set ?? {})
-        : { ...input.set, threads: uniqueThreads(input.set.threads) };
+        : {
+            ...input.set,
+            threads: uniqueThreads(
+              stale && !listRead ? [...current.threads, ...input.set.threads] : input.set.threads,
+            ),
+          };
     const mine: Record<string, Schema.Json> = {};
     for (const key of TASK_FIELDS) {
       if (!(key in set) || sameJson(set[key], current[key])) continue;
@@ -546,9 +551,11 @@ const make = Effect.gen(function* () {
     return yield* transact(
       Effect.gen(function* () {
         const current = yield* findTask(workspaceId, taskId);
-        const others = current.threads.filter((t) => !sameThread(t)(thread));
-        const had = others.length < current.threads.length;
-        const set = { threads: !linked ? others : had ? current.threads : [...others, thread] };
+        const set = {
+          threads: linked
+            ? [...current.threads, thread]
+            : current.threads.filter((t) => !sameThread(t)(thread)),
+        };
         const input = { workspaceId, taskId, baseVersion: current.version, set };
         return yield* commitTask(author, input, current);
       }),
@@ -578,8 +585,12 @@ const make = Effect.gen(function* () {
   ) {
     const [task] = yield* selectTasks(proposal.workspaceId, { item_id: taskId });
     if (task?.conflictDecisionId !== proposal.id) return;
-    const chosen = decision.chosen === "incoming" ? incoming : {};
-    yield* applyCommit(author, task, { ...chosen, conflictDecisionId: null }, [], at, {
+    // An older server's `incoming` may hold `threadId`, which is now a link, if still free.
+    const { threadId, ...chosen } = decision.chosen === "incoming" ? incoming : {};
+    const env = yield* environment.getEnvironmentId;
+    const free = typeof threadId === "string" && !(yield* db.taskOfThread(env, threadId));
+    const threads = free ? { threads: [...task.threads, { environmentId: env, threadId }] } : {};
+    yield* applyCommit(author, task, { ...chosen, ...threads, conflictDecisionId: null }, [], at, {
       mergeLevel: 0,
       mergeReason: `settled by decision ${decision.id}`,
     });

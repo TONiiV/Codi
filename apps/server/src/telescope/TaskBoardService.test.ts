@@ -404,6 +404,18 @@ it.layer(layer)("Telescope task board", (it) => {
         commits.map((commit) => commit.changedFields.threads),
         [undefined, [thread("t-2")], [thread("t-2"), thread("t-3")], [thread("t-3")]],
       );
+
+      // Resending the list it read is not a write, so it cannot unlink what a later write linked.
+      const stale = yield* board.updateTask(agent, {
+        workspaceId: a,
+        taskId: second.id,
+        baseVersion: 1,
+        set: { status: "in_progress", threads: [] },
+      });
+      assert.deepStrictEqual(
+        [stale.status, stale.threads, stale.overwrote],
+        ["in_progress", [thread("t-3")], undefined],
+      );
     }),
   );
 
@@ -425,9 +437,25 @@ it.layer(layer)("Telescope task board", (it) => {
         Effect.scoped,
       );
       const reread = yield* board.getTask(alice, { workspaceId: a, taskId: task.id });
-      assert.deepStrictEqual(reread.threads, [
-        { environmentId: EnvironmentId.make("env-elsewhere"), threadId: ThreadId.make("t-moved") },
-      ]);
+      const moved = {
+        environmentId: EnvironmentId.make("env-elsewhere"),
+        threadId: ThreadId.make("t-moved"),
+      };
+      assert.deepStrictEqual(reread.threads, [moved]);
+
+      // No commit recorded the moved link, yet a stale write resending it keeps a later link.
+      const added = {
+        environmentId: EnvironmentId.make("env-elsewhere"),
+        threadId: ThreadId.make("t-added"),
+      };
+      yield* board.linkThread(alice, { workspaceId: a, taskId: task.id, ...added });
+      const stale = yield* board.updateTask(alice, {
+        workspaceId: a,
+        taskId: task.id,
+        baseVersion: 1,
+        set: { status: "in_progress", threads: [moved] },
+      });
+      assert.deepStrictEqual(stale.threads, [moved, added]);
     }),
   );
 
@@ -750,7 +778,7 @@ it.layer(layer)("Telescope task board", (it) => {
         });
       // Older servers opened these for stale writes; a write no longer does.
       const sql = yield* SqlClient.SqlClient;
-      const seedConflict = (title: string) =>
+      const seedConflict = (title: string, legacy: object = {}) =>
         Effect.gen(function* () {
           const proposal = yield* board.createDecision(alice, {
             workspaceId: a,
@@ -758,7 +786,7 @@ it.layer(layer)("Telescope task board", (it) => {
             text: "",
             status: "proposed",
           });
-          const conflict = JSON.stringify({ taskId: task.id, incoming: { title } });
+          const conflict = JSON.stringify({ taskId: task.id, incoming: { title, ...legacy } });
           yield* sql`UPDATE telescope_tasks SET conflict_json = ${conflict} WHERE item_id = ${proposal.id}`;
           yield* sql`UPDATE telescope_tasks SET conflict_decision_id = ${proposal.id} WHERE item_id = ${task.id}`;
           return proposal.id;
@@ -842,6 +870,14 @@ it.layer(layer)("Telescope task board", (it) => {
       assert.deepStrictEqual(
         (yield* decisions).filter((d) => d.status === "proposed"),
         [],
+      );
+
+      // An older server's proposal may carry `threadId`, a column migration 097 dropped.
+      yield* decide(yield* seedConflict("Plan F", { threadId: "t-old" }), "incoming");
+      const legacy = yield* current;
+      assert.deepStrictEqual(
+        [legacy.title, legacy.conflictDecisionId, legacy.threads],
+        ["Plan F", undefined, [{ environmentId: "env-elsewhere", threadId: "t-old" }]],
       );
     }),
   );
