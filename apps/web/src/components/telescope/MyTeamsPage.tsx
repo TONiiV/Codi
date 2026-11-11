@@ -42,7 +42,7 @@ const READ_ERROR_TEXT: Partial<Record<Telescope.WorkspaceError["reason"], string
   storage: "服务器读取出错，请稍后再试。",
 };
 
-function QueryState<A>({
+export function QueryState<A>({
   query,
   children,
 }: {
