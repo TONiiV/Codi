@@ -142,7 +142,7 @@ export function useTasksLayout(): TasksLayout {
   });
 }
 
-export function useTaskDrawerId(): Telescope.TaskId | null {
+export function useTaskParam(): Telescope.TaskId | null {
   return useLocation({
     select: (location) =>
       telescopeSearchAt(location.pathname, location.search, peekAppModalReturnHref())?.task ?? null,
