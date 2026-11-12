@@ -36,24 +36,20 @@ import {
 } from "./TasksParts";
 import { telescopeSearch, useTasksProjectId } from "./telescopeViews";
 
-type Write = ReturnType<typeof useTaskWrite>;
 type People = ReturnType<typeof useBoardPeople>;
-type Fields = NonNullable<Parameters<Write>[1]["set"]>;
+type Fields = NonNullable<Parameters<ReturnType<typeof useTaskWrite>>[1]["set"]>;
 /** Creates a task in the view's project; null for a member who may not. */
 export type CreateTask = ((title: string, set?: Fields) => Promise<boolean>) | null;
 /** Null for a member who may not edit. */
 type Edit = ((task: Telescope.Task, set: Fields) => void) | null;
 
-const PRIORITIES = [
-  "high",
-  "medium",
-  "low",
-] as const satisfies ReadonlyArray<Telescope.TaskPriority>;
 const NONE = "";
 
 const CELL =
   "flex h-9 w-full min-w-0 cursor-pointer items-center gap-1.5 overflow-hidden px-2 text-left whitespace-nowrap outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring";
 const CELL_STATIC = "flex h-9 min-w-0 items-center gap-1.5 overflow-hidden px-2 whitespace-nowrap";
+
+type CellProps = { task: Telescope.Task; edit: Edit; people: People };
 
 /** A cell that opens a menu to edit it, or shows the value alone for a reader. */
 function MenuCell(props: { label: string; edit: boolean; value: ReactNode; children: ReactNode }) {
@@ -68,7 +64,7 @@ function MenuCell(props: { label: string; edit: boolean; value: ReactNode; child
   );
 }
 
-function StatusCell({ task, edit }: { task: Telescope.Task; edit: Edit }) {
+function StatusCell({ task, edit }: CellProps) {
   return (
     <MenuCell label="状态" edit={edit !== null} value={<StatusPill status={task.status} />}>
       <MenuRadioGroup value={task.status}>
@@ -87,7 +83,7 @@ function StatusCell({ task, edit }: { task: Telescope.Task; edit: Edit }) {
   );
 }
 
-function PriorityCell({ task, edit }: { task: Telescope.Task; edit: Edit }) {
+function PriorityCell({ task, edit }: CellProps) {
   const pick = (priority: Telescope.TaskPriority | null) =>
     priority !== (task.priority ?? null) && edit?.(task, { priority });
   return (
@@ -100,7 +96,7 @@ function PriorityCell({ task, edit }: { task: Telescope.Task; edit: Edit }) {
         <MenuRadioItem value={NONE} closeOnClick onClick={() => pick(null)}>
           <span className="text-muted-foreground">无</span>
         </MenuRadioItem>
-        {PRIORITIES.map((priority) => (
+        {Telescope.TaskPriority.literals.map((priority) => (
           <MenuRadioItem
             key={priority}
             value={priority}
@@ -140,7 +136,7 @@ function Owners({
   );
 }
 
-function OwnerCell({ task, edit, people }: { task: Telescope.Task; edit: Edit; people: People }) {
+function OwnerCell({ task, edit, people }: CellProps) {
   return (
     <MenuCell label="负责人" edit={edit !== null} value={<Owners task={task} people={people} />}>
       <MenuGroup>
@@ -232,13 +228,14 @@ function EditInput({
 }
 
 /** Shows the day; a click swaps in the native date input. */
-function DueCell({ task, edit }: { task: Telescope.Task; edit: Edit }) {
-  const [editing, setEditing] = useState(false);
+function DueCell({ task, edit }: CellProps) {
+  // The write is pinned to the version the editor opened on, so a change made meanwhile conflicts.
+  const [editing, setEditing] = useState<Telescope.Task | null>(null);
   const shown = task.dueDate && formatDueDate(task.dueDate);
   if (edit === null) return <div className={CELL_STATIC}>{shown}</div>;
-  if (!editing)
+  if (editing === null)
     return (
-      <button type="button" aria-label="截止日期" className={CELL} onClick={() => setEditing(true)}>
+      <button type="button" aria-label="截止日期" className={CELL} onClick={() => setEditing(task)}>
         {shown}
       </button>
     );
@@ -248,7 +245,7 @@ function DueCell({ task, edit }: { task: Telescope.Task; edit: Edit }) {
       nativeInput
       type="date"
       aria-label="截止日期"
-      defaultValue={task.dueDate ?? ""}
+      defaultValue={editing.dueDate ?? ""}
       onFocus={(event) => {
         try {
           event.currentTarget.showPicker();
@@ -257,30 +254,31 @@ function DueCell({ task, edit }: { task: Telescope.Task; edit: Edit }) {
         }
       }}
       onCommit={(value) => {
-        setEditing(false);
-        if (value !== (task.dueDate ?? "")) edit(task, { dueDate: value === "" ? null : value });
+        setEditing(null);
+        if (value !== (editing.dueDate ?? ""))
+          edit(editing, { dueDate: value === "" ? null : value });
       }}
-      onCancel={() => setEditing(false)}
+      onCancel={() => setEditing(null)}
     />
   );
 }
 
 function TitleCell(props: { task: Telescope.Task; edit: Edit; open: ReactNode }) {
   const { task, edit } = props;
-  const [editing, setEditing] = useState(false);
-  if (editing && edit !== null)
+  const [editing, setEditing] = useState<Telescope.Task | null>(null);
+  if (editing !== null && edit !== null)
     return (
       <EditInput
         unstyled
         aria-label="任务标题"
         maxLength={Telescope.BOARD_LIMITS.titleLength}
-        defaultValue={task.title}
+        defaultValue={editing.title}
         onCommit={(value) => {
-          setEditing(false);
+          setEditing(null);
           const title = value.trim();
-          if (title.length > 0 && title !== task.title) edit(task, { title });
+          if (title.length > 0 && title !== editing.title) edit(editing, { title });
         }}
-        onCancel={() => setEditing(false)}
+        onCancel={() => setEditing(null)}
       />
     );
   const title = <span className="truncate font-medium">{task.title}</span>;
@@ -293,7 +291,7 @@ function TitleCell(props: { task: Telescope.Task; edit: Edit; open: ReactNode })
           type="button"
           aria-label={`改标题：${task.title}`}
           className={CELL}
-          onClick={() => setEditing(true)}
+          onClick={() => setEditing(task)}
         >
           {title}
         </button>
@@ -310,8 +308,18 @@ function TitleCell(props: { task: Telescope.Task; edit: Edit; open: ReactNode })
 }
 
 /** Notion's bottom row: a label until clicked, then a title input that adds a task per Enter. */
-function NewTask(props: { create: NonNullable<CreateTask>; set?: Fields; card?: boolean }) {
-  const [open, setOpen] = useState(false);
+function NewTask(props: {
+  create: NonNullable<CreateTask>;
+  set?: Fields;
+  card?: boolean;
+  /** Lets a group header's + open the same input; without it the row keeps its own state. */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+}) {
+  const [own, setOwn] = useState(false);
+  const busy = useRef(false);
+  const open = props.open ?? own;
+  const setOpen = props.onOpenChange ?? setOwn;
   if (!open)
     return (
       <button
@@ -319,7 +327,7 @@ function NewTask(props: { create: NonNullable<CreateTask>; set?: Fields; card?: 
         className={cn(
           "flex w-full cursor-pointer items-center gap-1.5 px-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
           props.card
-            ? "h-10 rounded-xl text-muted-foreground ring-1 ring-border hover:bg-accent"
+            ? "h-10 rounded-xl px-3 text-muted-foreground ring-1 ring-border hover:bg-accent"
             : "h-7 text-foreground hover:bg-accent",
         )}
         onClick={() => setOpen(true)}
@@ -337,7 +345,13 @@ function NewTask(props: { create: NonNullable<CreateTask>; set?: Fields; card?: 
       maxLength={Telescope.BOARD_LIMITS.titleLength}
       onCommit={async (value, input) => {
         const title = value.trim();
-        if (title.length > 0 && (await props.create(title, props.set))) input.value = "";
+        // A second Enter, or a blur right after Enter, must not create the same task again.
+        if (busy.current) return;
+        if (title.length > 0) {
+          busy.current = true;
+          if (await props.create(title, props.set)) input.value = "";
+          busy.current = false;
+        }
         if (input !== document.activeElement) setOpen(false);
       }}
       onCancel={() => setOpen(false)}
@@ -347,19 +361,19 @@ function NewTask(props: { create: NonNullable<CreateTask>; set?: Fields; card?: 
 
 type Column = "status" | "owner" | "due" | "priority";
 const COLUMN = {
-  status: { label: "状态", icon: CircleDotDashedIcon, width: "w-32.5" },
-  owner: { label: "负责人", icon: UsersIcon, width: "w-43.5" },
-  due: { label: "截止日期", icon: CalendarIcon, width: "w-32" },
-  priority: { label: "优先级", icon: CircleChevronDownIcon, width: "w-26.25" },
-} as const satisfies Record<Column, { label: string; icon: unknown; width: string }>;
+  status: { label: "状态", icon: CircleDotDashedIcon, width: "w-32.5", Cell: StatusCell },
+  owner: { label: "负责人", icon: UsersIcon, width: "w-43.5", Cell: OwnerCell },
+  due: { label: "截止日期", icon: CalendarIcon, width: "w-29.5", Cell: DueCell },
+  priority: { label: "优先级", icon: CircleChevronDownIcon, width: "w-26.25", Cell: PriorityCell },
+} as const satisfies Record<
+  Column,
+  { label: string; icon: unknown; width: string; Cell: (props: CellProps) => ReactNode }
+>;
 /** 我的 shows Notion's My Tasks columns; the other tables show every property. */
 const COLUMNS = {
   table: ["status", "owner", "due", "priority"],
   mine: ["owner", "due", "status"],
 } as const satisfies Record<string, ReadonlyArray<Column>>;
-
-const editOf = (write: Write, mayEdit: boolean): Edit =>
-  mayEdit ? (task, set) => void write(task, { set }) : null;
 
 export function TasksTable(props: {
   target: BoardTarget;
@@ -372,11 +386,11 @@ export function TasksTable(props: {
   const write = useTaskWrite(props.target);
   const people = useBoardPeople(props.target);
   const project = useTasksProjectId();
-  const edit = editOf(write, props.mayEdit);
+  const edit: Edit = props.mayEdit ? (task, set) => void write(task, { set }) : null;
   const columns = COLUMNS[props.layout];
   const head = (label: string, Icon: typeof CalendarIcon) => (
     <span className="flex items-center gap-1.5">
-      <Icon className="size-4.5 shrink-0" />
+      <Icon className="size-4.75 shrink-0" />
       <span className="truncate">{label}</span>
     </span>
   );
@@ -428,19 +442,14 @@ export function TasksTable(props: {
                   }
                 />
               </td>
-              {columns.map((column) => (
-                <td key={column} className="border-r border-b p-0">
-                  {column === "status" ? (
-                    <StatusCell task={task} edit={edit} />
-                  ) : column === "owner" ? (
-                    <OwnerCell task={task} edit={edit} people={people} />
-                  ) : column === "due" ? (
-                    <DueCell task={task} edit={edit} />
-                  ) : (
-                    <PriorityCell task={task} edit={edit} />
-                  )}
-                </td>
-              ))}
+              {columns.map((column) => {
+                const { Cell } = COLUMN[column];
+                return (
+                  <td key={column} className="border-r border-b p-0">
+                    <Cell task={task} edit={edit} people={people} />
+                  </td>
+                );
+              })}
             </tr>
           ))}
           {props.create === null ? null : (
@@ -489,7 +498,7 @@ function TaskCard(props: {
           project: props.project,
         })}
         draggable={false}
-        className="px-2.5 pt-2 pb-1 text-sm font-medium wrap-anywhere outline-none after:absolute after:inset-0 after:rounded-xl focus-visible:after:ring-2 focus-visible:after:ring-inset focus-visible:after:ring-ring"
+        className="px-2.5 pt-2 pb-1.5 text-sm font-medium wrap-anywhere outline-none after:absolute after:inset-0 after:rounded-xl focus-visible:after:ring-2 focus-visible:after:ring-inset focus-visible:after:ring-ring"
       >
         {task.title}
       </Link>
@@ -508,7 +517,6 @@ function TaskCard(props: {
           <PriorityTag small priority={task.priority} />
         </span>
       ) : null}
-      {task.dueDate ? <span className={row}>{formatDueDate(task.dueDate)}</span> : null}
     </div>
   );
 }
@@ -524,6 +532,7 @@ export function TasksBoard(props: {
   const people = useBoardPeople(props.target);
   const project = useTasksProjectId();
   const [over, setOver] = useState<Telescope.TaskStatus | null>(null);
+  const [adding, setAdding] = useState<Telescope.TaskStatus | null>(null);
   const columns = tasksByStatus(props.tasks);
   return (
     <div className="flex items-start gap-3 overflow-x-auto px-4 pb-6 sm:px-24">
@@ -539,9 +548,25 @@ export function TasksBoard(props: {
               <span className={cn("size-2 rounded-full", STATUS_TONE[status].dot)} />
               {TASK_STATUS[status].label}
             </span>
-            <span className={cn("tabular-nums", STATUS_TONE[status].text)}>
+            <span
+              className={cn(
+                "inline-flex h-5 items-center rounded-sm px-1.5 tabular-nums",
+                STATUS_TONE[status].text,
+              )}
+            >
               {columns[status].length}
             </span>
+            {props.create === null ? null : (
+              <Button
+                size="icon-xs"
+                variant="ghost-muted"
+                className="ms-auto"
+                aria-label={`新任务（${TASK_STATUS[status].label}）`}
+                onClick={() => setAdding(status)}
+              >
+                <PlusIcon />
+              </Button>
+            )}
           </header>
           <div
             onDragOver={(event) => {
@@ -575,7 +600,15 @@ export function TasksBoard(props: {
                 draggable={props.mayEdit}
               />
             ))}
-            {props.create === null ? null : <NewTask card create={props.create} set={{ status }} />}
+            {props.create === null ? null : (
+              <NewTask
+                card
+                create={props.create}
+                set={{ status }}
+                open={adding === status}
+                onOpenChange={(open) => setAdding(open ? status : null)}
+              />
+            )}
           </div>
         </section>
       ))}

@@ -56,9 +56,11 @@ function TasksTabs({ layout }: { layout: TasksLayout }) {
   );
 }
 
-function TasksHeader({ target }: { target: BoardTarget }) {
+function TasksHeader({ target, layout }: { target: BoardTarget; layout: TasksLayout }) {
   const { list, selected } = useTasksProject(target);
-  const name = list?.find((project) => project.id === selected)?.name;
+  // Decisions have no project, so their list always covers the whole workspace.
+  const name =
+    layout === "decisions" ? undefined : list?.find((project) => project.id === selected)?.name;
   return (
     <header className="px-4 pt-8 pb-3 sm:px-24 sm:pt-12">
       <h2 className="text-3xl font-bold wrap-anywhere">{name ?? "全部任务"}</h2>
@@ -119,7 +121,7 @@ export function TasksPage() {
   const tabs = <TasksTabs layout={layout} />;
   return (
     <>
-      <TasksHeader target={target} />
+      <TasksHeader target={target} layout={layout} />
       {layout === "decisions" ? (
         <DecisionsBody target={target} actions={tabs} />
       ) : (

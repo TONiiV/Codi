@@ -72,17 +72,26 @@ export function useBoardPeople({ environmentId, workspaceId }: BoardTarget) {
   const query = { environmentId, input: { workspaceId } };
   const mine = useAtomValue(telescopeBoard.agents(query));
   const company = useAtomValue(telescopeBoard.companyAgents(query));
-  const members = (
-    AsyncResult.getOrElse(useAtomValue(telescope.members(query)), () => null)?.members ?? []
-  ).filter((member) => member.revokedAt === undefined);
-  const agents = [mine, company].flatMap(
-    (result) => AsyncResult.getOrElse(result, () => null)?.agents ?? [],
-  );
+  const everyone =
+    AsyncResult.getOrElse(useAtomValue(telescope.members(query)), () => null)?.members ?? [];
+  // The company list repeats the caller's own agent.
+  const agents = [
+    ...new Map(
+      [mine, company]
+        .flatMap((result) => AsyncResult.getOrElse(result, () => null)?.agents ?? [])
+        .map((agent) => [agent.id, agent] as const),
+    ).values(),
+  ];
+  // Names keep removed members: decisions and 汇报 still carry their ids. Only the picker drops them.
   const names = new Map<string, string>([
     ...agents.map((agent) => [agent.id, agent.name] as const),
-    ...members.map((member) => [member.subjectId, member.displayName] as const),
+    ...everyone.map((member) => [member.subjectId, member.displayName] as const),
   ]);
-  return { members, agents, name: (id: string) => names.get(id) };
+  return {
+    members: everyone.filter((member) => member.revokedAt === undefined),
+    agents,
+    name: (id: string) => names.get(id),
+  };
 }
 
 /** Display names for the agent and member ids the caller can see. */
@@ -207,7 +216,7 @@ export function BoardFrame(props: {
   const error = query.error === null ? null : failureText(AsyncResult.fail(query.failure));
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="mx-4 flex h-10 shrink-0 items-center gap-0.5 border-b sm:mx-24">
+      <div className="mx-4 flex h-10 shrink-0 items-center border-b sm:mx-24">
         {props.actions}
         <Button
           size="icon-xs"

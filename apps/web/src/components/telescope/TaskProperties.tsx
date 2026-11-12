@@ -4,6 +4,12 @@ import { BotIcon } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { TASK_STATUS } from "./TasksParts";
 
+const TONE = {
+  error: "bg-destructive/12 text-destructive-foreground dark:bg-destructive/32",
+  warning: "bg-warning/16 text-warning-foreground dark:bg-warning/32",
+  success: "bg-success/16 text-success-foreground dark:bg-success/32",
+};
+
 /** Notion-style property values shared by the task table and board; display only. */
 export const STATUS_TONE = {
   todo: {
@@ -19,19 +25,19 @@ export const STATUS_TONE = {
     column: "bg-info/6",
   },
   in_review: {
-    pill: "bg-warning/16 text-warning-foreground dark:bg-warning/32",
+    pill: TONE.warning,
     dot: "bg-warning",
     text: "text-warning-foreground",
     column: "bg-warning/6",
   },
   done: {
-    pill: "bg-success/16 text-success-foreground dark:bg-success/32",
+    pill: TONE.success,
     dot: "bg-success",
     text: "text-success-foreground",
     column: "bg-success/5",
   },
   needs_decision: {
-    pill: "bg-destructive/12 text-destructive-foreground dark:bg-destructive/32",
+    pill: TONE.error,
     dot: "bg-destructive",
     text: "text-destructive-foreground",
     column: "bg-destructive/5",
@@ -62,12 +68,9 @@ export function StatusPill({ status }: { status: Telescope.TaskStatus }) {
 }
 
 const TASK_PRIORITY = {
-  high: {
-    label: "高",
-    tag: "bg-destructive/12 text-destructive-foreground dark:bg-destructive/32",
-  },
-  medium: { label: "中", tag: "bg-warning/16 text-warning-foreground dark:bg-warning/32" },
-  low: { label: "低", tag: "bg-success/16 text-success-foreground dark:bg-success/32" },
+  high: { label: "高", tag: TONE.error },
+  medium: { label: "中", tag: TONE.warning },
+  low: { label: "低", tag: TONE.success },
 } as const satisfies Record<Telescope.TaskPriority, { label: string; tag: string }>;
 
 export function PriorityTag(props: { priority: Telescope.TaskPriority; small?: boolean }) {
@@ -107,7 +110,12 @@ export function PersonChip(props: { name: string; agent?: boolean; small?: boole
   );
 }
 
-const DAY = new Intl.DateTimeFormat("zh-CN", { dateStyle: "medium", timeZone: "UTC" });
+const DAY = new Intl.DateTimeFormat("zh-CN", {
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  timeZone: "UTC",
+});
 
 /** `YYYY-MM-DD` has no time zone; read and print it in UTC so the day never shifts. */
 export const formatDueDate = (date: string) => DAY.format(new Date(`${date}T00:00:00Z`));
