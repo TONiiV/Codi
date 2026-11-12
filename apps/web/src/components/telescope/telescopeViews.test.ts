@@ -1,3 +1,4 @@
+import { Telescope } from "@t3tools/contracts";
 import {
   createMemoryHistory,
   createRootRoute,
@@ -7,7 +8,12 @@ import {
 import { describe, expect, it } from "vite-plus/test";
 
 import { Route as TelescopeRoute } from "../../routes/_chat.telescope";
-import { parseTelescopeSearch, telescopeSearch, telescopeSearchAt } from "./telescopeViews";
+import {
+  knownProjectId,
+  parseTelescopeSearch,
+  telescopeSearch,
+  telescopeSearchAt,
+} from "./telescopeViews";
 
 function matchedSearch(url: string) {
   const root = createRootRoute();
@@ -72,10 +78,34 @@ describe("telescope view", () => {
     expect(telescopeSearchAt("/telescope", { view: "chats", agent: ["a-1"] }, null)).toEqual({
       view: "tasks",
     });
+    expect(
+      telescopeSearchAt("/telescope", { view: "tasks", layout: "board", project: "p-1" }, null),
+    ).toEqual({ view: "tasks", layout: "board", project: "p-1" });
+    expect(telescopeSearchAt("/telescope", { view: "tasks", layout: "board" }, null)).toEqual({
+      view: "tasks",
+      layout: "board",
+    });
+    expect(telescopeSearchAt("/telescope", { view: "tasks", project: " " }, null)).toEqual({
+      view: "tasks",
+    });
+    expect(telescopeSearchAt("/telescope", { view: "tasks", project: ["p-1"] }, null)).toEqual({
+      view: "tasks",
+    });
     expect(matchedSearch("/telescope?view=teams")).toEqual({ view: "tasks" });
     expect(matchedSearch("/telescope?view=lighthouse")).toEqual({ view: "tasks" });
     expect(matchedSearch("/telescope?view=123")).toEqual({ view: "tasks" });
     expect(matchedSearch("/telescope")).toEqual({ view: "tasks" });
+  });
+
+  it("shows 全部 for a project the workspace no longer has", () => {
+    const id = Telescope.TelescopeProjectId.make;
+    const projects = [{ id: id("p-1") }, { id: id("p-2") }];
+    expect({
+      listed: knownProjectId(id("p-2"), projects),
+      removed: knownProjectId(id("gone"), projects),
+      none: knownProjectId(undefined, projects),
+      loading: knownProjectId(id("p-2"), null),
+    }).toEqual({ listed: "p-2", removed: undefined, none: undefined, loading: "p-2" });
   });
 
   it("stays on behind a Settings or Usage modal opened from Telescope", () => {

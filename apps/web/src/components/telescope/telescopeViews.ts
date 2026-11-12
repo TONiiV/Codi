@@ -73,24 +73,35 @@ type TelescopeSearch = {
   readonly layout?: Exclude<TasksLayout, "table">;
   /** The task whose detail drawer is open. */
   readonly task?: Telescope.TaskId;
+  /** The project 任务 is filtered to; absent shows 全部. */
+  readonly project?: Telescope.TelescopeProjectId;
   /** The agent whose chat is open in 对话. */
   readonly agent?: Telescope.AgentId;
 };
 
 const decodeTaskId = Schema.decodeUnknownOption(Telescope.TaskId);
 const decodeAgentId = Schema.decodeUnknownOption(Telescope.AgentId);
+const decodeProjectId = Schema.decodeUnknownOption(Telescope.TelescopeProjectId);
 
 export function telescopeSearch(
   view: TelescopeView,
   layout: TasksLayout,
-  task?: Telescope.TaskId,
-  agent?: Telescope.AgentId,
+  {
+    task,
+    agent,
+    project,
+  }: {
+    task?: Telescope.TaskId | undefined;
+    agent?: Telescope.AgentId | undefined;
+    project?: Telescope.TelescopeProjectId | undefined;
+  } = {},
 ): TelescopeSearch {
   return {
     view,
     ...(layout === "table" ? {} : { layout }),
     ...(task === undefined ? {} : { task }),
     ...(agent === undefined ? {} : { agent }),
+    ...(project === undefined ? {} : { project }),
   };
 }
 
@@ -100,8 +111,11 @@ export function parseTelescopeSearch(raw: Record<string, unknown>): TelescopeSea
   return telescopeSearch(
     legacyDecisions ? "tasks" : parseTelescopeView(raw.view),
     legacyDecisions ? "decisions" : (TASKS_LAYOUTS.find((id) => id === raw.layout) ?? "table"),
-    Option.getOrUndefined(decodeTaskId(raw.task)),
-    Option.getOrUndefined(decodeAgentId(raw.agent)),
+    {
+      task: Option.getOrUndefined(decodeTaskId(raw.task)),
+      agent: Option.getOrUndefined(decodeAgentId(raw.agent)),
+      project: Option.getOrUndefined(decodeProjectId(raw.project)),
+    },
   );
 }
 
@@ -147,6 +161,21 @@ export function useTaskParam(): Telescope.TaskId | null {
     select: (location) =>
       telescopeSearchAt(location.pathname, location.search, peekAppModalReturnHref())?.task ?? null,
   });
+}
+
+export function useTasksProjectId(): Telescope.TelescopeProjectId | undefined {
+  return useLocation({
+    select: (location) =>
+      telescopeSearchAt(location.pathname, location.search, peekAppModalReturnHref())?.project,
+  });
+}
+
+/** The selected project if the workspace still has it; while its list loads the link is trusted. */
+export function knownProjectId(
+  project: Telescope.TelescopeProjectId | undefined,
+  projects: ReadonlyArray<Pick<Telescope.Project, "id">> | null,
+): Telescope.TelescopeProjectId | undefined {
+  return projects === null || projects.some((entry) => entry.id === project) ? project : undefined;
 }
 
 export function useChatAgentId(): Telescope.AgentId | null {

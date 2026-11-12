@@ -118,7 +118,7 @@ function SummaryView({ summary }: { summary: Telescope.DashboardSummary }) {
                 <TableCell className="whitespace-normal">
                   <Link
                     to={TELESCOPE_PATH}
-                    search={telescopeSearch("dashboard", layout, task.id)}
+                    search={telescopeSearch("dashboard", layout, { task: task.id })}
                     className="line-clamp-2 max-w-80 wrap-anywhere hover:underline sm:line-clamp-1"
                   >
                     {task.title}
