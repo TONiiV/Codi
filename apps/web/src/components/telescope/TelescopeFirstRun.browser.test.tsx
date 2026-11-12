@@ -2,7 +2,7 @@ import { RegistryContext } from "@effect/atom-react";
 import type { EnvironmentProject } from "@t3tools/client-runtime/state/shell";
 import { EnvironmentId, ProjectId, Telescope } from "@t3tools/contracts";
 import { AsyncResult, Atom, AtomRegistry } from "effect/reactivity";
-import { useSyncExternalStore, type ReactNode } from "react";
+import { useSyncExternalStore } from "react";
 import { describe, expect, it, vi } from "vite-plus/test";
 import { page, userEvent } from "vite-plus/test/browser";
 
@@ -11,7 +11,7 @@ import { render } from "../../../test/render";
 import { buildSidebarProjectSnapshots } from "../../sidebarProjectGrouping";
 import { NoWorkspace } from "./TasksParts";
 import { FirstRunGate } from "./TelescopeFirstRun";
-import { INVITE_CLOSED_KEY, firstRunHeldAtom } from "./firstRunSteps";
+import { INVITE_CLOSED_KEY, firstRunAtom, workspaceKey } from "./firstRunSteps";
 
 const AT = "2026-11-08T00:00:00.000Z";
 const environmentId = EnvironmentId.make("local");
@@ -22,6 +22,11 @@ const workspace: Telescope.Workspace = {
   name: "Gripper Lab",
   createdAt: AT,
   createdBy: "me",
+};
+const other: Telescope.Workspace = {
+  ...workspace,
+  id: Telescope.WorkspaceId.make("other"),
+  name: "Other WS",
 };
 const codeProject = (id: string): EnvironmentProject => ({
   id: ProjectId.make(id),
@@ -49,6 +54,7 @@ const fake = vi.hoisted(() => ({
   settle: [] as Array<(result: unknown) => void>,
   role: "admin" as Telescope.Member["role"],
   mayInvite: true,
+  mayCreate: true,
   version: 0,
   listeners: new Set<() => void>(),
   projects: [] as ReadonlyArray<unknown>,
@@ -68,6 +74,7 @@ function setup(options: {
   projects?: ReadonlyArray<Telescope.Project>;
   role?: Telescope.Member["role"];
   mayInvite?: boolean;
+  mayCreate?: boolean;
   workspaces?: ReadonlyArray<Telescope.Workspace> | null;
   listFailed?: boolean;
 }) {
@@ -76,6 +83,7 @@ function setup(options: {
   fake.projects = options.projects ?? [];
   fake.role = options.role ?? "admin";
   fake.mayInvite = options.mayInvite ?? true;
+  fake.mayCreate = options.mayCreate ?? true;
   fake.workspaces = options.workspaces === undefined ? [workspace] : options.workspaces;
   fake.current = fake.workspaces?.[0] ?? null;
   fake.listFailed = options.listFailed ?? false;
@@ -93,6 +101,10 @@ vi.mock(import("./telescopeState"), async (original) => {
       get: () => ({ key: "get" }),
       projects: () => ({ key: "projects" }),
       bindingSummary: () => ({ key: "summary" }),
+      create: {
+        ...actual.telescope.create,
+        permissionAtom: () => (fake.mayCreate ? allowed : refused),
+      },
       createProject: { ...actual.telescope.createProject, permissionAtom: () => allowed },
       invite: {
         ...actual.telescope.invite,
@@ -157,16 +169,21 @@ vi.mock(import("../../state/use-atom-command"), () => ({
   },
 }));
 
-function held(ui: ReactNode) {
-  const registry = AtomRegistry.make();
-  registry.set(firstRunHeldAtom, true);
-  return <RegistryContext.Provider value={registry}>{ui}</RegistryContext.Provider>;
+function startRun(registry: AtomRegistry.AtomRegistry, id = workspaceId) {
+  registry.set(firstRunAtom, { key: workspaceKey(environmentId, id), mountPassed: false });
+  return registry;
 }
+
+const gate = (registry = startRun(AtomRegistry.make())) => (
+  <RegistryContext.Provider value={registry}>
+    <FirstRunGate>board</FirstRunGate>
+  </RegistryContext.Provider>
+);
 
 describe("FirstRunGate", () => {
   it("holds 接入 for a directory from the click until the data shows it mounted", async () => {
     setup({});
-    await using _screen = await render(held(<FirstRunGate>board</FirstRunGate>));
+    await using _screen = await render(gate());
     const connect = page.getByRole("button", { name: "接入 free" });
     await userEvent.click(connect);
     await expect.element(connect).toBeDisabled();
@@ -180,37 +197,114 @@ describe("FirstRunGate", () => {
     await expect.element(page.getByRole("button", { name: "生成邀请码" })).toBeVisible();
   });
 
-  it("lets the admin retry a directory whose call failed", async () => {
+  it.each([
+    ["while the call is pending", false],
+    ["after the call returned, before the data shows the mount", true],
+  ] as const)("keeps 接入 held after leaving and coming back %s", async (_name, returned) => {
     setup({});
-    await using _screen = await render(held(<FirstRunGate>board</FirstRunGate>));
+    const registry = startRun(AtomRegistry.make());
+    await using screen = await render(gate(registry));
+    await userEvent.click(page.getByRole("button", { name: "接入 free" }));
+    await screen.unmount();
+    if (returned) fake.settle[0]?.(AsyncResult.success(undefined));
+    await using _again = await render(gate(registry));
     const connect = page.getByRole("button", { name: "接入 free" });
-    await userEvent.click(connect);
+    await expect.element(connect).toBeDisabled();
+    await userEvent.click(connect, { force: true });
+    expect(fake.calls).toHaveLength(1);
+  });
+
+  it.each([
+    ["on the page", false],
+    ["after leaving and coming back", true],
+  ] as const)("lets the admin retry a directory whose call failed %s", async (_name, leave) => {
+    setup({});
+    const registry = startRun(AtomRegistry.make());
+    await using screen = await render(gate(registry));
+    await userEvent.click(page.getByRole("button", { name: "接入 free" }));
+    if (leave) await screen.unmount();
     fake.settle[0]?.(AsyncResult.fail(new Error("offline")));
+    await using _again = leave ? await render(gate(registry)) : undefined;
+    const connect = page.getByRole("button", { name: "接入 free" });
     await expect.element(connect).toBeEnabled();
     await userEvent.click(connect);
     expect(fake.calls).toHaveLength(2);
   });
 
+  it("does not hold back another workspace's directories", async () => {
+    setup({});
+    const registry = startRun(AtomRegistry.make());
+    await using _screen = await render(gate(registry));
+    await userEvent.click(page.getByRole("button", { name: "接入 free" }));
+    fake.current = other;
+    startRun(registry, other.id);
+    await expect.element(page.getByRole("button", { name: "接入 free" })).toBeEnabled();
+  });
+
+  it("stays off a workspace the first run was not started for", async () => {
+    setup({ workspaces: [other] });
+    await using _screen = await render(gate());
+    await expect.element(page.getByText("board")).toBeVisible();
+  });
+
+  it("moves on to the invite step when the admin skips mounting", async () => {
+    setup({});
+    await using _screen = await render(gate());
+    await userEvent.click(page.getByRole("button", { name: "先跳过，之后在项目页接入" }));
+    await expect.element(page.getByRole("button", { name: "生成邀请码" })).toBeVisible();
+  });
+
+  it("does not bring the mount step back when the project goes away", async () => {
+    setup({ projects: [mounted] });
+    await using _screen = await render(gate());
+    await expect.element(page.getByRole("button", { name: "生成邀请码" })).toBeVisible();
+    publish([]);
+    await expect.element(page.getByText("之后可以在项目页接入")).toBeVisible();
+    expect(page.getByRole("button", { name: "生成邀请码" }).query()).not.toBeNull();
+    expect(page.getByRole("button", { name: "接入 free" }).query()).toBeNull();
+  });
+
+  it("makes one invite code per click", async () => {
+    setup({ projects: [mounted] });
+    await using _screen = await render(gate());
+    const make = page.getByRole("button", { name: "生成邀请码" });
+    await userEvent.dblClick(make);
+    await expect.element(make).toBeDisabled();
+    expect(fake.calls).toHaveLength(1);
+  });
+
+  it("ends the first run for this session when the browser refuses to store the choice", async () => {
+    setup({ projects: [mounted] });
+    await using screen = await render(gate());
+    using _refused = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new DOMException("refused", "SecurityError");
+    });
+    await userEvent.click(page.getByRole("button", { name: "跳过" }));
+    await expect.element(screen.getByText("board")).toBeVisible();
+  });
+
   it("keeps a skipped invite step skipped for this browser", async () => {
     setup({ projects: [mounted] });
-    await using screen = await render(held(<FirstRunGate>board</FirstRunGate>));
+    await using screen = await render(gate());
     await expect.element(page.getByRole("button", { name: "生成邀请码" })).toBeVisible();
     await userEvent.click(page.getByRole("button", { name: "跳过" }));
     await expect.element(screen.getByText("board")).toBeVisible();
     await screen.unmount();
-    await using _again = await render(held(<FirstRunGate>board</FirstRunGate>));
+    await using _again = await render(gate());
     await expect.element(page.getByText("board")).toBeVisible();
     expect(page.getByRole("button", { name: "生成邀请码" }).query()).toBeNull();
   });
 
   it.each([
     ["a member", { role: "member" }],
+    ["a member in a workspace with no project", { role: "member", projects: [] }],
     ["an admin without the invite permission", { mayInvite: false }],
-  ] as const)("shows %s the board, not the invite step", async (_name, options) => {
+  ] as const)("shows %s the board, not a step they cannot take", async (_name, options) => {
     setup({ projects: [mounted], ...options });
-    await using _screen = await render(held(<FirstRunGate>board</FirstRunGate>));
+    await using _screen = await render(gate());
     await expect.element(page.getByText("board")).toBeVisible();
     expect(page.getByRole("button", { name: "生成邀请码" }).query()).toBeNull();
+    expect(page.getByRole("button", { name: "接入 free" }).query()).toBeNull();
   });
 
   it("is not in the way when nothing started the first run", async () => {
@@ -242,10 +336,24 @@ describe("NoWorkspace", () => {
     await userEvent.click(page.getByRole("button", { name: "新建" }));
     fake.settle[0]?.(AsyncResult.fail(new Error("offline")));
     await expect.element(page.getByRole("alert")).toBeVisible();
-    expect(registry.get(firstRunHeldAtom)).toBe(false);
+    expect(registry.get(firstRunAtom)).toBeNull();
     await userEvent.click(page.getByRole("button", { name: "新建" }));
     fake.settle[1]?.(AsyncResult.success(workspace));
-    await vi.waitFor(() => expect(registry.get(firstRunHeldAtom)).toBe(true));
+    await vi.waitFor(() =>
+      expect(registry.get(firstRunAtom)?.key).toBe(workspaceKey(environmentId, workspaceId)),
+    );
+  });
+
+  it("follows the create permission on 新建, not on 加入", async () => {
+    setup({ workspaces: [], mayCreate: false });
+    await using _screen = await render(<NoWorkspace />);
+    await userEvent.fill(page.getByLabelText("名字"), "Gripper Lab");
+    await userEvent.fill(page.getByLabelText("你在工作区里的名字"), "Me");
+    await expect.element(page.getByRole("button", { name: "新建" })).toBeDisabled();
+    await userEvent.click(page.getByRole("button", { name: "有邀请码？加入已有的" }));
+    await userEvent.fill(page.getByLabelText("邀请码"), "abc");
+    await userEvent.fill(page.getByLabelText("你在工作区里的名字"), "Me");
+    await expect.element(page.getByRole("button", { name: "加入" })).toBeEnabled();
   });
 
   it.each([

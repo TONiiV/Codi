@@ -154,7 +154,7 @@ export function useCreateWorkspaceForm(props: {
   environmentId: EnvironmentId;
   defaultName: string;
   autoFocus?: boolean;
-  onDone: () => void;
+  onDone: (workspaceId: Telescope.WorkspaceId) => void;
 }) {
   const [name, setName] = useState("");
   const [displayName, setDisplayName] = useState(props.defaultName);
@@ -173,7 +173,7 @@ export function useCreateWorkspaceForm(props: {
         input: { kind, name: name.trim(), displayName: displayName.trim() },
       });
       setBusy(false);
-      if (result._tag === "Success") props.onDone();
+      if (result._tag === "Success") props.onDone(result.value.id);
       else setError(failureText(result));
     },
     fields: (
@@ -209,7 +209,7 @@ export function useJoinWorkspaceForm(props: {
   environmentId: EnvironmentId;
   defaultName: string;
   autoFocus?: boolean;
-  onDone: () => void;
+  onDone: (workspaceId: Telescope.WorkspaceId) => void;
 }) {
   const [code, setCode] = useState("");
   const [displayName, setDisplayName] = useState(props.defaultName);
@@ -227,7 +227,7 @@ export function useJoinWorkspaceForm(props: {
         input: { code: code.trim(), displayName: displayName.trim() },
       });
       setBusy(false);
-      if (result._tag === "Success") props.onDone();
+      if (result._tag === "Success") props.onDone(result.value.workspaceId);
       else setError(failureText(result, JOIN_ERROR_TEXT));
     },
     fields: (

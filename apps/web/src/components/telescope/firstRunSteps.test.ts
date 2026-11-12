@@ -3,17 +3,17 @@ import { describe, expect, it } from "vite-plus/test";
 import { firstRunStep } from "./firstRunSteps";
 
 const open = {
-  hasWorkspace: true,
   projectCount: 0,
   mayConnect: true,
+  mountPassed: false,
   mayInvite: true,
   inviteClosed: false,
 };
 
 describe("firstRunStep", () => {
   it.each([
-    ["no workspace", { ...open, hasWorkspace: false }, "create"],
     ["a workspace with no project", open, "mount"],
+    ["the mount step skipped or passed", { ...open, mountPassed: true }, "invite"],
     ["a workspace with a project", { ...open, projectCount: 1 }, "invite"],
     ["the invite step skipped", { ...open, projectCount: 1, inviteClosed: true }, "done"],
     ["a caller who may not invite", { ...open, projectCount: 1, mayInvite: false }, "done"],

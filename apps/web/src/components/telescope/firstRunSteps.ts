@@ -1,31 +1,46 @@
+import type { EnvironmentId, Telescope } from "@t3tools/contracts";
 import { Atom } from "effect/reactivity";
 
-export type FirstRunStep = "create" | "mount" | "invite" | "done";
+export type FirstRunStep = "mount" | "invite" | "done";
 
 /**
- * The first step still open, from data alone: no workspace, then no project, then the invite step.
+ * The step after the first one still open: no project, then the invite step.
  * A step the caller may not act on counts as done, so a member never waits on a button they lack.
  */
 export function firstRunStep(state: {
-  hasWorkspace: boolean;
   projectCount: number;
   mayConnect: boolean;
+  mountPassed: boolean;
   mayInvite: boolean;
   inviteClosed: boolean;
 }): FirstRunStep {
-  if (!state.hasWorkspace) return "create";
-  if (state.projectCount === 0 && state.mayConnect) return "mount";
+  if (state.projectCount === 0 && state.mayConnect && !state.mountPassed) return "mount";
   return state.mayInvite && !state.inviteClosed ? "invite" : "done";
 }
 
 /** Per browser: the invite step was skipped or finished. */
 export const INVITE_CLOSED_KEY = "t3code:telescope:first-run-invite-closed:v1";
 
+export const workspaceKey = (environmentId: EnvironmentId, workspaceId: Telescope.WorkspaceId) =>
+  `${environmentId}/${workspaceId}`;
+
 /**
- * Set when this session creates or joins a workspace from the first-run page, so the page stays up
- * for the steps after it. Not stored: a reload lands on the ordinary pages.
+ * The workspace whose first run this session started, from the first-run page's create or join.
+ * Not stored: a reload lands on the ordinary pages. `mountPassed` once a project showed up or the
+ * admin skipped the step, so removing a project later does not bring the step back.
  */
-export const firstRunHeldAtom = Atom.make(false).pipe(
+export const firstRunAtom = Atom.make<{ key: string; mountPassed: boolean } | null>(null).pipe(
   Atom.keepAlive,
-  Atom.withLabel("telescope:first-run-held"),
+  Atom.withLabel("telescope:first-run"),
+);
+
+/**
+ * Directories this session sent 接入 for, per workspace (`workspaceKey`); a key leaves only when
+ * its call fails. Outlives the view, so leaving and coming back cannot send a directory twice.
+ */
+export const sentMountsAtom = Atom.family((key: string) =>
+  Atom.make<ReadonlyArray<string>>([]).pipe(
+    Atom.keepAlive,
+    Atom.withLabel(`telescope:sent-mounts:${key}`),
+  ),
 );

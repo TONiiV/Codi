@@ -4,7 +4,7 @@ import type { EnvironmentId, Telescope } from "@t3tools/contracts";
 import { AsyncResult } from "effect/reactivity";
 import * as Schema from "effect/Schema";
 import { CheckIcon, PlusIcon } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 import { openCommandPalette } from "../../commandPaletteBus";
 import { useLocalStorage } from "../../hooks/useLocalStorage";
@@ -22,10 +22,17 @@ import {
   useJoinWorkspaceForm,
 } from "./TelescopeAccountDialogs";
 import { telescope, useTelescopeWorkspaces } from "./telescopeState";
-import { INVITE_CLOSED_KEY, firstRunHeldAtom, firstRunStep } from "./firstRunSteps";
+import {
+  INVITE_CLOSED_KEY,
+  firstRunAtom,
+  firstRunStep,
+  sentMountsAtom,
+  workspaceKey,
+  type FirstRunStep,
+} from "./firstRunSteps";
 import { unlinkedProjects } from "./telescopeProjects";
 
-type OpenStep = "create" | "mount" | "invite";
+type OpenStep = "create" | Exclude<FirstRunStep, "done">;
 const ORDER: ReadonlyArray<OpenStep> = ["create", "mount", "invite"];
 
 function Step(props: {
@@ -71,7 +78,7 @@ function Step(props: {
 function FirstRunPage(props: {
   step: OpenStep;
   workspace: Telescope.Workspace | null;
-  projectCount: number;
+  mountDoneNote?: string;
   children: ReactNode;
 }) {
   const stateOf = (step: OpenStep) =>
@@ -102,9 +109,7 @@ function FirstRunPage(props: {
           title="接入项目"
           note={
             stateOf("mount") === "done"
-              ? props.projectCount > 0
-                ? `已接入 ${props.projectCount} 个项目`
-                : "请管理员接入项目"
+              ? props.mountDoneNote
               : "把 Code 里的项目接进工作区，每个成员在项目里有自己的 Chief Agent。"
           }
           state={stateOf("mount")}
@@ -126,23 +131,30 @@ function FirstRunPage(props: {
 
 function CreateOrJoin({ environmentId }: { environmentId: EnvironmentId }) {
   const [joining, setJoining] = useState(false);
-  const setHeld = useAtomSet(firstRunHeldAtom);
-  const options = { environmentId, defaultName: "", onDone: () => setHeld(true) };
+  const setRun = useAtomSet(firstRunAtom);
+  const mayCreate = useAtomValue(telescope.create.permissionAtom(environmentId));
+  const options = {
+    environmentId,
+    defaultName: "",
+    onDone: (workspaceId: Telescope.WorkspaceId) =>
+      setRun({ key: workspaceKey(environmentId, workspaceId), mountPassed: false }),
+  };
   const create = useCreateWorkspaceForm(options);
   const join = useJoinWorkspaceForm(options);
   const form = joining ? join : create;
+  const canSubmit = form.canSubmit && (joining || mayCreate);
   return (
     <form
       className="flex flex-col gap-4"
       onSubmit={(event) => {
         event.preventDefault();
-        if (form.canSubmit) void form.submit();
+        if (canSubmit) void form.submit();
       }}
     >
       {form.fields}
       {form.error === null ? null : <ErrorNote text={form.error} />}
       <div className="flex items-center gap-2">
-        <Button type="submit" disabled={!form.canSubmit}>
+        <Button type="submit" disabled={!canSubmit}>
           {joining ? "加入" : "新建"}
         </Button>
         <Button type="button" variant="ghost-muted" onClick={() => setJoining(!joining)}>
@@ -155,15 +167,18 @@ function CreateOrJoin({ environmentId }: { environmentId: EnvironmentId }) {
 
 function MountProjects(props: {
   environmentId: EnvironmentId;
+  workspaceId: Telescope.WorkspaceId;
   self: Telescope.Member;
   projects: ReadonlyArray<Telescope.Project>;
 }) {
   const { environmentId, self, projects } = props;
+  const sentAtom = sentMountsAtom(workspaceKey(environmentId, props.workspaceId));
   const groups = useSettingsProjectGroups();
   const summary = useEnvironmentQuery(telescope.bindingSummary({ environmentId, input: {} }));
   const createProject = useAtomCommand(telescope.createProject, "接入项目");
-  const setHeld = useAtomSet(firstRunHeldAtom);
-  const [sent, setSent] = useState<ReadonlySet<string>>(new Set());
+  const setRun = useAtomSet(firstRunAtom);
+  const sent = useAtomValue(sentAtom);
+  const setSent = useAtomSet(sentAtom);
   const [error, setError] = useState<string | null>(null);
   const unlinked = unlinkedProjects(
     groups,
@@ -171,14 +186,15 @@ function MountProjects(props: {
     projects,
     self,
   );
-  // A directory stays disabled from the click until the data lists it as mounted: the call returns
-  // before the refresh lands, and a second call would move the mount out of the project it created.
+  // A directory stays disabled from the click until the data lists it as mounted, also across leaving
+  // the page: the call returns before the refresh lands, and a second call would move the mount out of
+  // the project the first created.
   const connect = async (key: string, input: (typeof unlinked)[number]["input"]) => {
     setError(null);
-    setSent((prev) => new Set(prev).add(key));
+    setSent((prev) => [...prev, key]);
     const result = await createProject({ environmentId, input });
     if (AsyncResult.isSuccess(result)) return;
-    setSent((prev) => new Set([...prev].filter((sentKey) => sentKey !== key)));
+    setSent((prev) => prev.filter((sentKey) => sentKey !== key));
     setError(failureText(result));
   };
   return (
@@ -211,17 +227,22 @@ function MountProjects(props: {
                 size="xs"
                 variant="outline"
                 aria-label={`接入 ${group.displayName}`}
-                disabled={sent.has(group.projectKey)}
+                disabled={sent.includes(group.projectKey)}
                 onClick={() => void connect(group.projectKey, input)}
               >
-                {sent.has(group.projectKey) ? "接入中…" : "接入"}
+                {sent.includes(group.projectKey) ? "接入中…" : "接入"}
               </Button>
             </li>
           ))}
         </ul>
       )}
       {error === null ? null : <ErrorNote text={error} />}
-      <Button size="xs" variant="ghost-muted" className="self-start" onClick={() => setHeld(false)}>
+      <Button
+        size="xs"
+        variant="ghost-muted"
+        className="self-start"
+        onClick={() => setRun((run) => run && { ...run, mountPassed: true })}
+      >
         先跳过，之后在项目页接入
       </Button>
     </div>
@@ -234,20 +255,30 @@ function InviteCoworker(props: {
 }) {
   const invite = useAtomCommand(telescope.invite, "生成邀请码");
   const [, setClosed] = useLocalStorage(INVITE_CLOSED_KEY, false, Schema.Boolean);
+  const setRun = useAtomSet(firstRunAtom);
   const [invitation, setInvitation] = useState<Telescope.Invitation | null>(null);
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Ending the run holds for this session even when storage refuses the write.
+  const close = () => {
+    setClosed(true);
+    setRun(null);
+  };
   return (
     <div className="flex flex-col gap-3">
       {invitation === null ? (
         <Button
           variant="outline"
           className="self-start"
+          disabled={busy}
           onClick={async () => {
+            setBusy(true);
             setError(null);
             const result = await invite({
               environmentId: props.environmentId,
               input: { workspaceId: props.workspaceId, role: "member" },
             });
+            setBusy(false);
             if (result._tag === "Success") setInvitation(result.value);
             else setError(failureText(result));
           }}
@@ -263,7 +294,7 @@ function InviteCoworker(props: {
         size="xs"
         variant={invitation === null ? "ghost-muted" : "default"}
         className="self-start"
-        onClick={() => setClosed(true)}
+        onClick={close}
       >
         {invitation === null ? "跳过" : "完成"}
       </Button>
@@ -274,7 +305,7 @@ function InviteCoworker(props: {
 /** What `NoWorkspace` shows once the list has loaded and is empty. */
 export function FirstRunCreate({ environmentId }: { environmentId: EnvironmentId }) {
   return (
-    <FirstRunPage step="create" workspace={null} projectCount={0}>
+    <FirstRunPage step="create" workspace={null}>
       <CreateOrJoin environmentId={environmentId} />
     </FirstRunPage>
   );
@@ -283,6 +314,7 @@ export function FirstRunCreate({ environmentId }: { environmentId: EnvironmentId
 function WorkspaceFirstRun(props: {
   environmentId: EnvironmentId;
   workspace: Telescope.Workspace;
+  mountPassed: boolean;
   children: ReactNode;
 }) {
   const { environmentId, workspace } = props;
@@ -292,6 +324,13 @@ function WorkspaceFirstRun(props: {
   const mayConnect = useAtomValue(telescope.createProject.permissionAtom(environmentId));
   const mayInvite = useAtomValue(telescope.invite.permissionAtom(environmentId));
   const [inviteClosed] = useLocalStorage(INVITE_CLOSED_KEY, false, Schema.Boolean);
+  const setRun = useAtomSet(firstRunAtom);
+  const hasProject = (projects.data?.projects.length ?? 0) > 0;
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- the run is a session atom outside React; once a project shows up the mount step is over, even if it is removed later
+  useEffect(() => {
+    if (hasProject)
+      setRun((run) => (run === null || run.mountPassed ? run : { ...run, mountPassed: true }));
+  }, [hasProject, setRun]);
   if (detail.data === null || projects.data === null)
     return detail.error !== null || projects.error !== null ? (
       props.children
@@ -302,18 +341,29 @@ function WorkspaceFirstRun(props: {
   const isAdmin = self.role === "admin";
   const projectCount = projects.data.projects.length;
   const step = firstRunStep({
-    hasWorkspace: true,
     projectCount,
     mayConnect: mayConnect && isAdmin,
+    mountPassed: props.mountPassed,
     mayInvite: mayInvite && isAdmin,
     inviteClosed,
   });
   if (step !== "mount" && step !== "invite") return props.children;
   return (
-    <FirstRunPage step={step} workspace={workspace} projectCount={projectCount}>
+    <FirstRunPage
+      step={step}
+      workspace={workspace}
+      mountDoneNote={
+        projectCount > 0
+          ? `已接入 ${projectCount} 个项目`
+          : mayConnect && isAdmin
+            ? "之后可以在项目页接入"
+            : "请管理员接入项目"
+      }
+    >
       {step === "mount" ? (
         <MountProjects
           environmentId={environmentId}
+          workspaceId={workspace.id}
           self={self}
           projects={projects.data.projects}
         />
@@ -324,22 +374,36 @@ function WorkspaceFirstRun(props: {
   );
 }
 
-function HeldFirstRun({ children }: { children: ReactNode }) {
+function HeldFirstRun(props: { runKey: string; mountPassed: boolean; children: ReactNode }) {
   const { environmentId, current } = useTelescopeWorkspaces();
   // Without a workspace the page's own NoWorkspace shows the first step, and its loading and failed states.
-  return environmentId === null || current === null ? (
-    children
+  return environmentId === null ||
+    current === null ||
+    workspaceKey(environmentId, current.id) !== props.runKey ? (
+    props.children
   ) : (
-    <WorkspaceFirstRun environmentId={environmentId} workspace={current}>
-      {children}
+    <WorkspaceFirstRun
+      environmentId={environmentId}
+      workspace={current}
+      mountPassed={props.mountPassed}
+    >
+      {props.children}
     </WorkspaceFirstRun>
   );
 }
 
 /**
- * Keeps the first-run steps up after the first one: once this session made a workspace, the pages
- * give way to the project and invite steps until those are done, skipped, or not the caller's to do.
+ * Keeps the first-run steps up after the first one: once this session made or joined a workspace,
+ * that workspace's pages give way to the project and invite steps until those are done, skipped, or
+ * not the caller's to do.
  */
 export function FirstRunGate({ children }: { children: ReactNode }) {
-  return useAtomValue(firstRunHeldAtom) ? <HeldFirstRun>{children}</HeldFirstRun> : children;
+  const run = useAtomValue(firstRunAtom);
+  return run === null ? (
+    children
+  ) : (
+    <HeldFirstRun runKey={run.key} mountPassed={run.mountPassed}>
+      {children}
+    </HeldFirstRun>
+  );
 }
