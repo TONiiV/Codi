@@ -49,7 +49,13 @@ import { ErrorNote } from "./TelescopeAccountDialogs";
 import { AgentChat } from "./TelescopeChatPage";
 import { useTelescopeWorkspaces } from "./telescopeState";
 import { TaskDetail } from "./TaskPanel";
-import { telescopeSearch, useTaskParam, useTasksLayout, useTelescopeView } from "./telescopeViews";
+import {
+  telescopeSearch,
+  useTaskParam,
+  useTasksLayout,
+  useTasksProjectId,
+  useTelescopeView,
+} from "./telescopeViews";
 
 const PreviewPanel = lazy(() =>
   import("../preview/PreviewPanel").then((module) => ({ default: module.PreviewPanel })),
@@ -123,6 +129,7 @@ export function TelescopePanel(props: {
   const taskParam = useTaskParam();
   const view = useTelescopeView();
   const layout = useTasksLayout();
+  const project = useTasksProjectId();
   const navigate = useNavigate();
   const keybindings = useAtomValue(primaryServerKeybindingsAtom);
   const state = useRightPanelStore((store) =>
@@ -160,9 +167,13 @@ export function TelescopePanel(props: {
     }
     if (activeTaskId === taskParam) seenTaskRef.current = taskParam;
     else if (seenTaskRef.current === taskParam && view !== null) {
-      void navigate({ to: TELESCOPE_PATH, search: telescopeSearch(view, layout), replace: true });
+      void navigate({
+        to: TELESCOPE_PATH,
+        search: telescopeSearch(view, layout, { project }),
+        replace: true,
+      });
     }
-  }, [taskParam, activeTaskId, view, layout, navigate]);
+  }, [taskParam, activeTaskId, view, layout, project, navigate]);
   const canOperatePreview = useEnvironmentScope(environmentId, AuthPreviewOperateScope);
   const serverBrowser = useEnvironmentSupportsServerBrowser(environmentId);
   const browserAvailable = serverBrowser || isPreviewSupportedInRuntime();

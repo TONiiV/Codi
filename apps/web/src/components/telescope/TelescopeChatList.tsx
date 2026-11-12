@@ -9,12 +9,12 @@ import { readLocalStorageValue, writeLocalStorageValue } from "../../hooks/useLo
 import { useProject } from "../../state/entities";
 import { useEnvironmentQuery, type EnvironmentQueryView } from "../../state/query";
 import { TELESCOPE_PATH } from "../sidebar/mainAppLocation";
-import { Button } from "../ui/button";
 import { CollapsibleSectionHeader } from "../ui/collapsible-section-header";
 import { SidebarMenu, SidebarMenuButton, SidebarMenuItem, useSidebar } from "../ui/sidebar";
 import { Spinner } from "../ui/spinner";
 import { agentDisplayName, KIND_LABEL, telescopeAgents } from "./myTeamsShared";
 import { telescope, useTelescopeWorkspaces } from "./telescopeState";
+import { LoadFailed, SidebarNote } from "./TelescopeSidebarNotes";
 import { telescopeSearch, useIsChatAgentSelected, useTasksLayout } from "./telescopeViews";
 
 const ChatGroupId = Schema.Literals(["mine", "company"]);
@@ -77,21 +77,6 @@ function ChatRow({
         </span>
       </SidebarMenuButton>
     </SidebarMenuItem>
-  );
-}
-
-function SidebarNote({ children }: { children: ReactNode }) {
-  return <p className="px-2 py-1 text-xs text-sidebar-muted-foreground">{children}</p>;
-}
-
-function LoadFailed({ onRetry }: { onRetry: () => void }) {
-  return (
-    <div className="flex items-center justify-between gap-2 px-2 py-1">
-      <span className="text-xs text-sidebar-muted-foreground">读取失败</span>
-      <Button size="xs" variant="outline" onClick={onRetry}>
-        重试
-      </Button>
-    </div>
   );
 }
 
@@ -172,7 +157,7 @@ function ChatGroups({
     if (isMobile) setOpenMobile(false);
     void navigate({
       to: TELESCOPE_PATH,
-      search: telescopeSearch("chats", layout, undefined, agentId),
+      search: telescopeSearch("chats", layout, { agent: agentId }),
     });
   };
   const rows = (agents: ReadonlyArray<Telescope.Agent>) =>
