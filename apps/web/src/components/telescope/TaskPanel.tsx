@@ -7,7 +7,6 @@ import {
   type Telescope,
 } from "@t3tools/contracts";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { AsyncResult } from "effect/reactivity";
 import {
   CircleDashedIcon,
   ExternalLinkIcon,
@@ -36,7 +35,7 @@ import { ErrorNote } from "./TelescopeAccountDialogs";
 import { PropertyRow, TaskPage, time } from "./TaskPage";
 import { telescope, telescopeBoard } from "./telescopeState";
 import { unlinkThreadFromTask } from "./ThreadTaskLink";
-import { type BoardTarget, useBoardNames, useTaskWrite } from "./TasksParts";
+import { type BoardTarget, useBoardAgents, useBoardNames, useTaskWrite } from "./TasksParts";
 
 export function LeaseField({
   lease,
@@ -250,17 +249,7 @@ export function TaskDetail({ target, taskId }: { target: BoardTarget; taskId: Te
   const names = useBoardNames(target);
   const board = { environmentId, input: { workspaceId: target.workspaceId } };
   const self = useEnvironmentQuery(telescope.get(board)).data?.self ?? null;
-  // The company list also carries the member's own agents that are visible to the company.
-  const agents = [
-    ...new Map(
-      [
-        useAtomValue(telescopeBoard.agents(board)),
-        useAtomValue(telescopeBoard.companyAgents(board)),
-      ]
-        .flatMap((result) => AsyncResult.getOrElse(result, () => null)?.agents ?? [])
-        .map((agent) => [agent.id, agent]),
-    ).values(),
-  ];
+  const agents = useBoardAgents(target);
   // A viewer (只读) is refused every write, so it gets the page without controls.
   const member = self !== null && self.role !== "viewer";
   const mayWrite = useAtomValue(telescopeBoard.updateTask.permissionAtom(environmentId)) && member;
