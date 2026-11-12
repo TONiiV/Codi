@@ -18,6 +18,7 @@ import Migration0095 from "./Migrations/codi/095_TelescopeStopMemberAgents.ts";
 import Migration0096 from "./Migrations/codi/096_TelescopeProjects.ts";
 import Migration0097 from "./Migrations/codi/097_TelescopeTaskThreads.ts";
 import Migration0098 from "./Migrations/codi/098_TelescopeTaskDetails.ts";
+import Migration0099 from "./Migrations/codi/099_TelescopeLostThreadUnlinks.ts";
 
 // Codi's migrations have their own table: the migrator skips every id up to the highest one it
 // recorded, so sharing upstream's table would skip each migration upstream adds below Codi's ids.
@@ -40,6 +41,7 @@ const codiMigrationEntries = [
   [96, "TelescopeProjects", Migration0096],
   [97, "TelescopeTaskThreads", Migration0097],
   [98, "TelescopeTaskDetails", Migration0098],
+  [99, "TelescopeLostThreadUnlinks", Migration0099],
 ] as const;
 
 export const codiMigrationManifest = codiMigrationEntries.map(([id, name]) => [id, name] as const);
