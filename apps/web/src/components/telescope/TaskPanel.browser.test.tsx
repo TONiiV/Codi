@@ -96,34 +96,18 @@ const task: Telescope.Task = {
   version: 3,
 };
 const names = (id: string) => (id === "s1" ? "小王" : undefined);
-const page_ = (current: Telescope.Task, write: (...args: never[]) => Promise<boolean>) => (
+const taskPage = (current: Telescope.Task, write: (...args: never[]) => Promise<boolean>) => (
   <TaskPage task={current} write={write as never} names={names} agents={[]} selfName="小王" />
 );
 
 describe("TaskPage", () => {
-  it("shows a read-only member the page without edit controls", async () => {
-    await using screen = await render(
-      <TaskPage task={task} write={null} names={names} agents={[]} selfName="小王" />,
-    );
-    await expect.element(screen.getByRole("heading", { name: "发布 1.2" })).toBeVisible();
-    await expect.element(screen.getByText("先别发周五")).toBeVisible();
-    expect(screen.container.querySelector("[contenteditable], input:not([type=checkbox])")).toBe(
-      null,
-    );
-    expect(screen.container.querySelectorAll("button:not([aria-expanded]), textarea")).toHaveLength(
-      0,
-    );
-    for (const box of screen.container.querySelectorAll("input[type=checkbox]"))
-      expect((box as HTMLInputElement).readOnly || (box as HTMLInputElement).disabled).toBe(true);
-  });
-
   it("saves the Markdown source against the version it was opened on, and an unchanged one not at all", async () => {
     const write = vi.fn(async () => true);
     const v4 = { ...task, version: 4, body: `${task.body}\n- [ ] 对方新加的一项` };
-    await using screen = await render(page_(task, write));
+    await using screen = await render(taskPage(task, write));
 
     await userEvent.click(screen.getByRole("button", { name: "编辑 Markdown" }));
-    await screen.rerender(page_(v4, write));
+    await screen.rerender(taskPage(v4, write));
     await userEvent.click(screen.getByRole("button", { name: "保存" }));
     await expect
       .element(screen.getByRole("textbox", { name: "正文 Markdown" }))
@@ -131,7 +115,7 @@ describe("TaskPage", () => {
     expect(write).not.toHaveBeenCalled();
 
     await userEvent.click(screen.getByRole("button", { name: "编辑 Markdown" }));
-    await screen.rerender(page_({ ...v4, version: 5, body: "对方又改了" }, write));
+    await screen.rerender(taskPage({ ...v4, version: 5, body: "对方又改了" }, write));
     await userEvent.fill(screen.getByRole("textbox", { name: "正文 Markdown" }), "我的正文");
     await userEvent.click(screen.getByRole("button", { name: "保存" }));
     expect(write).toHaveBeenCalledExactlyOnceWith(v4, { set: { body: "我的正文" } });
@@ -139,25 +123,72 @@ describe("TaskPage", () => {
 
   it("sends one comment for a double click while the first is in flight", async () => {
     const write = vi.fn(() => new Promise<boolean>(() => {}));
-    await using screen = await render(page_(task, write));
+    await using screen = await render(taskPage(task, write));
     await userEvent.fill(screen.getByRole("textbox", { name: "添加评论" }), "周一发");
     await userEvent.dblClick(screen.getByRole("button", { name: "发送评论" }));
     expect(write).toHaveBeenCalledExactlyOnceWith(task, { note: "周一发" });
   });
 
+  it("keeps what was typed while a comment was sending, and clears only the sent text", async () => {
+    let settle = (_sent: boolean) => {};
+    const write = vi.fn(() => new Promise<boolean>((resolve) => (settle = resolve)));
+    await using screen = await render(taskPage(task, write));
+    const box = screen.getByRole("textbox", { name: "添加评论" });
+    await userEvent.fill(box, "第一条");
+    await userEvent.keyboard("{Enter}");
+    await userEvent.fill(box, "第一条第二条还没发");
+    settle(true);
+    await expect.element(box).toHaveValue("第二条还没发");
+    expect(write).toHaveBeenCalledExactlyOnceWith(task, { note: "第一条" });
+  });
+
+  it("keeps the typed title when its write fails", async () => {
+    const write = vi.fn(async () => false);
+    await using screen = await render(taskPage(task, write));
+    const title = screen.getByRole("textbox", { name: "任务标题" });
+    await userEvent.fill(title, "我的新标题");
+    await userEvent.keyboard("{Enter}");
+    await write.mock.results[0]?.value;
+    expect(title.element().textContent).toBe("我的新标题");
+  });
+
+  it("shows a status it sent until the task's next version arrives", async () => {
+    const write = vi.fn(async () => true);
+    await using screen = await render(taskPage(task, write));
+    await userEvent.click(screen.getByRole("combobox", { name: "状态" }));
+    await userEvent.click(page.getByRole("option", { name: "等你确认" }));
+    expect(write).toHaveBeenCalledExactlyOnceWith(task, { set: { status: "in_review" } });
+    await expect
+      .element(screen.getByRole("combobox", { name: "状态" }))
+      .toHaveTextContent("等你确认");
+    await screen.rerender(taskPage({ ...task, version: 4, status: "done" }, write));
+    await expect.element(screen.getByRole("combobox", { name: "状态" })).toHaveTextContent("完成");
+  });
+
+  it("writes a picked due date once its year is plausible, and shows it", async () => {
+    const write = vi.fn(async () => true);
+    await using screen = await render(taskPage(task, write));
+    const due = screen.getByLabelText("截止日期");
+    await userEvent.fill(due, "0202-12-01");
+    expect(write).not.toHaveBeenCalled();
+    await userEvent.fill(due, "2026-12-01");
+    expect(write).toHaveBeenCalledExactlyOnceWith(task, { set: { dueDate: "2026-12-01" } });
+    await expect.element(due).toHaveValue("2026-12-01");
+  });
+
   it("keeps what the member is typing in the title when someone else renames the task", async () => {
     const write = vi.fn(async () => true);
-    await using screen = await render(page_(task, write));
+    await using screen = await render(taskPage(task, write));
     const title = screen.getByRole("textbox", { name: "任务标题" });
 
     await userEvent.fill(title, "发布 1.3");
-    await screen.rerender(page_({ ...task, version: 4, title: "对方改的标题" }, write));
+    await screen.rerender(taskPage({ ...task, version: 4, title: "对方改的标题" }, write));
     await expect.element(title).toHaveTextContent("发布 1.3");
     expect(document.activeElement).toBe(title.element());
 
     await userEvent.keyboard("{Enter}");
     expect(write).toHaveBeenCalledExactlyOnceWith(task, { set: { title: "发布 1.3" } });
-    await screen.rerender(page_({ ...task, version: 5, title: "又改了" }, write));
+    await screen.rerender(taskPage({ ...task, version: 5, title: "又改了" }, write));
     await expect
       .element(screen.getByRole("textbox", { name: "任务标题" }))
       .toHaveTextContent("又改了");
@@ -174,10 +205,18 @@ describe("TaskDetail", () => {
     setup("viewer");
     await using screen = await render(<TaskDetail target={target} taskId={task.id} />);
     await expect.element(screen.getByRole("heading", { name: "发布 1.2" })).toBeVisible();
-    expect(screen.container.querySelector("[contenteditable], input[type=date], textarea")).toBe(
-      null,
-    );
+    await expect.element(screen.getByText("先别发周五")).toBeVisible();
+    expect(
+      screen.container.querySelector("[contenteditable], input:not([type=checkbox]), textarea"),
+    ).toBe(null);
     expect(screen.container.querySelectorAll("[role=combobox]")).toHaveLength(0);
+    expect(
+      [...screen.container.querySelectorAll("button:not([aria-expanded])")].map(
+        (button) => button.textContent,
+      ),
+    ).toEqual(["加到 side chat"]);
+    for (const box of screen.container.querySelectorAll<HTMLInputElement>("input[type=checkbox]"))
+      expect(box.readOnly || box.disabled).toBe(true);
   });
 
   it("lists an agent once when it is both the member's own and visible to the company", async () => {

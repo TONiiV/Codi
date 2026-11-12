@@ -2061,6 +2061,16 @@ code {
   background: var(--app-scrollbar-thumb-hover);
 }
 
+/* Telescope task page: Notion's 32px title and 13px labels fall between the type scale's steps. */
+.telescope-task-title {
+  font-size: 2rem;
+  line-height: 1.2;
+}
+
+.telescope-task-label {
+  font-size: 0.8125rem;
+}
+
 /* Chat markdown rendering */
 
 .chat-markdown > :first-child {
