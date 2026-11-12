@@ -1,5 +1,5 @@
 import { useAtomValue } from "@effect/atom-react";
-import { scopedThreadKey } from "@t3tools/client-runtime/environment";
+import { scopedThreadKey, scopeProjectRef } from "@t3tools/client-runtime/environment";
 import {
   AuthPreviewOperateScope,
   type EnvironmentId,
@@ -33,6 +33,7 @@ import { isPreviewSupportedInRuntime, useThreadPreviewState } from "../../previe
 import { RIGHT_PANEL_INLINE_LAYOUT_MEDIA_QUERY } from "../../rightPanelLayout";
 import {
   fileSurfaceId,
+  isWorkspaceFile,
   type RightPanelSurface,
   selectActiveRightPanelSurface,
   selectThreadRightPanelState,
@@ -42,9 +43,13 @@ import {
   withPendingFile,
 } from "../../rightPanelStore";
 import { useDeviceState } from "../../state/device";
-import { useEnvironmentSupportsServerBrowser } from "../../state/entities";
+import {
+  readProject,
+  useEnvironmentSupportsServerBrowser,
+  useProject,
+  useProjects,
+} from "../../state/entities";
 import { useEnvironmentQuery } from "../../state/query";
-import { useProjects } from "../../state/entities";
 import {
   primaryServerAvailableEditorsAtom,
   primaryServerKeybindingsAtom,
@@ -53,13 +58,14 @@ import { useEnvironmentScope } from "../../state/session";
 import { BackgroundThreadContext } from "../chat/backgroundThread";
 import { ChatRightPanel } from "../chat/ChatRightPanel";
 import { RightPanelFileSurface } from "../chat/RightPanelSurfaceContent";
+import { FileMountContext } from "../files/fileMount";
 import { usePreviewSession } from "../preview/usePreviewSession";
 import {
   PanelLayoutControls,
   RightPanelMaximizeControl,
   WorkspaceTitlebarControls,
 } from "../chat/PanelLayoutControls";
-import { useRightPanelActions } from "../chat/useRightPanelActions";
+import { copyFilePathToClipboard, useRightPanelActions } from "../chat/useRightPanelActions";
 import { TELESCOPE_PATH } from "../sidebar/mainAppLocation";
 import { Button } from "../ui/button";
 import { Spinner } from "../ui/spinner";
@@ -153,11 +159,11 @@ function FileTab(props: {
 }) {
   const { surface, panelRef } = props;
   const { projectId } = surface;
-  const project = useProjects().find(
-    (entry) => entry.environmentId === panelRef.environmentId && entry.id === projectId,
+  const project = useProject(
+    projectId === undefined ? null : scopeProjectRef(panelRef.environmentId, projectId),
   );
   const availableEditors = useAtomValue(primaryServerAvailableEditorsAtom);
-  if (project === undefined && (surface.kind === "files" || surface.attachment === undefined)) {
+  if (project === null && isWorkspaceFile(surface)) {
     return (
       <p className="m-auto p-4 text-center text-muted-foreground text-sm">
         这个标签页的目录在这台机器上找不到了。
@@ -165,29 +171,31 @@ function FileTab(props: {
     );
   }
   const body = (
-    <RightPanelFileSurface
-      surface={surface}
-      threadRef={panelRef}
-      environmentId={panelRef.environmentId}
-      visible={props.visible}
-      composerDraftTarget={FILES_COMPOSER_TARGET}
-      reviewComments={false}
-      keybindings={props.keybindings}
-      workspaceMutationId={null}
-      files={{
-        projectId,
-        projectName: project?.title ?? null,
-        workspaceRoot: project?.workspaceRoot,
-        availableEditors,
-        pendingSurfaceIds: props.pendingSurfaceIds,
-        onOpenFile: (relativePath) =>
-          useRightPanelStore.getState().openFile(panelRef, relativePath, undefined, projectId),
-        onPendingChange: (relativePath, pending) =>
-          props.setPendingSurfaceIds((current) =>
-            withPendingFile(current, fileSurfaceId(relativePath, projectId), pending),
-          ),
-      }}
-    />
+    <FileMountContext value={projectId}>
+      <RightPanelFileSurface
+        surface={surface}
+        threadRef={panelRef}
+        environmentId={panelRef.environmentId}
+        visible={props.visible}
+        composerDraftTarget={FILES_COMPOSER_TARGET}
+        reviewComments={false}
+        keybindings={props.keybindings}
+        workspaceMutationId={null}
+        files={{
+          projectId,
+          projectName: project?.title ?? null,
+          workspaceRoot: project?.workspaceRoot,
+          availableEditors,
+          pendingSurfaceIds: props.pendingSurfaceIds,
+          onOpenFile: (relativePath) =>
+            useRightPanelStore.getState().openFile(panelRef, relativePath, undefined, projectId),
+          onPendingChange: (relativePath, pending) =>
+            props.setPendingSurfaceIds((current) =>
+              withPendingFile(current, fileSurfaceId(relativePath, projectId), pending),
+            ),
+        }}
+      />
+    </FileMountContext>
   );
   if (props.remote.length === 0) return body;
   return (
@@ -427,7 +435,13 @@ export function TelescopePanel(props: {
           onCloseSurfacesToRight={closers.closeSurfacesToRight}
           onCloseAllSurfaces={closers.closeAllSurfaces}
           onMoveSurface={actions.moveRightPanelSurfaceStable}
-          onCopyFilePath={noop}
+          onCopyFilePath={(relativePath, projectId) => {
+            const root =
+              projectId === undefined
+                ? undefined
+                : readProject(scopeProjectRef(environmentId, projectId))?.workspaceRoot;
+            if (root !== undefined) copyFilePathToClipboard(relativePath, root);
+          }}
           onAddBrowser={() => actions.createBrowserSurface()}
           onAddBrowserInProfile={actions.createBrowserSurfaceStable}
           onAddTerminal={noop}
@@ -479,9 +493,7 @@ export function TelescopePanel(props: {
               visible={open}
               keybindings={keybindings}
               remote={
-                active.kind === "files" &&
-                filesTarget.ready &&
-                filesTarget.projectId === active.projectId
+                filesTarget.ready && filesTarget.projectId === active.projectId
                   ? filesTarget.remote
                   : []
               }

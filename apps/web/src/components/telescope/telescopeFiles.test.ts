@@ -13,7 +13,6 @@ const codi = (environmentId: EnvironmentId, id: string) => ({
   environmentId,
   id: ProjectId.make(id),
   title: id,
-  workspaceRoot: `/work/${id}`,
 });
 const loaded = [codi(here, "app"), codi(here, "docs"), codi(there, "app")];
 
@@ -26,12 +25,7 @@ describe("telescopeFilesTarget", () => {
       here,
       loaded,
     );
-    expect(target).toMatchObject({
-      ready: true,
-      projectId: "docs",
-      workspaceRoot: "/work/docs",
-      remote: ["app"],
-    });
+    expect(target).toEqual({ ready: true, projectId: "docs", remote: ["app"] });
   });
 
   it("is unavailable, with a distinct reason, without a project, without mounts, or with only other machines' mounts", () => {
@@ -42,6 +36,6 @@ describe("telescopeFilesTarget", () => {
     ];
     expect(targets.map((target) => target.ready)).toEqual([false, false, false]);
     expect(new Set(targets.map((target) => !target.ready && target.reason)).size).toBe(3);
-    expect(targets[2]).toMatchObject({ remote: ["app"] });
+    expect(targets[2]).toMatchObject({ reason: expect.stringContaining("app") });
   });
 });

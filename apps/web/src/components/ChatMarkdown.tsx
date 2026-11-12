@@ -65,6 +65,7 @@ import {
 } from "@t3tools/client-runtime/markdown-images";
 import { mediaUrlReference } from "@t3tools/client-runtime/media-reference";
 import { mediaKindFromPath, mediaMimeTypeFromExtension } from "@t3tools/shared/mediaPreview";
+import { FileMountContext } from "./files/fileMount";
 import { InlineAudioPreview } from "./files/InlineAudioPreview";
 import { HostImageUrlContext } from "./chat/hostImageUrl";
 import * as Cause from "effect/Cause";
@@ -549,6 +550,7 @@ function useChatMarkdownState({
     reportFailure: false,
   });
   const pullRequestLinking = usePullRequestLinking(threadRef?.environmentId);
+  const fileMount = use(FileMountContext);
   const environmentId = threadRef?.environmentId ?? explicitEnvironmentId ?? null;
   const canOperateHost = useEnvironmentScope(environmentId, AuthOrchestrationOperateScope);
   const canOperatePreview = useEnvironmentScope(environmentId, AuthPreviewOperateScope);
@@ -795,7 +797,9 @@ function useChatMarkdownState({
     // Every open supersedes pending lookups, including synchronous opens.
     const isLatestLookup = claimWorkspaceBasenameLookup();
     const openAt = (path: string) =>
-      useRightPanelStore.getState().openFile(threadRef, path, fileLinkMeta.line);
+      useRightPanelStore
+        .getState()
+        .openFile(threadRef, path, fileLinkMeta.line, ...(fileMount ? [fileMount] : []));
     if (
       fileLinkMeta.workspaceLookupPath === null ||
       !cwd ||
@@ -838,7 +842,11 @@ function useChatMarkdownState({
         targetPath={fileLinkMeta.targetPath}
         iconPath={fileLinkMeta.filePath}
         workspaceRelativePath={fileLinkMeta.workspaceRelativePath}
-        panelPath={!threadRef || rightPanelOffers(threadRef, "file") ? panelPath : null}
+        panelPath={
+          !threadRef || fileMount !== undefined || rightPanelOffers(threadRef, "file")
+            ? panelPath
+            : null
+        }
         line={fileLinkMeta.line}
         label={fileLinkLabel(
           {

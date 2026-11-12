@@ -133,7 +133,8 @@ export interface RightPanelTabsProps {
   onCloseSurfacesToRight: (surface: RightPanelSurface) => void;
   onCloseAllSurfaces: () => void;
   onMoveSurface?: (surfaceId: string, toIndex: number) => void;
-  onCopyFilePath: (relativePath: string) => void;
+  /** `projectId` is the mount a Telescope tab is bound to; Code's tabs resolve against the thread. */
+  onCopyFilePath: (relativePath: string, projectId: ProjectId | undefined) => void;
   onAddBrowser: () => void;
   /** Keep separate from the DOM click handler so a MouseEvent cannot become a profile id. */
   onAddBrowserInProfile: (profileId: string) => void;
@@ -1273,7 +1274,7 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
         break;
       case "copy-path":
         if (surface.kind === "file" && surface.attachment === undefined) {
-          props.onCopyFilePath(surface.relativePath);
+          props.onCopyFilePath(surface.relativePath, surface.projectId);
         }
         break;
       case "toggle-mute": {

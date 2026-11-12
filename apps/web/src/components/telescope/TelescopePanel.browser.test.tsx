@@ -51,6 +51,7 @@ vi.mock("../files/FilePreviewPanel", () => ({
     relativePath: string | null;
     attachment?: { name: string };
     onOpenFile: (relativePath: string) => void;
+    onNavigateFolder: (relativePath: string, folderTrail: string) => void;
   }) =>
     props.attachment ? (
       <p>attachment {props.attachment.name}</p>
@@ -63,12 +64,25 @@ vi.mock("../files/FilePreviewPanel", () => ({
         <button type="button" onClick={() => props.onOpenFile("src/app.ts")}>
           open app.ts
         </button>
+        <button type="button" onClick={() => props.onNavigateFolder("", props.relativePath ?? "")}>
+          go to root
+        </button>
       </div>
     ),
 }));
+const codiProject = (ref: { environmentId: EnvironmentId; projectId: ProjectId } | null) =>
+  CODI_PROJECTS.find(
+    (entry) => entry.environmentId === ref?.environmentId && entry.id === ref.projectId,
+  ) ?? null;
 vi.mock(import("../../state/entities"), async (original) => ({
   ...(await original()),
   useProjects: (() => CODI_PROJECTS) as never,
+  useProject: ((ref: Parameters<typeof codiProject>[0]) => codiProject(ref)) as never,
+  readProject: ((ref: Parameters<typeof codiProject>[0]) => codiProject(ref)) as never,
+}));
+vi.mock(import("~/localApi"), async (original) => ({
+  ...(await original()),
+  readLocalApi: (() => ({ contextMenu: { show: async () => "copy-path" } })) as never,
 }));
 vi.mock("./TaskPanel", () => ({
   TaskDetail: (props: { taskId: string }) => <p>task body {props.taskId}</p>,
@@ -191,10 +205,7 @@ describe("TelescopePanel", () => {
   });
   describe("Files", () => {
     const launcher = () => page.getByLabelText("Open a surface");
-    const filesDisabled = () =>
-      Array.from(launcher().element().querySelectorAll('[aria-disabled="true"]')).some((item) =>
-        item.textContent?.includes("Files"),
-      );
+    const remoteNames = () => page.getByText("另一台机器上（这里打不开）：app");
 
     const addFiles = async () => {
       await userEvent.click(page.getByRole("button", { name: "Add panel surface" }));
@@ -209,7 +220,10 @@ describe("TelescopePanel", () => {
       );
       useRightPanelStore.getState().show(panelRef);
       await expect.element(launcher().getByText("Side chat")).toBeVisible();
-      expect(filesDisabled()).toBe(true);
+      // A disabled entry is a tooltip trigger, not a button.
+      await vi.waitFor(() =>
+        expect(launcher().getByText("Files").element().closest("[aria-disabled]")).not.toBeNull(),
+      );
       useRightPanelStore.getState().openAttachment(panelRef, {
         type: "file",
         id: "att1",
@@ -220,7 +234,7 @@ describe("TelescopePanel", () => {
       await expect.element(page.getByText("attachment notes.md")).toBeVisible();
     });
 
-    it("opens the first mount on this machine of the selected project and lists the others", async () => {
+    it("opens the first mount on this machine of the selected project and lists the others on each of its tabs", async () => {
       await using _viewport = await setup();
       await using _screen = await render(
         <TelescopePanel panelRef={panelRef} layoutElement={null} />,
@@ -229,8 +243,11 @@ describe("TelescopePanel", () => {
       useRightPanelStore.getState().show(panelRef);
       await userEvent.click(launcher().getByRole("button", { name: /^Files/ }));
       await expect.element(page.getByText("files of /work/app")).toBeVisible();
-      await expect.element(page.getByText("另一台机器上（这里打不开）：app")).toBeVisible();
+      await expect.element(remoteNames()).toBeVisible();
       expect(panelState().surfaces.map((surface) => surface.kind)).toEqual(["files"]);
+      await userEvent.click(page.getByRole("button", { name: "open app.ts" }));
+      await expect.element(page.getByText("files of /work/app at src/app.ts")).toBeVisible();
+      await expect.element(remoteNames()).toBeVisible();
     });
 
     it("follows the open task's project over the selected one, and an open tab keeps its own mount", async () => {
@@ -253,6 +270,21 @@ describe("TelescopePanel", () => {
       await expect.element(page.getByText("files of /work/app")).toBeVisible();
       await userEvent.click(page.getByRole("button", { name: "app.ts", exact: true }));
       await expect.element(page.getByText("files of /work/docs at src/app.ts")).toBeVisible();
+
+      using writeText = vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue();
+      await userEvent.click(page.getByRole("button", { name: "app.ts", exact: true }), {
+        button: "right",
+      });
+      await vi.waitFor(() => expect(writeText).toHaveBeenCalledWith("src/app.ts"));
+
+      // Its root is docs' explorer, beside app's, never app's in its place.
+      await userEvent.click(page.getByRole("button", { name: "go to root" }));
+      await expect.element(page.getByText("files of /work/docs")).toBeVisible();
+      expect(panelState().surfaces.map((surface) => surface.id)).toEqual([
+        "task:t2",
+        "files:docs",
+        "files:app",
+      ]);
     });
   });
 });
