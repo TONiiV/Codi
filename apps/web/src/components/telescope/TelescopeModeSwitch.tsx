@@ -54,7 +54,7 @@ export function TelescopeModeSwitch() {
         role="group"
         aria-label="Telescope or Microscope"
         className={cn(
-          "group/mode pointer-events-auto relative flex h-6 w-14 items-center justify-center overflow-hidden rounded-full border border-transparent bg-foreground/40 shadow-sm backdrop-blur-md",
+          "group/mode pointer-events-auto relative flex h-6 w-14 items-center justify-center overflow-hidden rounded-full border border-transparent bg-foreground/15 shadow-sm backdrop-blur-sm",
           "transition-[width,height,border-radius,background-color] duration-200 ease-out motion-reduce:transition-none",
           "hover:h-10 hover:w-72 hover:rounded-xl hover:border-border hover:bg-popover",
           "has-[:focus-visible]:h-10 has-[:focus-visible]:w-72 has-[:focus-visible]:rounded-xl has-[:focus-visible]:border-border has-[:focus-visible]:bg-popover",
@@ -68,7 +68,7 @@ export function TelescopeModeSwitch() {
             const parts = event.currentTarget.getAnimations({ subtree: true });
             if (parts.every((part) => part.playState !== "running")) settle();
           }}
-          className="absolute size-3.5 text-background opacity-70 group-hover/mode:opacity-0 group-has-[:focus-visible]/mode:opacity-0"
+          className="absolute size-3.5 text-foreground opacity-70 group-hover/mode:opacity-0 group-has-[:focus-visible]/mode:opacity-0"
         />
         <div className="pointer-events-none grid h-8 w-70 shrink-0 grid-cols-2 gap-1 opacity-0 group-hover/mode:pointer-events-auto group-hover/mode:opacity-100 group-has-[:focus-visible]/mode:pointer-events-auto group-has-[:focus-visible]/mode:opacity-100">
           {modes.map((mode) => (
