@@ -40,6 +40,7 @@ import {
 import {
   telescopeSearch,
   useTasksLayout,
+  useTasksProjectId,
   useTaskDrawerId,
   useTelescopeView,
 } from "./telescopeViews";
@@ -333,6 +334,7 @@ export function TaskDrawer() {
   const taskId = useTaskDrawerId();
   const view = useTelescopeView();
   const layout = useTasksLayout();
+  const project = useTasksProjectId();
   const target = useBoardTarget();
   const navigate = useNavigate();
   const open = taskId !== null && target !== null && view !== null;
@@ -343,7 +345,7 @@ export function TaskDrawer() {
         if (!next && view !== null)
           void navigate({
             to: TELESCOPE_PATH,
-            search: telescopeSearch(view, layout),
+            search: telescopeSearch(view, layout, undefined, undefined, project),
             replace: true,
           });
       }}

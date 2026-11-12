@@ -107,8 +107,14 @@ function TaskNotes({
   );
 }
 
-function TaskRow(props: { target: BoardTarget; task: Telescope.Task; write: Write; names: Names }) {
-  const { target, task, write, names } = props;
+function TaskRow(props: {
+  target: BoardTarget;
+  task: Telescope.Task;
+  write: Write;
+  names: Names;
+  project?: Telescope.TelescopeProjectId | undefined;
+}) {
+  const { target, task, write, names, project } = props;
   const [open, setOpen] = useState(false);
   return (
     <>
@@ -131,7 +137,10 @@ function TaskRow(props: { target: BoardTarget; task: Telescope.Task; write: Writ
               variant="ghost-muted"
               aria-label="任务详情"
               render={
-                <Link to={TELESCOPE_PATH} search={telescopeSearch("tasks", "table", task.id)} />
+                <Link
+                  to={TELESCOPE_PATH}
+                  search={telescopeSearch("tasks", "table", task.id, undefined, project)}
+                />
               }
             >
               <PanelRightOpenIcon />
@@ -177,7 +186,11 @@ function TaskRow(props: { target: BoardTarget; task: Telescope.Task; write: Writ
   );
 }
 
-export function TasksTable(props: { target: BoardTarget; tasks: ReadonlyArray<Telescope.Task> }) {
+export function TasksTable(props: {
+  target: BoardTarget;
+  tasks: ReadonlyArray<Telescope.Task>;
+  project?: Telescope.TelescopeProjectId | undefined;
+}) {
   const write = useTaskWrite(props.target);
   const names = useBoardNames(props.target);
   return (
@@ -192,7 +205,14 @@ export function TasksTable(props: { target: BoardTarget; tasks: ReadonlyArray<Te
       </TableHeader>
       <TableBody>
         {props.tasks.map((task) => (
-          <TaskRow key={task.id} target={props.target} task={task} write={write} names={names} />
+          <TaskRow
+            key={task.id}
+            target={props.target}
+            task={task}
+            write={write}
+            names={names}
+            project={props.project}
+          />
         ))}
       </TableBody>
     </Table>
@@ -202,7 +222,11 @@ export function TasksTable(props: { target: BoardTarget; tasks: ReadonlyArray<Te
 const DRAG_TYPE = "application/x-telescope-task";
 
 /** One column per status; a drop is a `task.update` pinned to the card's version. */
-export function TasksBoard(props: { target: BoardTarget; tasks: ReadonlyArray<Telescope.Task> }) {
+export function TasksBoard(props: {
+  target: BoardTarget;
+  tasks: ReadonlyArray<Telescope.Task>;
+  project?: Telescope.TelescopeProjectId | undefined;
+}) {
   const write = useTaskWrite(props.target);
   const names = useBoardNames(props.target);
   const [over, setOver] = useState<Telescope.TaskStatus | null>(null);
@@ -252,7 +276,7 @@ export function TasksBoard(props: { target: BoardTarget; tasks: ReadonlyArray<Te
             >
               <Link
                 to={TELESCOPE_PATH}
-                search={telescopeSearch("tasks", "board", task.id)}
+                search={telescopeSearch("tasks", "board", task.id, undefined, props.project)}
                 draggable={false}
                 className="font-medium wrap-anywhere hover:underline"
               >

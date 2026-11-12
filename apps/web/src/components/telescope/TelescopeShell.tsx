@@ -24,6 +24,7 @@ import { BackgroundThreadContext } from "../chat/backgroundThread";
 import { MicroscopeGlyph } from "./ModeGlyphs";
 import { MyTeamsPage } from "./MyTeamsPage";
 import { TaskDrawer } from "./TaskDrawer";
+import { TasksSidebar } from "./TasksSidebar";
 import { TelescopeAccountFooter } from "./TelescopeAccount";
 import { TelescopeChatList } from "./TelescopeChatList";
 import { TelescopeChatPage } from "./TelescopeChatPage";
@@ -132,10 +133,12 @@ export function TelescopeSidebar({
         <TelescopeRail view={view} collapsed={false} />
         <SidebarContent className="min-h-full">
           <SidebarGroup>
-            <div className="px-2 py-1 text-xs font-medium text-muted-foreground">
-              {telescopeViewEntry(view).label}
-            </div>
-            {children ?? (view === "chats" ? <TelescopeChatList /> : null)}
+            {children ??
+              (view === "chats" ? (
+                <TelescopeChatList />
+              ) : view === "tasks" ? (
+                <TasksSidebar />
+              ) : null)}
           </SidebarGroup>
         </SidebarContent>
       </div>

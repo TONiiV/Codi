@@ -15,6 +15,7 @@ import {
   DialogTitle,
 } from "../ui/dialog";
 import { TELESCOPE_PATH } from "../sidebar/mainAppLocation";
+import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "../ui/empty";
 import { Input } from "../ui/input";
 import { DecisionsBody } from "./DecisionsPage";
 import { TelescopeEmptyState } from "./TelescopeShell";
@@ -26,8 +27,14 @@ import {
   useBoardCommand,
   useBoardTarget,
 } from "./TasksParts";
+import { useTasksProject } from "./TasksSidebar";
 import { TasksBoard, TasksTable } from "./TasksViews";
-import { type TasksLayout, telescopeSearch, useTasksLayout } from "./telescopeViews";
+import {
+  type TasksLayout,
+  telescopeSearch,
+  useTasksLayout,
+  useTasksProjectId,
+} from "./telescopeViews";
 
 function NewTaskDialog({ target }: { target: BoardTarget }) {
   const [open, setOpen] = useState(false);
@@ -77,6 +84,7 @@ function NewTaskDialog({ target }: { target: BoardTarget }) {
 
 function TasksTabs({ layout }: { layout: TasksLayout }) {
   const navigate = useNavigate();
+  const project = useTasksProjectId();
   const tab = (id: TasksLayout, label: string, Icon: typeof TableIcon) => (
     <Button
       size="xs"
@@ -85,7 +93,7 @@ function TasksTabs({ layout }: { layout: TasksLayout }) {
       onClick={() =>
         void navigate({
           to: TELESCOPE_PATH,
-          search: telescopeSearch("tasks", id),
+          search: telescopeSearch("tasks", id, undefined, undefined, project),
           replace: true,
         })
       }
@@ -104,7 +112,11 @@ function TasksTabs({ layout }: { layout: TasksLayout }) {
 
 function TasksBody(props: { target: BoardTarget; layout: TasksLayout; tabs: ReactNode }) {
   const { target, layout } = props;
-  const input = { workspaceId: target.workspaceId };
+  const { selected: projectId } = useTasksProject(target);
+  const input = {
+    workspaceId: target.workspaceId,
+    ...(projectId === undefined ? {} : { projectId }),
+  };
   const query = useEnvironmentQuery(
     telescopeBoard.tasks({ environmentId: target.environmentId, input }),
   );
@@ -121,9 +133,18 @@ function TasksBody(props: { target: BoardTarget; layout: TasksLayout; tabs: Reac
       }
     >
       {tasks.length === 0 ? (
-        <TelescopeEmptyState view="tasks" />
+        projectId === undefined ? (
+          <TelescopeEmptyState view="tasks" />
+        ) : (
+          <Empty>
+            <EmptyHeader>
+              <EmptyTitle>这个项目还没有任务</EmptyTitle>
+              <EmptyDescription>任务归到这个项目后，会列在这里。</EmptyDescription>
+            </EmptyHeader>
+          </Empty>
+        )
       ) : (
-        <View target={target} tasks={tasks} />
+        <View target={target} tasks={tasks} project={projectId} />
       )}
     </BoardFrame>
   );
