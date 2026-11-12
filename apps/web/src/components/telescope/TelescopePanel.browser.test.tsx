@@ -93,7 +93,7 @@ describe("TelescopePanel", () => {
       return { row, [Symbol.dispose]: () => row.remove() };
     }
 
-    it("opens the task named by the URL at 60% of the row, and closing its tab clears the param", async () => {
+    it("opens the task named by the URL at 60% of the row, follows the row, and closing its tab clears the param", async () => {
       await using _viewport = await setup();
       using mount = mountRow();
       await using screen = await render(
@@ -105,6 +105,12 @@ describe("TelescopePanel", () => {
       expect(taskTabs()).toEqual(["t1"]);
       const host = document.querySelector<HTMLElement>('[style*="--resizable-width"]')!;
       expect(host.style.getPropertyValue("--resizable-width")).toBe("600px");
+
+      mount.row.style.width = "1200px";
+      await vi.waitFor(() =>
+        expect(host.style.getPropertyValue("--resizable-width")).toBe("720px"),
+      );
+      expect(searchTask(screen)).toBe("t1");
 
       await userEvent.click(page.getByRole("button", { name: "Close 任务 t1" }));
       await vi.waitFor(() => expect(taskTabs()).toEqual([]));

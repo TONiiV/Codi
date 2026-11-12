@@ -4,7 +4,7 @@ import {
   AuthPreviewOperateScope,
   type EnvironmentId,
   type ScopedThreadRef,
-  Telescope,
+  type Telescope,
 } from "@t3tools/contracts";
 import { useNavigate } from "@tanstack/react-router";
 import { XIcon } from "lucide-react";
@@ -49,12 +49,7 @@ import { ErrorNote } from "./TelescopeAccountDialogs";
 import { AgentChat } from "./TelescopeChatPage";
 import { useTelescopeWorkspaces } from "./telescopeState";
 import { TaskDetail } from "./TaskPanel";
-import {
-  telescopeSearch,
-  useTaskDrawerId,
-  useTasksLayout,
-  useTelescopeView,
-} from "./telescopeViews";
+import { telescopeSearch, useTaskParam, useTasksLayout, useTelescopeView } from "./telescopeViews";
 
 const PreviewPanel = lazy(() =>
   import("../preview/PreviewPanel").then((module) => ({ default: module.PreviewPanel })),
@@ -125,7 +120,7 @@ export function TelescopePanel(props: {
   const { panelRef } = props;
   const { environmentId } = panelRef;
   const workspace = useTelescopeWorkspaces().current;
-  const taskParam = useTaskDrawerId();
+  const taskParam = useTaskParam();
   const view = useTelescopeView();
   const layout = useTasksLayout();
   const navigate = useNavigate();
@@ -269,13 +264,7 @@ export function TelescopePanel(props: {
           sheet={sheet}
           workspaceLayoutElement={props.layoutElement}
           widthStorageKey={`t3code:preview-panel-width:${scopedThreadKey(panelRef)}`}
-          {...(props.layoutElement === null
-            ? {}
-            : {
-                defaultWidth: Math.round(
-                  props.layoutElement.clientWidth * TELESCOPE_PANEL_WIDTH_FRACTION,
-                ),
-              })}
+          defaultWidthFraction={TELESCOPE_PANEL_WIDTH_FRACTION}
           sheetAnimationDurationMs={animated ? durationMs : 0}
           onCloseSheet={actions.closePreviewPanelStable}
           open={open}
@@ -348,16 +337,11 @@ export function TelescopePanel(props: {
               onClose={() => closers.closeSurface(active)}
             />
           ) : active?.kind === "task" ? (
-            <div className="flex h-full min-h-0 flex-col">
-              <TaskDetail
-                key={active.id}
-                target={{
-                  environmentId,
-                  workspaceId: Telescope.WorkspaceId.make(active.workspaceId),
-                }}
-                taskId={Telescope.TaskId.make(active.taskId)}
-              />
-            </div>
+            <TaskDetail
+              key={active.id}
+              target={{ environmentId, workspaceId: active.workspaceId }}
+              taskId={active.taskId}
+            />
           ) : null}
         </ChatRightPanel>
       ) : null}

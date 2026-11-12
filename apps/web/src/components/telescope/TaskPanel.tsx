@@ -22,6 +22,7 @@ import { sideChatSourceBlock } from "../ChatView.logic";
 import { type SideChatFailureStage, useSideChat } from "../chat/useSideChat";
 import { Button } from "../ui/button";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "../ui/empty";
+import { SheetHeader } from "../ui/sheet";
 import { Skeleton } from "../ui/skeleton";
 import { Spinner } from "../ui/spinner";
 import { toastManager } from "../ui/toast";
@@ -264,7 +265,8 @@ export function TaskDetail({ target, taskId }: { target: BoardTarget; taskId: Te
   const reports = task.freeText;
   return (
     <>
-      <header className="flex flex-col gap-2 p-6 max-sm:pb-4">
+      <SheetHeader>
+        {/* SheetTitle and SheetDescription throw outside a Dialog root. */}
         <h2 className="font-semibold text-xl leading-snug wrap-anywhere">{task.title}</h2>
         <div className="flex flex-wrap items-center gap-2 text-muted-foreground text-sm">
           <StatusBadge status={task.status} />
@@ -273,7 +275,7 @@ export function TaskDetail({ target, taskId }: { target: BoardTarget; taskId: Te
             <span>负责 agent：{names(task.ownerAgentId) ?? "其他成员的 agent"}</span>
           ) : null}
         </div>
-      </header>
+      </SheetHeader>
       <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-6 pb-6 text-sm">
         <LeaseField lease={lease} holder={holder} query={leaseQuery} />
         <Field label="关联">

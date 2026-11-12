@@ -14,7 +14,6 @@ import {
   threadPullRequestKeysEqual,
   visibleThreadPullRequests,
 } from "@t3tools/client-runtime/thread-pull-requests";
-import { Telescope } from "@t3tools/contracts";
 import type {
   ContextMenuItem,
   EnvironmentId,
@@ -721,8 +720,8 @@ function useTaskTabTitle(surface: RightPanelSurface, environmentId: EnvironmentI
       ? telescopeBoard.task({
           environmentId,
           input: {
-            workspaceId: Telescope.WorkspaceId.make(surface.workspaceId),
-            taskId: Telescope.TaskId.make(surface.taskId),
+            workspaceId: surface.workspaceId,
+            taskId: surface.taskId,
           },
         })
       : null,
