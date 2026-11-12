@@ -1,6 +1,7 @@
 import { EnvironmentId, ThreadId, type ProjectReadFileResult } from "@t3tools/contracts";
 import { AsyncResult } from "effect/reactivity";
 import { describe, expect, it, vi } from "vite-plus/test";
+import { userEvent } from "vite-plus/test/browser";
 import { act, fakeTimers, render } from "../../../test/render";
 
 const state = vi.hoisted(() => ({
@@ -49,6 +50,18 @@ vi.mock(import("~/hooks/useWorkspaceMutationRefresh"), () => ({
   useWorkspaceMutationRefresh: vi.fn(),
 }));
 vi.mock(import("./FileBreadcrumbs"), () => ({ FileBreadcrumbs: () => <></> }));
+// Stands in for the code view: a click ends a line selection, and the draft comments show as a count.
+vi.mock(import("@pierre/diffs/react"), async (original) => ({
+  ...(await original()),
+  File: ((props: {
+    options: { onLineSelectionEnd: (range: { start: number; end: number }) => void };
+    lineAnnotations: ReadonlyArray<unknown>;
+  }) => (
+    <button type="button" onClick={() => props.options.onLineSelectionEnd({ start: 1, end: 1 })}>
+      comments: {props.lineAnnotations.length}
+    </button>
+  )) as never,
+}));
 vi.mock(import("./projectFilesQueryState"), async (original) => ({
   ...(await original()),
   useProjectFileQuery: () => ({
@@ -93,6 +106,37 @@ function setup() {
       }
     },
   };
+}
+
+function sourcePreview(reviewComments: boolean) {
+  state.file = {
+    relativePath: "a.ts",
+    contents: "const a = 1;\n",
+    byteLength: 13,
+    truncated: false,
+  };
+  return (
+    <FilePreviewPanel
+      environmentId={environmentId}
+      cwd="/workspace"
+      projectName="Project"
+      relativePath="a.ts"
+      threadRef={threadRef}
+      composerDraftTarget={threadRef}
+      reviewComments={reviewComments}
+      keybindings={[]}
+      availableEditors={[]}
+      openInShortcutEnabled={false}
+      revealLine={null}
+      revealRequestId={0}
+      onOpenFile={vi.fn()}
+      onNavigateFolder={vi.fn()}
+      folderTrail={undefined}
+      onPendingChange={vi.fn()}
+      selectedFilePending={false}
+      workspaceMutationId={null}
+    />
+  );
 }
 
 function markdownPreview(truncated: boolean) {
@@ -158,5 +202,19 @@ describe("rendered Markdown task saves", () => {
         contents: "- [x] Keep the rest of this file\n",
       },
     });
+  });
+});
+
+describe("line comments", () => {
+  it("opens a comment on a line selection only where the panel takes review comments", async () => {
+    using _settings = setup();
+    for (const [reviewComments, drafts] of [
+      [true, 1],
+      [false, 0],
+    ] as const) {
+      await using screen = await render(sourcePreview(reviewComments));
+      await userEvent.click(screen.getByRole("button", { name: "comments: 0" }));
+      await expect.element(screen.getByText(`comments: ${drafts}`)).toBeVisible();
+    }
   });
 });
