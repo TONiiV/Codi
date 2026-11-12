@@ -15,13 +15,16 @@ import {
   RoutingAllowlist,
   RoutingResolveInput,
   RoutingRuleSetInput,
+  BOARD_LIMITS,
   TaskCommit,
+  TaskFields,
 } from "./index.ts";
 
 const at = "2026-11-06T12:00:00.000Z";
 const decodeBoardItem = Schema.decodeSync(BoardItem);
 const decodeAgent = Schema.decodeSync(Agent);
 const decodeTaskCommit = Schema.decodeUnknownSync(TaskCommit);
+const decodeTaskFields = Schema.decodeUnknownSync(TaskFields);
 const decodeSetRole = Schema.decodeUnknownSync(MemberSetRoleInput);
 const decodeInvite = Schema.decodeUnknownSync(MemberInviteInput);
 const decodeLinkCode = Schema.decodeUnknownSync(MemberLinkCodeInput);
@@ -49,6 +52,16 @@ describe("telescope contracts", () => {
       version: 3,
     });
     expect(task).toMatchObject({ kind: "task", title: "Ship invites" });
+    const fields = { dueDate: "2026-11-30", priority: "high", body: "# Plan" };
+    expect(decodeTaskFields(fields)).toEqual(fields);
+    expect(decodeTaskFields({ dueDate: null, priority: null, body: null })).toBeTruthy();
+    for (const invalid of [
+      { dueDate: "2026-11-30T00:00:00.000Z" },
+      { dueDate: "2026-13-01" },
+      { priority: "urgent" },
+      { body: "x".repeat(BOARD_LIMITS.bodyLength + 1) },
+    ])
+      expect(() => decodeTaskFields(invalid)).toThrow();
     expect(
       decodeBoardItem({
         kind: "decision",

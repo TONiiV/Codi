@@ -307,6 +307,66 @@ it.layer(layer)("Telescope task board", (it) => {
     }),
   );
 
+  it.effect("writes due date, priority and body per field and lists tasks without the body", () =>
+    Effect.gen(function* () {
+      const { board, a, agent } = yield* setup;
+      const plan = "# Plan\n- print the shell";
+      const task = yield* board.createTask(alice, {
+        workspaceId: a,
+        title: "Prototype shell",
+        dueDate: "2026-11-30",
+        priority: "high",
+        body: plan,
+      });
+      const [listed] = (yield* board.listTasks(alice, { workspaceId: a })).tasks;
+      assert.deepStrictEqual(
+        [listed?.priority, listed?.dueDate, listed?.body],
+        ["high", "2026-11-30", undefined],
+      );
+
+      yield* board.updateTask(agent, {
+        workspaceId: a,
+        taskId: task.id,
+        baseVersion: 1,
+        set: { body: `${plan}\n- paint it` },
+      });
+      const late = yield* board.updateTask(alice, {
+        workspaceId: a,
+        taskId: task.id,
+        baseVersion: 1,
+        set: { priority: "low", body: "# Plan" },
+      });
+      assert.deepStrictEqual(
+        late.overwrote?.map(({ key, by }) => [key, by]),
+        [["body", "agent-cos"]],
+      );
+      const read = yield* board.getTask(alice, { workspaceId: a, taskId: task.id });
+      assert.deepStrictEqual(
+        [read.priority, read.dueDate, read.body],
+        ["low", "2026-11-30", "# Plan"],
+      );
+
+      const cleared = yield* board.updateTask(alice, {
+        workspaceId: a,
+        taskId: task.id,
+        baseVersion: read.version,
+        set: { dueDate: null, priority: null, body: null },
+      });
+      const after = yield* board.getTask(alice, { workspaceId: a, taskId: task.id });
+      assert.deepStrictEqual(
+        [
+          cleared.dueDate,
+          cleared.priority,
+          cleared.body,
+          after.dueDate,
+          after.priority,
+          after.body,
+        ],
+        [undefined, undefined, undefined, undefined, undefined, undefined],
+      );
+    }),
+  );
+
   it.effect("rejects non-members and keeps workspaces apart", () =>
     Effect.gen(function* () {
       const { board, a, b } = yield* setup;

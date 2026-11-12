@@ -537,7 +537,12 @@ const make = Effect.gen(function* () {
     yield* expireLeases(workspaceId);
     const tasks = yield* selectTasks(workspaceId, toColumns(filter, "item_id"));
     const listed = Telescope.BOARD_LIMITS.listedFreeTextEntries;
-    return { tasks: tasks.map((task) => ({ ...task, freeText: task.freeText.slice(-listed) })) };
+    return {
+      tasks: tasks.map((task) => ({
+        ...Struct.omit(task, ["body"]),
+        freeText: task.freeText.slice(-listed),
+      })),
+    };
   });
 
   /** One thread in or out, at the version read inside the write, so nothing else changes. */
