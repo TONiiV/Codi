@@ -6,6 +6,7 @@ import {
   type ScopedThreadRef,
   Telescope,
 } from "@t3tools/contracts";
+import { useNavigate } from "@tanstack/react-router";
 import { XIcon } from "lucide-react";
 import { lazy, Suspense, useEffect, useEffectEvent, useRef } from "react";
 
@@ -40,19 +41,28 @@ import {
   WorkspaceTitlebarControls,
 } from "../chat/PanelLayoutControls";
 import { useRightPanelActions } from "../chat/useRightPanelActions";
+import { TELESCOPE_PATH } from "../sidebar/mainAppLocation";
 import { Button } from "../ui/button";
 import { Spinner } from "../ui/spinner";
 import { agentDisplayName, telescopeAgents } from "./myTeamsShared";
 import { ErrorNote } from "./TelescopeAccountDialogs";
 import { AgentChat } from "./TelescopeChatPage";
 import { useTelescopeWorkspaces } from "./telescopeState";
-import { useTaskDrawerId } from "./telescopeViews";
+import { TaskDetail } from "./TaskPanel";
+import {
+  telescopeSearch,
+  useTaskDrawerId,
+  useTasksLayout,
+  useTelescopeView,
+} from "./telescopeViews";
 
 const PreviewPanel = lazy(() =>
   import("../preview/PreviewPanel").then((module) => ({ default: module.PreviewPanel })),
 );
 const NO_TERMINALS: ReadonlyMap<string, string> = new Map();
 const NO_PENDING: ReadonlySet<string> = new Set();
+/** Telescope's panel opens this much of the row, so a task reads as a page beside the board. */
+const TELESCOPE_PANEL_WIDTH_FRACTION = 0.6;
 const PANEL_COMMANDS = ["rightPanel.toggle", "rightPanel.toggleMaximized", "rightPanel.close"];
 const noop = () => undefined;
 const shortcutContext = () => ({
@@ -115,7 +125,10 @@ export function TelescopePanel(props: {
   const { panelRef } = props;
   const { environmentId } = panelRef;
   const workspace = useTelescopeWorkspaces().current;
-  const drawerOpen = useTaskDrawerId() !== null;
+  const taskParam = useTaskDrawerId();
+  const view = useTelescopeView();
+  const layout = useTasksLayout();
+  const navigate = useNavigate();
   const keybindings = useAtomValue(primaryServerKeybindingsAtom);
   const state = useRightPanelStore((store) =>
     selectThreadRightPanelState(store.byThreadKey, panelRef),
@@ -135,6 +148,26 @@ export function TelescopePanel(props: {
     durationMs,
   );
   const previewState = useThreadPreviewState(panelRef);
+  const activeTaskId = activeSurface?.kind === "task" ? activeSurface.taskId : null;
+  const workspaceId = workspace?.id ?? null;
+  const seenTaskRef = useRef<string | null>(null);
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- the `task` search param is a deep link into the panel's tab store
+  useEffect(() => {
+    if (taskParam !== null && workspaceId !== null) {
+      useRightPanelStore.getState().openTask(panelRef, { workspaceId, taskId: taskParam });
+    }
+  }, [panelRef, taskParam, workspaceId]);
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- the param names the tab on screen, so it clears once another tab or none is
+  useEffect(() => {
+    if (taskParam === null) {
+      seenTaskRef.current = null;
+      return;
+    }
+    if (activeTaskId === taskParam) seenTaskRef.current = taskParam;
+    else if (seenTaskRef.current === taskParam && view !== null) {
+      void navigate({ to: TELESCOPE_PATH, search: telescopeSearch(view, layout), replace: true });
+    }
+  }, [taskParam, activeTaskId, view, layout, navigate]);
   const canOperatePreview = useEnvironmentScope(environmentId, AuthPreviewOperateScope);
   const serverBrowser = useEnvironmentSupportsServerBrowser(environmentId);
   const browserAvailable = serverBrowser || isPreviewSupportedInRuntime();
@@ -220,7 +253,7 @@ export function TelescopePanel(props: {
 
   return (
     <>
-      {drawerOpen || (sheet && presence.present && open) ? null : (
+      {sheet && presence.present && open ? null : (
         <WorkspaceTitlebarControls
           showMaximizeControl={!sheet}
           rightPanelOpen={open}
@@ -236,6 +269,13 @@ export function TelescopePanel(props: {
           sheet={sheet}
           workspaceLayoutElement={props.layoutElement}
           widthStorageKey={`t3code:preview-panel-width:${scopedThreadKey(panelRef)}`}
+          {...(props.layoutElement === null
+            ? {}
+            : {
+                defaultWidth: Math.round(
+                  props.layoutElement.clientWidth * TELESCOPE_PANEL_WIDTH_FRACTION,
+                ),
+              })}
           sheetAnimationDurationMs={animated ? durationMs : 0}
           onCloseSheet={actions.closePreviewPanelStable}
           open={open}
@@ -307,6 +347,17 @@ export function TelescopePanel(props: {
               workspace={workspace}
               onClose={() => closers.closeSurface(active)}
             />
+          ) : active?.kind === "task" ? (
+            <div className="flex h-full min-h-0 flex-col">
+              <TaskDetail
+                key={active.id}
+                target={{
+                  environmentId,
+                  workspaceId: Telescope.WorkspaceId.make(active.workspaceId),
+                }}
+                taskId={Telescope.TaskId.make(active.taskId)}
+              />
+            </div>
           ) : null}
         </ChatRightPanel>
       ) : null}

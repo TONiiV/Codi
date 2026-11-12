@@ -12,7 +12,6 @@ vi.mock("./TelescopeAccount", () => ({ TelescopeAccountFooter: () => null }));
 vi.mock("./TelescopeChatPage", () => ({ TelescopeChatPage: () => null, AgentChat: () => null }));
 vi.mock("./MyTeamsPage", () => ({ MyTeamsPage: () => null }));
 vi.mock("./TelescopeDashboard", () => ({ TelescopeDashboard: () => null }));
-vi.mock("./TaskDrawer", () => ({ TaskDrawer: () => null }));
 
 describe("TelescopeSidebar", () => {
   it("keeps the phone sheet's toggle clickable under a top safe-area inset", async () => {

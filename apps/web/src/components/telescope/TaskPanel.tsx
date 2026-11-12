@@ -20,29 +20,15 @@ import { threadFamilies } from "../../state/threads";
 import { buildThreadRouteParams } from "../../threadRoutes";
 import { sideChatSourceBlock } from "../ChatView.logic";
 import { type SideChatFailureStage, useSideChat } from "../chat/useSideChat";
-import { TELESCOPE_PATH } from "../sidebar/mainAppLocation";
 import { Button } from "../ui/button";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "../ui/empty";
-import { Sheet, SheetDescription, SheetHeader, SheetPopup, SheetTitle } from "../ui/sheet";
 import { Skeleton } from "../ui/skeleton";
 import { Spinner } from "../ui/spinner";
 import { toastManager } from "../ui/toast";
 import { ErrorNote } from "./TelescopeAccountDialogs";
 import { telescopeBoard } from "./telescopeState";
 import { unlinkThreadFromTask } from "./ThreadTaskLink";
-import {
-  type BoardTarget,
-  NeedsYouBadge,
-  StatusBadge,
-  useBoardNames,
-  useBoardTarget,
-} from "./TasksParts";
-import {
-  telescopeSearch,
-  useTasksLayout,
-  useTaskDrawerId,
-  useTelescopeView,
-} from "./telescopeViews";
+import { type BoardTarget, NeedsYouBadge, StatusBadge, useBoardNames } from "./TasksParts";
 
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
@@ -243,7 +229,7 @@ function SideChatButton({ task }: { task: Telescope.Task }) {
   );
 }
 
-function TaskDetail({ target, taskId }: { target: BoardTarget; taskId: Telescope.TaskId }) {
+export function TaskDetail({ target, taskId }: { target: BoardTarget; taskId: Telescope.TaskId }) {
   const { environmentId } = target;
   const input = { workspaceId: target.workspaceId, taskId };
   const query = useEnvironmentQuery(telescopeBoard.task({ environmentId, input }));
@@ -278,16 +264,16 @@ function TaskDetail({ target, taskId }: { target: BoardTarget; taskId: Telescope
   const reports = task.freeText;
   return (
     <>
-      <SheetHeader>
-        <SheetTitle className="me-8 wrap-anywhere">{task.title}</SheetTitle>
-        <SheetDescription render={<div />} className="flex flex-wrap items-center gap-2">
+      <header className="flex flex-col gap-2 p-6 max-sm:pb-4">
+        <h2 className="font-semibold text-xl leading-snug wrap-anywhere">{task.title}</h2>
+        <div className="flex flex-wrap items-center gap-2 text-muted-foreground text-sm">
           <StatusBadge status={task.status} />
           <NeedsYouBadge task={task} />
           {task.ownerAgentId ? (
             <span>负责 agent：{names(task.ownerAgentId) ?? "其他成员的 agent"}</span>
           ) : null}
-        </SheetDescription>
-      </SheetHeader>
+        </div>
+      </header>
       <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-6 pb-6 text-sm">
         <LeaseField lease={lease} holder={holder} query={leaseQuery} />
         <Field label="关联">
@@ -325,30 +311,5 @@ function TaskDetail({ target, taskId }: { target: BoardTarget; taskId: Telescope
         <SideChatButton task={task} />
       </div>
     </>
-  );
-}
-
-/** The task named by the URL's `task` search param, over whichever Telescope view is open. */
-export function TaskDrawer() {
-  const taskId = useTaskDrawerId();
-  const view = useTelescopeView();
-  const layout = useTasksLayout();
-  const target = useBoardTarget();
-  const navigate = useNavigate();
-  const open = taskId !== null && target !== null && view !== null;
-  return (
-    <Sheet
-      open={open}
-      onOpenChange={(next) => {
-        if (!next && view !== null)
-          void navigate({
-            to: TELESCOPE_PATH,
-            search: telescopeSearch(view, layout),
-            replace: true,
-          });
-      }}
-    >
-      <SheetPopup>{open ? <TaskDetail target={target} taskId={taskId} /> : null}</SheetPopup>
-    </Sheet>
   );
 }

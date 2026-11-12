@@ -73,7 +73,9 @@ describe("rightPanelStore", () => {
       );
     expect(kinds()).toEqual(["side-chat"]);
     store.open(panel, "preview");
-    expect(kinds()).toEqual(["side-chat", "preview"]);
+    store.openTask(panel, { workspaceId: "w", taskId: "t1" });
+    store.openTask(panel, { workspaceId: "w", taskId: "t2" });
+    expect(kinds()).toEqual(["side-chat", "preview", "task", "task"]);
     unhost();
   });
 

@@ -14,6 +14,7 @@ import {
   threadPullRequestKeysEqual,
   visibleThreadPullRequests,
 } from "@t3tools/client-runtime/thread-pull-requests";
+import { Telescope } from "@t3tools/contracts";
 import type {
   ContextMenuItem,
   EnvironmentId,
@@ -43,6 +44,7 @@ import {
   FileDiff,
   Files,
   Globe2,
+  ListChecks,
   MessagesSquare,
   Plus,
   TerminalSquare,
@@ -94,6 +96,7 @@ import {
   useSharedPullRequestSummary,
 } from "~/state/pullRequests";
 import { useEnvironmentQuery } from "~/state/query";
+import { telescopeBoard } from "./telescope/telescopeState";
 import { COLLAPSED_SIDEBAR_TITLEBAR_INSET_CLASS } from "~/workspaceTitlebar";
 
 import { PreviewPanelShell, type PreviewPanelMode } from "./preview/PreviewPanelShell";
@@ -606,6 +609,8 @@ function surfaceTitle(
       return surface.title ?? surface.target?.name ?? "Device";
     case "side-chat":
       return "Side chat";
+    case "task":
+      return "任务";
     case "preview": {
       const snapshot = surface.resourceId ? sessions[surface.resourceId] : null;
       if (!snapshot || snapshot.navStatus._tag === "Idle") return "Browser";
@@ -696,6 +701,8 @@ function SurfaceIcon({
       return <PullRequestGlyph.link className="size-3 shrink-0" />;
     case "side-chat":
       return <SideChatTabIcon environmentId={environmentId} threadId={surface.threadId} />;
+    case "task":
+      return <ListChecks className="size-3 shrink-0" />;
     case "device":
       return surface.target?.platform === "ios" ? (
         <AppleIcon className="size-3 shrink-0" />
@@ -705,6 +712,22 @@ function SurfaceIcon({
         <Smartphone className="size-3 shrink-0" />
       );
   }
+}
+
+/** The task's own title, once read; the tab says 任务 until then. */
+function useTaskTabTitle(surface: RightPanelSurface, environmentId: EnvironmentId | null) {
+  const query = useEnvironmentQuery(
+    surface.kind === "task" && environmentId !== null
+      ? telescopeBoard.task({
+          environmentId,
+          input: {
+            workspaceId: Telescope.WorkspaceId.make(surface.workspaceId),
+            taskId: Telescope.TaskId.make(surface.taskId),
+          },
+        })
+      : null,
+  );
+  return query.data?.title ?? null;
 }
 
 /** What a side chat tab's dot shows and its title's accessible name says. */
@@ -917,7 +940,8 @@ function RightPanelTab(
       ? scopeThreadRef(props.environmentId, surface.threadId)
       : null,
   );
-  const title = sideChatShell?.title ?? props.title;
+  const taskTitle = useTaskTabTitle(surface, props.environmentId);
+  const title = taskTitle ?? sideChatShell?.title ?? props.title;
   const sideChatState = sideChatTabState(sideChatShell);
   const content = (
     <>
