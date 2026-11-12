@@ -1,6 +1,7 @@
 import type { EnvironmentProject } from "@t3tools/client-runtime/state/shell";
 import { EnvironmentId, ProjectId, Telescope } from "@t3tools/contracts";
-import { Atom } from "effect/reactivity";
+import { Atom, AsyncResult } from "effect/reactivity";
+import { useSyncExternalStore } from "react";
 import { describe, expect, it, vi } from "vite-plus/test";
 import { page, userEvent } from "vite-plus/test/browser";
 
@@ -43,15 +44,35 @@ const mount = (id: string): Telescope.ProjectMount => ({
 
 const fake = vi.hoisted(() => ({
   calls: [] as unknown[],
+  settle: [] as Array<(result: unknown) => void>,
+  role: "admin" as Telescope.Member["role"],
+  agents: [] as ReadonlyArray<Telescope.Agent>,
+  environments: [] as ReadonlyArray<{ environmentId: EnvironmentId; label: string }>,
+  version: 0,
+  listeners: new Set<() => void>(),
   projects: [] as ReadonlyArray<unknown>,
   summary: null as unknown,
 }));
 
+// The page reads through hooks, so new data has to arrive the way it does in the app: by notifying.
+function publish(projects: ReadonlyArray<Telescope.Project>) {
+  fake.projects = projects;
+  fake.version += 1;
+  fake.listeners.forEach((listener) => listener());
+}
+
 function setup(options: {
+  role?: Telescope.Member["role"];
+  agents?: ReadonlyArray<Telescope.Agent>;
+  environments?: ReadonlyArray<{ environmentId: EnvironmentId; label: string }>;
   projects?: ReadonlyArray<Telescope.Project>;
   summary?: { projects: ReadonlyArray<Telescope.ProjectBindingSummary> } | null;
 }) {
   fake.calls = [];
+  fake.settle = [];
+  fake.role = options.role ?? "admin";
+  fake.agents = options.agents ?? [];
+  fake.environments = options.environments ?? [];
   fake.projects = options.projects ?? [];
   fake.summary = options.summary === undefined ? { projects: [] } : options.summary;
 }
@@ -89,11 +110,15 @@ vi.mock(import("./myTeamsShared"), async (original) => {
 vi.mock(import("../../state/query"), async (original) => ({
   ...(await original()),
   useEnvironmentQuery: ((atom: { key: string } | null) => {
+    useSyncExternalStore(
+      (listener) => (fake.listeners.add(listener), () => void fake.listeners.delete(listener)),
+      () => fake.version,
+    );
     const data =
       atom?.key === "get"
-        ? { workspace, self }
+        ? { workspace, self: { ...self, role: fake.role } }
         : atom?.key === "mine"
-          ? { agents: [] }
+          ? { agents: fake.agents }
           : atom?.key === "projects"
             ? { projects: fake.projects }
             : fake.summary;
@@ -116,7 +141,7 @@ vi.mock(import("../../state/entities"), async (original) => ({
 
 vi.mock(import("../../state/environments"), async (original) => ({
   ...(await original()),
-  useEnvironmentIdentities: () => [],
+  useEnvironmentIdentities: () => fake.environments,
 }));
 
 vi.mock(import("../settings/useSettingsProjectGroups"), () => ({
@@ -130,10 +155,10 @@ vi.mock(import("../settings/useSettingsProjectGroups"), () => ({
 }));
 
 vi.mock(import("../../state/use-atom-command"), () => ({
-  // Never settles, so the row stays pending for as long as the test looks.
+  // Stays pending until the test settles the call, so it picks the moment the page sees the result.
   useAtomCommand: (_command, _label) => (request: unknown) => {
     fake.calls.push(request);
-    return new Promise(() => {});
+    return new Promise((resolve) => fake.settle.push(resolve as never));
   },
 }));
 
@@ -145,6 +170,67 @@ const held = {
   createdAt: AT,
 } satisfies Telescope.Project;
 
+const chief = (projectId: string): Telescope.Agent => ({
+  id: Telescope.AgentId.make(`chief-${projectId}`),
+  workspaceId,
+  ownerSubjectId: "me",
+  kind: "chief_agent",
+  projectId: ProjectId.make(projectId),
+  name: `${projectId} Chief Agent`,
+  standingPowers: {
+    openTickets: true,
+    dispatchWorkers: false,
+    answerMembers: false,
+    mergePRs: false,
+  },
+  exposure: "hidden",
+  syncWithBoard: true,
+  dispatchMode: "inbox",
+  channels: [],
+  createdAt: AT,
+  updatedAt: AT,
+});
+
+describe("TelescopeProjectsPage 项目行", () => {
+  it("offers 设定 only to members who can save the agent", async () => {
+    const options = { projects: [held], agents: [chief("held")] };
+    setup({ ...options, role: "viewer" });
+    await using viewer = await render(<TelescopeProjectsPage />);
+    await expect.element(page.getByRole("cell", { name: "held" }).first()).toBeVisible();
+    expect(page.getByRole("button", { name: /^设定/ }).query()).toBeNull();
+    await viewer.unmount();
+    setup({ ...options, role: "member" });
+    await using _member = await render(<TelescopeProjectsPage />);
+    await expect.element(page.getByRole("button", { name: /^设定/ })).toBeVisible();
+  });
+
+  it("says a mount this client has no environment for is on another machine", async () => {
+    const bobs = {
+      environmentId: EnvironmentId.make("env-bob"),
+      projectId: ProjectId.make("bobs"),
+    };
+    setup({ projects: [{ ...held, mounts: [bobs] }] });
+    await using _screen = await render(<TelescopeProjectsPage />);
+    await expect.element(page.getByText("在另一台机器上")).toBeVisible();
+    await expect.element(page.getByRole("cell", { name: "另一台机器", exact: true })).toBeVisible();
+    expect(page.getByText("项目未加载").query()).toBeNull();
+    expect(page.getByText("env-bob").query()).toBeNull();
+  });
+
+  it("shows the machine's name when this client knows it", async () => {
+    const bobs = {
+      environmentId: EnvironmentId.make("env-bob"),
+      projectId: ProjectId.make("bobs"),
+    };
+    setup({
+      projects: [{ ...held, mounts: [bobs] }],
+      environments: [{ environmentId: bobs.environmentId, label: "Bob 的笔记本" }],
+    });
+    await using _screen = await render(<TelescopeProjectsPage />);
+    await expect.element(page.getByText("Bob 的笔记本")).toBeVisible();
+  });
+});
+
 describe("TelescopeProjectsPage 接入", () => {
   it("sends one createProject for a double click while the first is in flight", async () => {
     setup({});
@@ -155,11 +241,40 @@ describe("TelescopeProjectsPage 接入", () => {
     expect(fake.calls).toHaveLength(1);
   });
 
-  it("does not offer a directory the workspace already mounts", async () => {
-    setup({ projects: [held] });
+  it("does not send a directory again after the call returned but the data has not caught up", async () => {
+    setup({});
     await using _screen = await render(<TelescopeProjectsPage />);
-    await expect.element(page.getByRole("button", { name: "接入 free" })).toBeVisible();
-    expect(page.getByRole("button", { name: "接入 held" }).query()).toBeNull();
+    const connect = page.getByRole("button", { name: "接入 free" });
+    await userEvent.click(connect);
+    fake.settle[0]?.(AsyncResult.success(undefined));
+    await userEvent.click(connect, { force: true });
+    expect(fake.calls).toHaveLength(1);
+    // A different directory is not held back by the first.
+    await userEvent.click(page.getByRole("button", { name: "接入 held" }));
+    expect(fake.calls).toHaveLength(2);
+  });
+
+  it("lets the admin retry a directory whose call failed", async () => {
+    setup({});
+    await using _screen = await render(<TelescopeProjectsPage />);
+    const connect = page.getByRole("button", { name: "接入 free" });
+    await userEvent.click(connect);
+    fake.settle[0]?.(AsyncResult.fail(new Error("offline")));
+    await expect.element(connect).toBeEnabled();
+    await userEvent.click(connect);
+    expect(fake.calls).toHaveLength(2);
+  });
+
+  it("offers a directory again if the data showed it mounted and later lost it", async () => {
+    setup({});
+    await using _screen = await render(<TelescopeProjectsPage />);
+    const connect = page.getByRole("button", { name: "接入 free" });
+    await userEvent.click(connect);
+    fake.settle[0]?.(AsyncResult.success(undefined));
+    publish([{ ...held, mounts: [mount("free")] }]);
+    await expect.element(connect).not.toBeInTheDocument();
+    publish([]);
+    await expect.element(connect).toBeEnabled();
   });
 
   it("offers nothing to connect until the binding summary has loaded", async () => {

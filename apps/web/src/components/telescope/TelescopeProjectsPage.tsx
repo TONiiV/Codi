@@ -128,17 +128,17 @@ function Projects(props: {
   const machineLabel = new Map(
     useEnvironmentIdentities().map((env) => [env.environmentId, env.label]),
   );
-  const machine = (id: EnvironmentId) => machineLabel.get(id) ?? id;
+  const machine = (id: EnvironmentId) => machineLabel.get(id) ?? "另一台机器";
   const summary = useEnvironmentQuery(telescope.bindingSummary({ environmentId, input: {} }));
   const mayConnect =
     useAtomValue(telescope.createProject.permissionAtom(environmentId)) && self.role === "admin";
-  // Without the summary a directory another project of this workspace holds looks free.
+  // Other workspaces' mounts come only from the summary, so nothing is offered before it loads.
   const canConnect = mayConnect && summary.data !== null;
-  const mayRename =
+  const mayUpdateAgents =
     useAtomValue(telescopeAgents.update.permissionAtom(environmentId)) && self.role !== "viewer";
   const createProject = useAtomCommand(telescope.createProject, "接入项目");
   const [connectError, setConnectError] = useState<string | null>(null);
-  const [connecting, setConnecting] = useState(false);
+  const [sent, setSent] = useState<ReadonlySet<string>>(new Set());
   const [editing, setEditing] = useState<Telescope.Agent | null>(null);
   const boundHeading = useRef<HTMLHeadingElement>(null);
   const rows = projectRows(projects, codeProjects, agents, self);
@@ -149,15 +149,26 @@ function Projects(props: {
     self,
   );
   const assistant = agents.find((agent) => agent.kind === "chief_of_staff");
+  // A directory stays sent until the data lists it as mounted: the call returns before the
+  // refresh lands, and a second call would move the mount out of the project the first created.
+  const unlinkedKeys = unlinked.map(({ group }) => group.projectKey);
+  const [seenKeys, setSeenKeys] = useState(unlinkedKeys);
+  if (seenKeys.join("\n") !== unlinkedKeys.join("\n")) {
+    setSeenKeys(unlinkedKeys);
+    setSent((prev) => new Set(unlinkedKeys.filter((key) => prev.has(key))));
+  }
   const connect = async (
+    key: string,
     input: (typeof unlinked)[number]["input"],
     focusNext: HTMLElement | null,
   ) => {
     setConnectError(null);
-    setConnecting(true);
+    setSent((prev) => new Set(prev).add(key));
     const result = await createProject({ environmentId, input });
-    setConnecting(false);
-    if (!AsyncResult.isSuccess(result)) return setConnectError(failureText(result));
+    if (!AsyncResult.isSuccess(result)) {
+      setSent((prev) => new Set([...prev].filter((sentKey) => sentKey !== key)));
+      return setConnectError(failureText(result));
+    }
     focusNext?.focus();
   };
 
@@ -168,7 +179,7 @@ function Projects(props: {
           environmentId={environmentId}
           workspaceId={workspace.id}
           agent={assistant}
-          mayRename={mayRename}
+          mayRename={mayUpdateAgents}
         />
       ) : null}
 
@@ -220,7 +231,10 @@ function Projects(props: {
                             ) : (
                               <FolderCodeIcon className="size-4 shrink-0 text-icon-muted" />
                             )}
-                            {code?.title ?? "项目未加载"}
+                            {code?.title ??
+                              (machineLabel.has(mount.environmentId)
+                                ? "项目未加载"
+                                : "在另一台机器上")}
                           </div>
                           <div className="max-w-48 truncate font-mono text-muted-foreground">
                             {code?.workspaceRoot}
@@ -246,7 +260,7 @@ function Projects(props: {
                           </span>
                         </TableCell>
                         <TableCell>
-                          {chief ? (
+                          {chief && mayUpdateAgents ? (
                             <Button
                               size="xs"
                               variant="ghost-muted"
@@ -306,17 +320,17 @@ function Projects(props: {
                     size="xs"
                     variant="outline"
                     aria-label={`接入 ${group.displayName}`}
-                    disabled={connecting}
+                    disabled={sent.has(group.projectKey)}
                     onClick={(event) => {
                       // The bound row unmounts, so focus moves to the row that takes its place.
                       const row = event.currentTarget.closest("li");
                       const next = (
                         row?.nextElementSibling ?? row?.previousElementSibling
                       )?.querySelector("button");
-                      void connect(input, next ?? boundHeading.current);
+                      void connect(group.projectKey, input, next ?? boundHeading.current);
                     }}
                   >
-                    接入
+                    {sent.has(group.projectKey) ? "接入中…" : "接入"}
                   </Button>
                 ) : null}
               </li>
