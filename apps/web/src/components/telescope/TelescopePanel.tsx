@@ -191,11 +191,11 @@ function FileTab(props: {
   );
   if (props.remote.length === 0) return body;
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div className="flex min-h-0 flex-1 flex-col">
       <p className="shrink-0 truncate border-b border-border px-3 py-1 text-muted-foreground text-xs">
         {`另一台机器上（这里打不开）：${props.remote.join("、")}`}
       </p>
-      <div className="min-h-0 flex-1">{body}</div>
+      <div className="flex min-h-0 flex-1 flex-col">{body}</div>
     </div>
   );
 }
