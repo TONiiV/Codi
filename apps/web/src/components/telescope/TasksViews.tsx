@@ -1,6 +1,7 @@
 import { TASK_STATUSES, tasksByStatus } from "@t3tools/client-runtime/telescope/taskBoard";
 import { Telescope } from "@t3tools/contracts";
 import { Link } from "@tanstack/react-router";
+import { Schema } from "effect";
 import {
   CalendarIcon,
   CaseSensitiveIcon,
@@ -37,11 +38,14 @@ import {
 import { telescopeSearch, useTasksProjectId } from "./telescopeViews";
 
 type People = ReturnType<typeof useBoardPeople>;
-type Fields = NonNullable<Parameters<ReturnType<typeof useTaskWrite>>[1]["set"]>;
+type Fields = Telescope.TaskFields;
 /** Creates a task in the view's project; null for a member who may not. */
 export type CreateTask = ((title: string, set?: Fields) => Promise<boolean>) | null;
-/** Null for a member who may not edit. */
-type Edit = ((task: Telescope.Task, set: Fields) => void) | null;
+type Editable = "title" | "status" | "ownerSubjectId" | "ownerAgentId" | "dueDate" | "priority";
+/** Writes the fields that differ from the task; null for a member who may not edit. */
+type Edit = ((task: Telescope.Task, set: Pick<Fields, Editable>) => void) | null;
+
+const isDueDate = Schema.is(Telescope.TaskDueDate);
 
 const NONE = "";
 
@@ -73,7 +77,7 @@ function StatusCell({ task, edit }: CellProps) {
             key={status}
             value={status}
             closeOnClick
-            onClick={() => status !== task.status && edit?.(task, { status })}
+            onClick={() => edit?.(task, { status })}
           >
             <StatusPill status={status} />
           </MenuRadioItem>
@@ -84,8 +88,7 @@ function StatusCell({ task, edit }: CellProps) {
 }
 
 function PriorityCell({ task, edit }: CellProps) {
-  const pick = (priority: Telescope.TaskPriority | null) =>
-    priority !== (task.priority ?? null) && edit?.(task, { priority });
+  const pick = (priority: Telescope.TaskPriority | null) => edit?.(task, { priority });
   return (
     <MenuCell
       label="优先级"
@@ -145,7 +148,7 @@ function OwnerCell({ task, edit, people }: CellProps) {
           <MenuRadioItem
             value={NONE}
             closeOnClick
-            onClick={() => task.ownerSubjectId && edit?.(task, { ownerSubjectId: null })}
+            onClick={() => edit?.(task, { ownerSubjectId: null })}
           >
             <span className="text-muted-foreground">无</span>
           </MenuRadioItem>
@@ -154,10 +157,7 @@ function OwnerCell({ task, edit, people }: CellProps) {
               key={member.subjectId}
               value={member.subjectId}
               closeOnClick
-              onClick={() =>
-                member.subjectId !== task.ownerSubjectId &&
-                edit?.(task, { ownerSubjectId: member.subjectId })
-              }
+              onClick={() => edit?.(task, { ownerSubjectId: member.subjectId })}
             >
               <PersonChip name={member.displayName} />
             </MenuRadioItem>
@@ -171,7 +171,7 @@ function OwnerCell({ task, edit, people }: CellProps) {
           <MenuRadioItem
             value={NONE}
             closeOnClick
-            onClick={() => task.ownerAgentId && edit?.(task, { ownerAgentId: null })}
+            onClick={() => edit?.(task, { ownerAgentId: null })}
           >
             <span className="text-muted-foreground">无</span>
           </MenuRadioItem>
@@ -180,9 +180,7 @@ function OwnerCell({ task, edit, people }: CellProps) {
               key={agent.id}
               value={agent.id}
               closeOnClick
-              onClick={() =>
-                agent.id !== task.ownerAgentId && edit?.(task, { ownerAgentId: agent.id })
-              }
+              onClick={() => edit?.(task, { ownerAgentId: agent.id })}
             >
               <PersonChip agent name={agent.name} />
             </MenuRadioItem>
@@ -195,17 +193,15 @@ function OwnerCell({ task, edit, people }: CellProps) {
 
 /**
  * Mounted only while editing: Enter and blur commit, Escape cancels. Enter and Escape blur the
- * input as it unmounts; that blur must not commit again. `stay` keeps it open after Enter.
+ * input as it unmounts; that blur must not commit again.
  */
 function EditInput({
   onCommit,
   onCancel,
-  stay = false,
   ...props
 }: Omit<InputProps, "onBlur" | "onKeyDown"> & {
-  onCommit: (value: string, input: HTMLInputElement) => void;
+  onCommit: (value: string) => void;
   onCancel: () => void;
-  stay?: boolean;
 }) {
   const settled = useRef(false);
   return (
@@ -214,13 +210,13 @@ function EditInput({
       autoFocus
       size="sm"
       onBlur={(event) => {
-        if (!settled.current) onCommit(event.currentTarget.value, event.currentTarget);
+        if (!settled.current) onCommit(event.currentTarget.value);
       }}
       onKeyDown={(event) => {
         if (event.nativeEvent.isComposing || event.keyCode === 229) return;
         if (event.key !== "Enter" && event.key !== "Escape") return;
-        settled.current = event.key === "Escape" || !stay;
-        if (event.key === "Enter") onCommit(event.currentTarget.value, event.currentTarget);
+        settled.current = true;
+        if (event.key === "Enter") onCommit(event.currentTarget.value);
         else onCancel();
       }}
     />
@@ -231,11 +227,21 @@ function EditInput({
 function DueCell({ task, edit }: CellProps) {
   // The write is pinned to the version the editor opened on, so a change made meanwhile conflicts.
   const [editing, setEditing] = useState<Telescope.Task | null>(null);
+  // A stored day the input cannot show (2026-02-31) reads as empty, so only a change is sent.
+  const changed = useRef(false);
   const shown = task.dueDate && formatDueDate(task.dueDate);
   if (edit === null) return <div className={CELL_STATIC}>{shown}</div>;
   if (editing === null)
     return (
-      <button type="button" aria-label="截止日期" className={CELL} onClick={() => setEditing(task)}>
+      <button
+        type="button"
+        aria-label="截止日期"
+        className={CELL}
+        onClick={() => {
+          changed.current = false;
+          setEditing(task);
+        }}
+      >
         {shown}
       </button>
     );
@@ -246,17 +252,12 @@ function DueCell({ task, edit }: CellProps) {
       type="date"
       aria-label="截止日期"
       defaultValue={editing.dueDate ?? ""}
-      onFocus={(event) => {
-        try {
-          event.currentTarget.showPicker();
-        } catch {
-          // Without the click's activation the picker stays shut; typing still works.
-        }
-      }}
+      onChange={() => (changed.current = true)}
       onCommit={(value) => {
         setEditing(null);
-        if (value !== (editing.dueDate ?? ""))
-          edit(editing, { dueDate: value === "" ? null : value });
+        if (!changed.current) return;
+        if (value === "") edit(editing, { dueDate: null });
+        else if (isDueDate(value)) edit(editing, { dueDate: value });
       }}
       onCancel={() => setEditing(null)}
     />
@@ -276,7 +277,7 @@ function TitleCell(props: { task: Telescope.Task; edit: Edit; open: ReactNode })
         onCommit={(value) => {
           setEditing(null);
           const title = value.trim();
-          if (title.length > 0 && title !== editing.title) edit(editing, { title });
+          if (title.length > 0) edit(editing, { title });
         }}
         onCancel={() => setEditing(null)}
       />
@@ -307,6 +308,57 @@ function TitleCell(props: { task: Telescope.Task; edit: Edit; open: ReactNode })
   );
 }
 
+/**
+ * The open new-task input owns its text and its creates. It stays open while one is out, so a
+ * failed title is still there to see; it closes once nothing is out, it has no focus, and it is
+ * empty or was cancelled.
+ */
+function NewTaskInput(props: {
+  create: NonNullable<CreateTask>;
+  set: Fields | undefined;
+  card: boolean;
+  onClose: () => void;
+}) {
+  const pending = useRef(new Set<string>());
+  const cancelled = useRef(false);
+  const settle = (input: HTMLInputElement) => {
+    const idle = pending.current.size === 0 && input !== document.activeElement;
+    if (idle && (cancelled.current || input.value.trim() === "")) props.onClose();
+  };
+  const submit = async (input: HTMLInputElement) => {
+    const title = input.value.trim();
+    // A second Enter, or a blur right after Enter, must not create the same task again.
+    if (title === "" || pending.current.has(title)) return settle(input);
+    pending.current.add(title);
+    const created = await props.create(title, props.set);
+    pending.current.delete(title);
+    if (!created) cancelled.current = false;
+    else if (input.value.trim() === title) input.value = "";
+    settle(input);
+  };
+  return (
+    <Input
+      autoFocus
+      size="sm"
+      unstyled={!props.card}
+      aria-label="新任务标题"
+      placeholder="要做什么"
+      maxLength={Telescope.BOARD_LIMITS.titleLength}
+      onFocus={() => (cancelled.current = false)}
+      onBlur={(event) =>
+        cancelled.current ? settle(event.currentTarget) : void submit(event.currentTarget)
+      }
+      onKeyDown={(event) => {
+        if (event.nativeEvent.isComposing || event.keyCode === 229) return;
+        if (event.key === "Enter") void submit(event.currentTarget);
+        if (event.key !== "Escape") return;
+        cancelled.current = true;
+        event.currentTarget.blur();
+      }}
+    />
+  );
+}
+
 /** Notion's bottom row: a label until clicked, then a title input that adds a task per Enter. */
 function NewTask(props: {
   create: NonNullable<CreateTask>;
@@ -317,7 +369,6 @@ function NewTask(props: {
   onOpenChange?: (open: boolean) => void;
 }) {
   const [own, setOwn] = useState(false);
-  const busy = useRef(false);
   const open = props.open ?? own;
   const setOpen = props.onOpenChange ?? setOwn;
   if (!open)
@@ -337,24 +388,11 @@ function NewTask(props: {
       </button>
     );
   return (
-    <EditInput
-      stay
-      unstyled={!props.card}
-      aria-label="新任务标题"
-      placeholder="要做什么"
-      maxLength={Telescope.BOARD_LIMITS.titleLength}
-      onCommit={async (value, input) => {
-        const title = value.trim();
-        // A second Enter, or a blur right after Enter, must not create the same task again.
-        if (busy.current) return;
-        if (title.length > 0) {
-          busy.current = true;
-          if (await props.create(title, props.set)) input.value = "";
-          busy.current = false;
-        }
-        if (input !== document.activeElement) setOpen(false);
-      }}
-      onCancel={() => setOpen(false)}
+    <NewTaskInput
+      create={props.create}
+      set={props.set}
+      card={props.card === true}
+      onClose={() => setOpen(false)}
     />
   );
 }
@@ -386,7 +424,12 @@ export function TasksTable(props: {
   const write = useTaskWrite(props.target);
   const people = useBoardPeople(props.target);
   const project = useTasksProjectId();
-  const edit: Edit = props.mayEdit ? (task, set) => void write(task, { set }) : null;
+  const edit: Edit = props.mayEdit
+    ? (task, set) => {
+        const keys = Object.keys(set) as ReadonlyArray<Editable>;
+        if (keys.some((key) => set[key] !== (task[key] ?? null))) void write(task, { set });
+      }
+    : null;
   const columns = COLUMNS[props.layout];
   const head = (label: string, Icon: typeof CalendarIcon) => (
     <span className="flex items-center gap-1.5">
@@ -532,7 +575,8 @@ export function TasksBoard(props: {
   const people = useBoardPeople(props.target);
   const project = useTasksProjectId();
   const [over, setOver] = useState<Telescope.TaskStatus | null>(null);
-  const [adding, setAdding] = useState<Telescope.TaskStatus | null>(null);
+  // Each group's input opens and closes on its own, so one group's pending create never closes another's.
+  const [adding, setAdding] = useState<Partial<Record<Telescope.TaskStatus, boolean>>>({});
   const columns = tasksByStatus(props.tasks);
   return (
     <div className="flex items-start gap-3 overflow-x-auto px-4 pb-6 sm:px-24">
@@ -562,7 +606,7 @@ export function TasksBoard(props: {
                 variant="ghost-muted"
                 className="ms-auto"
                 aria-label={`新任务（${TASK_STATUS[status].label}）`}
-                onClick={() => setAdding(status)}
+                onClick={() => setAdding((groups) => ({ ...groups, [status]: true }))}
               >
                 <PlusIcon />
               </Button>
@@ -605,8 +649,8 @@ export function TasksBoard(props: {
                 card
                 create={props.create}
                 set={{ status }}
-                open={adding === status}
-                onOpenChange={(open) => setAdding(open ? status : null)}
+                open={adding[status] === true}
+                onOpenChange={(open) => setAdding((groups) => ({ ...groups, [status]: open }))}
               />
             )}
           </div>

@@ -35,7 +35,11 @@ const task = (id: string, title: string, owner: Partial<Telescope.Task> = {}): T
 });
 const TASKS: ReadonlyArray<Telescope.Task> = [
   task("t-mine", "我负责的", { ownerSubjectId: ME }),
-  task("t-agent", "我的 agent 负责的", { ownerAgentId: Telescope.AgentId.make("a-mine") }),
+  task("t-agent", "我的 agent 负责的", {
+    ownerAgentId: Telescope.AgentId.make("a-mine"),
+    // The contract checks only the shape, so a day that does not exist can be stored.
+    dueDate: "2026-02-31",
+  }),
   task("t-other", "别人的", {
     ownerSubjectId: Telescope.SubjectId.make("other"),
     ownerAgentId: Telescope.AgentId.make("a-other"),
@@ -138,8 +142,15 @@ describe("TasksPage", () => {
     await userEvent.fill(screen.getByRole("textbox", { name: "截止日期" }), "2026-11-20");
     await userEvent.click(screen.getByText("名称"));
 
+    // A stored day the date input cannot show is shown as stored and survives opening the editor.
+    await expect.element(screen.getByText("2026/02/31")).toBeVisible();
+    await userEvent.click(screen.getByRole("button", { name: "截止日期" }).nth(1));
+    await userEvent.click(screen.getByText("名称"));
+
     await userEvent.click(screen.getByRole("button", { name: "负责人" }).nth(2));
     await userEvent.click(page.getByRole("menuitemradio", { name: "我" }));
+    await userEvent.click(screen.getByRole("button", { name: "负责人" }).first());
+    await userEvent.click(page.getByRole("menuitemradio", { name: "无" }).first());
 
     // A rename saves the trimmed title; Enter on the same title and Escape save nothing.
     await userEvent.click(screen.getByRole("button", { name: "改标题：我负责的" }));
@@ -157,33 +168,131 @@ describe("TasksPage", () => {
       [TASKS[0], { set: { priority: "high" } }],
       [TASKS[0], { set: { dueDate: "2026-11-20" } }],
       [TASKS[2], { set: { ownerSubjectId: ME } }],
+      [TASKS[0], { set: { ownerSubjectId: null } }],
       [TASKS[0], { set: { title: "周一发版" } }],
     ]);
   });
 
-  it("sends a title edit against the version the editor opened on", async () => {
+  it("sends title and due edits against the version the editor opened on", async () => {
     const { write } = setup();
     await using screen = await render(<TasksPage />, { router: "/telescope?view=tasks" });
-    await userEvent.click(screen.getByRole("button", { name: "改标题：我负责的" }));
+    await userEvent.click(screen.getByRole("button", { name: "截止日期" }).first());
     mocks.tasks = [{ ...TASKS[0]!, version: 2 }, ...TASKS.slice(1)];
+    await screen.rerender(<TasksPage />);
+    await userEvent.fill(screen.getByRole("textbox", { name: "截止日期" }), "2026-12-01");
+    await userEvent.click(screen.getByText("名称"));
+    await userEvent.click(screen.getByRole("button", { name: "改标题：我负责的" }));
+    mocks.tasks = [{ ...TASKS[0]!, version: 3 }, ...TASKS.slice(1)];
     await screen.rerender(<TasksPage />);
     await userEvent.fill(screen.getByRole("textbox", { name: "任务标题" }), "新标题");
     await userEvent.keyboard("{Enter}");
-    expect(vi.mocked(write).mock.calls).toEqual([[TASKS[0], { set: { title: "新标题" } }]]);
+    expect(vi.mocked(write).mock.calls).toEqual([
+      [TASKS[0], { set: { dueDate: "2026-12-01" } }],
+      [{ ...TASKS[0], version: 2 }, { set: { title: "新标题" } }],
+    ]);
   });
 
-  it("creates one task per Enter while the first create is still pending", async () => {
-    setup();
-    let finish = (_created: boolean) => {};
-    const create = vi.fn(() => new Promise<boolean>((resolve) => (finish = resolve)));
+  it("takes a typed due date and sends only a whole one", async () => {
+    const { write } = setup();
+    await using screen = await render(<TasksPage />, { router: "/telescope?view=tasks" });
+    await userEvent.click(screen.getByRole("button", { name: "截止日期" }).first());
+    // The test browser lays the date out as mm/dd/yyyy; each field moves on once it is full.
+    await userEvent.keyboard("11202026{Enter}");
+    await userEvent.click(screen.getByRole("button", { name: "截止日期" }).nth(2));
+    await userEvent.keyboard("112020266{Enter}");
+    expect(vi.mocked(write).mock.calls).toEqual([[TASKS[0], { set: { dueDate: "2026-11-20" } }]]);
+  });
+
+  /** Creates the test settles by hand, in call order. */
+  function pendingCreates() {
+    const settle: Array<(created: boolean) => void> = [];
+    const create = vi.fn(() => new Promise<boolean>((resolve) => settle.push(resolve)));
     mocks.create = create;
+    return { create, settle };
+  }
+
+  it("keeps each new task's text until its own create lands", async () => {
+    setup();
+    const { create, settle } = pendingCreates();
     await using screen = await render(<TasksPage />, { router: "/telescope?view=tasks" });
     await userEvent.click(screen.getByRole("button", { name: "新任务" }));
-    await userEvent.fill(screen.getByRole("textbox", { name: "新任务标题" }), "周一发");
-    await userEvent.keyboard("{Enter}{Enter}");
+    const input = screen.getByRole("textbox", { name: "新任务标题" });
+    await userEvent.fill(input, "第一个");
+    // A second Enter, and Escape while the create is out, neither repeat it nor drop the text.
+    await userEvent.keyboard("{Enter}{Enter}{Escape}");
+    await expect.element(input).toHaveValue("第一个");
+    await userEvent.fill(input, "第二个");
+    await userEvent.keyboard("{Enter}");
+    expect(create).toHaveBeenCalledTimes(2);
+    settle[0]!(true);
+    await expect.element(input).toHaveValue("第二个");
+    settle[1]!(true);
+    await expect.element(input).toHaveValue("");
     await userEvent.click(screen.getByText("名称"));
-    finish(true);
     await expect.element(screen.getByRole("button", { name: "新任务" })).toBeVisible();
+
+    // Enter then blur: the row closes once the create lands.
+    await userEvent.click(screen.getByRole("button", { name: "新任务" }));
+    await userEvent.fill(screen.getByRole("textbox", { name: "新任务标题" }), "第三个");
+    await userEvent.keyboard("{Enter}");
+    await userEvent.click(screen.getByText("名称"));
+    settle[2]!(true);
+    await expect.element(screen.getByRole("button", { name: "新任务" })).toBeVisible();
+
+    // Enter then Escape: the same, and Escape alone drops an unsent title.
+    await userEvent.click(screen.getByRole("button", { name: "新任务" }));
+    await userEvent.fill(screen.getByRole("textbox", { name: "新任务标题" }), "第四个");
+    await userEvent.keyboard("{Enter}{Escape}");
+    settle[3]!(true);
+    await expect.element(screen.getByRole("button", { name: "新任务" })).toBeVisible();
+    await userEvent.click(screen.getByRole("button", { name: "新任务" }));
+    await userEvent.fill(screen.getByRole("textbox", { name: "新任务标题" }), "不要了");
+    await userEvent.keyboard("{Escape}");
+    await expect.element(screen.getByRole("button", { name: "新任务" })).toBeVisible();
+    expect(create).toHaveBeenCalledTimes(4);
+  });
+
+  it("leaves a title whose create failed in its input, with or without focus", async () => {
+    setup();
+    const { settle } = pendingCreates();
+    await using screen = await render(<TasksPage />, { router: "/telescope?view=tasks" });
+    await userEvent.click(screen.getByRole("button", { name: "新任务" }));
+    const input = screen.getByRole("textbox", { name: "新任务标题" });
+    await userEvent.fill(input, "没存上的");
+    await userEvent.keyboard("{Enter}");
+    settle[0]!(false);
+    await expect.element(input).toHaveValue("没存上的");
+    await userEvent.click(screen.getByText("名称"));
+    settle[1]!(false);
+    // A second click is a round trip, so a close the failure caused would have landed by now.
+    await userEvent.click(screen.getByText("名称"));
+    await expect.element(input).toHaveValue("没存上的");
+    await userEvent.click(input);
+    await userEvent.keyboard("{Enter}{Escape}");
+    settle[2]!(false);
+    await userEvent.click(screen.getByText("名称"));
+    await expect.element(input).toHaveValue("没存上的");
+  });
+
+  it("lets another board group take a new task while one group's create is pending", async () => {
+    setup();
+    const { create, settle } = pendingCreates();
+    await using screen = await render(<TasksPage />, {
+      router: "/telescope?view=tasks&layout=board&project=p1",
+    });
+    const todo = screen.getByRole("region", { name: "未开始" });
+    const doing = screen.getByRole("region", { name: "进行中" });
+    await userEvent.click(todo.getByRole("button", { name: "新任务" }));
+    await userEvent.fill(todo.getByRole("textbox", { name: "新任务标题" }), "A 组的");
+    await userEvent.keyboard("{Enter}");
+    await userEvent.click(screen.getByRole("button", { name: "新任务（进行中）" }));
+    await userEvent.fill(doing.getByRole("textbox", { name: "新任务标题" }), "B 组的");
+    settle[0]!(true);
+    await expect.element(todo.getByRole("button", { name: "新任务" })).toBeVisible();
+    await userEvent.keyboard("组");
+    await expect
+      .element(doing.getByRole("textbox", { name: "新任务标题" }))
+      .toHaveValue("B 组的组");
     expect(create).toHaveBeenCalledTimes(1);
   });
 

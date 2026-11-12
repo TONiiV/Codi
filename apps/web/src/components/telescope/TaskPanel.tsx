@@ -29,7 +29,7 @@ import { toastManager } from "../ui/toast";
 import { ErrorNote } from "./TelescopeAccountDialogs";
 import { telescopeBoard } from "./telescopeState";
 import { unlinkThreadFromTask } from "./ThreadTaskLink";
-import { type BoardTarget, NeedsYouBadge, StatusBadge, useBoardNames } from "./TasksParts";
+import { type BoardTarget, NeedsYouBadge, StatusBadge, useBoardPeople } from "./TasksParts";
 
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
@@ -244,7 +244,7 @@ export function TaskDetail({ target, taskId }: { target: BoardTarget; taskId: Te
     const handle = window.setTimeout(refreshLease, delay);
     return () => window.clearTimeout(handle);
   }, [lease, dataUpdatedAt, refreshLease]);
-  const names = useBoardNames(target);
+  const names = useBoardPeople(target).name;
   const task = query.data;
   if (task === null)
     return query.error === null ? (

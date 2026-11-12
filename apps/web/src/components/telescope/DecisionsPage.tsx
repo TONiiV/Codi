@@ -25,7 +25,7 @@ import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "../ui/empty";
 import { telescopeBoard } from "./telescopeState";
-import { BoardFrame, type BoardTarget, useBoardCommand, useBoardNames } from "./TasksParts";
+import { BoardFrame, type BoardTarget, useBoardCommand, useBoardPeople } from "./TasksParts";
 
 const GROUPS = {
   proposed: { label: "待决定", badge: "warning" },
@@ -181,7 +181,7 @@ export function DecisionsBody({ target, actions }: { target: BoardTarget; action
   const query = useEnvironmentQuery(
     telescopeBoard.decisions({ environmentId: target.environmentId, input }),
   );
-  const names = useBoardNames(target);
+  const names = useBoardPeople(target).name;
   const hash = useLocation({ select: (location) => location.hash.replace(/^#/, "") });
   const { busy, choose, dialog } = useDecide(target, query);
   const decisions = sortDecisions(query.data?.decisions ?? []);

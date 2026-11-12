@@ -94,11 +94,6 @@ export function useBoardPeople({ environmentId, workspaceId }: BoardTarget) {
   };
 }
 
-/** Display names for the agent and member ids the caller can see. */
-export function useBoardNames(target: BoardTarget) {
-  return useBoardPeople(target).name;
-}
-
 /** The caller as a member, and whether it may edit or add tasks; a 只读 member may do neither. */
 export function useTaskAccess(target: BoardTarget) {
   const { environmentId, workspaceId } = target;
@@ -134,7 +129,7 @@ const STALE = {
 export function useTaskWrite(target: BoardTarget) {
   const navigate = useNavigate();
   const { environmentId } = target;
-  const names = useBoardNames(target);
+  const names = useBoardPeople(target).name;
   const update = useAtomCommand(telescopeBoard.updateTask, { reportFailure: false });
   return async (task: Telescope.Task, change: Parameters<typeof taskUpdateInput>[1]) => {
     const result = await update({ environmentId, input: taskUpdateInput(task, change) });

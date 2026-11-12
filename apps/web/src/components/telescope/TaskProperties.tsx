@@ -57,7 +57,7 @@ export function StatusPill({ status }: { status: Telescope.TaskStatus }) {
   return (
     <span
       className={cn(
-        "inline-flex h-5 shrink-0 items-center gap-1.5 rounded-full ps-1.5 pe-2 text-sm whitespace-nowrap",
+        "inline-flex h-5 shrink-0 items-center gap-1.25 rounded-full ps-1.75 pe-2.25 text-sm whitespace-nowrap",
         STATUS_TONE[status].pill,
       )}
     >
@@ -110,12 +110,5 @@ export function PersonChip(props: { name: string; agent?: boolean; small?: boole
   );
 }
 
-const DAY = new Intl.DateTimeFormat("zh-CN", {
-  year: "numeric",
-  month: "2-digit",
-  day: "2-digit",
-  timeZone: "UTC",
-});
-
-/** `YYYY-MM-DD` has no time zone; read and print it in UTC so the day never shifts. */
-export const formatDueDate = (date: string) => DAY.format(new Date(`${date}T00:00:00Z`));
+/** Shown as stored: `YYYY-MM-DD` has no time zone, and a day the calendar lacks stays visible. */
+export const formatDueDate = (date: string) => date.replaceAll("-", "/");
