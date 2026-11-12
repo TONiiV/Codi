@@ -157,6 +157,9 @@ export async function reopenClosedView(
     case "side-chat":
       panels.openSideChat(ref, surface.threadId);
       break;
+    case "task":
+      // Telescope's panel records no closed tabs, so none arrives here.
+      return false;
     default:
       panels.open(ref, surface.kind);
   }

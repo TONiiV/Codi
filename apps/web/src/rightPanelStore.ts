@@ -3,7 +3,13 @@ import {
   scopedThreadKey,
   scopeThreadRef,
 } from "@t3tools/client-runtime/environment";
-import { EnvironmentId, RunId, ThreadId, type ScopedThreadRef } from "@t3tools/contracts";
+import {
+  EnvironmentId,
+  RunId,
+  type Telescope,
+  ThreadId,
+  type ScopedThreadRef,
+} from "@t3tools/contracts";
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 
@@ -22,8 +28,14 @@ const RIGHT_PANEL_KINDS = [
   "pull-request",
   "pull-requests",
   "side-chat",
+  "task",
 ] as const;
 export type RightPanelKind = (typeof RIGHT_PANEL_KINDS)[number];
+/** The kinds `open` and `toggle` take: one surface each, with no id of their own. */
+type SingletonKind = Exclude<
+  RightPanelKind,
+  "file" | "terminal" | "pull-request" | "side-chat" | "task"
+>;
 
 export type PullRequestDetailTab = "summary" | "guide" | "timeline" | "code";
 
@@ -76,7 +88,13 @@ export type RightPanelSurface =
       detailTab?: PullRequestDetailTab;
     }
   | { id: "pull-requests"; kind: "pull-requests" }
-  | { id: `side-chat:${string}`; kind: "side-chat"; threadId: ThreadId };
+  | { id: `side-chat:${string}`; kind: "side-chat"; threadId: ThreadId }
+  | {
+      id: `task:${string}`;
+      kind: "task";
+      workspaceId: Telescope.WorkspaceId;
+      taskId: Telescope.TaskId;
+    };
 
 const RIGHT_PANEL_STORAGE_KEY = "t3code:right-panel-state:v2";
 const RIGHT_PANEL_STORAGE_VERSION = 14;
@@ -88,7 +106,11 @@ export const PULL_REQUESTS_PANEL_REF = scopeThreadRef(
 
 const isPullRequestsPanelKey = (threadKey: string) => threadKey.endsWith(":pull-requests-panel");
 
-export const TELESCOPE_PANEL_SURFACES: ReadonlyArray<RightPanelKind> = ["preview", "side-chat"];
+export const TELESCOPE_PANEL_SURFACES: ReadonlyArray<RightPanelKind> = [
+  "preview",
+  "side-chat",
+  "task",
+];
 /** Telescope's one side chat tab; it talks to the member's assistant, so it names no real thread. */
 export const TELESCOPE_SIDE_CHAT = ThreadId.make("telescope-agent-chat");
 
@@ -140,11 +162,12 @@ interface RightPanelStoreState {
     expectedUserActionRevision: number,
     activateExisting?: boolean,
   ) => boolean;
-  open: (
-    ref: ScopedThreadRef,
-    kind: Exclude<RightPanelKind, "file" | "terminal" | "pull-request" | "side-chat">,
-  ) => void;
+  open: (ref: ScopedThreadRef, kind: SingletonKind) => void;
   openSideChat: (ref: ScopedThreadRef, threadId: ThreadId) => void;
+  openTask: (
+    ref: ScopedThreadRef,
+    task: { workspaceId: Telescope.WorkspaceId; taskId: Telescope.TaskId },
+  ) => void;
   openDevice: (ref: ScopedThreadRef, target: DeviceTabTarget, automatic?: boolean) => void;
   renameDevice: (ref: ScopedThreadRef, surfaceId: string, title: string) => void;
   openBrowser: (ref: ScopedThreadRef, tabId: string | null) => void;
@@ -202,10 +225,7 @@ interface RightPanelStoreState {
   close: (ref: ScopedThreadRef) => void;
   setMaximized: (ref: ScopedThreadRef, maximized: boolean) => void;
   toggleVisibility: (ref: ScopedThreadRef) => void;
-  toggle: (
-    ref: ScopedThreadRef,
-    kind: Exclude<RightPanelKind, "file" | "terminal" | "pull-request" | "side-chat">,
-  ) => void;
+  toggle: (ref: ScopedThreadRef, kind: SingletonKind) => void;
   setThreadPanelOpen: (
     ref: ScopedThreadRef,
     presentation: ThreadPanelPresentation,
@@ -226,9 +246,7 @@ const DEFAULT_THREAD_PANEL_VISIBILITY: ThreadPanelVisibility = {
   popoverOpen: false,
 };
 
-const singletonSurface = (
-  kind: Exclude<RightPanelKind, "file" | "preview" | "terminal" | "pull-request" | "side-chat">,
-): RightPanelSurface => {
+const singletonSurface = (kind: Exclude<SingletonKind, "preview">): RightPanelSurface => {
   switch (kind) {
     case "diff":
       return { id: "diff", kind };
@@ -767,6 +785,12 @@ export const useRightPanelStore = create<RightPanelStoreState>()(
         set((state) =>
           userAction(state, scopedThreadKey(ref), (current) =>
             upsertSurface(current, { id: `side-chat:${threadId}`, kind: "side-chat", threadId }),
+          ),
+        ),
+      openTask: (ref, task) =>
+        set((state) =>
+          userAction(state, scopedThreadKey(ref), (current) =>
+            upsertSurface(current, { id: `task:${task.taskId}`, kind: "task", ...task }),
           ),
         ),
       renameDevice: (ref, surfaceId, title) =>

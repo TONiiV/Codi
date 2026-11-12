@@ -23,7 +23,6 @@ import { WorkspacePageHeader } from "../WorkspacePageHeader";
 import { BackgroundThreadContext } from "../chat/backgroundThread";
 import { MicroscopeGlyph } from "./ModeGlyphs";
 import { MyTeamsPage } from "./MyTeamsPage";
-import { TaskDrawer } from "./TaskDrawer";
 import { TelescopeAccountFooter } from "./TelescopeAccount";
 import { TelescopeChatList } from "./TelescopeChatList";
 import { TelescopeChatPage } from "./TelescopeChatPage";
@@ -229,7 +228,6 @@ export function TelescopePage({
           <TelescopePanel panelRef={panelRef} layoutElement={layoutElement} />
         )}
       </div>
-      {background ? null : <TaskDrawer />}
     </SidebarInset>
   );
 }

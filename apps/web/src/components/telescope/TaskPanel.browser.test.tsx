@@ -2,7 +2,7 @@ import { Telescope } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
 import { render } from "../../../test/render";
-import { LeaseField } from "./TaskDrawer";
+import { LeaseField } from "./TaskPanel";
 
 describe("LeaseField", () => {
   it("keeps the last lease read on screen and shows that a re-read failed", async () => {
