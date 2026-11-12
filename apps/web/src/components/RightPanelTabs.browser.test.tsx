@@ -63,7 +63,7 @@ describe("RightPanelTabs surfaces", () => {
       .toHaveAttribute("data-surface-launcher-keys", "BTFDPLMS");
   });
 
-  it("offers only Browser and Side chat in Telescope, in the launcher and the + menu", async () => {
+  it("offers only Browser, Files and Side chat in Telescope, in the launcher and the + menu", async () => {
     const onAddTerminal = vi.fn();
     const onAddSideChat = vi.fn();
     await using screen = await render(
@@ -74,8 +74,8 @@ describe("RightPanelTabs surfaces", () => {
       }),
     );
     const launcher = screen.getByLabelText("Open a surface");
-    await expect.element(launcher).toHaveAttribute("data-surface-launcher-keys", "BS");
-    await expect.element(launcher).toHaveTextContent("Open a surfaceBrowserBSide chatS");
+    await expect.element(launcher).toHaveAttribute("data-surface-launcher-keys", "BFS");
+    await expect.element(launcher).toHaveTextContent("Open a surfaceBrowserBFilesFSide chatS");
     await userEvent.keyboard("t");
     expect(onAddTerminal).not.toHaveBeenCalled();
     await userEvent.keyboard("s");
@@ -84,6 +84,10 @@ describe("RightPanelTabs surfaces", () => {
     await screen.getByRole("button", { name: "Add panel surface" }).click();
     const items = page.getByRole("menuitem");
     await expect.element(items.first()).toBeVisible();
-    expect(items.elements().map((item) => item.textContent)).toEqual(["BrowserB", "Side chatS"]);
+    expect(items.elements().map((item) => item.textContent)).toEqual([
+      "BrowserB",
+      "FilesF",
+      "Side chatS",
+    ]);
   });
 });

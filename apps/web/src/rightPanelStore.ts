@@ -108,6 +108,8 @@ const isPullRequestsPanelKey = (threadKey: string) => threadKey.endsWith(":pull-
 
 export const TELESCOPE_PANEL_SURFACES: ReadonlyArray<RightPanelKind> = [
   "preview",
+  "files",
+  "file",
   "side-chat",
   "task",
 ];

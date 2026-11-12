@@ -1,4 +1,4 @@
-import { EnvironmentId, Telescope } from "@t3tools/contracts";
+import { EnvironmentId, ProjectId, Telescope } from "@t3tools/contracts";
 import { describe, expect, it, vi } from "vite-plus/test";
 import { page, userEvent } from "vite-plus/test/browser";
 
@@ -11,7 +11,26 @@ import {
 import { TelescopePanel } from "./TelescopePanel";
 
 const ENV = EnvironmentId.make("env");
+const OTHER_MACHINE = EnvironmentId.make("other");
 const assistant = { id: "pa", name: "助理", kind: "chief_of_staff" } as unknown as Telescope.Agent;
+const mount = (environmentId: EnvironmentId, id: string) => ({
+  environmentId,
+  projectId: ProjectId.make(id),
+});
+const PROJECTS = [
+  { id: "p-app", mounts: [mount(OTHER_MACHINE, "app"), mount(ENV, "app")] },
+  { id: "p-docs", mounts: [mount(ENV, "docs")] },
+  { id: "p-api", mounts: [mount(ENV, "api")] },
+  { id: "p-remote", mounts: [mount(OTHER_MACHINE, "app")] },
+  { id: "p-empty", mounts: [] },
+];
+const TASK_PROJECT: Record<string, string> = { t1: "p-app", t2: "p-docs" };
+const CODI_PROJECTS = ["app", "docs", "api"].map((id) => ({
+  environmentId: ENV,
+  id: ProjectId.make(id),
+  title: id,
+  workspaceRoot: `/work/${id}`,
+}));
 
 vi.mock(import("./telescopeState"), async (original) => {
   const real = await original();
@@ -19,12 +38,20 @@ vi.mock(import("./telescopeState"), async (original) => {
     ...real,
     useTelescopeWorkspaces: () =>
       ({ environmentId: ENV, current: { id: "w", kind: "personal" } }) as never,
+    telescope: { ...real.telescope, projects: () => ({ projects: true }) as never },
     telescopeBoard: {
       ...real.telescopeBoard,
       task: ({ input }: { input: { taskId: string } }) => ({ taskId: input.taskId }) as never,
     },
   };
 });
+vi.mock("../files/FilePreviewPanel", () => ({
+  default: (props: { cwd: string }) => <p>files of {props.cwd}</p>,
+}));
+vi.mock(import("../../state/entities"), async (original) => ({
+  ...(await original()),
+  useProjects: (() => CODI_PROJECTS) as never,
+}));
 vi.mock("./TaskPanel", () => ({
   TaskDetail: (props: { taskId: string }) => <p>task body {props.taskId}</p>,
 }));
@@ -34,8 +61,12 @@ vi.mock(import("./myTeamsShared"), async (original) => ({
 }));
 vi.mock(import("../../state/query"), async (original) => ({
   ...(await original()),
-  useEnvironmentQuery: ((query: { taskId?: string } | null) => ({
-    data: query?.taskId ? { title: `任务 ${query.taskId}` } : { agents: [assistant] },
+  useEnvironmentQuery: ((query: { taskId?: string; projects?: true } | null) => ({
+    data: query?.projects
+      ? { projects: PROJECTS }
+      : query?.taskId
+        ? { title: `任务 ${query.taskId}`, projectId: TASK_PROJECT[query.taskId] }
+        : { agents: [assistant] },
     error: null,
   })) as never,
 }));
@@ -138,6 +169,60 @@ describe("TelescopePanel", () => {
       await screen.router!.navigate({ to: "/telescope", search: taskSearch("t1") });
       await vi.waitFor(() => expect(searchTask(screen)).toBe("t1"));
       await expect.element(page.getByText("task body t1")).toBeVisible();
+    });
+  });
+  describe("Files", () => {
+    const launcher = () => page.getByLabelText("Open a surface");
+    const filesDisabled = () =>
+      Array.from(launcher().element().querySelectorAll('[aria-disabled="true"]')).some((item) =>
+        item.textContent?.includes("Files"),
+      );
+
+    it("is greyed out with no project in context, a project with no mount, or only another machine's", async () => {
+      await using _viewport = await setup();
+      await using screen = await render(
+        <TelescopePanel panelRef={panelRef} layoutElement={null} />,
+        { router: "/telescope?view=tasks" },
+      );
+      useRightPanelStore.getState().show(panelRef);
+      await expect.element(launcher().getByText("Side chat")).toBeVisible();
+      expect(filesDisabled()).toBe(true);
+      for (const project of ["p-empty", "p-remote"]) {
+        await screen.router!.navigate({
+          to: "/telescope",
+          search: { view: "tasks", project: Telescope.TelescopeProjectId.make(project) },
+        });
+        await vi.waitFor(() => expect(filesDisabled()).toBe(true));
+      }
+    });
+
+    it("opens the first mount on this machine of the selected project", async () => {
+      await using _viewport = await setup();
+      await using _screen = await render(
+        <TelescopePanel panelRef={panelRef} layoutElement={null} />,
+        { router: "/telescope?view=tasks&project=p-app" },
+      );
+      useRightPanelStore.getState().show(panelRef);
+      await userEvent.click(launcher().getByRole("button", { name: /^Files/ }));
+      await expect.element(page.getByText("files of /work/app")).toBeVisible();
+      expect(panelState().surfaces.map((surface) => surface.kind)).toEqual(["files"]);
+    });
+
+    it("follows the open task's project over the selected one, until the selection changes", async () => {
+      await using _viewport = await setup();
+      await using screen = await render(
+        <TelescopePanel panelRef={panelRef} layoutElement={null} />,
+        { router: "/telescope?view=tasks&project=p-api&task=t2" },
+      );
+      await expect.element(page.getByText("task body t2")).toBeVisible();
+      useRightPanelStore.getState().open(panelRef, "files");
+      await expect.element(page.getByText("files of /work/docs")).toBeVisible();
+
+      await screen.router!.navigate({
+        to: "/telescope",
+        search: { view: "tasks", project: Telescope.TelescopeProjectId.make("p-app") },
+      });
+      await expect.element(page.getByText("files of /work/app")).toBeVisible();
     });
   });
 });

@@ -64,7 +64,6 @@ describe("rightPanelStore", () => {
     const store = useRightPanelStore.getState();
     const unhost = hostRightPanel(refB, panel);
     store.openSideChat(panel, TELESCOPE_SIDE_CHAT);
-    store.openFile(refB, "src/app.ts");
     store.open(refB, "diff");
     store.openPullRequest(refB, { projectId: "p", repository: "o/r", number: 7 });
     const kinds = () =>
@@ -73,10 +72,13 @@ describe("rightPanelStore", () => {
       );
     expect(kinds()).toEqual(["side-chat"]);
     store.open(panel, "preview");
+    store.open(panel, "files");
+    store.openFile(refB, "src/app.ts");
     const workspaceId = Telescope.WorkspaceId.make("w");
     store.openTask(panel, { workspaceId, taskId: Telescope.TaskId.make("t1") });
     store.openTask(panel, { workspaceId, taskId: Telescope.TaskId.make("t2") });
-    expect(kinds()).toEqual(["side-chat", "preview", "task", "task"]);
+    // Opening a file replaces the standalone explorer, as in Code.
+    expect(kinds()).toEqual(["side-chat", "preview", "file", "task", "task"]);
     unhost();
   });
 

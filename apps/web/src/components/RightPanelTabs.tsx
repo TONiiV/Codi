@@ -155,6 +155,8 @@ export interface RightPanelTabsProps {
   sideChatAvailable?: boolean;
   /** Overrides the default reason while side chats are available but cannot start. */
   sideChatDisabledReason?: string | null;
+  /** Replaces the default reason Files is unavailable for. */
+  filesDisabledReason?: string | null;
   /** The surfaces this host offers in its launcher and "+" menu; all of them when absent. */
   surfaceKinds?: ReadonlyArray<string>;
   pullRequestStatusSeeds?: Readonly<Record<string, PullRequestTabStatusSeed>>;
@@ -337,6 +339,7 @@ function RightPanelEmptyState(props: {
   deviceAvailable: boolean;
   sideChatAvailable: boolean;
   sideChatDisabledReason: string | null;
+  filesDisabledReason: string | null;
   surfaceKinds: ReadonlyArray<string> | undefined;
 }) {
   const [highlight, setHighlight] = useState(-1);
@@ -366,7 +369,7 @@ function RightPanelEmptyState(props: {
       icon: Files,
       shortcut: "F",
       available: props.filesAvailable,
-      disabledReason: SURFACE_UNAVAILABLE_HINTS.files,
+      disabledReason: props.filesDisabledReason ?? SURFACE_UNAVAILABLE_HINTS.files,
       onClick: props.onAddFiles,
     },
     {
@@ -1150,7 +1153,7 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
       icon: Files,
       shortcut: "F",
       available: props.filesAvailable,
-      disabledReason: SURFACE_DISABLED_REASONS.files,
+      disabledReason: props.filesDisabledReason ?? SURFACE_DISABLED_REASONS.files,
       onClick: props.onAddFiles,
     },
     {
@@ -1589,6 +1592,7 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
             deviceAvailable={props.deviceAvailable}
             sideChatAvailable={props.sideChatAvailable === true}
             sideChatDisabledReason={props.sideChatDisabledReason ?? null}
+            filesDisabledReason={props.filesDisabledReason ?? null}
             surfaceKinds={props.surfaceKinds}
           />
         ) : (
