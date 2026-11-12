@@ -22,6 +22,8 @@ export function usePreviewPanelInlineSize(
     readonly enabled?: boolean | undefined;
     readonly widthStorageKey?: string | undefined;
     readonly defaultWidth?: number | undefined;
+    /** Default width as a share of the row; it follows the row until a width is dragged. */
+    readonly defaultWidthFraction?: number | undefined;
     readonly container?: HTMLElement | null | undefined;
   } = {},
 ): PreviewPanelInlineSize {
@@ -30,9 +32,13 @@ export function usePreviewPanelInlineSize(
   const [maxWidth, setMaxWidth] = useState(() =>
     getPreviewPanelMaxWidth(typeof window === "undefined" ? 1280 : window.innerWidth),
   );
+  const fraction = options.defaultWidthFraction;
+  const [rowDefaultWidth, setRowDefaultWidth] = useState(() =>
+    fraction === undefined || !container ? undefined : Math.round(container.clientWidth * fraction),
+  );
   const { width, handlers } = useResizableWidth({
     storageKey: options.widthStorageKey ?? PREVIEW_PANEL_WIDTH_STORAGE_KEY,
-    defaultWidth: options.defaultWidth ?? PREVIEW_PANEL_DEFAULT_WIDTH,
+    defaultWidth: rowDefaultWidth ?? options.defaultWidth ?? PREVIEW_PANEL_DEFAULT_WIDTH,
     minWidth: PREVIEW_PANEL_MIN_WIDTH,
     maxWidth,
     edge: "left",
@@ -44,6 +50,7 @@ export function usePreviewPanelInlineSize(
     // of a sidebar drag, but an unchanged cap skips re-rendering the owner.
     const measure = () => {
       setMaxWidth(getPreviewPanelMaxWidth(window.innerWidth, row?.clientWidth));
+      if (fraction !== undefined && row) setRowDefaultWidth(Math.round(row.clientWidth * fraction));
     };
     measure();
     let frame = 0;

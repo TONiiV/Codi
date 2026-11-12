@@ -1,5 +1,5 @@
 import { scopeThreadRef } from "@t3tools/client-runtime/environment";
-import { type EnvironmentId, RunId, ThreadId } from "@t3tools/contracts";
+import { type EnvironmentId, RunId, Telescope, ThreadId } from "@t3tools/contracts";
 import { beforeEach, describe, expect, it } from "vite-plus/test";
 
 import { useClosedViewStore } from "./closedViewStore";
@@ -73,7 +73,10 @@ describe("rightPanelStore", () => {
       );
     expect(kinds()).toEqual(["side-chat"]);
     store.open(panel, "preview");
-    expect(kinds()).toEqual(["side-chat", "preview"]);
+    const workspaceId = Telescope.WorkspaceId.make("w");
+    store.openTask(panel, { workspaceId, taskId: Telescope.TaskId.make("t1") });
+    store.openTask(panel, { workspaceId, taskId: Telescope.TaskId.make("t2") });
+    expect(kinds()).toEqual(["side-chat", "preview", "task", "task"]);
     unhost();
   });
 
