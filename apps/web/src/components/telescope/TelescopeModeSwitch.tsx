@@ -6,7 +6,8 @@ import { MicroscopeGlyph, TelescopeGlyph } from "./ModeGlyphs";
 import { useTelescopeView } from "./telescopeViews";
 
 /**
- * Rests as a faint capsule and opens on hover or keyboard focus; CSS only, nothing runs at rest.
+ * Rests as a faint glass capsule, blurring a title that runs under it, and opens on hover or
+ * keyboard focus; CSS only, nothing runs at rest.
  * Phones have no room in the top bar, so there the sidebar sheet switches modes.
  */
 export function TelescopeModeSwitch() {
@@ -53,10 +54,10 @@ export function TelescopeModeSwitch() {
         role="group"
         aria-label="Telescope or Microscope"
         className={cn(
-          "group/mode pointer-events-auto relative flex h-6 w-14 items-center justify-center overflow-hidden rounded-full border border-transparent bg-foreground/85 opacity-45 shadow-sm",
-          "transition-[width,height,border-radius,background-color,opacity] duration-200 ease-out motion-reduce:transition-none",
-          "hover:h-10 hover:w-72 hover:rounded-xl hover:border-border hover:bg-popover hover:opacity-100",
-          "has-[:focus-visible]:h-10 has-[:focus-visible]:w-72 has-[:focus-visible]:rounded-xl has-[:focus-visible]:border-border has-[:focus-visible]:bg-popover has-[:focus-visible]:opacity-100",
+          "group/mode pointer-events-auto relative flex h-6 w-14 items-center justify-center overflow-hidden rounded-full border border-transparent bg-foreground/40 shadow-sm backdrop-blur-md",
+          "transition-[width,height,border-radius,background-color] duration-200 ease-out motion-reduce:transition-none",
+          "hover:h-10 hover:w-72 hover:rounded-xl hover:border-border hover:bg-popover",
+          "has-[:focus-visible]:h-10 has-[:focus-visible]:w-72 has-[:focus-visible]:rounded-xl has-[:focus-visible]:border-border has-[:focus-visible]:bg-popover",
         )}
         onPointerLeave={settle}
         onBlur={settle}
@@ -67,7 +68,7 @@ export function TelescopeModeSwitch() {
             const parts = event.currentTarget.getAnimations({ subtree: true });
             if (parts.every((part) => part.playState !== "running")) settle();
           }}
-          className="absolute size-3.5 text-background group-hover/mode:opacity-0 group-has-[:focus-visible]/mode:opacity-0"
+          className="absolute size-3.5 text-background opacity-70 group-hover/mode:opacity-0 group-has-[:focus-visible]/mode:opacity-0"
         />
         <div className="pointer-events-none grid h-8 w-70 shrink-0 grid-cols-2 gap-1 opacity-0 group-hover/mode:pointer-events-auto group-hover/mode:opacity-100 group-has-[:focus-visible]/mode:pointer-events-auto group-has-[:focus-visible]/mode:opacity-100">
           {modes.map((mode) => (
