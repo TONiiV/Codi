@@ -21,19 +21,33 @@ type Write = ReturnType<typeof useTaskWrite>;
 type Task = Telescope.Task;
 type Names = (id: string) => string | undefined;
 
-const time = (at: string) => new Date(at).toLocaleString();
+export const time = (at: string) => new Date(at).toLocaleString();
 const composing = (event: KeyboardEvent) => event.nativeEvent.isComposing || event.keyCode === 229;
 
 /** A pinned property: a label row over its value, as on a Notion task page. */
-export function Property(props: { icon?: LucideIcon; label: string; children: ReactNode }) {
-  const Icon = props.icon;
+function Property(props: { icon: LucideIcon; label: string; children: ReactNode }) {
   return (
     <div className="flex min-w-0 flex-col">
       <div className="flex h-6 items-center gap-1.5 px-1.5 font-medium text-muted-foreground text-xs">
-        {Icon ? <Icon className="size-4" /> : null}
+        <props.icon className="size-4.25" />
         {props.label}
       </div>
       <div className="flex min-h-7.5 items-center gap-1.5 px-1.5 text-sm">{props.children}</div>
+    </div>
+  );
+}
+
+/** A row of the details list: a 120px label cell beside its value. */
+export function PropertyRow(props: { icon: LucideIcon; label: string; children: ReactNode }) {
+  return (
+    <div className="flex min-h-8.5 items-start text-sm">
+      <div className="flex h-8.5 w-30 shrink-0 items-center gap-1.5 px-1.5 text-muted-foreground">
+        <props.icon className="size-4.75" />
+        {props.label}
+      </div>
+      <div className="flex min-h-8.5 min-w-0 flex-1 flex-wrap items-center gap-x-1.5 px-1.5 py-1.75">
+        {props.children}
+      </div>
     </div>
   );
 }
@@ -45,7 +59,6 @@ const PRIORITY = {
   medium: { label: "中", badge: "warning" },
   low: { label: "低", badge: "secondary" },
 } as const satisfies Record<Telescope.TaskPriority, { label: string; badge: string }>;
-const NONE = "none";
 
 function PriorityBadge({ priority }: { priority: Telescope.TaskPriority | undefined }) {
   if (priority === undefined) return <Empty />;
@@ -59,23 +72,29 @@ const dayLabel = (day: string) => {
 };
 
 function Title({ task, write }: { task: Task; write: Write | null }) {
-  const className = "font-bold text-3xl leading-tight wrap-anywhere outline-none";
+  // The task as editing began: a rename arriving meanwhile leaves the typed text alone and
+  // the write goes in against that version, so the server reports what it replaced.
+  const [base, setBase] = useState<Task | null>(null);
+  const shown = base ?? task;
+  const className = "font-bold text-3xl leading-9.5 wrap-anywhere outline-none";
   if (write === null) return <h1 className={className}>{task.title}</h1>;
   const save = async (element: HTMLElement) => {
+    setBase(null);
     const title = (element.textContent ?? "").trim().slice(0, Telescope.BOARD_LIMITS.titleLength);
-    if (title.length === 0 || title === task.title) element.textContent = task.title;
-    else if (!(await write(task, { set: { title } }))) element.textContent = task.title;
+    if (title.length === 0 || title === shown.title) element.textContent = task.title;
+    else if (!(await write(shown, { set: { title } }))) element.textContent = task.title;
   };
   return (
     <h1
-      // A new title from the server remounts the text the browser owns while editing.
-      key={task.title}
+      // A new title from the server remounts the text the browser owns, once editing ends.
+      key={shown.title}
       role="textbox"
       aria-label="任务标题"
       contentEditable="plaintext-only"
       suppressContentEditableWarning
       spellCheck={false}
       className={className}
+      onFocus={() => setBase(task)}
       onBlur={(event) => void save(event.currentTarget)}
       onKeyDown={(event) => {
         if (composing(event)) return;
@@ -84,12 +103,12 @@ function Title({ task, write }: { task: Task; write: Write | null }) {
           event.currentTarget.blur();
         }
         if (event.key === "Escape") {
-          event.currentTarget.textContent = task.title;
+          event.currentTarget.textContent = shown.title;
           event.currentTarget.blur();
         }
       }}
     >
-      {task.title}
+      {shown.title}
     </h1>
   );
 }
@@ -129,26 +148,19 @@ function OwnerValue(props: {
   const owner = task.ownerAgentId;
   const ownerName = owner && (names(owner) ?? "其他成员的 agent");
   if (write === null) return ownerName ? <span>{ownerName}</span> : <Empty />;
-  // An owner the viewer cannot see stays selectable so the trigger still names it.
-  const agents =
-    owner && !props.agents.some((agent) => agent.id === owner)
-      ? [...props.agents, { id: owner, name: ownerName ?? "" }]
-      : props.agents;
   return (
     <Select
-      value={owner ?? NONE}
-      onValueChange={(value) => {
-        if (value === null || value === (owner ?? NONE)) return;
-        const ownerAgentId = value === NONE ? null : Telescope.AgentId.make(value);
-        void write(task, { set: { ownerAgentId } });
+      value={owner ?? null}
+      onValueChange={(ownerAgentId) => {
+        if (ownerAgentId !== (owner ?? null)) void write(task, { set: { ownerAgentId } });
       }}
     >
       <SelectTrigger variant="ghost" size="xs" aria-label="负责">
         <SelectValue>{ownerName ?? <Empty />}</SelectValue>
       </SelectTrigger>
       <SelectPopup>
-        <SelectItem value={NONE}>无</SelectItem>
-        {agents.map((agent) => (
+        <SelectItem value={null}>无</SelectItem>
+        {props.agents.map((agent) => (
           <SelectItem key={agent.id} value={agent.id}>
             {agent.name}
           </SelectItem>
@@ -184,11 +196,9 @@ function PriorityValue({ task, write }: { task: Task; write: Write | null }) {
   if (write === null) return <PriorityBadge priority={task.priority} />;
   return (
     <Select
-      value={task.priority ?? NONE}
-      onValueChange={(value) => {
-        if (value === null || value === (task.priority ?? NONE)) return;
-        const priority = value === NONE ? null : (value as Telescope.TaskPriority);
-        void write(task, { set: { priority } });
+      value={task.priority ?? null}
+      onValueChange={(priority) => {
+        if (priority !== (task.priority ?? null)) void write(task, { set: { priority } });
       }}
     >
       <SelectTrigger variant="ghost" size="xs" aria-label="优先级">
@@ -197,7 +207,7 @@ function PriorityValue({ task, write }: { task: Task; write: Write | null }) {
         </SelectValue>
       </SelectTrigger>
       <SelectPopup>
-        <SelectItem value={NONE}>无</SelectItem>
+        <SelectItem value={null}>无</SelectItem>
         {Telescope.TaskPriority.literals.map((priority) => (
           <SelectItem key={priority} value={priority}>
             {PRIORITY[priority].label}
@@ -220,10 +230,13 @@ function Initial({ name }: { name: string }) {
 function Comments(props: { task: Task; write: Write | null; names: Names; selfName: string }) {
   const { task, write, names } = props;
   const [draft, setDraft] = useState("");
+  const [sending, setSending] = useState(false);
   const send = async () => {
     const note = draft.trim();
-    if (write === null || note.length === 0) return;
+    if (write === null || sending || note.length === 0) return;
+    setSending(true);
     if (await write(task, { note })) setDraft("");
+    setSending(false);
   };
   return (
     <section aria-label="评论" className="flex flex-col gap-3 border-b pb-4">
@@ -268,7 +281,7 @@ function Comments(props: { task: Task; write: Write | null; names: Names; selfNa
             size="icon-xs"
             variant="ghost"
             aria-label="发送评论"
-            disabled={draft.trim().length === 0}
+            disabled={sending || draft.trim().length === 0}
             onClick={() => void send()}
           >
             <ArrowUpIcon />
@@ -285,37 +298,39 @@ const BODY_TYPE =
 
 /** The markdown body: checkboxes tick in place, and editing is the plain source. */
 function Body({ task, write }: { task: Task; write: Write | null }) {
-  const [source, setSource] = useState<string | null>(null);
+  // The source is saved against the task it was opened on, so the server reports what it replaced.
+  const [editing, setEditing] = useState<{ task: Task; body: string; source: string } | null>(null);
   // A sent body stands in until the task's next version arrives.
   const [sent, setSent] = useState<{ body: string; version: number } | null>(null);
   const body = sent?.version === task.version ? sent.body : (task.body ?? "");
-  const save = async (next: string) => {
+  const save = async (next: string, base: Task) => {
     if (write === null) return false;
     setSent({ body: next, version: task.version });
-    const saved = await write(task, { set: { body: next.trim().length === 0 ? null : next } });
+    const saved = await write(base, { set: { body: next.trim().length === 0 ? null : next } });
     if (!saved) setSent(null);
     return saved;
   };
-  if (source !== null)
+  if (editing !== null)
     return (
       <section aria-label="正文" className="flex flex-col gap-2">
         <Textarea
           autoFocus
           aria-label="正文 Markdown"
           maxLength={Telescope.BOARD_LIMITS.bodyLength}
-          value={source}
-          onChange={(event) => setSource(event.target.value)}
+          value={editing.source}
+          onChange={(event) => setEditing({ ...editing, source: event.target.value })}
         />
         <div className="flex gap-2">
           <Button
             size="xs"
             onClick={async () => {
-              if (source === body || (await save(source))) setSource(null);
+              const { source } = editing;
+              if (source === editing.body || (await save(source, editing.task))) setEditing(null);
             }}
           >
             保存
           </Button>
-          <Button size="xs" variant="ghost" onClick={() => setSource(null)}>
+          <Button size="xs" variant="ghost" onClick={() => setEditing(null)}>
             取消
           </Button>
         </div>
@@ -328,7 +343,7 @@ function Body({ task, write }: { task: Task; write: Write | null }) {
           size="xs"
           variant="ghost-muted"
           className="self-end"
-          onClick={() => setSource(body)}
+          onClick={() => setEditing({ task, body, source: body })}
         >
           编辑 Markdown
         </Button>
@@ -345,7 +360,7 @@ function Body({ task, write }: { task: Task; write: Write | null }) {
               ? undefined
               : ({ markerOffset, checked }) => {
                   const next = setMarkdownTaskChecked(body, markerOffset, checked);
-                  if (next !== body) void save(next);
+                  if (next !== body) void save(next, task);
                 }
           }
         />
@@ -364,17 +379,27 @@ export function TaskPage(props: {
   names: Names;
   agents: ReadonlyArray<{ readonly id: Telescope.AgentId; readonly name: string }>;
   selfName: string;
-  /** More pinned properties after the task's own. */
-  properties?: ReactNode;
+  /** More rows for the details list, after priority. */
+  details?: ReactNode;
   /** Sections after the body. */
   children?: ReactNode;
 }) {
   const { task, write, names } = props;
+  const [details, setDetails] = useState(false);
   return (
     <div className="@container min-h-0 flex-1 overflow-y-auto">
       <div className="flex flex-col gap-6 px-6 pt-9 pb-16 @2xl:ps-19 @2xl:pe-23">
         <div className="flex flex-col gap-3">
           <Title task={task} write={write} />
+          <Button
+            size="sm"
+            variant="ghost-muted"
+            className="-mx-2.25 self-start"
+            aria-expanded={details}
+            onClick={() => setDetails(!details)}
+          >
+            {details ? "隐藏详情" : "查看详情"}
+          </Button>
           <div className="-mx-1.5 flex flex-wrap gap-x-2 gap-y-1">
             <Property icon={UserRoundIcon} label="负责">
               <OwnerValue task={task} write={write} names={names} agents={props.agents} />
@@ -386,11 +411,16 @@ export function TaskPage(props: {
             <Property icon={CalendarIcon} label="截止日期">
               <DueDateValue task={task} write={write} />
             </Property>
-            <Property icon={FlagIcon} label="优先级">
-              <PriorityValue task={task} write={write} />
-            </Property>
-            {props.properties}
           </div>
+          {details ? (
+            <section aria-label="属性" className="-mx-1.5 flex flex-col gap-1">
+              <h2 className="px-1.5 font-medium text-muted-foreground text-xs">属性</h2>
+              <PropertyRow icon={FlagIcon} label="优先级">
+                <PriorityValue task={task} write={write} />
+              </PropertyRow>
+              {props.details}
+            </section>
+          ) : null}
         </div>
         <Comments task={task} write={write} names={names} selfName={props.selfName} />
         <Body task={task} write={write} />

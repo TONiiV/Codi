@@ -33,12 +33,10 @@ import { Skeleton } from "../ui/skeleton";
 import { Spinner } from "../ui/spinner";
 import { toastManager } from "../ui/toast";
 import { ErrorNote } from "./TelescopeAccountDialogs";
-import { Property, TaskPage } from "./TaskPage";
+import { PropertyRow, TaskPage, time } from "./TaskPage";
 import { telescope, telescopeBoard } from "./telescopeState";
 import { unlinkThreadFromTask } from "./ThreadTaskLink";
 import { type BoardTarget, useBoardNames, useTaskWrite } from "./TasksParts";
-
-const time = (at: string) => new Date(at).toLocaleString();
 
 export function LeaseField({
   lease,
@@ -50,7 +48,7 @@ export function LeaseField({
   query: { data: unknown; error: string | null; refresh: () => void };
 }) {
   return (
-    <Property icon={CircleDashedIcon} label="租约">
+    <PropertyRow icon={CircleDashedIcon} label="租约">
       {lease && holder ? (
         <p>
           {holder} 在做{" "}
@@ -69,7 +67,7 @@ export function LeaseField({
           onRetry={query.refresh}
         />
       )}
-    </Property>
+    </PropertyRow>
   );
 }
 
@@ -129,8 +127,8 @@ function SubTask({
 /** The task's linked Code threads, read as its sub-tasks. */
 function SubTasks({ task, mayUnlink }: { task: Telescope.Task; mayUnlink: boolean }) {
   return (
-    <section aria-label="子任务" className="flex flex-col gap-1">
-      <h2 className="font-semibold text-2xl leading-8">子任务</h2>
+    <section aria-label="关联的对话" className="flex flex-col gap-1">
+      <h2 className="font-semibold text-2xl leading-8">关联的对话</h2>
       {task.threads.length === 0 ? (
         <p className="text-base text-muted-foreground">没有关联对话</p>
       ) : (
@@ -252,10 +250,17 @@ export function TaskDetail({ target, taskId }: { target: BoardTarget; taskId: Te
   const names = useBoardNames(target);
   const board = { environmentId, input: { workspaceId: target.workspaceId } };
   const self = useEnvironmentQuery(telescope.get(board)).data?.self ?? null;
+  // The company list also carries the member's own agents that are visible to the company.
   const agents = [
-    useAtomValue(telescopeBoard.agents(board)),
-    useAtomValue(telescopeBoard.companyAgents(board)),
-  ].flatMap((result) => AsyncResult.getOrElse(result, () => null)?.agents ?? []);
+    ...new Map(
+      [
+        useAtomValue(telescopeBoard.agents(board)),
+        useAtomValue(telescopeBoard.companyAgents(board)),
+      ]
+        .flatMap((result) => AsyncResult.getOrElse(result, () => null)?.agents ?? [])
+        .map((agent) => [agent.id, agent]),
+    ).values(),
+  ];
   // A viewer (只读) is refused every write, so it gets the page without controls.
   const member = self !== null && self.role !== "viewer";
   const mayWrite = useAtomValue(telescopeBoard.updateTask.permissionAtom(environmentId)) && member;
@@ -286,11 +291,11 @@ export function TaskDetail({ target, taskId }: { target: BoardTarget; taskId: Te
       names={names}
       agents={agents}
       selfName={self?.displayName ?? ""}
-      properties={
+      details={
         <>
           <LeaseField lease={lease} holder={holder} query={leaseQuery} />
           {task.forgeIssue ? (
-            <Property icon={LinkIcon} label="Issue">
+            <PropertyRow icon={LinkIcon} label="Issue">
               <a
                 href={task.forgeIssue.url}
                 target="_blank"
@@ -300,7 +305,7 @@ export function TaskDetail({ target, taskId }: { target: BoardTarget; taskId: Te
                 {task.forgeIssue.repo}#{task.forgeIssue.number}
                 <ExternalLinkIcon className="size-3.5" />
               </a>
-            </Property>
+            </PropertyRow>
           ) : null}
         </>
       }
