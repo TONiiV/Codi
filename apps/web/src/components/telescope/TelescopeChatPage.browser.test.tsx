@@ -85,7 +85,7 @@ describe("TelescopeChatPage", () => {
     await page.viewport(1280, 800);
     await using screen = await render(
       <SidebarProvider defaultOpen={false}>
-        <Sidebar collapsible="icon">
+        <Sidebar>
           <AgentList />
         </Sidebar>
         <TelescopeChatPage />
@@ -102,7 +102,7 @@ describe("TelescopeChatPage", () => {
     await page.viewport(1280, 800);
     await using screen = await render(
       <SidebarProvider defaultOpen={false}>
-        <Sidebar collapsible="icon">
+        <Sidebar>
           <AgentList />
         </Sidebar>
         <TelescopeChatPage />
