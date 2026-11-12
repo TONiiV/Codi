@@ -157,7 +157,7 @@ function ChatGroups({
     if (isMobile) setOpenMobile(false);
     void navigate({
       to: TELESCOPE_PATH,
-      search: telescopeSearch("chats", layout, undefined, agentId),
+      search: telescopeSearch("chats", layout, { agent: agentId }),
     });
   };
   const rows = (agents: ReadonlyArray<Telescope.Agent>) =>

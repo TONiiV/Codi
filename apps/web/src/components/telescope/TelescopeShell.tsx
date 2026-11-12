@@ -148,7 +148,15 @@ export function TelescopeSidebar({
   );
 }
 
-export function TelescopeEmptyState({ view }: { view: TelescopeView }) {
+export function TelescopeEmptyState({
+  view,
+  title,
+  description,
+}: {
+  view: TelescopeView;
+  title?: string;
+  description?: string;
+}) {
   const entry = telescopeViewEntry(view);
   return (
     <Empty>
@@ -156,8 +164,8 @@ export function TelescopeEmptyState({ view }: { view: TelescopeView }) {
         <EmptyMedia variant="icon">
           <entry.icon />
         </EmptyMedia>
-        <EmptyTitle>{entry.emptyTitle}</EmptyTitle>
-        <EmptyDescription>{entry.emptyDescription}</EmptyDescription>
+        <EmptyTitle>{title ?? entry.emptyTitle}</EmptyTitle>
+        <EmptyDescription>{description ?? entry.emptyDescription}</EmptyDescription>
       </EmptyHeader>
     </Empty>
   );

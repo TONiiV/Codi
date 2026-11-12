@@ -78,9 +78,15 @@ const decodeProjectId = Schema.decodeUnknownOption(Telescope.TelescopeProjectId)
 export function telescopeSearch(
   view: TelescopeView,
   layout: TasksLayout,
-  task?: Telescope.TaskId,
-  agent?: Telescope.AgentId,
-  project?: Telescope.TelescopeProjectId,
+  {
+    task,
+    agent,
+    project,
+  }: {
+    task?: Telescope.TaskId | undefined;
+    agent?: Telescope.AgentId | undefined;
+    project?: Telescope.TelescopeProjectId | undefined;
+  } = {},
 ): TelescopeSearch {
   return {
     view,
@@ -97,9 +103,11 @@ export function parseTelescopeSearch(raw: Record<string, unknown>): TelescopeSea
   return telescopeSearch(
     legacyDecisions ? "tasks" : parseTelescopeView(raw.view),
     legacyDecisions ? "decisions" : (TASKS_LAYOUTS.find((id) => id === raw.layout) ?? "table"),
-    Option.getOrUndefined(decodeTaskId(raw.task)),
-    Option.getOrUndefined(decodeAgentId(raw.agent)),
-    Option.getOrUndefined(decodeProjectId(raw.project)),
+    {
+      task: Option.getOrUndefined(decodeTaskId(raw.task)),
+      agent: Option.getOrUndefined(decodeAgentId(raw.agent)),
+      project: Option.getOrUndefined(decodeProjectId(raw.project)),
+    },
   );
 }
 

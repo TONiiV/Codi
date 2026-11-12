@@ -345,7 +345,7 @@ export function TaskDrawer() {
         if (!next && view !== null)
           void navigate({
             to: TELESCOPE_PATH,
-            search: telescopeSearch(view, layout, undefined, undefined, project),
+            search: telescopeSearch(view, layout, { project }),
             replace: true,
           });
       }}

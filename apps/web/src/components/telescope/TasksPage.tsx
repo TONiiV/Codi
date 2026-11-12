@@ -15,7 +15,6 @@ import {
   DialogTitle,
 } from "../ui/dialog";
 import { TELESCOPE_PATH } from "../sidebar/mainAppLocation";
-import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "../ui/empty";
 import { Input } from "../ui/input";
 import { DecisionsBody } from "./DecisionsPage";
 import { TelescopeEmptyState } from "./TelescopeShell";
@@ -93,7 +92,7 @@ function TasksTabs({ layout }: { layout: TasksLayout }) {
       onClick={() =>
         void navigate({
           to: TELESCOPE_PATH,
-          search: telescopeSearch("tasks", id, undefined, undefined, project),
+          search: telescopeSearch("tasks", id, { project }),
           replace: true,
         })
       }
@@ -133,18 +132,14 @@ function TasksBody(props: { target: BoardTarget; layout: TasksLayout; tabs: Reac
       }
     >
       {tasks.length === 0 ? (
-        projectId === undefined ? (
-          <TelescopeEmptyState view="tasks" />
-        ) : (
-          <Empty>
-            <EmptyHeader>
-              <EmptyTitle>这个项目还没有任务</EmptyTitle>
-              <EmptyDescription>任务归到这个项目后，会列在这里。</EmptyDescription>
-            </EmptyHeader>
-          </Empty>
-        )
+        <TelescopeEmptyState
+          view="tasks"
+          {...(projectId === undefined
+            ? {}
+            : { title: "这个项目还没有任务", description: "任务归到这个项目后，会列在这里。" })}
+        />
       ) : (
-        <View target={target} tasks={tasks} project={projectId} />
+        <View target={target} tasks={tasks} />
       )}
     </BoardFrame>
   );

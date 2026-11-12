@@ -41,7 +41,7 @@ export function TasksSidebar() {
     if (isMobile) setOpenMobile(false);
     void navigate({
       to: TELESCOPE_PATH,
-      search: telescopeSearch("tasks", layout, undefined, undefined, project),
+      search: telescopeSearch("tasks", layout, { project }),
     });
   };
   const row = (label: string, project?: Telescope.TelescopeProjectId) => (
