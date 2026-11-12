@@ -224,7 +224,9 @@ export function ThreadTaskBadge({ threadRef }: { threadRef: ScopedThreadRef }) {
     <Badge
       variant="outline"
       size="sm"
-      render={<Link to={TELESCOPE_PATH} search={telescopeSearch("tasks", "table", task.id)} />}
+      render={
+        <Link to={TELESCOPE_PATH} search={telescopeSearch("tasks", "table", { task: task.id })} />
+      }
     >
       任务 · {task.title}
     </Badge>

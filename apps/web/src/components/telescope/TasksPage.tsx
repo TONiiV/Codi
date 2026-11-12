@@ -26,8 +26,14 @@ import {
   useBoardCommand,
   useBoardTarget,
 } from "./TasksParts";
+import { useTasksProject } from "./TasksSidebar";
 import { TasksBoard, TasksTable } from "./TasksViews";
-import { type TasksLayout, telescopeSearch, useTasksLayout } from "./telescopeViews";
+import {
+  type TasksLayout,
+  telescopeSearch,
+  useTasksLayout,
+  useTasksProjectId,
+} from "./telescopeViews";
 
 function NewTaskDialog({ target }: { target: BoardTarget }) {
   const [open, setOpen] = useState(false);
@@ -77,6 +83,7 @@ function NewTaskDialog({ target }: { target: BoardTarget }) {
 
 function TasksTabs({ layout }: { layout: TasksLayout }) {
   const navigate = useNavigate();
+  const project = useTasksProjectId();
   const tab = (id: TasksLayout, label: string, Icon: typeof TableIcon) => (
     <Button
       size="xs"
@@ -85,7 +92,7 @@ function TasksTabs({ layout }: { layout: TasksLayout }) {
       onClick={() =>
         void navigate({
           to: TELESCOPE_PATH,
-          search: telescopeSearch("tasks", id),
+          search: telescopeSearch("tasks", id, { project }),
           replace: true,
         })
       }
@@ -104,7 +111,11 @@ function TasksTabs({ layout }: { layout: TasksLayout }) {
 
 function TasksBody(props: { target: BoardTarget; layout: TasksLayout; tabs: ReactNode }) {
   const { target, layout } = props;
-  const input = { workspaceId: target.workspaceId };
+  const { selected: projectId } = useTasksProject(target);
+  const input = {
+    workspaceId: target.workspaceId,
+    ...(projectId === undefined ? {} : { projectId }),
+  };
   const query = useEnvironmentQuery(
     telescopeBoard.tasks({ environmentId: target.environmentId, input }),
   );
@@ -121,7 +132,12 @@ function TasksBody(props: { target: BoardTarget; layout: TasksLayout; tabs: Reac
       }
     >
       {tasks.length === 0 ? (
-        <TelescopeEmptyState view="tasks" />
+        <TelescopeEmptyState
+          view="tasks"
+          {...(projectId === undefined
+            ? {}
+            : { title: "这个项目还没有任务", description: "任务归到这个项目后，会列在这里。" })}
+        />
       ) : (
         <View target={target} tasks={tasks} />
       )}

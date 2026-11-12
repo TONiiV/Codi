@@ -23,6 +23,7 @@ import { WorkspacePageHeader } from "../WorkspacePageHeader";
 import { BackgroundThreadContext } from "../chat/backgroundThread";
 import { MicroscopeGlyph } from "./ModeGlyphs";
 import { MyTeamsPage } from "./MyTeamsPage";
+import { TasksSidebar } from "./TasksSidebar";
 import { TelescopeAccountFooter } from "./TelescopeAccount";
 import { TelescopeChatList } from "./TelescopeChatList";
 import { TelescopeChatPage } from "./TelescopeChatPage";
@@ -131,10 +132,12 @@ export function TelescopeSidebar({
         <TelescopeRail view={view} collapsed={false} />
         <SidebarContent className="min-h-full">
           <SidebarGroup>
-            <div className="px-2 py-1 text-xs font-medium text-muted-foreground">
-              {telescopeViewEntry(view).label}
-            </div>
-            {children ?? (view === "chats" ? <TelescopeChatList /> : null)}
+            {children ??
+              (view === "chats" ? (
+                <TelescopeChatList />
+              ) : view === "tasks" ? (
+                <TasksSidebar />
+              ) : null)}
           </SidebarGroup>
         </SidebarContent>
       </div>
@@ -144,7 +147,15 @@ export function TelescopeSidebar({
   );
 }
 
-export function TelescopeEmptyState({ view }: { view: TelescopeView }) {
+export function TelescopeEmptyState({
+  view,
+  title,
+  description,
+}: {
+  view: TelescopeView;
+  title?: string;
+  description?: string;
+}) {
   const entry = telescopeViewEntry(view);
   return (
     <Empty>
@@ -152,8 +163,8 @@ export function TelescopeEmptyState({ view }: { view: TelescopeView }) {
         <EmptyMedia variant="icon">
           <entry.icon />
         </EmptyMedia>
-        <EmptyTitle>{entry.emptyTitle}</EmptyTitle>
-        <EmptyDescription>{entry.emptyDescription}</EmptyDescription>
+        <EmptyTitle>{title ?? entry.emptyTitle}</EmptyTitle>
+        <EmptyDescription>{description ?? entry.emptyDescription}</EmptyDescription>
       </EmptyHeader>
     </Empty>
   );

@@ -291,10 +291,20 @@ export function createTelescopeBoardAtoms<R, E>(
       const watched = registry.get(seen);
       if (AsyncResult.isFailure(watched) && !watched.waiting) registry.refresh(seen);
     });
+  // Moves when a write must re-read every task list of a workspace, whatever its project filter.
+  const staleLists = Atom.family((key: string) =>
+    Atom.make(0).pipe(Atom.withLabel(`telescope:task:list-stale:${key}`)),
+  );
+  const staleListsOf = (environmentId: EnvironmentId, workspaceId: Telescope.WorkspaceId) =>
+    staleLists(JSON.stringify([environmentId, workspaceId]));
   const tasks = createEnvironmentRpcQueryAtomFamily(runtime, {
     label: "telescope:task:list",
     tag: WS_METHODS.taskList,
-    refreshTrigger: (target) => noticesFor(target, (seen) => seen.tasks),
+    refreshTrigger: (target) => {
+      const notices = noticesFor(target, (seen) => seen.tasks);
+      const stale = staleListsOf(target.environmentId, target.input.workspaceId);
+      return Atom.make((get) => `${get(notices)}:${get(stale)}`);
+    },
     onAnswer: reopenRefusedWatch,
   });
   const task = createEnvironmentRpcQueryAtomFamily(runtime, {
@@ -322,7 +332,7 @@ export function createTelescopeBoardAtoms<R, E>(
       const watched = registry.getNodes().has(seen) ? registry.get(seen) : undefined;
       const live = watched !== undefined && AsyncResult.isSuccess(watched) && watched.value.live;
       if (Exit.isSuccess(exit) && live) return;
-      registry.refresh(tasks({ environmentId, input: { workspaceId } }));
+      registry.update(staleListsOf(environmentId, workspaceId), (n) => n + 1);
       registry.refresh(decisions({ environmentId, input: { workspaceId } }));
       if (taskId !== undefined)
         registry.refresh(task({ environmentId, input: { workspaceId, taskId } }));
