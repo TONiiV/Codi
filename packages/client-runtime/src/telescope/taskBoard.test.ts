@@ -36,6 +36,7 @@ import {
 } from "./taskBoard.ts";
 
 const workspaceId = Telescope.WorkspaceId.make("w1");
+const projectId = Telescope.TelescopeProjectId.make("p-1");
 
 function decision(
   id: string,
@@ -451,13 +452,15 @@ describe("board watch", () => {
       const { board, registry, watches, ended, nextWatch, nextReads, unread, readsBefore } = fake;
       const tasks = board.tasks(at({ workspaceId }));
       registry.mount(tasks);
+      // A project filter reads under its own key and must follow every refresh of the board.
+      registry.mount(board.tasks(at({ workspaceId, projectId })));
       registry.mount(board.decisions(at({ workspaceId })));
       // No notice names t2, so only the watch failing re-reads it.
       registry.mount(board.task(at({ workspaceId, taskId: t2 })));
       // The agents read has no trigger: refreshing it marks where a write's own reads end.
       const marker = board.agents(at({ workspaceId }));
       registry.mount(marker);
-      expect(yield* nextReads(4)).toEqual(["agents", "decisions", "task:t2", "tasks"]);
+      expect(yield* nextReads(5)).toEqual(["agents", "decisions", "task:t2", "tasks", "tasks"]);
       const settled = Effect.sync(() => registry.refresh(marker)).pipe(
         Effect.andThen(readsBefore("agents")),
       );
@@ -469,7 +472,7 @@ describe("board watch", () => {
       const write = { workspaceId, taskId: t1, baseVersion: 1, set: { status: "done" as const } };
       const updated = yield* Effect.promise(() => board.updateTask.run(registry, at(write)));
       expect(updated._tag).toBe("Success");
-      expect(yield* nextReads(1)).toEqual(["tasks"]);
+      expect(yield* nextReads(2)).toEqual(["tasks", "tasks"]);
       // Nothing else was read for it: the next read is the next notice's.
       yield* Queue.offer(watch, decided);
       expect(yield* nextReads(1)).toEqual(["decisions"]);
@@ -479,7 +482,7 @@ describe("board watch", () => {
         board.createDecision.run(registry, at(decideInput(proposal, "a"))),
       );
       expect(refused._tag).toBe("Failure");
-      expect(yield* settled).toEqual(["decisions", "tasks"]);
+      expect(yield* settled).toEqual(["decisions", "tasks", "tasks"]);
 
       // A refused member's watch stays failed: each read re-reads once and no watch reopens.
       yield* fake.setRevoked(true);
@@ -488,12 +491,12 @@ describe("board watch", () => {
         Cause.fail(new Telescope.WorkspaceError({ reason: "forbidden", message: "Revoked." })),
       );
       yield* Queue.take(ended);
-      expect(yield* settled).toEqual(["decisions", "task:t2", "tasks"]);
+      expect(yield* settled).toEqual(["decisions", "task:t2", "tasks", "tasks"]);
       yield* TestClock.adjust("1 minute");
       expect(yield* Queue.size(watches)).toBe(0);
       // With no live watch to echo it, a write re-reads on settle.
       yield* Effect.promise(() => board.updateTask.run(registry, at(write)));
-      expect(yield* settled).toEqual(["decisions", "tasks"]);
+      expect(yield* settled).toEqual(["decisions", "tasks", "tasks"]);
       expect(yield* unread).toBe(0);
 
       // Once a read is answered again the member is back: the watch reopens and each read re-reads.
@@ -501,7 +504,7 @@ describe("board watch", () => {
       registry.refresh(tasks);
       expect(yield* nextReads(1)).toEqual(["tasks"]);
       const restored = yield* nextWatch;
-      expect(yield* nextReads(3)).toEqual(["decisions", "task:t2", "tasks"]);
+      expect(yield* nextReads(4)).toEqual(["decisions", "task:t2", "tasks", "tasks"]);
       yield* Queue.offer(restored, decided);
       expect(yield* nextReads(1)).toEqual(["decisions"]);
       expect(yield* unread).toBe(0);
