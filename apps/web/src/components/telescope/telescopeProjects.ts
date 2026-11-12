@@ -44,35 +44,40 @@ export function projectRows(
   });
 }
 
+/** How a project's repository reads in the page; a project with no remote is a local directory. */
+export const repositoryLabel = (project: Pick<SidebarProjectSnapshot, "repositoryIdentity">) =>
+  project.repositoryIdentity?.canonicalKey ?? "本地目录";
+
 /**
- * Live Code project groups that no workspace mounts. 接入 turns one into a Telescope project
- * the caller leads, holding the whole group, so it is also what a first-run flow submits.
+ * Live Code project groups that nothing in the workspace mounts, from the environment's binding
+ * summary or the workspace's own projects. 接入 turns one into a project the caller leads.
  */
 export function unlinkedProjects(
   groups: ReadonlyArray<SidebarProjectSnapshot>,
   mounted: ReadonlyArray<WorkspaceMount>,
+  projects: ReadonlyArray<Telescope.Project>,
   self: Telescope.Member,
 ) {
+  const taken = [
+    ...mounted,
+    ...projects.flatMap(({ workspaceId, mounts }) =>
+      mounts.map((mount) => ({ workspaceId, ...mount })),
+    ),
+  ];
   return groups
     .filter(
       (group) =>
         group.isScratch !== true &&
         !group.archived &&
-        boundWorkspaceIds(mounted, group.memberProjectRefs).size === 0,
+        boundWorkspaceIds(taken, group.memberProjectRefs).size === 0,
     )
     .map((group) => ({
       group,
-      machines: [
-        ...new Set(group.memberProjects.map((m) => m.environmentLabel ?? m.environmentId)),
-      ],
       input: {
         workspaceId: self.workspaceId,
         name: group.displayName,
         leadSubjectId: self.subjectId,
-        mounts: group.memberProjectRefs.map(({ environmentId, projectId }) => ({
-          environmentId,
-          projectId,
-        })),
+        mounts: group.memberProjectRefs,
       },
     }));
 }

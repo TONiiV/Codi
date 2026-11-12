@@ -1,5 +1,5 @@
 import { useAtomValue } from "@effect/atom-react";
-import { failureText } from "@t3tools/client-runtime/telescope/workspaces";
+import { bindingsFromSummary, failureText } from "@t3tools/client-runtime/telescope/workspaces";
 import type { EnvironmentId, Telescope } from "@t3tools/contracts";
 import { AsyncResult } from "effect/reactivity";
 import { FolderCodeIcon, PencilIcon, PlusIcon, Settings2Icon } from "lucide-react";
@@ -19,13 +19,12 @@ import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
 import { AgentSettingsDialog } from "./MyTeamsAgentDialog";
-import { QueryState } from "./MyTeamsPage";
-import { agentDisplayName, telescopeAgents } from "./myTeamsShared";
+import { agentDisplayName, initials, telescopeAgents } from "./myTeamsShared";
 import { NoWorkspace } from "./TasksParts";
 import { ErrorNote } from "./TelescopeAccountDialogs";
-import { initials } from "./TelescopeChatList";
+import { QueryState } from "./TelescopeQueryState";
 import { TelescopeEmptyState } from "./TelescopeShell";
-import { projectRows, unlinkedProjects } from "./telescopeProjects";
+import { projectRows, repositoryLabel, unlinkedProjects } from "./telescopeProjects";
 import { telescope, useTelescopeWorkspaces } from "./telescopeState";
 
 function AgentInitial({ agent, large = false }: { agent: Telescope.Agent; large?: boolean }) {
@@ -129,24 +128,35 @@ function Projects(props: {
   const machineLabel = new Map(
     useEnvironmentIdentities().map((env) => [env.environmentId, env.label]),
   );
-  const { bindings: mounted } = useTelescopeWorkspaces();
+  const machine = (id: EnvironmentId) => machineLabel.get(id) ?? id;
+  const summary = useEnvironmentQuery(telescope.bindingSummary({ environmentId, input: {} }));
   const mayConnect =
     useAtomValue(telescope.createProject.permissionAtom(environmentId)) && self.role === "admin";
+  // Without the summary a directory another project of this workspace holds looks free.
+  const canConnect = mayConnect && summary.data !== null;
   const mayRename =
     useAtomValue(telescopeAgents.update.permissionAtom(environmentId)) && self.role !== "viewer";
   const createProject = useAtomCommand(telescope.createProject, "接入项目");
   const [connectError, setConnectError] = useState<string | null>(null);
+  const [connecting, setConnecting] = useState(false);
   const [editing, setEditing] = useState<Telescope.Agent | null>(null);
   const boundHeading = useRef<HTMLHeadingElement>(null);
   const rows = projectRows(projects, codeProjects, agents, self);
-  const unlinked = unlinkedProjects(groups, mounted, self);
+  const unlinked = unlinkedProjects(
+    groups,
+    bindingsFromSummary(summary.data?.projects ?? []),
+    projects,
+    self,
+  );
   const assistant = agents.find((agent) => agent.kind === "chief_of_staff");
   const connect = async (
     input: (typeof unlinked)[number]["input"],
     focusNext: HTMLElement | null,
   ) => {
     setConnectError(null);
+    setConnecting(true);
     const result = await createProject({ environmentId, input });
+    setConnecting(false);
     if (!AsyncResult.isSuccess(result)) return setConnectError(failureText(result));
     focusNext?.focus();
   };
@@ -218,12 +228,12 @@ function Projects(props: {
                         </TableCell>
                         <TableCell>
                           <span className="block max-w-48 truncate font-mono text-muted-foreground">
-                            {code ? (code.repositoryIdentity?.canonicalKey ?? "本地目录") : null}
+                            {code ? repositoryLabel(code) : null}
                           </span>
                         </TableCell>
                         <TableCell>
                           <span className="text-muted-foreground">
-                            {machineLabel.get(mount.environmentId) ?? mount.environmentId}
+                            {machine(mount.environmentId)}
                           </span>
                         </TableCell>
                         <TableCell>
@@ -261,7 +271,11 @@ function Projects(props: {
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <h3 className="text-sm font-medium">Microscope 里还没接入的项目</h3>
           <span className="text-xs text-muted-foreground">
-            {mayConnect ? null : "请管理员接入。"}接入后，Chief Agent 会出现在左侧聊天列表
+            {summary.data === null
+              ? summary.error === null
+                ? "正在读取接入情况…"
+                : "读不到接入情况，请刷新后再试。"
+              : `${mayConnect ? "" : "请管理员接入。"}接入后，Chief Agent 会出现在左侧聊天列表`}
           </span>
         </div>
         {connectError === null ? null : <ErrorNote text={connectError} />}
@@ -272,7 +286,7 @@ function Projects(props: {
           </div>
         ) : (
           <ul className="divide-y rounded-lg border bg-card text-sm">
-            {unlinked.map(({ group, machines, input }) => (
+            {unlinked.map(({ group, input }) => (
               <li key={group.projectKey} className="flex flex-wrap items-center gap-3 px-3 py-2.5">
                 <ProjectFavicon project={group} className="size-4 shrink-0" />
                 <span className="min-w-0 flex-1 basis-48">
@@ -281,15 +295,18 @@ function Projects(props: {
                     {group.workspaceRoot}
                   </span>
                 </span>
-                <span className="text-xs text-muted-foreground">{machines.join("、")}</span>
-                <Badge variant="outline">
-                  {group.repositoryIdentity?.canonicalKey ?? "本地目录"}
-                </Badge>
-                {mayConnect ? (
+                <span className="text-xs text-muted-foreground">
+                  {[
+                    ...new Set(group.memberProjectRefs.map((ref) => machine(ref.environmentId))),
+                  ].join("、")}
+                </span>
+                <Badge variant="outline">{repositoryLabel(group)}</Badge>
+                {canConnect ? (
                   <Button
                     size="xs"
                     variant="outline"
                     aria-label={`接入 ${group.displayName}`}
+                    disabled={connecting}
                     onClick={(event) => {
                       // The bound row unmounts, so focus moves to the row that takes its place.
                       const row = event.currentTarget.closest("li");

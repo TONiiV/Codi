@@ -146,30 +146,19 @@ describe("telescope projects page", () => {
       resolveEnvironmentLabel: (id) => (id === local ? "本机" : null),
     });
     const elsewhere = taken("app", remote, Telescope.WorkspaceId.make("other"));
-    const unlinked = unlinkedProjects(groups, [taken("taken"), elsewhere], self);
-    expect(unlinked.map(({ machines, input }) => ({ machines, input }))).toEqual([
+    const unlinked = unlinkedProjects(groups, [taken("taken"), elsewhere], [], self);
+    expect(unlinked.map(({ input }) => input)).toEqual([
+      { workspaceId, name: "free", leadSubjectId: "me", mounts: [mount("free")] },
+      { workspaceId, name: "taken", leadSubjectId: "me", mounts: [mount("taken", remote)] },
       {
-        machines: ["本机"],
-        input: { workspaceId, name: "free", leadSubjectId: "me", mounts: [mount("free")] },
-      },
-      {
-        machines: ["remote"],
-        input: {
-          workspaceId,
-          name: "taken",
-          leadSubjectId: "me",
-          mounts: [mount("taken", remote)],
-        },
-      },
-      {
-        machines: ["本机", "remote"],
-        input: {
-          workspaceId,
-          name: "lib",
-          leadSubjectId: "me",
-          mounts: [mount("lib"), mount("lib", remote)],
-        },
+        workspaceId,
+        name: "lib",
+        leadSubjectId: "me",
+        mounts: [mount("lib"), mount("lib", remote)],
       },
     ]);
+    // A project this workspace already holds is taken even before the binding summary loads.
+    const held = unlinkedProjects(groups, [], [tProject("Held", [mount("free")])], self);
+    expect(held.map(({ group }) => group.displayName)).toEqual(["taken", "taken", "app", "lib"]);
   });
 });
