@@ -149,10 +149,12 @@ export function TextField(props: {
   );
 }
 
-export function CreateWorkspaceDialog(props: {
+/** State and fields of the create form: the dialog and the first-run page share them. */
+export function useCreateWorkspaceForm(props: {
   environmentId: EnvironmentId;
   defaultName: string;
-  onClose: () => void;
+  autoFocus?: boolean;
+  onDone: () => void;
 }) {
   const [name, setName] = useState("");
   const [displayName, setDisplayName] = useState(props.defaultName);
@@ -160,47 +162,105 @@ export function CreateWorkspaceDialog(props: {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const create = useAtomCommand(telescope.create, "新建工作区");
+  return {
+    canSubmit: !busy && name.trim() !== "" && displayName.trim() !== "",
+    error,
+    submit: async () => {
+      setBusy(true);
+      setError(null);
+      const result = await create({
+        environmentId: props.environmentId,
+        input: { kind, name: name.trim(), displayName: displayName.trim() },
+      });
+      setBusy(false);
+      if (result._tag === "Success") props.onDone();
+      else setError(failureText(result));
+    },
+    fields: (
+      <>
+        <TextField
+          label="名字"
+          autoFocus={props.autoFocus ?? false}
+          placeholder="例如 Gripper Lab"
+          value={name}
+          onChange={setName}
+        />
+        <div className="flex flex-col gap-2">
+          <ToggleGroup
+            aria-label="工作区类型"
+            value={[kind]}
+            onValueChange={(next) => {
+              if (next[0] === "enterprise" || next[0] === "personal") setKind(next[0]);
+            }}
+          >
+            <Toggle value="enterprise">企业</Toggle>
+            <Toggle value="personal">个人</Toggle>
+          </ToggleGroup>
+          <p className="text-xs text-muted-foreground">{KIND_HINT[kind]}</p>
+        </div>
+        <TextField label="你在工作区里的名字" value={displayName} onChange={setDisplayName} />
+      </>
+    ),
+  };
+}
+
+/** State and fields of the join form: the dialog and the first-run page share them. */
+export function useJoinWorkspaceForm(props: {
+  environmentId: EnvironmentId;
+  defaultName: string;
+  autoFocus?: boolean;
+  onDone: () => void;
+}) {
+  const [code, setCode] = useState("");
+  const [displayName, setDisplayName] = useState(props.defaultName);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const accept = useAtomCommand(telescope.accept, "加入工作区");
+  return {
+    canSubmit: !busy && code.trim() !== "" && displayName.trim() !== "",
+    error,
+    submit: async () => {
+      setBusy(true);
+      setError(null);
+      const result = await accept({
+        environmentId: props.environmentId,
+        input: { code: code.trim(), displayName: displayName.trim() },
+      });
+      setBusy(false);
+      if (result._tag === "Success") props.onDone();
+      else setError(failureText(result, JOIN_ERROR_TEXT));
+    },
+    fields: (
+      <>
+        <TextField
+          label="邀请码"
+          autoFocus={props.autoFocus ?? false}
+          value={code}
+          onChange={setCode}
+        />
+        <TextField label="你在工作区里的名字" value={displayName} onChange={setDisplayName} />
+      </>
+    ),
+  };
+}
+
+export function CreateWorkspaceDialog(props: {
+  environmentId: EnvironmentId;
+  defaultName: string;
+  onClose: () => void;
+}) {
+  const form = useCreateWorkspaceForm({ ...props, autoFocus: true, onDone: props.onClose });
   return (
     <FormDialog
       title="新建工作区"
       description="工作区分企业和个人。建好后马上切换过去。"
       submitLabel="新建"
-      canSubmit={!busy && name.trim() !== "" && displayName.trim() !== ""}
-      error={error}
+      canSubmit={form.canSubmit}
+      error={form.error}
       onClose={props.onClose}
-      onSubmit={async () => {
-        setBusy(true);
-        setError(null);
-        const result = await create({
-          environmentId: props.environmentId,
-          input: { kind, name: name.trim(), displayName: displayName.trim() },
-        });
-        setBusy(false);
-        if (result._tag === "Success") props.onClose();
-        else setError(failureText(result));
-      }}
+      onSubmit={form.submit}
     >
-      <TextField
-        label="名字"
-        autoFocus
-        placeholder="例如 Gripper Lab"
-        value={name}
-        onChange={setName}
-      />
-      <div className="flex flex-col gap-2">
-        <ToggleGroup
-          aria-label="工作区类型"
-          value={[kind]}
-          onValueChange={(next) => {
-            if (next[0] === "enterprise" || next[0] === "personal") setKind(next[0]);
-          }}
-        >
-          <Toggle value="enterprise">企业</Toggle>
-          <Toggle value="personal">个人</Toggle>
-        </ToggleGroup>
-        <p className="text-xs text-muted-foreground">{KIND_HINT[kind]}</p>
-      </div>
-      <TextField label="你在工作区里的名字" value={displayName} onChange={setDisplayName} />
+      {form.fields}
     </FormDialog>
   );
 }
@@ -210,34 +270,37 @@ export function JoinWorkspaceDialog(props: {
   defaultName: string;
   onClose: () => void;
 }) {
-  const [code, setCode] = useState("");
-  const [displayName, setDisplayName] = useState(props.defaultName);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const accept = useAtomCommand(telescope.accept, "加入工作区");
+  const form = useJoinWorkspaceForm({ ...props, autoFocus: true, onDone: props.onClose });
   return (
     <FormDialog
       title="加入工作区"
       description="填入管理员发给你的邀请码。加入后马上切换过去。"
       submitLabel="加入"
-      canSubmit={!busy && code.trim() !== "" && displayName.trim() !== ""}
-      error={error}
+      canSubmit={form.canSubmit}
+      error={form.error}
       onClose={props.onClose}
-      onSubmit={async () => {
-        setBusy(true);
-        setError(null);
-        const result = await accept({
-          environmentId: props.environmentId,
-          input: { code: code.trim(), displayName: displayName.trim() },
-        });
-        setBusy(false);
-        if (result._tag === "Success") props.onClose();
-        else setError(failureText(result, JOIN_ERROR_TEXT));
-      }}
+      onSubmit={form.submit}
     >
-      <TextField label="邀请码" autoFocus value={code} onChange={setCode} />
-      <TextField label="你在工作区里的名字" value={displayName} onChange={setDisplayName} />
+      {form.fields}
     </FormDialog>
+  );
+}
+
+/** A made invite code with a copy button and its expiry. */
+export function InvitationCode({ invitation }: { invitation: Telescope.Invitation }) {
+  const { copyToClipboard, isCopied } = useCopyToClipboard();
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div className="flex items-center gap-2">
+        <Input nativeInput readOnly aria-label="邀请码" value={invitation.code} />
+        <Button variant="outline" onClick={() => copyToClipboard(invitation.code, undefined)}>
+          {isCopied ? "已复制" : "复制"}
+        </Button>
+      </div>
+      <p className="text-xs text-muted-foreground">
+        有效期至 {expiryFormatter.format(new Date(invitation.expiresAt))}，只能使用一次。
+      </p>
+    </div>
   );
 }
 
@@ -271,7 +334,6 @@ export function MembersDialog(props: {
   const revoke = useAtomCommand(telescope.revoke, "移除成员");
   const [invitation, setInvitation] = useState<Telescope.Invitation | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const { copyToClipboard, isCopied } = useCopyToClipboard();
   const active = (query.data?.members ?? []).filter((member) => member.revokedAt === undefined);
   const remove = async (member: Telescope.Member) => {
     const confirmed = await (requestConfirmDialog(
@@ -324,19 +386,8 @@ export function MembersDialog(props: {
             <p className="text-sm text-muted-foreground">正在加载成员…</p>
           )}
           {invitation === null ? null : (
-            <div className="mt-4 flex flex-col gap-1.5">
-              <div className="flex items-center gap-2">
-                <Input nativeInput readOnly aria-label="邀请码" value={invitation.code} />
-                <Button
-                  variant="outline"
-                  onClick={() => copyToClipboard(invitation.code, undefined)}
-                >
-                  {isCopied ? "已复制" : "复制"}
-                </Button>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                有效期至 {expiryFormatter.format(new Date(invitation.expiresAt))}，只能使用一次。
-              </p>
+            <div className="mt-4">
+              <InvitationCode invitation={invitation} />
             </div>
           )}
         </DialogPanel>

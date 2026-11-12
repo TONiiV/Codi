@@ -28,6 +28,7 @@ import { TelescopeAccountFooter } from "./TelescopeAccount";
 import { TelescopeChatList } from "./TelescopeChatList";
 import { TelescopeChatPage } from "./TelescopeChatPage";
 import { TelescopeDashboard } from "./TelescopeDashboard";
+import { FirstRunGate } from "./TelescopeFirstRun";
 import { TelescopePanel } from "./TelescopePanel";
 import { useTelescopeWorkspaces } from "./telescopeState";
 import {
@@ -222,16 +223,18 @@ export function TelescopePage({
           {/* The top border, not the header's bottom one, lines up with the sidebar's under its header. */}
           <div className="flex min-h-0 flex-1 flex-col overflow-y-auto border-t">
             <BackgroundThreadContext value={background}>
-              {children ??
-                (view === "chats" ? (
-                  <TelescopeChatPage />
-                ) : view === "teams" ? (
-                  <MyTeamsPage />
-                ) : view === "dashboard" ? (
-                  <TelescopeDashboard />
-                ) : (
-                  <TelescopeEmptyState view={view} />
-                ))}
+              <FirstRunGate>
+                {children ??
+                  (view === "chats" ? (
+                    <TelescopeChatPage />
+                  ) : view === "teams" ? (
+                    <MyTeamsPage />
+                  ) : view === "dashboard" ? (
+                    <TelescopeDashboard />
+                  ) : (
+                    <TelescopeEmptyState view={view} />
+                  ))}
+              </FirstRunGate>
             </BackgroundThreadContext>
           </div>
         </div>
