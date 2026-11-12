@@ -1,21 +1,17 @@
 import type { EnvironmentId, ProjectId, Telescope } from "@t3tools/contracts";
 
-export type TelescopeFilesTarget =
+export type TelescopeFilesTarget = (
   | {
       readonly ready: true;
       readonly projectId: ProjectId;
       readonly title: string;
       readonly workspaceRoot: string;
     }
-  | {
-      readonly ready: false;
-      readonly reason: string;
-      /** Mounts on other machines, which the panel lists but cannot open. */
-      readonly remote: ReadonlyArray<Telescope.ProjectMount>;
-    };
-
-const unavailable = (reason: string, remote: ReadonlyArray<Telescope.ProjectMount> = []) =>
-  ({ ready: false, reason, remote }) as const;
+  | { readonly ready: false; readonly reason: string }
+) & {
+  /** Titles of the mounts on other machines, which the panel lists but cannot open. */
+  readonly remote: ReadonlyArray<string>;
+};
 
 /** Code's Files pointed at the project's first mount on `environmentId`, the machine Telescope runs on. */
 export function telescopeFilesTarget(
@@ -28,24 +24,38 @@ export function telescopeFilesTarget(
     readonly workspaceRoot: string;
   }>,
 ): TelescopeFilesTarget {
-  if (project === undefined) return unavailable("先在左侧选一个项目，或打开一个任务。");
-  if (project.mounts.length === 0) return unavailable("这个项目还没有挂目录。");
-  const local = project.mounts.filter((mount) => mount.environmentId === environmentId);
-  if (local.length === 0) {
-    return unavailable("这个项目的目录在另一台机器上，这里打不开。", project.mounts);
+  if (project === undefined) {
+    return { ready: false, reason: "先在左侧选一个项目，或打开一个任务。", remote: [] };
   }
-  for (const mount of local) {
-    const found = codiProjects.find(
+  if (project.mounts.length === 0) {
+    return { ready: false, reason: "这个项目还没有挂目录。", remote: [] };
+  }
+  const codiProject = (mount: Telescope.ProjectMount) =>
+    codiProjects.find(
       (entry) => entry.environmentId === mount.environmentId && entry.id === mount.projectId,
     );
+  const remote = project.mounts
+    .filter((mount) => mount.environmentId !== environmentId)
+    .map((mount) => codiProject(mount)?.title ?? mount.projectId);
+  const local = project.mounts.filter((mount) => mount.environmentId === environmentId);
+  if (local.length === 0) {
+    return {
+      ready: false,
+      reason: `这个项目的目录在另一台机器上，这里打不开：${remote.join("、")}。`,
+      remote,
+    };
+  }
+  for (const mount of local) {
+    const found = codiProject(mount);
     if (found !== undefined) {
       return {
         ready: true,
         projectId: found.id,
         title: found.title,
         workspaceRoot: found.workspaceRoot,
+        remote,
       };
     }
   }
-  return unavailable("这个项目挂的目录在这台机器上找不到。");
+  return { ready: false, reason: "这个项目挂的目录在这台机器上找不到。", remote };
 }

@@ -1,5 +1,5 @@
 import { scopeThreadRef } from "@t3tools/client-runtime/environment";
-import { type EnvironmentId, RunId, Telescope, ThreadId } from "@t3tools/contracts";
+import { type EnvironmentId, ProjectId, RunId, Telescope, ThreadId } from "@t3tools/contracts";
 import { beforeEach, describe, expect, it } from "vite-plus/test";
 
 import { useClosedViewStore } from "./closedViewStore";
@@ -9,6 +9,7 @@ import {
   migratePersistedRightPanelState,
   pullRequestSurface,
   pullRequestSurfaceId,
+  rightPanelOffers,
   selectActiveRightPanel,
   selectActiveRightPanelSurface,
   selectThreadPanelVisibility,
@@ -64,6 +65,7 @@ describe("rightPanelStore", () => {
     const store = useRightPanelStore.getState();
     const unhost = hostRightPanel(refB, panel);
     store.openSideChat(panel, TELESCOPE_SIDE_CHAT);
+    store.openFile(refB, "src/app.ts");
     store.open(refB, "diff");
     store.openPullRequest(refB, { projectId: "p", repository: "o/r", number: 7 });
     const kinds = () =>
@@ -72,12 +74,21 @@ describe("rightPanelStore", () => {
       );
     expect(kinds()).toEqual(["side-chat"]);
     store.open(panel, "preview");
+    // A file tab there resolves against the mount its Files browser shows, which a bare path names none of.
+    expect(rightPanelOffers(refB, "file")).toBe(false);
     store.open(panel, "files");
-    store.openFile(refB, "src/app.ts");
+    store.openFile(panel, ".", undefined, ProjectId.make("app"));
+    store.openAttachment(refB, {
+      type: "file",
+      id: "att1",
+      name: "notes.md",
+      mimeType: "text/markdown",
+      sizeBytes: 3,
+    });
     const workspaceId = Telescope.WorkspaceId.make("w");
     store.openTask(panel, { workspaceId, taskId: Telescope.TaskId.make("t1") });
     store.openTask(panel, { workspaceId, taskId: Telescope.TaskId.make("t2") });
-    // Opening a file replaces the standalone explorer, as in Code.
+    // Opening an attachment replaces the standalone explorer, as in Code.
     expect(kinds()).toEqual(["side-chat", "preview", "file", "task", "task"]);
     unhost();
   });
@@ -874,6 +885,30 @@ describe("rightPanelStore", () => {
       revealLine: null,
       revealRequestId: 1,
     });
+  });
+
+  it("binds a Telescope file tab, its folder walks and its explorer to the mount it was opened from", () => {
+    const panel = telescopePanelRef("env-1" as EnvironmentId);
+    const store = useRightPanelStore.getState();
+    const state = () =>
+      selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, panel);
+    const app = ProjectId.make("app");
+    const docs = ProjectId.make("docs");
+    store.openFile(panel, "src/app.ts", undefined, app);
+    store.openFile(panel, "src/app.ts", undefined, docs);
+    store.navigateFolder(panel, state().activeSurfaceId!, "src", "src/app.ts");
+    store.openFile(panel, ".", undefined, app);
+    store.openFile(panel, ".", undefined, docs);
+    expect(
+      state().surfaces.map((surface) => [
+        surface.kind === "file" ? surface.relativePath : surface.kind,
+        "projectId" in surface ? surface.projectId : null,
+      ]),
+    ).toEqual([
+      ["src/app.ts", app],
+      ["src", docs],
+      ["files", docs],
+    ]);
   });
 
   it("switches to a tab that already shows the folder instead of replacing it", () => {

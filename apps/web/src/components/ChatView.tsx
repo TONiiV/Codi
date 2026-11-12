@@ -153,11 +153,13 @@ import { FileMetadataThreadProvider } from "../hooks/FileMetadataThreadProvider"
 import { RIGHT_PANEL_INLINE_LAYOUT_MEDIA_QUERY } from "../rightPanelLayout";
 import { PopoverCreateHandle } from "./ui/popover";
 import {
+  fileSurfaceId,
   selectActiveRightPanel,
   selectActiveRightPanelSurface,
   selectThreadPanelOpen,
   selectThreadRightPanelState,
   useRightPanelStore,
+  withPendingFile,
 } from "../rightPanelStore";
 import { isPreviewSupportedInRuntime, useThreadPreviewState } from "../previewStateStore";
 import { previewRuntimeTabId } from "../browser/previewRuntimeTabId";
@@ -1150,11 +1152,8 @@ export default function ChatView(props: ChatViewProps) {
     if (!activeProjectKey) return;
     setPendingFileSurfaceIdsByProject((currentByProject) => {
       const current = currentByProject.get(activeProjectKey) ?? EMPTY_PENDING_FILE_SURFACE_IDS;
-      const surfaceId = `file:${relativePath}`;
-      if (current.has(surfaceId) === pending) return currentByProject;
-      const next = new Set(current);
-      if (pending) next.add(surfaceId);
-      else next.delete(surfaceId);
+      const next = withPendingFile(current, fileSurfaceId(relativePath), pending);
+      if (next === current) return currentByProject;
       const nextByProject = new Map(currentByProject);
       if (next.size === 0) nextByProject.delete(activeProjectKey);
       else nextByProject.set(activeProjectKey, next);

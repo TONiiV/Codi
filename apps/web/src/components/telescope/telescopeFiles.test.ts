@@ -26,7 +26,12 @@ describe("telescopeFilesTarget", () => {
       here,
       loaded,
     );
-    expect(target).toMatchObject({ ready: true, projectId: "docs", workspaceRoot: "/work/docs" });
+    expect(target).toMatchObject({
+      ready: true,
+      projectId: "docs",
+      workspaceRoot: "/work/docs",
+      remote: ["app"],
+    });
   });
 
   it("is unavailable, with a distinct reason, without a project, without mounts, or with only other machines' mounts", () => {
@@ -37,6 +42,6 @@ describe("telescopeFilesTarget", () => {
     ];
     expect(targets.map((target) => target.ready)).toEqual([false, false, false]);
     expect(new Set(targets.map((target) => !target.ready && target.reason)).size).toBe(3);
-    expect(targets[2]).toMatchObject({ remote: [mount(there, "app")] });
+    expect(targets[2]).toMatchObject({ remote: ["app"] });
   });
 });

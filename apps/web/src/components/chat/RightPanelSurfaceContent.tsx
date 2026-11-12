@@ -49,7 +49,7 @@ interface RightPanelPullRequestProps {
   readonly onBack: (() => void) | undefined;
 }
 
-export interface RightPanelFileProps {
+interface RightPanelFileProps {
   readonly projectId?: ProjectId | undefined;
   readonly projectName: string | null;
   readonly workspaceRoot: string | undefined;
@@ -220,6 +220,7 @@ export function RightPanelFileSurface(props: {
   readonly environmentId: EnvironmentId;
   readonly visible: boolean;
   readonly composerDraftTarget: ScopedThreadRef | DraftId;
+  readonly reviewComments?: boolean;
   readonly keybindings: ResolvedKeybindingsConfig;
   readonly workspaceMutationId: string | null;
   readonly files: RightPanelFileProps;
@@ -239,6 +240,7 @@ export function RightPanelFileSurface(props: {
         projectId={files.projectId}
         threadRef={threadRef}
         composerDraftTarget={props.composerDraftTarget}
+        reviewComments={props.reviewComments}
         keybindings={props.keybindings}
         availableEditors={files.availableEditors}
         openInShortcutEnabled={visible}

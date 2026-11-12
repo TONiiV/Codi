@@ -46,7 +46,25 @@ vi.mock(import("./telescopeState"), async (original) => {
   };
 });
 vi.mock("../files/FilePreviewPanel", () => ({
-  default: (props: { cwd: string }) => <p>files of {props.cwd}</p>,
+  default: (props: {
+    cwd: string;
+    relativePath: string | null;
+    attachment?: { name: string };
+    onOpenFile: (relativePath: string) => void;
+  }) =>
+    props.attachment ? (
+      <p>attachment {props.attachment.name}</p>
+    ) : (
+      <div>
+        <p>
+          files of {props.cwd}
+          {props.relativePath === null ? "" : ` at ${props.relativePath}`}
+        </p>
+        <button type="button" onClick={() => props.onOpenFile("src/app.ts")}>
+          open app.ts
+        </button>
+      </div>
+    ),
 }));
 vi.mock(import("../../state/entities"), async (original) => ({
   ...(await original()),
@@ -178,25 +196,31 @@ describe("TelescopePanel", () => {
         item.textContent?.includes("Files"),
       );
 
-    it("is greyed out with no project in context, a project with no mount, or only another machine's", async () => {
+    const addFiles = async () => {
+      await userEvent.click(page.getByRole("button", { name: "Add panel surface" }));
+      await userEvent.click(page.getByRole("menuitem", { name: /^Files/ }));
+    };
+
+    it("is greyed out with no project in context, and still shows an attachment tab", async () => {
       await using _viewport = await setup();
-      await using screen = await render(
+      await using _screen = await render(
         <TelescopePanel panelRef={panelRef} layoutElement={null} />,
         { router: "/telescope?view=tasks" },
       );
       useRightPanelStore.getState().show(panelRef);
       await expect.element(launcher().getByText("Side chat")).toBeVisible();
       expect(filesDisabled()).toBe(true);
-      for (const project of ["p-empty", "p-remote"]) {
-        await screen.router!.navigate({
-          to: "/telescope",
-          search: { view: "tasks", project: Telescope.TelescopeProjectId.make(project) },
-        });
-        await vi.waitFor(() => expect(filesDisabled()).toBe(true));
-      }
+      useRightPanelStore.getState().openAttachment(panelRef, {
+        type: "file",
+        id: "att1",
+        name: "notes.md",
+        mimeType: "text/markdown",
+        sizeBytes: 3,
+      });
+      await expect.element(page.getByText("attachment notes.md")).toBeVisible();
     });
 
-    it("opens the first mount on this machine of the selected project", async () => {
+    it("opens the first mount on this machine of the selected project and lists the others", async () => {
       await using _viewport = await setup();
       await using _screen = await render(
         <TelescopePanel panelRef={panelRef} layoutElement={null} />,
@@ -205,24 +229,30 @@ describe("TelescopePanel", () => {
       useRightPanelStore.getState().show(panelRef);
       await userEvent.click(launcher().getByRole("button", { name: /^Files/ }));
       await expect.element(page.getByText("files of /work/app")).toBeVisible();
+      await expect.element(page.getByText("另一台机器上（这里打不开）：app")).toBeVisible();
       expect(panelState().surfaces.map((surface) => surface.kind)).toEqual(["files"]);
     });
 
-    it("follows the open task's project over the selected one, until the selection changes", async () => {
+    it("follows the open task's project over the selected one, and an open tab keeps its own mount", async () => {
       await using _viewport = await setup();
       await using screen = await render(
         <TelescopePanel panelRef={panelRef} layoutElement={null} />,
         { router: "/telescope?view=tasks&project=p-api&task=t2" },
       );
       await expect.element(page.getByText("task body t2")).toBeVisible();
-      useRightPanelStore.getState().open(panelRef, "files");
+      await addFiles();
       await expect.element(page.getByText("files of /work/docs")).toBeVisible();
+      await userEvent.click(page.getByRole("button", { name: "open app.ts" }));
+      await expect.element(page.getByText("files of /work/docs at src/app.ts")).toBeVisible();
 
       await screen.router!.navigate({
         to: "/telescope",
         search: { view: "tasks", project: Telescope.TelescopeProjectId.make("p-app") },
       });
+      await addFiles();
       await expect.element(page.getByText("files of /work/app")).toBeVisible();
+      await userEvent.click(page.getByRole("button", { name: "app.ts", exact: true }));
+      await expect.element(page.getByText("files of /work/docs at src/app.ts")).toBeVisible();
     });
   });
 });
