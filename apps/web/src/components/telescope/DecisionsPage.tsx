@@ -200,7 +200,7 @@ export function DecisionsBody({ target, actions }: { target: BoardTarget; action
           </EmptyHeader>
         </Empty>
       ) : (
-        <div className="flex max-w-3xl flex-col gap-6 p-4">
+        <div className="flex max-w-3xl flex-col gap-6 px-4 py-4 sm:box-content sm:px-24">
           {DECISION_STATUSES.map((status) => {
             const items = decisions.filter((decision) => decision.status === status);
             if (items.length === 0) return null;

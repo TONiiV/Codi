@@ -1,33 +1,24 @@
-import { Telescope } from "@t3tools/contracts";
 import { useNavigate } from "@tanstack/react-router";
-import { Columns3Icon, GitBranchIcon, PlusIcon, TableIcon } from "lucide-react";
-import { type ReactNode, useState } from "react";
+import { CircleUserIcon, Columns3Icon, GitBranchIcon, TableIcon } from "lucide-react";
+import type { ReactNode } from "react";
 
 import { useEnvironmentQuery } from "../../state/query";
 import { Button } from "../ui/button";
-import {
-  Dialog,
-  DialogClose,
-  DialogFooter,
-  DialogHeader,
-  DialogPanel,
-  DialogPopup,
-  DialogTitle,
-} from "../ui/dialog";
 import { TELESCOPE_PATH } from "../sidebar/mainAppLocation";
-import { Input } from "../ui/input";
 import { DecisionsBody } from "./DecisionsPage";
 import { TelescopeEmptyState } from "./TelescopeShell";
 import { telescopeBoard } from "./telescopeState";
 import {
   BoardFrame,
   type BoardTarget,
+  isMyTask,
   NoWorkspace,
   useBoardCommand,
   useBoardTarget,
+  useTaskAccess,
 } from "./TasksParts";
 import { useTasksProject } from "./TasksSidebar";
-import { TasksBoard, TasksTable } from "./TasksViews";
+import { type CreateTask, TasksBoard, TasksTable } from "./TasksViews";
 import {
   type TasksLayout,
   telescopeSearch,
@@ -35,58 +26,13 @@ import {
   useTasksProjectId,
 } from "./telescopeViews";
 
-function NewTaskDialog({ target }: { target: BoardTarget }) {
-  const [open, setOpen] = useState(false);
-  const [title, setTitle] = useState("");
-  const create = useBoardCommand(telescopeBoard.createTask);
-  const input = { workspaceId: target.workspaceId, title: title.trim() };
-  return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <Button size="xs" onClick={() => setOpen(true)}>
-        <PlusIcon /> 新任务
-      </Button>
-      <DialogPopup>
-        <DialogHeader>
-          <DialogTitle>新任务</DialogTitle>
-        </DialogHeader>
-        <DialogPanel>
-          <form
-            id="telescope-new-task"
-            onSubmit={async (event) => {
-              event.preventDefault();
-              if (await create({ environmentId: target.environmentId, input })) {
-                setTitle("");
-                setOpen(false);
-              }
-            }}
-          >
-            <Input
-              autoFocus
-              aria-label="任务标题"
-              placeholder="要做什么"
-              maxLength={Telescope.BOARD_LIMITS.titleLength}
-              value={title}
-              onChange={(event) => setTitle(event.target.value)}
-            />
-          </form>
-        </DialogPanel>
-        <DialogFooter>
-          <DialogClose render={<Button variant="ghost" />}>取消</DialogClose>
-          <Button type="submit" form="telescope-new-task" disabled={input.title.length === 0}>
-            创建
-          </Button>
-        </DialogFooter>
-      </DialogPopup>
-    </Dialog>
-  );
-}
-
+/** Notion's view tabs: pills in one row, the selected one filled. */
 function TasksTabs({ layout }: { layout: TasksLayout }) {
   const navigate = useNavigate();
   const project = useTasksProjectId();
   const tab = (id: TasksLayout, label: string, Icon: typeof TableIcon) => (
     <Button
-      size="xs"
+      size="sm-pill"
       variant={layout === id ? "secondary" : "ghost-muted"}
       aria-pressed={layout === id}
       onClick={() =>
@@ -104,42 +50,63 @@ function TasksTabs({ layout }: { layout: TasksLayout }) {
     <>
       {tab("table", "表格", TableIcon)}
       {tab("board", "按状态", Columns3Icon)}
+      {tab("mine", "我的", CircleUserIcon)}
       {tab("decisions", "决定", GitBranchIcon)}
     </>
   );
 }
 
+function TasksHeader({ target }: { target: BoardTarget }) {
+  const { list, selected } = useTasksProject(target);
+  const name = list?.find((project) => project.id === selected)?.name;
+  return (
+    <header className="px-4 pt-8 pb-3 sm:px-24 sm:pt-12">
+      <h2 className="text-3xl font-bold wrap-anywhere">{name ?? "全部任务"}</h2>
+      <p className="mt-1 text-sm">所有成员和 agents 实时看到同一块板。</p>
+    </header>
+  );
+}
+
 function TasksBody(props: { target: BoardTarget; layout: TasksLayout; tabs: ReactNode }) {
   const { target, layout } = props;
+  const { environmentId, workspaceId } = target;
   const { selected: projectId } = useTasksProject(target);
-  const input = {
-    workspaceId: target.workspaceId,
-    ...(projectId === undefined ? {} : { projectId }),
-  };
-  const query = useEnvironmentQuery(
-    telescopeBoard.tasks({ environmentId: target.environmentId, input }),
-  );
-  const tasks = query.data?.tasks ?? [];
-  const View = layout === "table" ? TasksTable : TasksBoard;
+  const { self, mayEdit, mayCreate } = useTaskAccess(target);
+  const input = { workspaceId, ...(projectId === undefined ? {} : { projectId }) };
+  const query = useEnvironmentQuery(telescopeBoard.tasks({ environmentId, input }));
+  const myAgents = useEnvironmentQuery(
+    telescopeBoard.agents({ environmentId, input: { workspaceId } }),
+  ).data?.agents;
+  const createTask = useBoardCommand(telescopeBoard.createTask);
+  const all = query.data?.tasks ?? [];
+  const mine = new Set(myAgents?.map((agent) => agent.id));
+  const tasks =
+    layout === "mine" ? all.filter((task) => isMyTask(task, self?.subjectId, mine)) : all;
+  const create: CreateTask = mayCreate
+    ? (title, set) => createTask({ environmentId, input: { ...input, ...set, title } })
+    : null;
   return (
-    <BoardFrame
-      query={query}
-      actions={
-        <>
-          {props.tabs}
-          <NewTaskDialog target={target} />
-        </>
-      }
-    >
-      {tasks.length === 0 ? (
+    <BoardFrame query={query} actions={props.tabs}>
+      {tasks.length === 0 && create === null ? (
         <TelescopeEmptyState
           view="tasks"
-          {...(projectId === undefined
-            ? {}
-            : { title: "这个项目还没有任务", description: "任务归到这个项目后，会列在这里。" })}
+          {...(layout === "mine"
+            ? { title: "还没有你的任务", description: "负责人是你或你的 agent 的任务会列在这里。" }
+            : projectId === undefined
+              ? {}
+              : { title: "这个项目还没有任务", description: "任务归到这个项目后，会列在这里。" })}
         />
+      ) : layout === "board" ? (
+        <TasksBoard target={target} tasks={tasks} mayEdit={mayEdit} create={create} />
       ) : (
-        <View target={target} tasks={tasks} />
+        <TasksTable
+          target={target}
+          tasks={tasks}
+          layout={layout === "mine" ? "mine" : "table"}
+          mayEdit={mayEdit}
+          create={create}
+          {...(layout === "mine" && self ? { createSet: { ownerSubjectId: self.subjectId } } : {})}
+        />
       )}
     </BoardFrame>
   );
@@ -150,9 +117,14 @@ export function TasksPage() {
   const layout = useTasksLayout();
   if (target === null) return <NoWorkspace />;
   const tabs = <TasksTabs layout={layout} />;
-  return layout === "decisions" ? (
-    <DecisionsBody target={target} actions={tabs} />
-  ) : (
-    <TasksBody target={target} layout={layout} tabs={tabs} />
+  return (
+    <>
+      <TasksHeader target={target} />
+      {layout === "decisions" ? (
+        <DecisionsBody target={target} actions={tabs} />
+      ) : (
+        <TasksBody target={target} layout={layout} tabs={tabs} />
+      )}
+    </>
   );
 }

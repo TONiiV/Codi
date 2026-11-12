@@ -67,19 +67,50 @@ export function NeedsYouBadge({ task }: { task: Pick<Telescope.Task, "conflictDe
   );
 }
 
-/** Display names for the agent and member ids the caller can see. */
-export function useBoardNames({ environmentId, workspaceId }: BoardTarget) {
+/** The members and agents the caller can see, and their display names. */
+export function useBoardPeople({ environmentId, workspaceId }: BoardTarget) {
   const query = { environmentId, input: { workspaceId } };
   const mine = useAtomValue(telescopeBoard.agents(query));
   const company = useAtomValue(telescopeBoard.companyAgents(query));
-  const members = AsyncResult.getOrElse(useAtomValue(telescope.members(query)), () => null);
+  const members = (
+    AsyncResult.getOrElse(useAtomValue(telescope.members(query)), () => null)?.members ?? []
+  ).filter((member) => member.revokedAt === undefined);
+  const agents = [mine, company].flatMap(
+    (result) => AsyncResult.getOrElse(result, () => null)?.agents ?? [],
+  );
   const names = new Map<string, string>([
-    ...[mine, company]
-      .flatMap((result) => AsyncResult.getOrElse(result, () => null)?.agents ?? [])
-      .map((agent) => [agent.id, agent.name] as const),
-    ...(members?.members ?? []).map((member) => [member.subjectId, member.displayName] as const),
+    ...agents.map((agent) => [agent.id, agent.name] as const),
+    ...members.map((member) => [member.subjectId, member.displayName] as const),
   ]);
-  return (id: string) => names.get(id);
+  return { members, agents, name: (id: string) => names.get(id) };
+}
+
+/** Display names for the agent and member ids the caller can see. */
+export function useBoardNames(target: BoardTarget) {
+  return useBoardPeople(target).name;
+}
+
+/** The caller as a member, and whether it may edit or add tasks; a 只读 member may do neither. */
+export function useTaskAccess(target: BoardTarget) {
+  const { environmentId, workspaceId } = target;
+  const self = useEnvironmentQuery(telescope.get({ environmentId, input: { workspaceId } })).data
+    ?.self;
+  const mayUpdate = useAtomValue(telescopeBoard.updateTask.permissionAtom(environmentId));
+  const mayCreate = useAtomValue(telescopeBoard.createTask.permissionAtom(environmentId));
+  const writer = self !== undefined && self.role !== "viewer";
+  return { self, mayEdit: writer && mayUpdate, mayCreate: writer && mayCreate };
+}
+
+/** 我的: owned by the caller or by one of the caller's own agents. */
+export function isMyTask(
+  task: Pick<Telescope.Task, "ownerSubjectId" | "ownerAgentId">,
+  selfId: string | undefined,
+  myAgentIds: ReadonlySet<string>,
+) {
+  return (
+    (selfId !== undefined && task.ownerSubjectId === selfId) ||
+    (task.ownerAgentId !== undefined && myAgentIds.has(task.ownerAgentId))
+  );
 }
 
 export const errorText = (error: unknown) =>
@@ -176,7 +207,7 @@ export function BoardFrame(props: {
   const error = query.error === null ? null : failureText(AsyncResult.fail(query.failure));
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex items-center gap-1 border-b px-4 py-2">
+      <div className="mx-4 flex h-10 shrink-0 items-center gap-0.5 border-b sm:mx-24">
         {props.actions}
         <Button
           size="icon-xs"
@@ -192,7 +223,7 @@ export function BoardFrame(props: {
       {query.data !== null ? (
         <>
           {error === null ? null : (
-            <div className="border-b px-4 py-2">
+            <div className="mx-4 border-b py-2 sm:mx-24">
               <ErrorNote text={`没有读到最新内容：${error}`} onRetry={query.refresh} />
             </div>
           )}
