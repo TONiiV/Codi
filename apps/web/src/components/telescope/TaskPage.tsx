@@ -45,7 +45,7 @@ export function PropertyRow(props: { icon: LucideIcon; label: string; children: 
         <props.icon className="size-4.75" />
         {props.label}
       </div>
-      <div className="flex min-h-8.5 min-w-0 flex-1 flex-wrap items-center gap-x-1.5 px-1.5 py-1.75">
+      <div className="flex min-h-8.5 min-w-0 flex-1 flex-wrap items-center gap-x-1.5 px-1.5">
         {props.children}
       </div>
     </div>
