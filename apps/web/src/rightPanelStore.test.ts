@@ -88,8 +88,8 @@ describe("rightPanelStore", () => {
     const workspaceId = Telescope.WorkspaceId.make("w");
     store.openTask(panel, { workspaceId, taskId: Telescope.TaskId.make("t1") });
     store.openTask(panel, { workspaceId, taskId: Telescope.TaskId.make("t2") });
-    // Opening an attachment replaces the standalone explorer, as in Code.
-    expect(kinds()).toEqual(["side-chat", "preview", "file", "task", "task"]);
+    // An attachment names no mount, so it leaves the project's explorer in place.
+    expect(kinds()).toEqual(["side-chat", "preview", "files", "file", "task", "task"]);
     unhost();
   });
 
@@ -888,27 +888,50 @@ describe("rightPanelStore", () => {
   });
 
   it("binds a Telescope file tab, its folder walks and its explorer to the mount it was opened from", () => {
-    const panel = telescopePanelRef("env-1" as EnvironmentId);
     const store = useRightPanelStore.getState();
-    const state = () =>
-      selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, panel);
     const app = ProjectId.make("app");
     const docs = ProjectId.make("docs");
-    store.openFile(panel, "src/app.ts", undefined, app);
-    store.openFile(panel, "src/app.ts", undefined, docs);
-    store.navigateFolder(panel, state().activeSurfaceId!, "src", "src/app.ts");
-    store.openFile(panel, ".", undefined, app);
-    store.openFile(panel, ".", undefined, docs);
+    const run = (
+      environmentId: string,
+      steps: (panel: ReturnType<typeof telescopePanelRef>) => void,
+    ) => {
+      const panel = telescopePanelRef(environmentId as EnvironmentId);
+      steps(panel);
+      const state = selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, panel);
+      return [state.activeSurfaceId, ...state.surfaces.map((surface) => surface.id)];
+    };
+
     expect(
-      state().surfaces.map((surface) => [
-        surface.kind === "file" ? surface.relativePath : surface.kind,
-        "projectId" in surface ? surface.projectId : null,
-      ]),
-    ).toEqual([
-      ["src/app.ts", app],
-      ["src", docs],
-      ["files", docs],
-    ]);
+      run("env-1", (panel) => {
+        store.openFile(panel, "src/app.ts", undefined, app);
+        store.openFile(panel, "src/app.ts", undefined, docs);
+        store.navigateFolder(
+          panel,
+          selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, panel)
+            .activeSurfaceId!,
+          "src",
+          "src/app.ts",
+        );
+        store.openFile(panel, ".", undefined, app);
+        store.openFile(panel, ".", undefined, docs);
+      }),
+    ).toEqual(["files:docs", "file:app:src/app.ts", "file:docs:src", "files:app", "files:docs"]);
+    // The root of a folder tab is its own project's explorer, not another project's.
+    expect(
+      run("env-2", (panel) => {
+        store.openFile(panel, "src", undefined, app);
+        store.openFile(panel, ".", undefined, docs);
+        store.navigateFolder(panel, "file:app:src", "", "src");
+      }),
+    ).toEqual(["files:app", "files:app", "files:docs"]);
+    // A file tab keeps its place beside its root, and opening it leaves the other explorer alone.
+    expect(
+      run("env-3", (panel) => {
+        store.openFile(panel, ".", undefined, docs);
+        store.openFile(panel, "src/app.ts", undefined, app);
+        store.navigateFolder(panel, "file:app:src/app.ts", "", "src/app.ts", true);
+      }),
+    ).toEqual(["files:app", "files:docs", "file:app:src/app.ts", "files:app"]);
   });
 
   it("switches to a tab that already shows the folder instead of replacing it", () => {
