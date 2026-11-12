@@ -30,6 +30,14 @@ export const TaskStatus = Schema.Literals([
 ]);
 export type TaskStatus = typeof TaskStatus.Type;
 
+export const TaskPriority = Schema.Literals(["high", "medium", "low"]);
+export type TaskPriority = typeof TaskPriority.Type;
+
+/** A calendar day, `YYYY-MM-DD`, with no time zone. */
+export const TaskDueDate = Schema.String.check(
+  Schema.isPattern(/^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/),
+);
+
 export const ForgeIssueRef = Schema.Struct({
   provider: Text,
   repo: Text,
@@ -57,6 +65,10 @@ export const Task = Schema.Struct({
   /** The open decision (需要你定) an older server's stale write opened; settling it clears this. */
   conflictDecisionId: Schema.optionalKey(DecisionId),
   forgeIssue: Schema.optionalKey(ForgeIssueRef),
+  dueDate: Schema.optionalKey(TaskDueDate),
+  priority: Schema.optionalKey(TaskPriority),
+  /** Markdown. `task.list` leaves it out; `task.get` has it. */
+  body: Schema.optionalKey(Schema.String),
   /** Oldest link first. An older server sends none. */
   threads: Schema.Array(TaskThread).pipe(Schema.withDecodingDefault(Effect.succeed([]))),
   goalChain: Strings,

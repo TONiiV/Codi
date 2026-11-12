@@ -21,6 +21,8 @@ import {
   Lease,
   Task,
   TaskCommit,
+  TaskDueDate,
+  TaskPriority,
   TaskStatus,
   TaskThread,
 } from "./board.ts";
@@ -31,6 +33,7 @@ const InWorkspace = { workspaceId: WorkspaceId };
 export const BOARD_LIMITS = {
   titleLength: 200,
   noteLength: 8 * 1024,
+  bodyLength: 32 * 1024,
   decisionTextLength: 32 * 1024,
   freeTextEntries: 500,
   listedFreeTextEntries: 20,
@@ -45,6 +48,12 @@ export const TaskFields = Schema.Struct({
   ownerSubjectId: Schema.optionalKey(Schema.NullOr(SubjectId)),
   ownerAgentId: Schema.optionalKey(Schema.NullOr(AgentId)),
   forgeIssue: Schema.optionalKey(Schema.NullOr(ForgeIssueRef)),
+  dueDate: Schema.optionalKey(Schema.NullOr(TaskDueDate)),
+  priority: Schema.optionalKey(Schema.NullOr(TaskPriority)),
+  /** Markdown; replaces the whole body. */
+  body: Schema.optionalKey(
+    Schema.NullOr(Schema.String.check(Schema.isMaxLength(BOARD_LIMITS.bodyLength))),
+  ),
   /** Replaces the whole list. */
   threads: Schema.optionalKey(Schema.Array(TaskThread)),
   goalChain: Schema.optionalKey(Strings),
@@ -91,7 +100,10 @@ export const TaskListInput = Schema.Struct({
   projectId: Schema.optionalKey(TelescopeProjectId),
   status: Schema.optionalKey(TaskStatus),
 });
-/** Each task carries only its latest `listedFreeTextEntries` free-text entries; `get` has all. */
+/**
+ * Each task carries only its latest `listedFreeTextEntries` free-text entries and no `body`;
+ * `get` has both.
+ */
 export const TaskListResult = Schema.Struct({ tasks: Schema.Array(Task) });
 
 /** A `proposed` decision records `supersedes` as intent; only a `decided` one retires it. */
