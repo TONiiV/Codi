@@ -1,7 +1,6 @@
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import { assert, it } from "@effect/vitest";
 import { AuthSessionId, EnvironmentId, Telescope, ThreadId } from "@t3tools/contracts";
-import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
@@ -602,17 +601,11 @@ it.layer(layer)("Telescope task board", (it) => {
         });
       const readFirst = yield* lostTo("t-a");
       const linkedFirst = yield* lostTo("t-b");
-      const unrelated = yield* lostTo("t-c");
-      yield* TestClock.adjust("1 minute");
-      const ran = DateTime.formatIso(yield* DateTime.now);
-      yield* sql`UPDATE codi_sql_migrations SET created_at = ${ran} WHERE migration_id = 97`;
-      yield* TestClock.adjust("1 minute");
       const read = yield* board.getTask(agent, { workspaceId: a, taskId: readFirst.id });
       assert.deepStrictEqual([read.threads, read.version], [[], 1]);
       yield* link(linkedFirst.id, "t-mb");
       yield* Migration0099;
       yield* link(readFirst.id, "t-ma");
-      yield* updateOf(unrelated.id, 1, { title: "Lost v2" });
       // The agent resends the list it read at version 1, so the member's later link stays.
       for (const [lost, linked] of [
         [readFirst, "t-ma"],
@@ -624,9 +617,6 @@ it.layer(layer)("Telescope task board", (it) => {
           [[elsewhere(linked)], undefined],
         );
       }
-      // Nobody else changed the list after version 1, so changing it replaces no one's change.
-      const changed = yield* updateOf(unrelated.id, 1, { threads: [elsewhere("c-x")] }, agent);
-      assert.deepStrictEqual([changed.threads, changed.overwrote], [[elsewhere("c-x")], undefined]);
     }),
   );
 

@@ -2,37 +2,46 @@ import * as Effect from "effect/Effect";
 import * as SqlClient from "effect/sql/SqlClient";
 
 /**
- * 097 kept a thread two tasks named on the one updated last and dropped it from the other, whose
- * last `threadId` commit still names it, so a stale write read `[thread]`. That value becomes null.
- * Every write before 097 was a commit, so a task's `updated_at` then is its last commit before
- * 097's recorded second; a commit inside that second may fall on either side, so ties stay as is.
+ * 097 kept a thread two tasks named on the one updated last; the other's last `threadId` commit
+ * still names it, so a stale write read `[thread]`. That value becomes null. Clocks step, so 097's
+ * own time is not read: a task's `updated_at` then was the time of a commit from that one up to
+ * the last before a `threads` commit (written only since 097). Text compare, as 097 compared.
  */
 export default Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
 
   yield* sql`
-    WITH ran AS (
-      SELECT julianday(created_at) AS at, julianday(created_at, '+1 second') AS after
-      FROM codi_sql_migrations WHERE migration_id = 97
+    WITH commits AS (
+      SELECT commit_id, task_id, base_version, created_at,
+        json_type(changed_fields_json, '$.threadId') IS NOT NULL AS names_thread,
+        json_extract(changed_fields_json, '$.threadId') AS thread_id,
+        created_at < LAG(created_at) OVER versions AS clock_went_back,
+        MAX(json_type(changed_fields_json, '$.threads') IS NOT NULL) OVER versions AS after_097
+      FROM telescope_task_commits
+      WINDOW versions AS (PARTITION BY task_id ORDER BY base_version)
     ),
-    named AS (
-      SELECT commit_id, task_id, json_extract(changed_fields_json, '$.threadId') AS thread_id,
+    last_named AS (
+      SELECT commit_id, task_id, thread_id, created_at, after_097,
         ROW_NUMBER() OVER (PARTITION BY task_id ORDER BY base_version DESC) AS n
-      FROM telescope_task_commits WHERE json_type(changed_fields_json, '$.threadId') IS NOT NULL
+      FROM commits WHERE names_thread
     ),
-    held AS (
-      SELECT named.commit_id, named.thread_id,
-        MAX(CASE WHEN julianday(c.created_at) < ran.at THEN julianday(c.created_at) END) AS surely,
-        MAX(CASE WHEN julianday(c.created_at) < ran.after THEN julianday(c.created_at) END) AS maybe
-      FROM named CROSS JOIN ran JOIN telescope_task_commits c ON c.task_id = named.task_id
-      WHERE named.n = 1 AND named.thread_id IS NOT NULL
-      GROUP BY named.commit_id
+    tasks AS (
+      SELECT last_named.commit_id, last_named.thread_id,
+        last_named.created_at AS updated_at_least,
+        MAX(CASE WHEN NOT c.after_097 THEN c.created_at END) AS updated_at_most,
+        TOTAL(c.clock_went_back) AS clock_went_back
+      FROM last_named JOIN commits c ON c.task_id = last_named.task_id
+      WHERE last_named.n = 1 AND last_named.thread_id IS NOT NULL AND NOT last_named.after_097
+      GROUP BY last_named.commit_id
     )
     UPDATE telescope_task_commits
-    SET changed_fields_json = json_set(changed_fields_json, '$.threadId', json('null'))
+    SET changed_fields_json = json_set(changed_fields_json, '$.threadId', NULL)
     WHERE commit_id IN (
       SELECT commit_id FROM (
-        SELECT commit_id, maybe, MAX(surely) OVER (PARTITION BY thread_id) AS newest FROM held
-      ) WHERE maybe < newest
+        SELECT commit_id, updated_at_most,
+          MAX(updated_at_least) OVER same_thread AS rival_updated_at_least,
+          TOTAL(clock_went_back) OVER same_thread AS clock_went_back
+        FROM tasks WINDOW same_thread AS (PARTITION BY thread_id)
+      ) WHERE updated_at_most < rival_updated_at_least AND clock_went_back = 0
     )`;
 });
