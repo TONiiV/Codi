@@ -45,7 +45,7 @@ const fakeAppImage = (canMount = true, app = REPORTER) => {
   const root = tempRoot();
   const image = NodePath.join(root, "image");
   writeExecutable(NodePath.join(image, "t3code"), app);
-  const appImage = NodePath.join(root, "T3 Code.AppImage");
+  const appImage = NodePath.join(root, "Codi.AppImage");
   writeExecutable(
     appImage,
     [

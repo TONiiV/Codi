@@ -42,7 +42,7 @@ for configuration and other providers.
 
 ## Generate images
 
-Codex can generate images directly in a T3 Code thread when your Codex version,
+Codex can generate images directly in a Codi thread when your Codex version,
 model, and account support native image generation.
 
 If Codex reports that its image tool is unavailable, image generation may be
@@ -53,7 +53,7 @@ Codex provider and add this to **Launch arguments**, keeping any other arguments
 -c features.image_generation=true
 ```
 
-This enables the feature for that T3 Code provider without changing your shared
+This enables the feature for that Codi provider without changing your shared
 Codex configuration. You do not need another provider instance or a separate image
 API key. The flag does not add image support to an unsupported model or account.
 

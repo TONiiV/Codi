@@ -230,7 +230,7 @@ export function renderBootServiceTask(
   return [
     `<Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">`,
     `  <RegistrationInfo>`,
-    `    <Description>T3 Code server</Description>`,
+    `    <Description>Codi server</Description>`,
     `  </RegistrationInfo>`,
     `  <Triggers>`,
     `    <LogonTrigger>`,
@@ -718,7 +718,7 @@ export class BootServiceBaseDirUnsupportedError extends Schema.TaggedError<BootS
   { baseDir: Schema.String },
 ) {
   override get message(): string {
-    return `systemd cannot run T3 Code from ${JSON.stringify(this.baseDir)}: the path contains a quote, backslash or control character. Choose another T3 home with --base-dir.`;
+    return `systemd cannot run Codi from ${JSON.stringify(this.baseDir)}: the path contains a quote, backslash or control character. Choose another T3 home with --base-dir.`;
   }
 
   override get [CliError.userMessage]() {

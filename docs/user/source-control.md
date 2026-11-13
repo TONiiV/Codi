@@ -158,7 +158,7 @@ Use **Add Project** in the command palette (`Cmd/Ctrl+K`) to clone a repository.
 provider or paste a Git URL, then choose where to save it. Only GitHub is listed at first. To list
 another provider here and in **Publish Repository**, turn on its switch under
 **Settings → Source control**. A branch or file page copied from GitHub,
-GitLab, GitCafe, Codeberg or Bitbucket also works: T3 Code clones that repository's default branch.
+GitLab, GitCafe, Codeberg or Bitbucket also works: Codi clones that repository's default branch.
 On other hosts, paste the repository's clone URL. The project opens right away while the
 clone runs in the background: you can write your first prompt, and sending waits until the files
 are in place. A toast tracks progress and lets you cancel; if the clone fails, retry it from the

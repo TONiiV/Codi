@@ -86,7 +86,7 @@ Some tools only work for an agent running inside a T3 thread, because they act
 as that thread: subagents, secret requests, rendered HTML, the browser preview,
 devices, and worktree handoff. They still appear in an outside agent's tool
 list, but calling one returns an error saying it needs an agent running inside
-T3 Code.
+Codi.
 
 - To hand off work, start a thread with `t3_thread_launch`, then follow it with
   `t3_thread_wait` or `t3_thread_read`, instead of `create_threads` or
