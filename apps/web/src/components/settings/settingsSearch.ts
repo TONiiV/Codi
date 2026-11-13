@@ -458,12 +458,6 @@ export const SETTINGS_SEARCH_ITEMS = [
     to: "/settings/appearance",
   },
   {
-    id: "language",
-    title: "Language",
-    to: "/settings/general",
-    searchTerms: ["locale translation chinese english 中文 语言"],
-  },
-  {
     id: "project-grouping",
     title: msg("Project grouping"),
     to: "/settings/general",

@@ -125,18 +125,20 @@ const layer = (opened: Array<string>) =>
               ),
             ),
         }),
-        Layer.mock(Orchestrator.OrchestratorV2)({
-          // A missing thread is looked up again under its `mcp:` alias.
-          getThreadShell: (threadId) =>
-            Effect.sync(() => {
-              if (!threadId.startsWith("mcp:")) opened.push("watch_pull_request");
-              return null;
-            }),
-        }),
+        Layer.mock(Orchestrator.OrchestratorV2)({ getThreadShell: () => Effect.succeed(null) }),
         Layer.mock(AssetSigner.AssetSigner)({}),
         Layer.mock(ServerSecretStore.ServerSecretStore)({}),
         Layer.mock(PullRequestReviewGuideService.PullRequestReviewGuideService)({}),
-        Layer.mock(PullRequestWatchService.PullRequestWatchService)({}),
+        Layer.mock(PullRequestWatchService.PullRequestWatchService)({
+          setWatching: ({ threadId }) =>
+            Effect.sync(() => opened.push("watch_pull_request")).pipe(
+              Effect.andThen(
+                Effect.fail(
+                  new PullRequestWatchService.PullRequestWatchThreadNotFoundError({ threadId }),
+                ),
+              ),
+            ),
+        }),
         Layer.mock(RemoteDelegation.RemoteDelegation)({}),
         Layer.succeed(
           SecureRandom.SecureRandom,
@@ -451,9 +453,9 @@ it.effect("a PA run's watch_pull_request on its own thread is not gated", () => 
   return Effect.gen(function* () {
     const { on, audit } = yield* setup;
     const pa = yield* on("chief_of_staff");
-    for (const threadId of [undefined, pa.threadId])
+    for (const thread of [{}, { threadId: pa.threadId }])
       yield* Effect.exit(
-        pa.pr("watch_pull_request", { threadId, url: "https://github.com/acme/web/pull/7" }),
+        pa.pr("watch_pull_request", { ...thread, url: "https://github.com/acme/web/pull/7" }),
       );
     assert.deepStrictEqual(opened, ["watch_pull_request", "watch_pull_request"]);
     assert.deepStrictEqual(yield* audit, []);

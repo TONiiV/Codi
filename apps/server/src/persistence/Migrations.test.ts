@@ -77,8 +77,10 @@ describe("runMigrations", () => {
   it.effect("runs an upstream migration below Codi's ids on a database older builds wrote", () =>
     Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
-      const [headId, headName] = migrationManifest.at(-1)!;
-      yield* runMigrations({ toMigrationInclusive: headId - 1 });
+      // Upstream has since used ids that Codi's migrations also have.
+      const firstCodiId = codiMigrationManifest[0]![0];
+      const pending = migrationManifest.filter(([id]) => id >= firstCodiId - 1);
+      yield* runMigrations({ toMigrationInclusive: firstCodiId - 2 });
       yield* runCodiMigrations();
       // Older builds recorded Codi's migrations in upstream's table, above upstream's head.
       yield* sql`
@@ -87,7 +89,7 @@ describe("runMigrations", () => {
       `;
       yield* sql`DROP TABLE ${sql(CODI_MIGRATIONS_TABLE)}`;
 
-      assert.deepStrictEqual(yield* runMigrations(), [[headId, headName]]);
+      assert.deepStrictEqual(yield* runMigrations(), pending);
       assert.deepStrictEqual(yield* history, migrationManifest);
       const codiRows = yield* sql<{ readonly migration_id: number; readonly name: string }>`
         SELECT migration_id, name FROM ${sql(CODI_MIGRATIONS_TABLE)} ORDER BY migration_id

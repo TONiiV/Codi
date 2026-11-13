@@ -63,7 +63,9 @@ it.layer(NodeServices.layer)("service preflight database", (it) => {
       const insert = db.prepare("INSERT INTO effect_sql_migrations VALUES (?, ?)");
       for (const [id, name] of migrationManifest) insert.run(id, name);
       // Builds before codi_sql_migrations recorded Codi's ids here, above upstream's head.
-      for (const [id, name] of codiMigrationManifest) insert.run(id, name);
+      for (const [id, name] of codiMigrationManifest) {
+        if (id > BUILD_MIGRATION_HEAD) insert.run(id, name);
+      }
       const preflight = () =>
         runServicePreflight({ databasePath, launcherProtocol: SERVICE_LAUNCHER_PROTOCOL });
 

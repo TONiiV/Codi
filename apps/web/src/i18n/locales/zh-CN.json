@@ -86,6 +86,10 @@
       "sections": "设置分区"
     },
     "items": {
+      "scheduled-tasks": "定时任务",
+      "keep-awake-while-agents-work": "智能体工作时保持唤醒",
+      "screen-reader-window-title": "屏幕阅读器窗口标题",
+      "screen-reader-announcements": "屏幕阅读器播报",
       "language": "语言",
       "project-grouping": "项目分组",
       "project-order": "项目排序",
@@ -2805,6 +2809,9 @@
       }
     },
     "itemTerms": {
+      "keep-awake-while-agents-work": "防止休眠 睡眠 保持唤醒 电源 笔记本 合盖 caffeinate sleep prevent stay awake power laptop lid inhibit",
+      "screen-reader-window-title": "无障碍 屏幕阅读器 窗口标题 标签页标题 任务栏 会话状态 accessibility a11y screen reader nvda jaws voiceover orca narrator window title tab title alt tab taskbar thread status order working approval",
+      "screen-reader-announcements": "无障碍 屏幕阅读器 朗读 播报 消息 活动 步骤 accessibility a11y screen reader nvda jaws voiceover orca narrator speech announce read aloud messages activity steps",
       "storage-worktree-keep-when": "本地文件 未提交更改 已编辑 已跟踪 忽略 环境变量 构建产物 清理",
       "storage-delete-now": "存储 清理 立即运行 结果 报告 已移除 已保留 失败",
       "storage-worktrees": "磁盘 存储 自动删除 已删除 已归档 会话 旧 不活跃 已合并 已完结 未更改 工作树 保留 天数 项目 继承 关闭 自定义",
@@ -2834,7 +2841,7 @@
       "separate-fonts": "排版 高级 提示词 代码 终端 字体族 字号 单独",
       "font-smoothing": "排版 文字 灰度 抗锯齿 macos 细",
       "word-wrap": "长行 代码块 差异 文件预览",
-      "language": "语言 区域 翻译 中文 英文 简体中文 English",
+      "language": "语言 区域 翻译 中文 英文 简体中文 locale translation english deutsch german español spanish français french português portuguese brasil brazilian chinese 中文 japanese 日本語 korean 한국어 russian русский sprache idioma langue 语言 言語 언어 язык",
       "project-grouping": "合并 相同仓库 环境 侧边栏",
       "project-order": "排序 项目 侧边栏 手动 创建时间 最近",
       "snooze-options": "延后 预设 时间 今晚 明天 下周 提醒",
@@ -2961,6 +2968,7 @@
       "text-generators": "模型 API API 密钥 OpenAI OpenRouter Anthropic Ollama LM Studio 自定义端点 基础 URL 对话标题 提交信息"
     },
     "keybindingCommands": {
+      "thread_regenerateTitle": "会话：重新生成标题",
       "workspace_focusNext": "聚焦下一个工作区",
       "workspace_focusPrevious": "聚焦上一个工作区",
       "sidebar_toggle": "侧边栏：切换",
