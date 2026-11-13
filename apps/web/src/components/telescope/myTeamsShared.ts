@@ -52,3 +52,19 @@ export function powerSummary(powers: Telescope.StandingPowers) {
       .join("、") || "都先问"
   );
 }
+
+/** Chief Agents are named "<project> Chief Agent"; only the project part tells them apart. */
+export function initials(agent: Telescope.Agent): string {
+  const name = agentDisplayName(agent);
+  const own = agent.kind === "chief_agent" ? name.replace(/\s+Chief Agent$/, "") : name;
+  const words = own.split(/[\s_-]+/).filter(Boolean);
+  const [only] = words;
+  // One Latin word keeps two letters ("IT"); one CJK character already names the agent.
+  const picks =
+    words.length > 1
+      ? [words[0], words.at(-1)].map((word) => [...(word ?? "")][0] ?? "")
+      : only !== undefined && /^[A-Za-z]/.test(only)
+        ? [only.slice(0, 2)]
+        : [[...(only ?? "")][0] ?? ""];
+  return picks.join("").toUpperCase() || "?";
+}
