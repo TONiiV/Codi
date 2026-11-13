@@ -21,7 +21,7 @@ describe("TelescopeSidebar", () => {
     try {
       await using screen = await render(
         <SidebarProvider>
-          <Sidebar collapsible="icon">
+          <Sidebar>
             <TelescopeSidebar view="chats" />
           </Sidebar>
           <SidebarTrigger />
