@@ -4,13 +4,17 @@ import { leaseRecheckDelay } from "@t3tools/client-runtime/telescope/taskBoard";
 import {
   AuthOrchestrationOperateScope,
   DEFAULT_RUNTIME_MODE,
-  type EnvironmentId,
   type Telescope,
-  type ThreadId,
 } from "@t3tools/contracts";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { ExternalLinkIcon, MessageSquarePlusIcon, UnlinkIcon } from "lucide-react";
-import { type ReactNode, useContext, useEffect, useState } from "react";
+import {
+  CircleDashedIcon,
+  ExternalLinkIcon,
+  LinkIcon,
+  MessageSquarePlusIcon,
+  UnlinkIcon,
+} from "lucide-react";
+import { useContext, useEffect, useState } from "react";
 
 import { useThreadShell } from "../../state/entities";
 import { useEnvironment } from "../../state/environments";
@@ -19,28 +23,19 @@ import { useEnvironmentScope } from "../../state/session";
 import { threadFamilies } from "../../state/threads";
 import { buildThreadRouteParams } from "../../threadRoutes";
 import { sideChatSourceBlock } from "../ChatView.logic";
+import { resolveThreadStatusPill } from "../Sidebar.logic";
+import { ThreadStatusLabel } from "../ThreadStatusIndicators";
 import { type SideChatFailureStage, useSideChat } from "../chat/useSideChat";
 import { Button } from "../ui/button";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "../ui/empty";
-import { SheetHeader } from "../ui/sheet";
 import { Skeleton } from "../ui/skeleton";
 import { Spinner } from "../ui/spinner";
 import { toastManager } from "../ui/toast";
 import { ErrorNote } from "./TelescopeAccountDialogs";
-import { telescopeBoard } from "./telescopeState";
+import { PropertyRow, TaskPage, time } from "./TaskPage";
+import { telescope, telescopeBoard } from "./telescopeState";
 import { unlinkThreadFromTask } from "./ThreadTaskLink";
-import { type BoardTarget, NeedsYouBadge, StatusBadge, useBoardPeople } from "./TasksParts";
-
-function Field({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <section className="flex flex-col items-start gap-1.5">
-      <h3 className="text-xs font-medium text-muted-foreground">{label}</h3>
-      {children}
-    </section>
-  );
-}
-
-const time = (at: string) => new Date(at).toLocaleString();
+import { type BoardTarget, useBoardPeople, useTaskWrite } from "./TasksParts";
 
 export function LeaseField({
   lease,
@@ -52,7 +47,7 @@ export function LeaseField({
   query: { data: unknown; error: string | null; refresh: () => void };
 }) {
   return (
-    <Field label="租约">
+    <PropertyRow icon={CircleDashedIcon} label="租约">
       {lease && holder ? (
         <p>
           {holder} 在做{" "}
@@ -63,7 +58,7 @@ export function LeaseField({
       ) : query.data !== null ? (
         <p className="text-muted-foreground">空闲</p>
       ) : query.error !== null ? null : (
-        <Skeleton className="h-5 w-48" />
+        <Skeleton className="h-5 w-32" />
       )}
       {query.error === null ? null : (
         <ErrorNote
@@ -71,7 +66,7 @@ export function LeaseField({
           onRetry={query.refresh}
         />
       )}
-    </Field>
+    </PropertyRow>
   );
 }
 
@@ -91,56 +86,63 @@ const SIDE_CHAT_FAILED: Record<SideChatFailureStage, string> = {
   send: "第一条消息没有发出去，请再试一次。",
 };
 
-function ThreadLink({
-  environmentId,
-  threadId,
+function SubTask({
+  thread,
+  task,
+  mayUnlink,
 }: {
-  environmentId: EnvironmentId;
-  threadId: ThreadId;
+  thread: Telescope.TaskThread;
+  task: Telescope.Task;
+  mayUnlink: boolean;
 }) {
-  const ref = scopeThreadRef(environmentId, threadId);
-  const title = useThreadShell(ref)?.title;
+  const ref = scopeThreadRef(thread.environmentId, thread.threadId);
+  const shell = useThreadShell(ref);
+  const status = shell === null ? null : resolveThreadStatusPill({ thread: shell });
   return (
-    <Button
-      variant="link"
-      size="sm"
-      className="-ms-2.5"
-      render={<Link to="/$environmentId/$threadId" params={buildThreadRouteParams(ref)} />}
-    >
-      <span className="truncate">{title ?? "关联的对话"}</span>
-    </Button>
+    <li className="-mx-1.5 flex min-h-7.5 items-center gap-2 rounded-md px-1.5 hover:bg-accent">
+      <Link
+        to="/$environmentId/$threadId"
+        params={buildThreadRouteParams(ref)}
+        className="min-w-0 flex-1 truncate text-base"
+      >
+        {shell?.title ?? "关联的对话"}
+      </Link>
+      {status === null ? null : <ThreadStatusLabel status={status} />}
+      {mayUnlink ? (
+        <Button
+          variant="ghost-muted"
+          size="icon-xs"
+          aria-label="解除关联"
+          title="解除关联（对话不会被删除）"
+          onClick={() => void unlinkThreadFromTask(ref, task)}
+        >
+          <UnlinkIcon />
+        </Button>
+      ) : null}
+    </li>
   );
 }
 
-function LinkedThreads({
-  environmentId,
-  task,
-}: {
-  environmentId: EnvironmentId;
-  task: Telescope.Task;
-}) {
-  const mayUnlink = useAtomValue(telescopeBoard.unlinkThread.permissionAtom(environmentId));
-  if (task.threads.length === 0) return <p className="text-muted-foreground">没有关联对话</p>;
+/** The task's linked Code threads, read as its sub-tasks. */
+function SubTasks({ task, mayUnlink }: { task: Telescope.Task; mayUnlink: boolean }) {
   return (
-    <ul className="flex flex-col items-start">
-      {task.threads.map((thread) => (
-        <li key={`${thread.environmentId}:${thread.threadId}`} className="flex items-center gap-1">
-          <ThreadLink environmentId={thread.environmentId} threadId={thread.threadId} />
-          <Button
-            variant="ghost"
-            size="icon-xs"
-            aria-label="解除关联"
-            title="解除关联（对话不会被删除）"
-            disabled={!mayUnlink}
-            onClick={() =>
-              void unlinkThreadFromTask(scopeThreadRef(thread.environmentId, thread.threadId), task)
-            }
-          >
-            <UnlinkIcon />
-          </Button>
-        </li>
-      ))}
-    </ul>
+    <section aria-label="关联的对话" className="flex flex-col gap-1">
+      <h2 className="font-semibold text-2xl leading-8">关联的对话</h2>
+      {task.threads.length === 0 ? (
+        <p className="text-base text-muted-foreground">没有关联对话</p>
+      ) : (
+        <ul className="flex flex-col">
+          {task.threads.map((thread) => (
+            <SubTask
+              key={`${thread.environmentId}:${thread.threadId}`}
+              thread={thread}
+              task={task}
+              mayUnlink={mayUnlink}
+            />
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }
 
@@ -244,7 +246,15 @@ export function TaskDetail({ target, taskId }: { target: BoardTarget; taskId: Te
     const handle = window.setTimeout(refreshLease, delay);
     return () => window.clearTimeout(handle);
   }, [lease, dataUpdatedAt, refreshLease]);
-  const names = useBoardPeople(target).name;
+  const { name: names, agents } = useBoardPeople(target);
+  const board = { environmentId, input: { workspaceId: target.workspaceId } };
+  const self = useEnvironmentQuery(telescope.get(board)).data?.self ?? null;
+  // A viewer (只读) is refused every write, so it gets the page without controls.
+  const member = self !== null && self.role !== "viewer";
+  const mayWrite = useAtomValue(telescopeBoard.updateTask.permissionAtom(environmentId)) && member;
+  const mayUnlink =
+    useAtomValue(telescopeBoard.unlinkThread.permissionAtom(environmentId)) && member;
+  const write = useTaskWrite(target);
   const task = query.data;
   if (task === null)
     return query.error === null ? (
@@ -262,56 +272,34 @@ export function TaskDetail({ target, taskId }: { target: BoardTarget; taskId: Te
     );
   const holder =
     lease && (names(lease.holderAgentId) ?? names(lease.holderSubjectId) ?? "其他成员的 agent");
-  const reports = task.freeText;
   return (
-    <>
-      <SheetHeader>
-        {/* SheetTitle and SheetDescription throw outside a Dialog root. */}
-        <h2 className="font-semibold text-xl leading-snug wrap-anywhere">{task.title}</h2>
-        <div className="flex flex-wrap items-center gap-2 text-muted-foreground text-sm">
-          <StatusBadge status={task.status} />
-          <NeedsYouBadge task={task} />
-          {task.ownerAgentId ? (
-            <span>负责 agent：{names(task.ownerAgentId) ?? "其他成员的 agent"}</span>
-          ) : null}
-        </div>
-      </SheetHeader>
-      <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-6 pb-6 text-sm">
-        <LeaseField lease={lease} holder={holder} query={leaseQuery} />
-        <Field label="关联">
+    <TaskPage
+      task={task}
+      write={mayWrite ? write : null}
+      names={names}
+      agents={agents}
+      selfName={self?.displayName ?? ""}
+      details={
+        <>
+          <LeaseField lease={lease} holder={holder} query={leaseQuery} />
           {task.forgeIssue ? (
-            <Button
-              variant="link"
-              size="sm"
-              className="-ms-2.5"
-              render={<a href={task.forgeIssue.url} target="_blank" rel="noopener noreferrer" />}
-            >
-              {task.forgeIssue.repo}#{task.forgeIssue.number}
-              <ExternalLinkIcon />
-            </Button>
-          ) : (
-            <p className="text-muted-foreground">没有关联 issue</p>
-          )}
-          <LinkedThreads environmentId={environmentId} task={task} />
-        </Field>
-        <Field label={`汇报 ${reports.length}`}>
-          {reports.length === 0 ? (
-            <p className="text-muted-foreground">还没有汇报</p>
-          ) : (
-            <ol className="flex flex-col gap-3">
-              {reports.map((entry) => (
-                <li key={`${entry.at}-${entry.authorId}`} className="flex flex-col gap-0.5">
-                  <span className="text-xs text-muted-foreground">
-                    {names(entry.authorId) ?? "其他成员"} · {time(entry.at)}
-                  </span>
-                  <p className="whitespace-pre-wrap wrap-anywhere">{entry.text}</p>
-                </li>
-              ))}
-            </ol>
-          )}
-        </Field>
-        <SideChatButton task={task} />
-      </div>
-    </>
+            <PropertyRow icon={LinkIcon} label="Issue">
+              <a
+                href={task.forgeIssue.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 hover:underline"
+              >
+                {task.forgeIssue.repo}#{task.forgeIssue.number}
+                <ExternalLinkIcon className="size-3.5" />
+              </a>
+            </PropertyRow>
+          ) : null}
+        </>
+      }
+    >
+      <SubTasks task={task} mayUnlink={mayUnlink} />
+      <SideChatButton task={task} />
+    </TaskPage>
   );
 }
