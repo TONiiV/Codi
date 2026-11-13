@@ -165,15 +165,44 @@ describe("TaskPage", () => {
     await expect.element(screen.getByRole("combobox", { name: "状态" })).toHaveTextContent("完成");
   });
 
-  it("writes a picked due date once its year is plausible, and shows it", async () => {
+  it("writes a typed due date once, on leaving the field, and only a whole one", async () => {
     const write = vi.fn(async () => true);
     await using screen = await render(taskPage(task, write));
     const due = screen.getByLabelText("截止日期");
-    await userEvent.fill(due, "0202-12-01");
+    const input = due.element() as HTMLInputElement;
+    const leave = () => userEvent.click(screen.getByRole("heading", { name: "评论" }));
+
+    // Focus lands on the month segment (en-US): a month alone, then a year with a fifth digit.
+    input.focus();
+    await userEvent.keyboard("12");
+    await leave();
+    expect(input.validity.badInput).toBe(false);
+    input.focus();
+    await userEvent.keyboard("120520271");
+    await leave();
     expect(write).not.toHaveBeenCalled();
-    await userEvent.fill(due, "2026-12-01");
-    expect(write).toHaveBeenCalledExactlyOnceWith(task, { set: { dueDate: "2026-12-01" } });
-    await expect.element(due).toHaveValue("2026-12-01");
+    const dated = { ...task, version: 4, dueDate: "2026-11-20" };
+    await screen.rerender(taskPage(dated, write));
+    await expect.element(due).toHaveValue("2026-11-20");
+
+    input.focus();
+    await userEvent.keyboard("12052027");
+    expect(write).not.toHaveBeenCalled();
+    await userEvent.keyboard("{Enter}");
+    expect(write).toHaveBeenCalledExactlyOnceWith(dated, { set: { dueDate: "2027-12-05" } });
+    await expect.element(due).toHaveValue("2027-12-05");
+
+    input.focus();
+    await userEvent.keyboard("{Backspace}");
+    await leave();
+    expect(write).toHaveBeenCalledOnce();
+    await expect.element(due).toHaveValue("2027-12-05");
+
+    input.focus();
+    await userEvent.keyboard("{Backspace}{Tab}{Backspace}{Tab}{Backspace}");
+    await leave();
+    expect(write).toHaveBeenCalledTimes(2);
+    expect(write).toHaveBeenLastCalledWith(dated, { set: { dueDate: null } });
   });
 
   it("keeps what the member is typing in the title when someone else renames the task", async () => {

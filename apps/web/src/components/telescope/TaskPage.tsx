@@ -16,6 +16,7 @@ import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { Textarea } from "../ui/textarea";
+import { enteredDueDate } from "./dueDateInput";
 import { NeedsYouBadge, TASK_STATUS, type useTaskWrite } from "./TasksParts";
 
 type Write = ReturnType<typeof useTaskWrite>;
@@ -205,8 +206,8 @@ function OwnerValue(props: { task: Task; write: Write | null; names: Names; agen
 
 function DueDateValue({ task, write }: { task: Task; write: Write | null }) {
   const [dueDate, send] = useSent(task, write, task.dueDate ?? null, (dueDate) => ({ dueDate }));
-  // ponytail: a year being typed emits 0002, 0020, 0202 first; it stays here until plausible.
-  const [partial, setPartial] = useState<string | null>(null);
+  // What the field holds while the member is in it; it is read once, as they leave.
+  const [draft, setDraft] = useState<string | null>(null);
   if (write === null) return dueDate ? <span>{dayLabel(dueDate)}</span> : <Empty />;
   return (
     <Input
@@ -215,12 +216,17 @@ function DueDateValue({ task, write }: { task: Task; write: Write | null }) {
       size="cell"
       className="-mx-1.5"
       aria-label="截止日期"
-      value={partial ?? dueDate ?? ""}
-      onChange={(event) => {
-        const value = event.target.value;
-        const typing = value !== "" && Number(value.slice(0, 4)) < 1900;
-        setPartial(typing ? value : null);
-        if (!typing) void send(value === "" ? null : value);
+      value={draft ?? dueDate ?? ""}
+      onChange={(event) => setDraft(event.target.value)}
+      onKeyDown={(event) => {
+        if (event.key === "Enter") event.currentTarget.blur();
+      }}
+      onBlur={(event) => {
+        const entered = enteredDueDate(event.currentTarget);
+        setDraft(null);
+        // Segments left half filled are dropped, so the field shows the stored day again.
+        if (entered === undefined) event.currentTarget.value = dueDate ?? "";
+        else void send(entered);
       }}
     />
   );
