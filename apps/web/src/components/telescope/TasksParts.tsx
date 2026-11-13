@@ -26,6 +26,7 @@ import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "../ui/empty";
 import { Spinner } from "../ui/spinner";
 import { toastManager } from "../ui/toast";
 import { ErrorNote } from "./TelescopeAccountDialogs";
+import { FirstRunCreate } from "./TelescopeFirstRun";
 import { telescope, telescopeBoard, useTelescopeWorkspaces } from "./telescopeState";
 import { telescopeSearch } from "./telescopeViews";
 
@@ -240,6 +241,7 @@ export function NoWorkspace() {
         <EmptyDescription>正在加载…</EmptyDescription>
       </Empty>
     );
+  if (environmentId !== null) return <FirstRunCreate environmentId={environmentId} />;
   return (
     <Empty>
       <EmptyHeader>

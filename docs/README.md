@@ -25,6 +25,7 @@
 - [Guest links](./user/guest-links.md)
 - [T3 Connect troubleshooting](./user/t3-connect-troubleshooting.md)
 - [Outside agents (MCP)](./user/outside-agents.md)
+- [Start a workspace in Telescope](./user/telescope-workspaces.md)
 - [Delegation in Telescope](./user/telescope-delegation.md)
 - [Running in the background](./user/background-service.md)
 - [Updating Codi](./user/updating.md)
