@@ -108,7 +108,6 @@ import {
   scheduleFromDraft,
   scheduleLabel,
   scheduledTaskDefaultModel,
-  WEEKDAY_LABELS,
   taskToDraft,
   unbindDraftFromThread,
   type DraftState,

@@ -1,10 +1,4 @@
-import type {
-  EnvironmentId,
-  EnvironmentMachineKind,
-  VcsRef,
-  ProjectId,
-  WorktreeSubmodules,
-} from "@t3tools/contracts";
+import type { EnvironmentId, EnvironmentMachineKind, VcsRef, ProjectId } from "@t3tools/contracts";
 import type { ThreadStructureRuntime } from "@t3tools/client-runtime/state/shell";
 import * as Schema from "effect/Schema";
 import { sanitizeNewRefName } from "@t3tools/shared/git";

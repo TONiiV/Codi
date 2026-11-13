@@ -150,7 +150,9 @@ const layer = (opened: Array<string>) =>
           namedProjectsRoot: "/projects",
           ensureScratchProject: Effect.suspend(() => {
             opened.push("t3_thread_launch");
-            return Effect.fail(new ManagedProjectFolders.ScratchUnavailableError({ baseDir: "/base" }));
+            return Effect.fail(
+              new ManagedProjectFolders.ScratchUnavailableError({ baseDir: "/base" }),
+            );
           }),
         }),
         // t3_thread_launch needs these to type-check; the scratch path stops before any of them.

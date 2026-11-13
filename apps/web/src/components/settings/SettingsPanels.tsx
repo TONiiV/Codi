@@ -124,16 +124,6 @@ import { useUpdateEverythingRun } from "../sidebar/updateEverythingRun";
 import { awaitsTrackSwitch } from "../sidebar/updateEverything.logic";
 import { isHostedByThisApp } from "../sidebar/useUpdateEverything";
 
-const RESPONSE_STREAMING_MODE_LABELS: Record<ResponseStreamingMode, string> = {
-  turn: "Wait for the full response",
-  paragraph: "Show finished paragraphs",
-};
-
-const RESPONSE_STREAMING_MODE_DESCRIPTIONS: Record<ResponseStreamingMode, string> = {
-  turn: "Text appears once the agent finishes its turn.",
-  paragraph: "Each paragraph or code block appears as soon as it is complete.",
-};
-
 const SIDEBAR_PROJECT_SORT_ORDER_LABELS: Record<SidebarProjectSortOrder, string> = {
   updated_at: msg("Last user message"),
   created_at: msg("Created at"),
@@ -811,8 +801,6 @@ function AutoSettleDaysInput({
     />
   );
 }
-
-const LANGUAGE_LABELS = { en: "English", "zh-CN": "简体中文" } as const;
 
 /** Settings > General is the only translated panel, so only it gets a localized reset button. */
 function GeneralResetButton({ label, onClick }: { label: string; onClick: () => void }) {
