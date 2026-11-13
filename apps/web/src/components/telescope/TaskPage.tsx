@@ -49,7 +49,7 @@ function useSent<V>(
 function Property(props: { icon: LucideIcon; label: string; children: ReactNode }) {
   return (
     <div className="flex min-w-0 flex-col">
-      <div className="telescope-task-label flex h-6 items-center gap-1.5 px-1.5 font-medium text-muted-foreground">
+      <div className="text-label flex h-6 items-center gap-1.5 px-1.5 font-medium text-muted-foreground">
         <props.icon className="size-4.25" />
         {props.label}
       </div>
@@ -98,7 +98,7 @@ function Title({ task, write }: { task: Task; write: Write | null }) {
   // the write goes in against that version, so the server reports what it replaced.
   const [base, setBase] = useState<Task | null>(null);
   const shown = base ?? task;
-  const className = "telescope-task-title font-bold wrap-anywhere outline-none";
+  const className = "text-title font-bold wrap-anywhere outline-none";
   if (write === null) return <h1 className={className}>{task.title}</h1>;
   const save = async (element: HTMLElement) => {
     setBase(null);
@@ -272,7 +272,7 @@ function Comments(props: { task: Task; write: Write | null; names: Names; selfNa
   };
   return (
     <section aria-label="评论" className="flex flex-col gap-3 border-b pb-4">
-      <h2 className="telescope-task-label font-medium text-muted-foreground">评论</h2>
+      <h2 className="text-label font-medium text-muted-foreground">评论</h2>
       {task.freeText.length === 0 ? null : (
         <ol className="flex flex-col gap-3">
           {task.freeText.map((entry) => {
@@ -438,9 +438,7 @@ export function TaskPage(props: {
           </div>
           {details ? (
             <section aria-label="属性" className="-mx-1.5 flex flex-col gap-1">
-              <h2 className="telescope-task-label px-1.5 font-medium text-muted-foreground">
-                属性
-              </h2>
+              <h2 className="text-label px-1.5 font-medium text-muted-foreground">属性</h2>
               <PropertyRow icon={FlagIcon} label="优先级">
                 <PriorityValue task={task} write={write} />
               </PropertyRow>
