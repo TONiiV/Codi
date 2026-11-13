@@ -412,10 +412,17 @@ describe("ChatMarkdown workspace file opens", () => {
     const panel = telescopePanelRef(EnvironmentId.make("workspace"));
     await using screen = await render(
       <FileMountContext value={ProjectId.make("app")}>
-        <ChatMarkdown cwd="/work/app" text="[Guide](/work/app/docs/guide.md)" threadRef={panel} />
+        <ChatMarkdown
+          cwd="/work/app"
+          text="[Host](/work/docs/secret.md) [Up](../docs/secret.md) [Sibling](/work/app-old/x.md) [Guide](/work/app/docs/guide.md)"
+          threadRef={panel}
+        />
       </FileMountContext>,
     );
-    await act(async () => screen.container.querySelector("a")!.click());
+    using openFile = vi.spyOn(useRightPanelStore.getState(), "openFile");
+    // A link that leaves the mount is not the panel's to open; it takes the editor's path.
+    for (const link of screen.container.querySelectorAll("a")) await act(async () => link.click());
+    expect(openFile.mock.calls.map(([, path]) => path)).toEqual(["docs/guide.md"]);
     await vi.waitFor(() =>
       expect(
         selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, panel).surfaces.map(

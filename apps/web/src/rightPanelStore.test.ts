@@ -932,6 +932,24 @@ describe("rightPanelStore", () => {
         store.navigateFolder(panel, "file:app:src/app.ts", "", "src/app.ts", true);
       }),
     ).toEqual(["files:app", "files:docs", "file:app:src/app.ts", "files:app"]);
+    // No opener puts a path outside the mount in its tab: a host path, or one that climbs out.
+    expect(
+      run("env-4", (panel) => {
+        store.openFile(panel, "src/app.ts", undefined, app);
+        for (const outside of [
+          "/work/docs/secret.md",
+          "/work/app-old/x.md",
+          "~/secret.md",
+          "../docs/secret.md",
+          "src/../../docs/secret.md",
+          "..\\docs\\secret.md",
+        ]) {
+          store.openFile(panel, outside, undefined, app);
+          store.navigateFolder(panel, "file:app:src/app.ts", outside, outside, true);
+        }
+        store.openFile(panel, "src/../README.md", undefined, app);
+      }),
+    ).toEqual(["file:app:src/../README.md", "file:app:src/app.ts", "file:app:src/../README.md"]);
   });
 
   it("switches to a tab that already shows the folder instead of replacing it", () => {

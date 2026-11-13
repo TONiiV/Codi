@@ -831,9 +831,12 @@ function useChatMarkdownState({
       mediaMimeTypeFromExtension(
         fileLinkMeta.basename.slice(fileLinkMeta.basename.lastIndexOf(".")),
       ) !== null;
+    // A mount's tab opens only what is inside that mount, so a host path there is the editor's.
     const panelPath =
       fileLinkMeta.workspaceRelativePath ??
-      (!canPreviewMedia && isHostPath(fileLinkMeta.filePath) ? fileLinkMeta.filePath : null);
+      (fileMount === undefined && !canPreviewMedia && isHostPath(fileLinkMeta.filePath)
+        ? fileLinkMeta.filePath
+        : null);
 
     return (
       <MarkdownFileLink

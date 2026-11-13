@@ -11,6 +11,7 @@ import {
   ThreadId,
   type ScopedThreadRef,
 } from "@t3tools/contracts";
+import { isHostPath, workspaceRelativeFilePath } from "@t3tools/shared/path";
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 
@@ -138,12 +139,20 @@ export const isWorkspaceFile = (
 ): surface is Extract<RightPanelSurface, { kind: "files" | "file" }> =>
   surface.kind === "files" || (surface.kind === "file" && surface.attachment === undefined);
 
+// A mount's tab holds a path under that mount. A host path, or one whose `..` climbs out, names a
+// file of another project; rooting the path at `/` lets the shared walk count the climb.
+const leavesMount = (relativePath: string) =>
+  isHostPath(relativePath) ||
+  workspaceRelativeFilePath(`/${relativePath.replaceAll("\\", "/")}`, "/") === null;
+
 // Telescope's panel holds only the kinds it offers, whoever asks, and its workspace file tabs only
-// with the mount they browse, since no thread there names a workspace.
+// with the mount they browse and a path inside it, since no thread there names a workspace.
 const hiddenInPanel = (threadKey: string, surface: RightPanelSurface) =>
   isTelescopePanelKey(threadKey) &&
   (!TELESCOPE_PANEL_SURFACES.includes(surface.kind) ||
-    (isWorkspaceFile(surface) && surface.projectId === undefined));
+    (isWorkspaceFile(surface) &&
+      (surface.projectId === undefined ||
+        (surface.kind === "file" && leavesMount(surface.relativePath)))));
 
 export interface ThreadRightPanelState {
   isOpen: boolean;
