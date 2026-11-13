@@ -4,10 +4,26 @@ import {
   boundWorkspaceIds,
   type WorkspaceMount,
 } from "@t3tools/client-runtime/telescope/workspaces";
-import type { Telescope } from "@t3tools/contracts";
+import type { EnvironmentId, Telescope } from "@t3tools/contracts";
+import { Atom } from "effect/reactivity";
 
 import type { SidebarProjectSnapshot } from "../../sidebarProjectGrouping";
 import { powerSummary } from "./myTeamsShared";
+
+export const workspaceKey = (environmentId: EnvironmentId, workspaceId: Telescope.WorkspaceId) =>
+  `${environmentId}/${workspaceId}`;
+
+/**
+ * Directories this session sent 接入 for, per workspace (`workspaceKey`). A key leaves when its call
+ * fails or the 项目 page sees the data list the directory as mounted. Outlives the view, so leaving
+ * and coming back cannot send a directory twice.
+ */
+export const sentMountsAtom = Atom.family((key: string) =>
+  Atom.make<ReadonlyArray<string>>([]).pipe(
+    Atom.keepAlive,
+    Atom.withLabel(`telescope:sent-mounts:${key}`),
+  ),
+);
 
 /** One row per Telescope project; each mount joins its Code project and the caller's Chief Agent there. */
 export function projectRows(

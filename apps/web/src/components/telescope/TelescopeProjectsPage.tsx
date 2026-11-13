@@ -1,9 +1,9 @@
-import { useAtomValue } from "@effect/atom-react";
+import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { bindingsFromSummary, failureText } from "@t3tools/client-runtime/telescope/workspaces";
 import type { EnvironmentId, Telescope } from "@t3tools/contracts";
 import { AsyncResult } from "effect/reactivity";
 import { FolderCodeIcon, PencilIcon, PlusIcon, Settings2Icon } from "lucide-react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 
 import { openCommandPalette } from "../../commandPaletteBus";
@@ -24,7 +24,13 @@ import { NoWorkspace } from "./TasksParts";
 import { ErrorNote } from "./TelescopeAccountDialogs";
 import { QueryState } from "./TelescopeQueryState";
 import { TelescopeEmptyState } from "./TelescopeShell";
-import { projectRows, repositoryLabel, unlinkedProjects } from "./telescopeProjects";
+import {
+  projectRows,
+  repositoryLabel,
+  sentMountsAtom,
+  unlinkedProjects,
+  workspaceKey,
+} from "./telescopeProjects";
 import { telescope, useTelescopeWorkspaces } from "./telescopeState";
 
 function AgentInitial({ agent, large = false }: { agent: Telescope.Agent; large?: boolean }) {
@@ -138,7 +144,9 @@ function Projects(props: {
     useAtomValue(telescopeAgents.update.permissionAtom(environmentId)) && self.role !== "viewer";
   const createProject = useAtomCommand(telescope.createProject, "接入项目");
   const [connectError, setConnectError] = useState<string | null>(null);
-  const [sent, setSent] = useState<ReadonlySet<string>>(new Set());
+  const sentAtom = sentMountsAtom(workspaceKey(environmentId, workspace.id));
+  const sent = useAtomValue(sentAtom);
+  const setSent = useAtomSet(sentAtom);
   const [editing, setEditing] = useState<Telescope.Agent | null>(null);
   const boundHeading = useRef<HTMLHeadingElement>(null);
   const rows = projectRows(projects, codeProjects, agents, self);
@@ -149,24 +157,26 @@ function Projects(props: {
     self,
   );
   const assistant = agents.find((agent) => agent.kind === "chief_of_staff");
-  // A directory stays sent until the data lists it as mounted: the call returns before the
-  // refresh lands, and a second call would move the mount out of the project the first created.
-  const unlinkedKeys = unlinked.map(({ group }) => group.projectKey);
-  const [seenKeys, setSeenKeys] = useState(unlinkedKeys);
-  if (seenKeys.join("\n") !== unlinkedKeys.join("\n")) {
-    setSeenKeys(unlinkedKeys);
-    setSent((prev) => new Set(unlinkedKeys.filter((key) => prev.has(key))));
-  }
+  // A directory stays sent until the data lists it as mounted, also across leaving the page: the
+  // call returns before the refresh lands, and a second call would move the mount out of the
+  // project the first created. A directory Code stopped listing is not known to be mounted.
+  const mounted = (key: string) =>
+    groups.some((group) => group.projectKey === key) &&
+    !unlinked.some(({ group }) => group.projectKey === key);
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- the sent record is a session atom outside React; a mounted directory leaves it, so one that loses its mount later is offered again
+  useEffect(() => {
+    if (sent.some(mounted)) setSent((prev) => prev.filter((key) => !mounted(key)));
+  });
   const connect = async (
     key: string,
     input: (typeof unlinked)[number]["input"],
     focusNext: HTMLElement | null,
   ) => {
     setConnectError(null);
-    setSent((prev) => new Set(prev).add(key));
+    setSent((prev) => [...prev, key]);
     const result = await createProject({ environmentId, input });
     if (!AsyncResult.isSuccess(result)) {
-      setSent((prev) => new Set([...prev].filter((sentKey) => sentKey !== key)));
+      setSent((prev) => prev.filter((sentKey) => sentKey !== key));
       return setConnectError(failureText(result));
     }
     focusNext?.focus();
@@ -320,7 +330,7 @@ function Projects(props: {
                     size="xs"
                     variant="outline"
                     aria-label={`接入 ${group.displayName}`}
-                    disabled={sent.has(group.projectKey)}
+                    disabled={sent.includes(group.projectKey)}
                     onClick={(event) => {
                       // The bound row unmounts, so focus moves to the row that takes its place.
                       const row = event.currentTarget.closest("li");
@@ -330,7 +340,7 @@ function Projects(props: {
                       void connect(group.projectKey, input, next ?? boundHeading.current);
                     }}
                   >
-                    {sent.has(group.projectKey) ? "接入中…" : "接入"}
+                    {sent.includes(group.projectKey) ? "接入中…" : "接入"}
                   </Button>
                 ) : null}
               </li>
