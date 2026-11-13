@@ -1,55 +1,83 @@
 import { useAtomValue } from "@effect/atom-react";
-import { scopedThreadKey } from "@t3tools/client-runtime/environment";
+import { scopedThreadKey, scopeProjectRef } from "@t3tools/client-runtime/environment";
 import {
   AuthPreviewOperateScope,
   type EnvironmentId,
+  type ResolvedKeybindingsConfig,
   type ScopedThreadRef,
   type Telescope,
 } from "@t3tools/contracts";
 import { useNavigate } from "@tanstack/react-router";
 import { XIcon } from "lucide-react";
-import { lazy, Suspense, useEffect, useEffectEvent, useRef } from "react";
+import {
+  type Dispatch,
+  lazy,
+  type SetStateAction,
+  Suspense,
+  useEffect,
+  useEffectEvent,
+  useRef,
+  useState,
+} from "react";
 
 import { previewRuntimeTabId } from "../../browser/previewRuntimeTabId";
 import { isCommandPaletteOpen } from "../../commandPaletteBus";
 import { ComposerHandleContext } from "../../composerHandleContext";
+import { DraftId } from "../../composerDraftStore";
 import { isElectron } from "../../env";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
 import { useRightPanelSurfaceClose } from "../../hooks/useRightPanelSurfaceClose";
+import { useStableCallback } from "../../hooks/useStableCallback";
 import { resolveShortcutCommand, shortcutLabelForCommand } from "../../keybindings";
 import { usePanelAnimationSettings, usePanelPresence } from "../../panelAnimations";
 import { isPreviewSupportedInRuntime, useThreadPreviewState } from "../../previewStateStore";
 import { RIGHT_PANEL_INLINE_LAYOUT_MEDIA_QUERY } from "../../rightPanelLayout";
 import {
+  fileSurfaceId,
+  isWorkspaceFile,
+  type RightPanelSurface,
   selectActiveRightPanelSurface,
   selectThreadRightPanelState,
   TELESCOPE_PANEL_SURFACES,
   TELESCOPE_SIDE_CHAT,
   useRightPanelStore,
+  withPendingFile,
 } from "../../rightPanelStore";
 import { useDeviceState } from "../../state/device";
-import { useEnvironmentSupportsServerBrowser } from "../../state/entities";
+import {
+  readProject,
+  useEnvironmentSupportsServerBrowser,
+  useProject,
+  useProjects,
+} from "../../state/entities";
 import { useEnvironmentQuery } from "../../state/query";
-import { primaryServerKeybindingsAtom } from "../../state/server";
+import {
+  primaryServerAvailableEditorsAtom,
+  primaryServerKeybindingsAtom,
+} from "../../state/server";
 import { useEnvironmentScope } from "../../state/session";
 import { BackgroundThreadContext } from "../chat/backgroundThread";
 import { ChatRightPanel } from "../chat/ChatRightPanel";
+import { RightPanelFileSurface } from "../chat/RightPanelSurfaceContent";
+import { FileMountContext } from "../files/fileMount";
 import { usePreviewSession } from "../preview/usePreviewSession";
 import {
   PanelLayoutControls,
   RightPanelMaximizeControl,
   WorkspaceTitlebarControls,
 } from "../chat/PanelLayoutControls";
-import { useRightPanelActions } from "../chat/useRightPanelActions";
+import { copyFilePathToClipboard, useRightPanelActions } from "../chat/useRightPanelActions";
 import { TELESCOPE_PATH } from "../sidebar/mainAppLocation";
 import { Button } from "../ui/button";
 import { Spinner } from "../ui/spinner";
 import { agentDisplayName, telescopeAgents } from "./myTeamsShared";
 import { ErrorNote } from "./TelescopeAccountDialogs";
 import { AgentChat } from "./TelescopeChatPage";
-import { useTelescopeWorkspaces } from "./telescopeState";
+import { telescope, telescopeBoard, useTelescopeWorkspaces } from "./telescopeState";
+import { telescopeFilesTarget } from "./telescopeFiles";
 import { TaskDetail } from "./TaskPanel";
 import {
+  knownProjectId,
   telescopeSearch,
   useTaskParam,
   useTasksLayout,
@@ -62,6 +90,8 @@ const PreviewPanel = lazy(() =>
 );
 const NO_TERMINALS: ReadonlyMap<string, string> = new Map();
 const NO_PENDING: ReadonlySet<string> = new Set();
+/** Telescope has no composer to send review comments, so its Files take none; a draft target keeps file assets off any thread. */
+const FILES_COMPOSER_TARGET = DraftId.make("telescope-panel");
 /** Telescope's panel opens this much of the row, so a task reads as a page beside the board. */
 const TELESCOPE_PANEL_WIDTH_FRACTION = 0.6;
 const PANEL_COMMANDS = ["rightPanel.toggle", "rightPanel.toggleMaximized", "rightPanel.close"];
@@ -118,6 +148,70 @@ function SideChat(props: {
   );
 }
 
+/** A file tab shows the mount it was opened from, whichever project is in context now. */
+function FileTab(props: {
+  surface: Extract<RightPanelSurface, { kind: "files" | "file" }>;
+  panelRef: ScopedThreadRef;
+  visible: boolean;
+  keybindings: ResolvedKeybindingsConfig;
+  remote: ReadonlyArray<string>;
+  pendingSurfaceIds: ReadonlySet<string>;
+  setPendingSurfaceIds: Dispatch<SetStateAction<ReadonlySet<string>>>;
+}) {
+  const { surface, panelRef } = props;
+  const { projectId } = surface;
+  const project = useProject(
+    projectId === undefined ? null : scopeProjectRef(panelRef.environmentId, projectId),
+  );
+  const availableEditors = useAtomValue(primaryServerAvailableEditorsAtom);
+  // The save session re-subscribes, flushing its write, whenever this listener's identity changes.
+  const onPendingChange = useStableCallback((relativePath: string, pending: boolean) =>
+    props.setPendingSurfaceIds((current) =>
+      withPendingFile(current, fileSurfaceId(relativePath, projectId), pending),
+    ),
+  );
+  if (project === null && isWorkspaceFile(surface)) {
+    return (
+      <p className="m-auto p-4 text-center text-muted-foreground text-sm">
+        这个标签页的目录在这台机器上找不到了。
+      </p>
+    );
+  }
+  const body = (
+    <FileMountContext value={projectId}>
+      <RightPanelFileSurface
+        surface={surface}
+        threadRef={panelRef}
+        environmentId={panelRef.environmentId}
+        visible={props.visible}
+        composerDraftTarget={FILES_COMPOSER_TARGET}
+        reviewComments={false}
+        keybindings={props.keybindings}
+        workspaceMutationId={null}
+        files={{
+          projectId,
+          projectName: project?.title ?? null,
+          workspaceRoot: project?.workspaceRoot,
+          availableEditors,
+          pendingSurfaceIds: props.pendingSurfaceIds,
+          onOpenFile: (relativePath) =>
+            useRightPanelStore.getState().openFile(panelRef, relativePath, undefined, projectId),
+          onPendingChange,
+        }}
+      />
+    </FileMountContext>
+  );
+  if (props.remote.length === 0) return body;
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <p className="shrink-0 truncate border-b border-border px-3 py-1 text-muted-foreground text-xs">
+        {`另一台机器上（这里打不开）：${props.remote.join("、")}`}
+      </p>
+      <div className="flex min-h-0 flex-1 flex-col">{body}</div>
+    </div>
+  );
+}
+
 /** Code's right panel on Telescope pages; closed, it mounts only the window's panel controls. */
 export function TelescopePanel(props: {
   readonly panelRef: ScopedThreadRef;
@@ -152,6 +246,42 @@ export function TelescopePanel(props: {
   const previewState = useThreadPreviewState(panelRef);
   const activeTaskId = activeSurface?.kind === "task" ? activeSurface.taskId : null;
   const workspaceId = workspace?.id ?? null;
+  // The project Files follows: the active task tab's, else the last task looked at while the
+  // sidebar selection is unchanged and its tab is open, else the sidebar's selected project.
+  const projectsQuery = useEnvironmentQuery(
+    workspaceId === null ? null : telescope.projects({ environmentId, input: { workspaceId } }),
+  );
+  const selectedProject = knownProjectId(project, projectsQuery.data?.projects ?? null);
+  const [lastTask, setLastTask] = useState<{
+    taskId: Telescope.TaskId;
+    project: Telescope.TelescopeProjectId | undefined;
+  } | null>(null);
+  if (
+    activeTaskId !== null &&
+    (lastTask?.taskId !== activeTaskId || lastTask.project !== selectedProject)
+  ) {
+    setLastTask({ taskId: activeTaskId, project: selectedProject });
+  }
+  const contextTaskId =
+    activeTaskId ??
+    (lastTask !== null &&
+    lastTask.project === selectedProject &&
+    state.surfaces.some((surface) => surface.kind === "task" && surface.taskId === lastTask.taskId)
+      ? lastTask.taskId
+      : null);
+  const contextTask = useEnvironmentQuery(
+    workspaceId === null || contextTaskId === null
+      ? null
+      : telescopeBoard.task({ environmentId, input: { workspaceId, taskId: contextTaskId } }),
+  ).data;
+  const codiProjects = useProjects();
+  const filesProjectId = contextTask?.projectId ?? selectedProject;
+  const filesTarget = telescopeFilesTarget(
+    projectsQuery.data?.projects.find((entry) => entry.id === filesProjectId),
+    environmentId,
+    codiProjects,
+  );
+  const [pendingFiles, setPendingFiles] = useState<ReadonlySet<string>>(NO_PENDING);
   const seenTaskRef = useRef<string | null>(null);
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- the `task` search param is a deep link into the panel's tab store
   useEffect(() => {
@@ -296,7 +426,7 @@ export function TelescopePanel(props: {
           surfaces={presence.value?.surfaces ?? []}
           environmentId={environmentId}
           activeSurfaceId={active?.id ?? null}
-          pendingSurfaceIds={NO_PENDING}
+          pendingSurfaceIds={pendingFiles}
           previewSessions={previewState.sessions}
           desktopByTabId={previewState.desktopByTabId}
           previewRuntimeTabId={(tabId) =>
@@ -309,12 +439,24 @@ export function TelescopePanel(props: {
           onCloseSurfacesToRight={closers.closeSurfacesToRight}
           onCloseAllSurfaces={closers.closeAllSurfaces}
           onMoveSurface={actions.moveRightPanelSurfaceStable}
-          onCopyFilePath={noop}
+          onCopyFilePath={(relativePath, projectId) => {
+            const root =
+              projectId === undefined
+                ? undefined
+                : readProject(scopeProjectRef(environmentId, projectId))?.workspaceRoot;
+            if (root !== undefined) copyFilePathToClipboard(relativePath, root);
+          }}
           onAddBrowser={() => actions.createBrowserSurface()}
           onAddBrowserInProfile={actions.createBrowserSurfaceStable}
           onAddTerminal={noop}
           onAddDiff={noop}
-          onAddFiles={noop}
+          onAddFiles={() => {
+            if (filesTarget.ready) {
+              useRightPanelStore
+                .getState()
+                .openFile(panelRef, ".", undefined, filesTarget.projectId);
+            }
+          }}
           onAddPullRequest={noop}
           onAddPullRequests={noop}
           onAddDevice={noop}
@@ -324,7 +466,8 @@ export function TelescopePanel(props: {
           browserAvailable={canOperatePreview && browserAvailable}
           terminalAvailable={false}
           diffAvailable={false}
-          filesAvailable={false}
+          filesAvailable={filesTarget.ready}
+          filesDisabledReason={filesTarget.ready ? null : filesTarget.reason}
           pullRequestAvailable={false}
           pullRequestsAvailable={false}
           deviceAvailable={false}
@@ -346,6 +489,22 @@ export function TelescopePanel(props: {
               environmentId={environmentId}
               workspace={workspace}
               onClose={() => closers.closeSurface(active)}
+            />
+          ) : active?.kind === "files" || active?.kind === "file" ? (
+            <FileTab
+              // A save can settle after its tab is left; its listener must still name this mount.
+              key={active.projectId}
+              surface={active}
+              panelRef={panelRef}
+              visible={open}
+              keybindings={keybindings}
+              remote={
+                filesTarget.ready && filesTarget.projectId === active.projectId
+                  ? filesTarget.remote
+                  : []
+              }
+              pendingSurfaceIds={pendingFiles}
+              setPendingSurfaceIds={setPendingFiles}
             />
           ) : active?.kind === "task" ? (
             <TaskDetail

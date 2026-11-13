@@ -140,6 +140,8 @@ interface FilePreviewPanelProps {
   attachment?: ChatFileAttachment;
   threadRef: ScopedThreadRef;
   composerDraftTarget: ScopedThreadRef | DraftId;
+  /** False where no composer reads the draft, so selecting lines opens no comment form. */
+  reviewComments?: boolean | undefined;
   keybindings: ResolvedKeybindingsConfig;
   availableEditors: ReadonlyArray<EditorId>;
   openInShortcutEnabled: boolean;
@@ -656,6 +658,7 @@ interface EditableFileSurfaceProps {
   cwd: string;
   relativePath: string;
   composerDraftTarget: ScopedThreadRef | DraftId;
+  reviewComments: boolean;
   contents: string;
   resolvedTheme: "light" | "dark";
   revealRequestId: number;
@@ -675,6 +678,7 @@ function EditableFileSurface({
   cwd,
   relativePath,
   composerDraftTarget,
+  reviewComments,
   contents,
   resolvedTheme,
   revealRequestId,
@@ -843,7 +847,7 @@ function EditableFileSurface({
   }, [hasOpenCommentForm, setSelectedRange]);
   const handleLineSelectionEnd = (range: SelectedLineRange | null) => {
     setSelectedRange(range);
-    if (range) {
+    if (range && reviewComments) {
       beginComment(range);
     }
   };
@@ -882,7 +886,7 @@ function EditableFileSurface({
             onEditChange={handleEditChange}
             options={{
               disableFileHeader: true,
-              enableGutterUtility: !hasOpenCommentForm,
+              enableGutterUtility: reviewComments && !hasOpenCommentForm,
               enableLineSelection: !hasOpenCommentForm,
               onGutterUtilityClick: setSelectedRange,
               onLineSelectionChange: setSelectedRange,
@@ -940,6 +944,7 @@ function RenderedMarkdownSurface({
   EditableFileSurfaceProps,
   | "resolvedTheme"
   | "composerDraftTarget"
+  | "reviewComments"
   | "revealLine"
   | "revealRequestId"
   | "wordWrap"
@@ -1006,6 +1011,7 @@ export default function FilePreviewPanel({
   attachment,
   threadRef,
   composerDraftTarget,
+  reviewComments = true,
   keybindings,
   availableEditors,
   openInShortcutEnabled,
@@ -1528,6 +1534,7 @@ export default function FilePreviewPanel({
                   cwd={cwd}
                   relativePath={relativePath}
                   composerDraftTarget={composerDraftTarget}
+                  reviewComments={reviewComments}
                   contents={file.data.contents}
                   resolvedTheme={resolvedTheme}
                   revealRequestId={revealRequestId}

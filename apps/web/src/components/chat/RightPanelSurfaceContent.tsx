@@ -197,42 +197,68 @@ export function RightPanelSurfaceContent(props: {
         </Suspense>
       );
     case "files":
-    case "file": {
-      const files = props.files;
-      const attachment = surface.kind === "file" ? surface.attachment : undefined;
-      if (!attachment && (files.projectName === null || !files.workspaceRoot)) return null;
+    case "file":
       return (
-        <Suspense fallback={null}>
-          <FilePreviewPanel
-            key={`${props.environmentId}:${
-              attachment ? `attachment:${attachment.id}` : files.workspaceRoot
-            }`}
-            environmentId={props.environmentId}
-            cwd={files.workspaceRoot ?? ""}
-            projectName={files.projectName ?? ""}
-            projectId={files.projectId}
-            threadRef={threadRef}
-            composerDraftTarget={props.composerDraftTarget}
-            keybindings={props.keybindings}
-            availableEditors={files.availableEditors}
-            openInShortcutEnabled={visible}
-            relativePath={surface.kind === "file" ? surface.relativePath : null}
-            {...(attachment ? { attachment } : {})}
-            revealLine={surface.kind === "file" ? (surface.revealLine ?? null) : null}
-            revealRequestId={surface.kind === "file" ? surface.revealRequestId : 0}
-            onOpenFile={files.onOpenFile}
-            onNavigateFolder={(relativePath, folderTrail, keepSource) =>
-              useRightPanelStore
-                .getState()
-                .navigateFolder(threadRef, surface.id, relativePath, folderTrail, keepSource)
-            }
-            folderTrail={surface.folderTrail}
-            onPendingChange={files.onPendingChange}
-            selectedFilePending={surface.kind === "file" && files.pendingSurfaceIds.has(surface.id)}
-            workspaceMutationId={props.workspaceMutationId}
-          />
-        </Suspense>
+        <RightPanelFileSurface
+          surface={surface}
+          threadRef={threadRef}
+          environmentId={props.environmentId}
+          visible={visible}
+          composerDraftTarget={props.composerDraftTarget}
+          keybindings={props.keybindings}
+          workspaceMutationId={props.workspaceMutationId}
+          files={props.files}
+        />
       );
-    }
   }
+}
+
+/** Code's Files and open-file tabs, which Telescope's panel also hosts. */
+export function RightPanelFileSurface(props: {
+  readonly surface: Extract<RightPanelSurface, { kind: "files" | "file" }>;
+  readonly threadRef: ScopedThreadRef;
+  readonly environmentId: EnvironmentId;
+  readonly visible: boolean;
+  readonly composerDraftTarget: ScopedThreadRef | DraftId;
+  readonly reviewComments?: boolean;
+  readonly keybindings: ResolvedKeybindingsConfig;
+  readonly workspaceMutationId: string | null;
+  readonly files: RightPanelFileProps;
+}) {
+  const { surface, threadRef, files, visible } = props;
+  const attachment = surface.kind === "file" ? surface.attachment : undefined;
+  if (!attachment && (files.projectName === null || !files.workspaceRoot)) return null;
+  return (
+    <Suspense fallback={null}>
+      <FilePreviewPanel
+        key={`${props.environmentId}:${
+          attachment ? `attachment:${attachment.id}` : files.workspaceRoot
+        }`}
+        environmentId={props.environmentId}
+        cwd={files.workspaceRoot ?? ""}
+        projectName={files.projectName ?? ""}
+        projectId={files.projectId}
+        threadRef={threadRef}
+        composerDraftTarget={props.composerDraftTarget}
+        reviewComments={props.reviewComments}
+        keybindings={props.keybindings}
+        availableEditors={files.availableEditors}
+        openInShortcutEnabled={visible}
+        relativePath={surface.kind === "file" ? surface.relativePath : null}
+        {...(attachment ? { attachment } : {})}
+        revealLine={surface.kind === "file" ? (surface.revealLine ?? null) : null}
+        revealRequestId={surface.kind === "file" ? surface.revealRequestId : 0}
+        onOpenFile={files.onOpenFile}
+        onNavigateFolder={(relativePath, folderTrail, keepSource) =>
+          useRightPanelStore
+            .getState()
+            .navigateFolder(threadRef, surface.id, relativePath, folderTrail, keepSource)
+        }
+        folderTrail={surface.folderTrail}
+        onPendingChange={files.onPendingChange}
+        selectedFilePending={surface.kind === "file" && files.pendingSurfaceIds.has(surface.id)}
+        workspaceMutationId={props.workspaceMutationId}
+      />
+    </Suspense>
+  );
 }

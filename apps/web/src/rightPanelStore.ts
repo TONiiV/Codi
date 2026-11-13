@@ -5,11 +5,13 @@ import {
 } from "@t3tools/client-runtime/environment";
 import {
   EnvironmentId,
+  type ProjectId,
   RunId,
   type Telescope,
   ThreadId,
   type ScopedThreadRef,
 } from "@t3tools/contracts";
+import { isHostPath, workspaceRelativeFilePath } from "@t3tools/shared/path";
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 
@@ -60,10 +62,12 @@ export type RightPanelSurface =
     }
   | { id: "diff"; kind: "diff" }
   | {
-      id: "files";
+      /** `files:<project>` when bound to a mount, so each project keeps its own explorer. */
+      id: "files" | `files:${string}`;
       kind: "files";
       /** Set when breadcrumbs moved a folder browser up to the workspace root. */
       folderTrail?: string;
+      projectId?: ProjectId;
     }
   | {
       id: `file:${string}` | `attachment:${string}`;
@@ -74,6 +78,8 @@ export type RightPanelSurface =
       attachment?: ChatFileAttachment;
       /** Deepest workspace path retained for navigating back down after moving up. */
       folderTrail?: string;
+      /** The mount a Telescope tab browses; Code's tabs follow their thread's project. */
+      projectId?: ProjectId;
     }
   | {
       id: `pull-request:${string}`;
@@ -108,6 +114,8 @@ const isPullRequestsPanelKey = (threadKey: string) => threadKey.endsWith(":pull-
 
 export const TELESCOPE_PANEL_SURFACES: ReadonlyArray<RightPanelKind> = [
   "preview",
+  "files",
+  "file",
   "side-chat",
   "task",
 ];
@@ -125,9 +133,26 @@ const isTelescopePanelKey = (threadKey: string) => threadKey.endsWith(":telescop
 export const isTelescopePanelRef = (ref: ScopedThreadRef) =>
   isTelescopePanelKey(scopedThreadKey(ref));
 
-// Telescope's panel holds only the kinds it offers, whoever asks.
-const hiddenInPanel = (threadKey: string, kind: RightPanelKind) =>
-  isTelescopePanelKey(threadKey) && !TELESCOPE_PANEL_SURFACES.includes(kind);
+/** A workspace file or explorer tab, as opposed to a chat attachment. */
+export const isWorkspaceFile = (
+  surface: RightPanelSurface,
+): surface is Extract<RightPanelSurface, { kind: "files" | "file" }> =>
+  surface.kind === "files" || (surface.kind === "file" && surface.attachment === undefined);
+
+// A mount's tab holds a path under that mount. A host path, or one whose `..` climbs out, names a
+// file of another project; rooting the path at `/` lets the shared walk count the climb.
+const leavesMount = (relativePath: string) =>
+  isHostPath(relativePath) ||
+  workspaceRelativeFilePath(`/${relativePath.replaceAll("\\", "/")}`, "/") === null;
+
+// Telescope's panel holds only the kinds it offers, whoever asks, and its workspace file tabs only
+// with the mount they browse and a path inside it, since no thread there names a workspace.
+const hiddenInPanel = (threadKey: string, surface: RightPanelSurface) =>
+  isTelescopePanelKey(threadKey) &&
+  (!TELESCOPE_PANEL_SURFACES.includes(surface.kind) ||
+    (isWorkspaceFile(surface) &&
+      (surface.projectId === undefined ||
+        (surface.kind === "file" && leavesMount(surface.relativePath)))));
 
 export interface ThreadRightPanelState {
   isOpen: boolean;
@@ -171,7 +196,13 @@ interface RightPanelStoreState {
   openDevice: (ref: ScopedThreadRef, target: DeviceTabTarget, automatic?: boolean) => void;
   renameDevice: (ref: ScopedThreadRef, surfaceId: string, title: string) => void;
   openBrowser: (ref: ScopedThreadRef, tabId: string | null) => void;
-  openFile: (ref: ScopedThreadRef, relativePath: string, line?: number) => void;
+  /** `projectId` binds the tab to a mount, for panels whose thread names no workspace. */
+  openFile: (
+    ref: ScopedThreadRef,
+    relativePath: string,
+    line?: number,
+    projectId?: ProjectId,
+  ) => void;
   /** Moves in place; "" opens the root explorer. folderTrail keeps the return path; keepSource opens beside the source. */
   navigateFolder: (
     ref: ScopedThreadRef,
@@ -251,7 +282,7 @@ const singletonSurface = (kind: Exclude<SingletonKind, "preview">): RightPanelSu
     case "diff":
       return { id: "diff", kind };
     case "files":
-      return { id: "files", kind };
+      return filesSurface(undefined);
     case "pull-requests":
       return { id: "pull-requests", kind };
     case "device":
@@ -264,16 +295,42 @@ const browserSurface = (tabId: string | null): RightPanelSurface =>
     ? { id: `browser:${tabId}`, kind: "preview", resourceId: tabId }
     : { id: "browser:new", kind: "preview", resourceId: null };
 
+/** Tabs bound to a mount carry it in their id, so two mounts' same path are two tabs. */
+export const fileSurfaceId = (relativePath: string, projectId?: ProjectId) =>
+  projectId === undefined
+    ? (`file:${relativePath}` as const)
+    : (`file:${encodeURIComponent(projectId)}:${relativePath}` as const);
+
+const filesSurface = (projectId: ProjectId | undefined): RightPanelSurface =>
+  projectId === undefined
+    ? { id: "files", kind: "files" }
+    : { id: `files:${encodeURIComponent(projectId)}`, kind: "files", projectId };
+
+/** A pending-save set with `surfaceId` added or removed; the same set when nothing changes. */
+export function withPendingFile(
+  current: ReadonlySet<string>,
+  surfaceId: string,
+  pending: boolean,
+): ReadonlySet<string> {
+  if (current.has(surfaceId) === pending) return current;
+  const next = new Set(current);
+  if (pending) next.add(surfaceId);
+  else next.delete(surfaceId);
+  return next;
+}
+
 const fileSurface = (
   relativePath: string,
   revealLine: number | null,
   revealRequestId: number,
+  projectId?: ProjectId,
 ): RightPanelSurface => ({
-  id: `file:${relativePath}`,
+  id: fileSurfaceId(relativePath, projectId),
   kind: "file",
   relativePath,
   revealLine,
   revealRequestId,
+  ...(projectId === undefined ? {} : { projectId }),
 });
 
 const attachmentSurface = (attachment: ChatFileAttachment): RightPanelSurface => ({
@@ -350,18 +407,16 @@ const updateThreadStateMap = (
 ): Record<string, ThreadRightPanelState> => {
   const current = byThreadKey[threadKey] ?? EMPTY_THREAD_STATE;
   let next = updater(current);
-  if (next.surfaces.some((surface) => hiddenInPanel(threadKey, surface.kind))) {
-    // Refuse an opener that adds a disallowed tab; drop ones already saved so the panel heals.
+  if (next.surfaces.some((surface) => hiddenInPanel(threadKey, surface))) {
+    // Refuse an opener that adds or changes a disallowed tab; drop ones already saved so the panel heals.
     if (
       next.surfaces.some(
-        (surface) =>
-          hiddenInPanel(threadKey, surface.kind) &&
-          !current.surfaces.some((entry) => entry.id === surface.id),
+        (surface) => hiddenInPanel(threadKey, surface) && !current.surfaces.includes(surface),
       )
     ) {
       return byThreadKey;
     }
-    const surfaces = next.surfaces.filter((surface) => !hiddenInPanel(threadKey, surface.kind));
+    const surfaces = next.surfaces.filter((surface) => !hiddenInPanel(threadKey, surface));
     next = {
       ...next,
       isOpen: next.isOpen && surfaces.length > 0,
@@ -462,8 +517,14 @@ export function rightPanelHostRef(ref: ScopedThreadRef): ScopedThreadRef {
   return panelHosts.get(scopedThreadKey(ref)) ?? ref;
 }
 
-export const rightPanelOffers = (ref: ScopedThreadRef, kind: RightPanelKind) =>
-  !hiddenInPanel(scopedThreadKey(rightPanelHostRef(ref)), kind);
+/** Whether `ref`'s panel takes an open of `kind` from a caller that names no mount. */
+export const rightPanelOffers = (ref: ScopedThreadRef, kind: RightPanelKind) => {
+  const hostKey = scopedThreadKey(rightPanelHostRef(ref));
+  return (
+    !isTelescopePanelKey(hostKey) ||
+    (TELESCOPE_PANEL_SURFACES.includes(kind) && kind !== "files" && kind !== "file")
+  );
+};
 
 const userAction = (
   state: RightPanelStoreState,
@@ -848,20 +909,19 @@ export const useRightPanelStore = create<RightPanelStoreState>()(
             ),
           }));
         }),
-      openFile: (ref, requestedPath, line) =>
+      openFile: (ref, requestedPath, line, projectId) =>
         set((state) =>
           userAction(state, scopedThreadKey(ref), (current) => {
-            if (requestedPath === ".") {
-              return upsertSurface(current, singletonSurface("files"));
-            }
+            const explorer = filesSurface(projectId);
+            if (requestedPath === ".") return upsertSurface(current, explorer);
             // Workspace entry paths use '/', including on Windows.
             const relativePath = /^[A-Za-z]:\/+$/.test(requestedPath)
               ? requestedPath
               : requestedPath.replace(/\/+$/, "") || requestedPath;
             const withoutStandaloneExplorer = current.surfaces.filter(
-              (surface) => surface.kind !== "files",
+              (surface) => surface.id !== explorer.id,
             );
-            const surfaceId = `file:${relativePath}` as const;
+            const surfaceId = fileSurfaceId(relativePath, projectId);
             const existing = withoutStandaloneExplorer.find(
               (surface): surface is Extract<RightPanelSurface, { kind: "file" }> =>
                 surface.id === surfaceId && surface.kind === "file",
@@ -870,6 +930,7 @@ export const useRightPanelStore = create<RightPanelStoreState>()(
               relativePath,
               normalizeRevealLine(line),
               (existing?.revealRequestId ?? 0) + 1,
+              projectId,
             );
             return {
               ...current,
@@ -888,12 +949,14 @@ export const useRightPanelStore = create<RightPanelStoreState>()(
           userAction(state, scopedThreadKey(ref), (current) => {
             const index = current.surfaces.findIndex((surface) => surface.id === surfaceId);
             if (index < 0) return current;
+            const source = current.surfaces[index]!;
+            const projectId = isWorkspaceFile(source) ? source.projectId : undefined;
+            const explorer = filesSurface(projectId);
             const trail = folderTrail === relativePath ? {} : { folderTrail };
             const target: RightPanelSurface =
               relativePath === ""
-                ? { ...singletonSurface("files"), ...trail }
-                : { ...fileSurface(relativePath, null, 1), ...trail };
-            const source = current.surfaces[index]!;
+                ? { ...explorer, ...trail }
+                : { ...fileSurface(relativePath, null, 1, projectId), ...trail };
             const existing = current.surfaces.some(
               (surface, i) => i !== index && surface.id === target.id,
             );
@@ -902,7 +965,7 @@ export const useRightPanelStore = create<RightPanelStoreState>()(
                 const kept = keepSource ? [source] : [];
                 return existing ? kept : [...kept, target];
               }
-              return !existing && target.kind === "file" && surface.kind === "files"
+              return !existing && target.kind === "file" && surface.id === explorer.id
                 ? []
                 : [surface];
             });
@@ -913,7 +976,7 @@ export const useRightPanelStore = create<RightPanelStoreState>()(
         set((state) =>
           userAction(state, scopedThreadKey(ref), (current) => {
             const withoutStandaloneExplorer = current.surfaces.filter(
-              (surface) => surface.kind !== "files",
+              (surface) => surface.id !== "files",
             );
             return upsertSurface(
               { ...current, surfaces: withoutStandaloneExplorer },

@@ -255,41 +255,8 @@ export function useRightPanelActions(input: RightPanelActionsInput) {
       useRightPanelStore.getState().moveSurface(activeThreadRef, surfaceId, toIndex);
   };
   const moveRightPanelSurfaceStable = useStableCallback(moveRightPanelSurface);
-  const copyRightPanelFilePath = (relativePath: string) => {
-    if (typeof window === "undefined" || !navigator.clipboard?.writeText) {
-      toastManager.add(
-        stackedThreadToast({
-          type: "error",
-          title: "Failed to copy path",
-          description: "Clipboard API unavailable.",
-        }),
-      );
-      return;
-    }
-
-    const clipboardPath = formatFilePathForClipboard(
-      relativePath,
-      resolvePathLinkTarget(relativePath, gitCwd ?? activeProjectCwd ?? ""),
-    );
-    void navigator.clipboard.writeText(clipboardPath).then(
-      () => {
-        toastManager.add({
-          type: "success",
-          title: "Path copied",
-          description: clipboardPath,
-        });
-      },
-      (error) => {
-        toastManager.add(
-          stackedThreadToast({
-            type: "error",
-            title: "Failed to copy path",
-            description: error instanceof Error ? error.message : "An error occurred.",
-          }),
-        );
-      },
-    );
-  };
+  const copyRightPanelFilePath = (relativePath: string) =>
+    copyFilePathToClipboard(relativePath, gitCwd ?? activeProjectCwd ?? "");
   const copyRightPanelFilePathStable = useStableCallback(copyRightPanelFilePath);
   const addPullRequestSurface = () => {
     if (!supportsPullRequests || activeThreadRef === null || pullRequestPanelTarget === null)
@@ -362,4 +329,40 @@ export function useRightPanelActions(input: RightPanelActionsInput) {
     toggleRightPanelStable,
     toggleThreadPanelStable,
   };
+}
+
+export function copyFilePathToClipboard(relativePath: string, cwd: string) {
+  if (typeof window === "undefined" || !navigator.clipboard?.writeText) {
+    toastManager.add(
+      stackedThreadToast({
+        type: "error",
+        title: "Failed to copy path",
+        description: "Clipboard API unavailable.",
+      }),
+    );
+    return;
+  }
+
+  const clipboardPath = formatFilePathForClipboard(
+    relativePath,
+    resolvePathLinkTarget(relativePath, cwd),
+  );
+  void navigator.clipboard.writeText(clipboardPath).then(
+    () => {
+      toastManager.add({
+        type: "success",
+        title: "Path copied",
+        description: clipboardPath,
+      });
+    },
+    (error) => {
+      toastManager.add(
+        stackedThreadToast({
+          type: "error",
+          title: "Failed to copy path",
+          description: error instanceof Error ? error.message : "An error occurred.",
+        }),
+      );
+    },
+  );
 }
