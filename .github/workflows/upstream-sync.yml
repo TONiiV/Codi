@@ -199,7 +199,10 @@ jobs:
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
         run: |
-          vp install
+          # Git can merge the lockfile without a conflict and still leave it missing entries.
+          vp install --fix-lockfile
+          git diff --quiet -- pnpm-lock.yaml \
+            || git commit -qm "chore: repair the lockfile after the upstream merge" --no-verify -- pnpm-lock.yaml
           # New upstream copy arrives as "T3 Code". The rename also shrinks the byte budget.
           node scripts/rebrand-codi.mjs
           node scripts/refresh-agent-context-budget.ts \
@@ -239,7 +242,8 @@ jobs:
 
       - name: Land
         id: land
-        if: steps.fetch.outputs.run == 'true'
+        # A committed merge is saved even when a later step failed.
+        if: ${{ !cancelled() && steps.merge.outcome == 'success' }}
         env:
           PAT: ${{ secrets.UPSTREAM_SYNC_TOKEN }}
           GITHUB_TOKEN: ${{ github.token }}
@@ -259,7 +263,7 @@ jobs:
             fi
             if [ "$PASSED" != true ]; then
               echo; echo "### check:changed 仍未通过"; echo '```'
-              sed 's/\x1b\[[0-9;]*m//g' "$RUNNER_TEMP/check.log" \
+              sed 's/\x1b\[[0-9;]*m//g' "$RUNNER_TEMP/check.log" 2>/dev/null \
                 | grep -E 'error TS|^ *FAIL |AssertionError|^ *(pass|FAIL)  ' | head -60
               echo '```'
             fi

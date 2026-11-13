@@ -470,7 +470,6 @@ export function AppSidebarLayout({
             <SidebarBrandWidthProbe isElectron={isElectron} onWidthChange={setBrandWidth} />
             <Sidebar
               side="left"
-              collapsible={telescopeView === null ? "offcanvas" : "icon"}
               data-app-sidebar=""
               {...sidebarArea}
               role="navigation"
