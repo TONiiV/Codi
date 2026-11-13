@@ -122,6 +122,7 @@ import {
   toDesktopPairingLinkRecord,
   toDesktopClientSessionRecord,
   selectPairingEndpoint,
+  isServerNetworkAccessible,
   isTailscaleHttpsEndpoint,
   endpointDefaultPreferenceKey,
 } from "./ConnectionsSettings.logic";
@@ -449,7 +450,10 @@ function ConnectionsSettingsContent({
   })();
   const isLocalBackendNetworkAccessible = desktopBridge
     ? desktopServerExposureState?.mode === "network-accessible"
-    : currentAuthPolicy === "remote-reachable";
+    : isServerNetworkAccessible({
+        authPolicy: currentAuthPolicy,
+        directEndpoints: accessEnvironment?.serverConfig?.directEndpoints,
+      });
   const trimmedTailscaleServePortInput = tailscaleServePortInput.trim();
   const parsedTailscaleServePort = Number(trimmedTailscaleServePortInput);
   const isTailscaleServePortValid =
@@ -1128,7 +1132,7 @@ function ConnectionsSettingsContent({
       description={
         desktopBridge
           ? t("settings.text.thisConnectionCannotViewOrChange")
-          : currentAuthPolicy === "remote-reachable"
+          : isLocalBackendNetworkAccessible
             ? t("settings.text.remoteAccessIsAlreadyConfiguredChange")
             : currentAuthPolicy === "loopback-browser"
               ? t("settings.text.onlyThisMachineCanConnectRestart")

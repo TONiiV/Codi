@@ -110,11 +110,11 @@ function useRunScopedPlan() {
 
 export function useUpdateScopedSettings() {
   const { t } = useTranslation();
-  const { scope, environments } = useSettingsScope();
+  const { scope, environments, deviceOnly } = useSettingsScope();
   const run = useRunScopedPlan();
   /** `onFailed` runs when any target rejects or drops the patch, so a draft can fall back. */
   return (patch: ScopedSettingsPatch, options?: { readonly onFailed?: () => void }) =>
-    run(planScopedSettingsPatch(scope, environments, patch, t), options?.onFailed);
+    run(planScopedSettingsPatch(scope, environments, patch, { deviceOnly }, t), options?.onFailed);
 }
 
 export function useClearScopedSettings() {
