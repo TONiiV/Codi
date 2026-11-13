@@ -24,6 +24,8 @@ const selectTriggerVariants = cva(
           "border-transparent text-secondary-label focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring data-pressed:bg-accent [:hover,[data-pressed]]:bg-accent [:hover,[data-pressed]]:text-foreground",
       },
       size: {
+        // A value in a property list: 30px and 14px at every width.
+        cell: "h-7.5 gap-1 rounded-sm px-[calc(--spacing(1.5)-1px)] text-sm before:rounded-[calc(var(--radius-sm)-1px)] [&_svg:not([class*='size-'])]:size-4",
         compact:
           "h-7 gap-1 rounded-md px-[calc(--spacing(2)-1px)] text-xs before:rounded-[calc(var(--radius-md)-1px)] [&_svg:not([class*='size-'])]:size-3.5",
         default: "min-h-9 px-[calc(--spacing(3)-1px)] sm:min-h-8",
