@@ -75,11 +75,12 @@ layer("099_TelescopeLostThreadUnlinks", (it) => {
         yield* commit("renamed", 0, { title: "renamed", threadId: "t-old" });
         yield* commit("renamed", 1, { threadId: "t-new" });
         yield* named("renamed-kept", "t-new", newer);
+        yield* named("renamed-rival", "t-old", newer);
         // The clock stepped back inside `clock-lost`, so its last commit is not its latest one.
         yield* named("clock-lost", "t-13", "2026-01-03T10:00:05.000Z", "2026-01-03T10:00:03.000Z");
         yield* commit("clock-lost", 1, { status: "done" }, "2026-01-03T10:00:03.000Z");
         yield* named("clock-kept", "t-13", "2026-01-03T10:00:04.000Z");
-        // The clock ran ahead before 097: `ahead-kept`'s last commit is timed after 097's time.
+        // `ahead-kept` named the thread first and was edited last, as under a clock that ran ahead.
         yield* named("ahead-kept", "t-14", early, "2026-01-04T00:00:05.000Z");
         yield* commit("ahead-kept", 1, { status: "done" }, "2026-01-04T00:00:05.000Z");
         yield* named("ahead-lost", "t-14", newer);
@@ -94,13 +95,18 @@ layer("099_TelescopeLostThreadUnlinks", (it) => {
         yield* task("unlinked", null, early);
         yield* commit("unlinked", 0, { title: "unlinked", threadId: "t-4" });
         yield* commit("unlinked", 1, { threadId: null });
+        yield* named("unlinked-rival", "t-4", newer);
         yield* runMigrations({ toMigrationInclusive: 98 });
-        yield* sql`UPDATE codi_sql_migrations SET created_at = '2026-01-04 00:00:00'
-          WHERE migration_id = 97`;
         assert.deepStrictEqual(
-          yield* sql`SELECT task_id FROM telescope_task_threads
-            WHERE thread_id IN ('t-13', 't-14', 't-15') ORDER BY thread_id`,
-          [{ task_id: "clock-kept" }, { task_id: "ahead-kept" }, { task_id: "back-kept" }],
+          yield* sql`SELECT thread_id, task_id FROM telescope_task_threads
+            WHERE thread_id IN ('t-13', 't-14', 't-15', 't-4', 't-old') ORDER BY thread_id`,
+          [
+            { thread_id: "t-13", task_id: "clock-kept" },
+            { thread_id: "t-14", task_id: "ahead-kept" },
+            { thread_id: "t-15", task_id: "back-kept" },
+            { thread_id: "t-4", task_id: "unlinked-rival" },
+            { thread_id: "t-old", task_id: "renamed-rival" },
+          ],
         );
         // After 097: `relinked` gets another thread, `left` gives up the one it kept and
         // `winner-left` links another, `swapped` trades the one it kept for another, and
@@ -116,7 +122,7 @@ layer("099_TelescopeLostThreadUnlinks", (it) => {
         yield* commit("gave-back", 1, threads(), later);
         yield* commit("came-back", 2, threads("t-8"), later);
         yield* sql`UPDATE telescope_task_threads SET task_id = 'came-back' WHERE thread_id = 't-8'`;
-        // The clock stepped back after 097: this edit of `back-lost` is timed before 097's time.
+        // Written after 097 under a clock that stepped back: nothing in the commit says so.
         yield* commit("back-lost", 2, { status: "done" }, "2026-01-03T00:00:00.000Z");
 
         const commits = sql<{ readonly commit_id: string; readonly changed_fields_json: string }>`
