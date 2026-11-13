@@ -66,10 +66,6 @@ export const TimestampFormat = Schema.Literals(["locale", "12-hour", "24-hour"])
 export type TimestampFormat = typeof TimestampFormat.Type;
 const DEFAULT_TIMESTAMP_FORMAT: TimestampFormat = "locale";
 
-/** UI language. "system" follows navigator.language. */
-export const AppLanguage = Schema.Literals(["system", "en", "zh-CN"]);
-export type AppLanguage = typeof AppLanguage.Type;
-
 export const DiffLayout = Schema.Literals(["stacked", "split"]);
 export type DiffLayout = typeof DiffLayout.Type;
 const DEFAULT_DIFF_LAYOUT: DiffLayout = "stacked";

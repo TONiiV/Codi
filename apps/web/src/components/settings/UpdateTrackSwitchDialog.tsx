@@ -89,7 +89,7 @@ function SwitchPlan({
   const switchesLocal = crossesLocal && !updatesOff;
   const [checking, setChecking] = useState(false);
   const everything = useUpdateEverything(switchesLocal ? release.version : null, release);
-  const label = channelSwitchLabel(release.channel);
+  const label = t(release.channel === "nightly" ? "settings.text.nightly" : "settings.text.stable");
   const idle = nothingToMove({
     label,
     channel: release.channel,

@@ -124,6 +124,11 @@ export const SETTINGS_SECTION_LABELS: Readonly<Record<SettingsPath, string>> = {
   "/settings/archived": msg("Archive"),
 };
 
+/** Takes the hook's `t` so React Compiler's memo cache is keyed on the language. */
+export function settingsSectionLabel(to: SettingsPath, t: TFunction): string {
+  return t(`settings.sections.${to.slice("/settings/".length)}`);
+}
+
 /** Sidebar order. A group with a hidden heading is set apart on screen by space alone. */
 export const SETTINGS_NAV_GROUPS: ReadonlyArray<{
   readonly heading: string;

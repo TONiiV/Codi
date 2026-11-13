@@ -33,8 +33,10 @@ import * as ManagedProjectFolders from "../../../project/ManagedProjectFolders.t
 import * as Project from "../../../project/ProjectService.ts";
 import * as DocumentText from "../../../provider/DocumentText.ts";
 import * as PeerForwarding from "../../../peer/PeerForwarding.ts";
+import * as RemoteDelegation from "../../../peer/RemoteDelegation.ts";
 import * as ProviderRegistry from "../../../provider/ProviderRegistry.ts";
 import * as PullRequestReviewGuideService from "../../../pullRequest/PullRequestReviewGuideService.ts";
+import * as PullRequestWatchService from "../../../pullRequest/PullRequestWatchService.ts";
 import * as ServerSettings from "../../../serverSettings.ts";
 import * as ScheduledTasks from "../../../scheduledTasks/ScheduledTaskService.ts";
 import * as GitVcsDriver from "../../../vcs/GitVcsDriver.ts";
@@ -134,6 +136,8 @@ const layer = (opened: Array<string>) =>
         Layer.mock(AssetSigner.AssetSigner)({}),
         Layer.mock(ServerSecretStore.ServerSecretStore)({}),
         Layer.mock(PullRequestReviewGuideService.PullRequestReviewGuideService)({}),
+        Layer.mock(PullRequestWatchService.PullRequestWatchService)({}),
+        Layer.mock(RemoteDelegation.RemoteDelegation)({}),
         Layer.succeed(
           SecureRandom.SecureRandom,
           SecureRandom.make((size) => new Uint8Array(size)),
@@ -146,7 +150,7 @@ const layer = (opened: Array<string>) =>
           namedProjectsRoot: "/projects",
           ensureScratchProject: Effect.suspend(() => {
             opened.push("t3_thread_launch");
-            return Effect.fail(new ManagedProjectFolders.ScratchUnavailableError());
+            return Effect.fail(new ManagedProjectFolders.ScratchUnavailableError({ baseDir: "/base" }));
           }),
         }),
         // t3_thread_launch needs these to type-check; the scratch path stops before any of them.
@@ -238,7 +242,7 @@ const setup = Effect.gen(function* () {
       threadId: ThreadId,
     ) =>
     <Name extends keyof Tools & string>(name: Name, params: Tool.Parameters<Tools[Name]>) =>
-      toolkit.handle(name, params).pipe(
+      toolkit.handle(name, params as never).pipe(
         Stream.unwrap,
         Stream.runCollect,
         Effect.map((out) => out.at(-1)?.result),

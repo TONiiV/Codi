@@ -17,7 +17,6 @@ import {
   type SidebarProjectGroupingMode,
 } from "@t3tools/contracts";
 import {
-  AppLanguage,
   DEFAULT_UNIFIED_SETTINGS,
   type DiffLayout,
   MAX_SIDEBAR_AUTO_SETTLE_AFTER_DAYS,
@@ -102,6 +101,7 @@ import {
 } from "./SettingsPanels.logic";
 import {
   SETTINGS_PICKER_TRIGGER_CLASSNAME,
+  SettingResetButton,
   TranslatedSettingResetButton,
   SettingsPageContainer,
   SettingsRow,
@@ -688,7 +688,6 @@ export function useSettingsRestore(onRestored?: () => void) {
       return;
     }
     updateSettings({
-      language: DEFAULT_UNIFIED_SETTINGS.language,
       appearanceContrast: DEFAULT_UNIFIED_SETTINGS.appearanceContrast,
       diffColorScheme: DEFAULT_UNIFIED_SETTINGS.diffColorScheme,
       chatWidth: DEFAULT_UNIFIED_SETTINGS.chatWidth,
@@ -1095,7 +1094,7 @@ export function GeneralSettingsPanel() {
                 <SelectPopup align="end" alignItemWithTrigger={false}>
                   {QuitConfirmationMode.literals.map((value) => (
                     <SelectItem hideIndicator key={value} value={value}>
-                      {m(label)}
+                      {m(QUIT_CONFIRMATION_MODE_LABELS[value])}
                     </SelectItem>
                   ))}
                 </SelectPopup>
