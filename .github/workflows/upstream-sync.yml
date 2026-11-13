@@ -95,7 +95,8 @@ jobs:
             --allowedTools "Read" "Edit" "Write" "Glob" "Grep" \
               "Bash(git diff:*)" "Bash(git log:*)" "Bash(git show:*)" "Bash(git status:*)" \
               "Bash(git add:*)" "Bash(git rm:*)" "Bash(git checkout --theirs:*)" \
-              "Bash(git checkout --ours:*)" "Bash(vp install:*)" "$@" \
+              "Bash(git checkout --ours:*)" "Bash(git ls-files:*)" "Bash(git merge-file:*)" \
+              "Bash(git cat-file:*)" "Bash(git merge-base:*)" "Bash(vp install:*)" "$@" \
             >> "$RUNNER_TEMP/claude.log" 2>&1
           status=$?
           tail -40 "$RUNNER_TEMP/claude.log"
@@ -130,7 +131,9 @@ jobs:
 
           Task: a git merge is in progress in the current directory. "Theirs" is $2. The
           conflicted files are listed in $RUNNER_TEMP/conflicts. Resolve every one of them by
-          the policy and git add it; leave none unresolved and no conflict markers. For
+          the policy and git add it; leave none unresolved and no conflict markers. Scripts
+          already resolved the files whose fork side differs only by the rename, so do not
+          sort the list first: take the files one at a time. For
           pnpm-lock.yaml: resolve the package.json files first, then git checkout --theirs
           pnpm-lock.yaml and run vp install --no-frozen-lockfile. Edit only the conflicted
           files and the locale files. Do not commit, push or switch branches.
@@ -160,9 +163,14 @@ jobs:
                     ;;
                 esac
               done < "$RUNNER_TEMP/outside"
-              # Upstream wins for whatever Claude left, so one hard file never blocks the sync.
               unmerged > "$RUNNER_TEMP/left"
               xargs -r grep -lE '^(<<<<<<<|>>>>>>>) ' < "$RUNNER_TEMP/conflicts" >> "$RUNNER_TEMP/left" 2>/dev/null || true
+              # Taking upstream for most of the files would drop the fork's work in them.
+              left=$(sort -u "$RUNNER_TEMP/left" | wc -l)
+              if [ "$left" -gt 3 ] && [ $((left * 2)) -gt "$(wc -l < "$RUNNER_TEMP/conflicts")" ]; then
+                fail "Claude Code left $left conflicted files unresolved"
+              fi
+              # Upstream wins for the few Claude left, so one hard file never blocks the sync.
               sort -u "$RUNNER_TEMP/left" | while IFS= read -r file; do
                 if git cat-file -e "MERGE_HEAD:$file" 2>/dev/null; then
                   git checkout MERGE_HEAD -- "$file"

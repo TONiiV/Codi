@@ -18,15 +18,18 @@ What reaches you needs judgment.
 2. **Keep these fork things** on top of upstream's version:
    - Telescope: `apps/server/src/telescope`, `apps/web/src/components/telescope`, Telescope
      RPCs, settings, layers and navigation.
-   - i18n in `apps/web`: a `t("key")` call stays when its key exists in
+   - i18n in `apps/web`: upstream translates with gt-react (`gt("…")`, `msg("…")`, `m(…)`,
+     `<T>`), and the fork moves to it. Where upstream's side uses gt-react, take upstream's side
+     and drop the fork's `t("key")`. Elsewhere a `t("key")` call stays when its key exists in
      `apps/web/src/i18n/locales/en.json`. When upstream reworded that string, update the value in
      `en.json`. Text upstream added stays an English literal: add no keys. Fork helpers take a
-     `t` argument, such as `searchableSetting(id, t)`.
+     `t` argument, such as `searchableSetting(id, t)`. The Language setting is upstream's: a
+     locale code string. The fork's i18next follows it through `resolveLanguage`.
    - The settings search catalog is the exception to "add no keys": every item in
      `settingsSearch.ts` needs `settings.items.<id>` and `settings.itemTerms.<id>` in `en.json`
      and `zh-CN.json`, matching the catalog's title and search terms. An item upstream removed
      loses its keys.
-   - The theme backdrop, brand assets under `brand/`, the language setting, the fork's own
+   - The theme backdrop, brand assets under `brand/`, the fork's own
      `README.md`, and `runs-on: ubuntu-24.04` in workflows.
 3. **Both sides added different things at the same place:** keep both.
 4. **Write product text as upstream has it ("T3 Code").** A script renames it afterwards.
@@ -68,6 +71,10 @@ text that still needs i18n keys.
   `git checkout --theirs pnpm-lock.yaml` and `vp install --no-frozen-lockfile`.
 - Leave no conflict markers and `git add` every file you resolve. Do not commit, push or switch
   branches.
+- In the nightly job the shell runs one plain command per call: no loops, pipes into scripts,
+  command substitution or script files. Read a side with `git show :2:<file>`, one file at a
+  time. If a command is refused, do the same work with Read, Grep and single git commands; never
+  stop to ask for approval, because nobody can answer.
 
 ## Fixing check:changed failures
 
