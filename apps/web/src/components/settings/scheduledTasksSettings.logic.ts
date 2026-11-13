@@ -36,7 +36,7 @@ import type { ProviderInstanceEntry } from "../../providerInstances";
 
 import type { ResolvedSettingsScope } from "./settingsScope";
 
-export const WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
+const WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
 
 const ONCE_FORMATTER = new Intl.DateTimeFormat(undefined, {
   dateStyle: "medium",
