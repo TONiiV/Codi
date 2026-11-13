@@ -79,7 +79,11 @@ function TasksBody(props: { target: BoardTarget; layout: TasksLayout; tabs: Reac
   const myAgents = useEnvironmentQuery(
     telescopeBoard.agents({ environmentId, input: { workspaceId } }),
   ).data?.agents;
-  const createTask = useBoardCommand(telescopeBoard.createTask);
+  const createTask = useBoardCommand(
+    telescopeBoard.createTask,
+    undefined,
+    ({ input }) => `没有建成任务「${input.title}」`,
+  );
   const all = query.data?.tasks ?? [];
   const mine = new Set(myAgents?.map((agent) => agent.id));
   const tasks =

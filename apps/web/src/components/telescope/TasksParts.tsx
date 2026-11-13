@@ -172,23 +172,28 @@ export function useTaskWrite(target: BoardTarget) {
   };
 }
 
-/** Other writes: a refusal surfaces the server's reason instead of failing quietly. */
+/**
+ * Other writes: a refusal surfaces the server's reason instead of failing quietly. `failed` titles
+ * the toast with what was sent, since the control that sent it may be gone by the time it fails.
+ */
 export function useBoardCommand<W, A, E>(
   command: AtomCommand<W, A, E>,
   explain: (error: unknown) => string | null = () => null,
+  failed: (value: W) => string = () => "没有完成",
 ) {
   const run = useAtomCommand(command, { reportFailure: false });
   return async (value: W) => {
     const result = await run(value);
+    const title = failed(value);
     if (result._tag === "Failure" && isAtomCommandInterrupted(result))
-      toastManager.add({ type: "error", title: "没有完成", description: failureText(result) });
+      toastManager.add({ type: "error", title, description: failureText(result) });
     else if (result._tag === "Failure") {
       const error = squashAtomCommandFailure(result);
       const known = explain(error);
       toastManager.add(
         known === null
-          ? { type: "error", title: "没有完成", description: errorText(error) }
-          : { type: "warning", title: "没有完成", description: known },
+          ? { type: "error", title, description: errorText(error) }
+          : { type: "warning", title, description: known },
       );
     }
     return result._tag === "Success";

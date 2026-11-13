@@ -1,9 +1,11 @@
 import { EnvironmentId, Telescope } from "@t3tools/contracts";
-import { Atom } from "effect/reactivity";
+import { Cause } from "effect";
+import { AsyncResult, Atom } from "effect/reactivity";
 import { describe, expect, it, vi } from "vite-plus/test";
 import { page, userEvent } from "vite-plus/test/browser";
 
 import { render } from "../../../test/render";
+import { toastManager } from "../ui/toast";
 import { TasksPage } from "./TasksPage";
 
 const mocks = vi.hoisted(() => ({
@@ -78,6 +80,12 @@ vi.mock(import("../../state/query"), async (original) => ({
     refresh: () => {},
   })) as never,
 }));
+vi.mock(import("../../state/use-atom-command"), () => ({
+  useAtomCommand: (() => async (value: unknown) =>
+    (await mocks.create(value))
+      ? AsyncResult.success(null)
+      : AsyncResult.failure(Cause.fail(new Error("断网了")))) as never,
+}));
 vi.mock(import("./TasksParts"), async (original) => ({
   ...(await original()),
   useBoardTarget: () => ({ environmentId: ENV, workspaceId: W }),
@@ -87,7 +95,6 @@ vi.mock(import("./TasksParts"), async (original) => ({
     name: () => undefined,
   }),
   useTaskWrite: () => mocks.write,
-  useBoardCommand: (() => mocks.create) as never,
 }));
 vi.mock(import("./TasksSidebar"), () => ({
   useTasksProject: () => ({ list: [{ id: P, name: "Alpha" }], selected: P, projects: {} }) as never,
@@ -192,7 +199,7 @@ describe("TasksPage", () => {
     ]);
   });
 
-  it("takes a typed due date and sends only a whole one", async () => {
+  it("takes a typed due date, sends only a whole one, and clears only a fully erased one", async () => {
     const { write } = setup();
     await using screen = await render(<TasksPage />, { router: "/telescope?view=tasks" });
     await userEvent.click(screen.getByRole("button", { name: "截止日期" }).first());
@@ -200,7 +207,22 @@ describe("TasksPage", () => {
     await userEvent.keyboard("11202026{Enter}");
     await userEvent.click(screen.getByRole("button", { name: "截止日期" }).nth(2));
     await userEvent.keyboard("112020266{Enter}");
-    expect(vi.mocked(write).mock.calls).toEqual([[TASKS[0], { set: { dueDate: "2026-11-20" } }]]);
+
+    // One field erased is no change, and the stored day is back on screen; all three erased clears it.
+    const dated = { ...TASKS[0]!, dueDate: "2026-11-20" };
+    mocks.tasks = [dated, ...TASKS.slice(1)];
+    await screen.rerender(<TasksPage />);
+    await userEvent.click(screen.getByRole("button", { name: "截止日期" }).first());
+    await userEvent.keyboard("{Backspace}");
+    await userEvent.click(screen.getByText("名称"));
+    await expect.element(screen.getByText("2026/11/20")).toBeVisible();
+    await userEvent.click(screen.getByRole("button", { name: "截止日期" }).first());
+    await userEvent.keyboard("{Backspace}{Tab}{Backspace}{Tab}{Backspace}");
+    await userEvent.click(screen.getByText("名称"));
+    expect(vi.mocked(write).mock.calls).toEqual([
+      [TASKS[0], { set: { dueDate: "2026-11-20" } }],
+      [dated, { set: { dueDate: null } }],
+    ]);
   });
 
   /** Creates the test settles by hand, in call order. */
@@ -252,10 +274,17 @@ describe("TasksPage", () => {
     expect(create).toHaveBeenCalledTimes(4);
   });
 
-  it("leaves a title whose create failed in its input, with or without focus", async () => {
+  it("keeps a title whose create failed: in its input, back in an empty one, and named in the toast", async () => {
     setup();
     const { settle } = pendingCreates();
     await using screen = await render(<TasksPage />, { router: "/telescope?view=tasks" });
+    using toast = vi.spyOn(toastManager, "add").mockReturnValue("");
+    const named = (title: string) =>
+      vi.waitFor(() =>
+        expect(toast).toHaveBeenLastCalledWith(
+          expect.objectContaining({ title: `没有建成任务「${title}」` }),
+        ),
+      );
     await userEvent.click(screen.getByRole("button", { name: "新任务" }));
     const input = screen.getByRole("textbox", { name: "新任务标题" });
     await userEvent.fill(input, "没存上的");
@@ -272,6 +301,32 @@ describe("TasksPage", () => {
     settle[2]!(false);
     await userEvent.click(screen.getByText("名称"));
     await expect.element(input).toHaveValue("没存上的");
+
+    // A failure that lands after a later title went out goes back into the input that create emptied.
+    await userEvent.fill(input, "第一个");
+    await userEvent.keyboard("{Enter}");
+    await userEvent.fill(input, "第二个");
+    await userEvent.keyboard("{Enter}");
+    settle[4]!(true);
+    await expect.element(input).toHaveValue("");
+    settle[3]!(false);
+    await named("第一个");
+    await expect.element(input).toHaveValue("第一个");
+
+    // It never replaces what the member has typed since.
+    await userEvent.fill(input, "第三个");
+    await userEvent.keyboard("{Enter}");
+    await userEvent.fill(input, "正在打的");
+    settle[5]!(false);
+    await named("第三个");
+    await expect.element(input).toHaveValue("正在打的");
+
+    // After a view switch the input is gone, so the toast alone carries the title.
+    await userEvent.keyboard("{Enter}");
+    await userEvent.click(screen.getByRole("button", { name: "按状态" }));
+    await expect.element(screen.getByRole("region", { name: "未开始" })).toBeVisible();
+    settle[6]!(false);
+    await named("正在打的");
   });
 
   it("lets another board group take a new task while one group's create is pending", async () => {

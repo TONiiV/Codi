@@ -1,7 +1,6 @@
 import { TASK_STATUSES, tasksByStatus } from "@t3tools/client-runtime/telescope/taskBoard";
 import { Telescope } from "@t3tools/contracts";
 import { Link } from "@tanstack/react-router";
-import { Schema } from "effect";
 import {
   CalendarIcon,
   CaseSensitiveIcon,
@@ -27,6 +26,7 @@ import {
   MenuSeparator,
   MenuTrigger,
 } from "../ui/menu";
+import { enteredDueDate } from "./dueDateInput";
 import { formatDueDate, PersonChip, PriorityTag, STATUS_TONE, StatusPill } from "./TaskProperties";
 import {
   type BoardTarget,
@@ -44,8 +44,6 @@ export type CreateTask = ((title: string, set?: Fields) => Promise<boolean>) | n
 type Editable = "title" | "status" | "ownerSubjectId" | "ownerAgentId" | "dueDate" | "priority";
 /** Writes the fields that differ from the task; null for a member who may not edit. */
 type Edit = ((task: Telescope.Task, set: Pick<Fields, Editable>) => void) | null;
-
-const isDueDate = Schema.is(Telescope.TaskDueDate);
 
 const NONE = "";
 
@@ -200,7 +198,7 @@ function EditInput({
   onCancel,
   ...props
 }: Omit<InputProps, "onBlur" | "onKeyDown"> & {
-  onCommit: (value: string) => void;
+  onCommit: (input: HTMLInputElement) => void;
   onCancel: () => void;
 }) {
   const settled = useRef(false);
@@ -210,13 +208,13 @@ function EditInput({
       autoFocus
       size="sm"
       onBlur={(event) => {
-        if (!settled.current) onCommit(event.currentTarget.value);
+        if (!settled.current) onCommit(event.currentTarget);
       }}
       onKeyDown={(event) => {
         if (event.nativeEvent.isComposing || event.keyCode === 229) return;
         if (event.key !== "Enter" && event.key !== "Escape") return;
         settled.current = true;
-        if (event.key === "Enter") onCommit(event.currentTarget.value);
+        if (event.key === "Enter") onCommit(event.currentTarget);
         else onCancel();
       }}
     />
@@ -253,11 +251,10 @@ function DueCell({ task, edit }: CellProps) {
       aria-label="截止日期"
       defaultValue={editing.dueDate ?? ""}
       onChange={() => (changed.current = true)}
-      onCommit={(value) => {
+      onCommit={(input) => {
         setEditing(null);
-        if (!changed.current) return;
-        if (value === "") edit(editing, { dueDate: null });
-        else if (isDueDate(value)) edit(editing, { dueDate: value });
+        const dueDate = enteredDueDate(input);
+        if (changed.current && dueDate !== undefined) edit(editing, { dueDate });
       }}
       onCancel={() => setEditing(null)}
     />
@@ -274,9 +271,9 @@ function TitleCell(props: { task: Telescope.Task; edit: Edit; open: ReactNode })
         aria-label="任务标题"
         maxLength={Telescope.BOARD_LIMITS.titleLength}
         defaultValue={editing.title}
-        onCommit={(value) => {
+        onCommit={(input) => {
           setEditing(null);
-          const title = value.trim();
+          const title = input.value.trim();
           if (title.length > 0) edit(editing, { title });
         }}
         onCancel={() => setEditing(null)}
@@ -309,9 +306,9 @@ function TitleCell(props: { task: Telescope.Task; edit: Edit; open: ReactNode })
 }
 
 /**
- * The open new-task input owns its text and its creates. It stays open while one is out, so a
- * failed title is still there to see; it closes once nothing is out, it has no focus, and it is
- * empty or was cancelled.
+ * The open new-task input owns its text and its creates. It stays open while one is out, and a
+ * failed title goes back into it unless the member has typed since; the failure toast names the
+ * title either way. It closes once nothing is out, it has no focus, and it is empty or cancelled.
  */
 function NewTaskInput(props: {
   create: NonNullable<CreateTask>;
@@ -332,8 +329,12 @@ function NewTaskInput(props: {
     pending.current.add(title);
     const created = await props.create(title, props.set);
     pending.current.delete(title);
-    if (!created) cancelled.current = false;
-    else if (input.value.trim() === title) input.value = "";
+    if (created) {
+      if (input.value.trim() === title) input.value = "";
+    } else {
+      cancelled.current = false;
+      if (input.value.trim() === "") input.value = title;
+    }
     settle(input);
   };
   return (
