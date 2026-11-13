@@ -11,7 +11,8 @@ import { render } from "../../../test/render";
 import { buildSidebarProjectSnapshots } from "../../sidebarProjectGrouping";
 import { NoWorkspace } from "./TasksParts";
 import { FirstRunGate } from "./TelescopeFirstRun";
-import { INVITE_CLOSED_KEY, firstRunAtom, workspaceKey } from "./firstRunSteps";
+import { INVITE_CLOSED_KEY, firstRunAtom } from "./firstRunSteps";
+import { workspaceKey } from "./telescopeProjects";
 
 const AT = "2026-11-08T00:00:00.000Z";
 const environmentId = EnvironmentId.make("local");

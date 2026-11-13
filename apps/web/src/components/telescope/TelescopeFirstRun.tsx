@@ -22,15 +22,8 @@ import {
   useJoinWorkspaceForm,
 } from "./TelescopeAccountDialogs";
 import { telescope, useTelescopeWorkspaces } from "./telescopeState";
-import {
-  INVITE_CLOSED_KEY,
-  firstRunAtom,
-  firstRunStep,
-  sentMountsAtom,
-  workspaceKey,
-  type FirstRunStep,
-} from "./firstRunSteps";
-import { unlinkedProjects } from "./telescopeProjects";
+import { INVITE_CLOSED_KEY, firstRunAtom, firstRunStep, type FirstRunStep } from "./firstRunSteps";
+import { sentMountsAtom, unlinkedProjects, workspaceKey } from "./telescopeProjects";
 
 type OpenStep = "create" | Exclude<FirstRunStep, "done">;
 const ORDER: ReadonlyArray<OpenStep> = ["create", "mount", "invite"];

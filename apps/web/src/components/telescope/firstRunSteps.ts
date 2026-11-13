@@ -1,4 +1,3 @@
-import type { EnvironmentId, Telescope } from "@t3tools/contracts";
 import { Atom } from "effect/reactivity";
 
 export type FirstRunStep = "mount" | "invite" | "done";
@@ -21,9 +20,6 @@ export function firstRunStep(state: {
 /** Per browser: the invite step was skipped or finished. */
 export const INVITE_CLOSED_KEY = "t3code:telescope:first-run-invite-closed:v1";
 
-export const workspaceKey = (environmentId: EnvironmentId, workspaceId: Telescope.WorkspaceId) =>
-  `${environmentId}/${workspaceId}`;
-
 /**
  * The workspace whose first run this session started, from the first-run page's create or join.
  * Not stored: a reload lands on the ordinary pages. `mountPassed` once a project showed up or the
@@ -32,15 +28,4 @@ export const workspaceKey = (environmentId: EnvironmentId, workspaceId: Telescop
 export const firstRunAtom = Atom.make<{ key: string; mountPassed: boolean } | null>(null).pipe(
   Atom.keepAlive,
   Atom.withLabel("telescope:first-run"),
-);
-
-/**
- * Directories this session sent 接入 for, per workspace (`workspaceKey`); a key leaves only when
- * its call fails. Outlives the view, so leaving and coming back cannot send a directory twice.
- */
-export const sentMountsAtom = Atom.family((key: string) =>
-  Atom.make<ReadonlyArray<string>>([]).pipe(
-    Atom.keepAlive,
-    Atom.withLabel(`telescope:sent-mounts:${key}`),
-  ),
 );
