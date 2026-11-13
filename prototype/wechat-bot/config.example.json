@@ -1,0 +1,39 @@
+{
+  "assistant": {
+    "command": ["claude", "-p", "--output-format", "json", "--model", "sonnet"]
+  },
+  "environments": [
+    {
+      "id": "office",
+      "label": "办公室 Mac",
+      "url": "http://office-mac.example.ts.net:3773",
+      "pairingUrl": "http://office-mac.example.ts.net:3773/pair#token=PASTE_ONE_TIME_TOKEN"
+    },
+    {
+      "id": "home",
+      "label": "家里电脑",
+      "url": "http://home-mac.example.ts.net:3773",
+      "token": "OR_PASTE_AN_EXISTING_BEARER"
+    }
+  ],
+  "admins": [],
+  "bootstrapCode": "CHANGE-ME-BOOT",
+  "defaultWork": {
+    "environmentId": "office",
+    "lockModel": false,
+    "modelSelection": {
+      "instanceId": "claudeAgent",
+      "model": "claude-opus-4-6",
+      "options": [
+        {
+          "id": "effort",
+          "value": "high"
+        }
+      ]
+    }
+  },
+  "wecom": {
+    "botId": "YOUR_BOT_ID",
+    "secret": "YOUR_BOT_SECRET"
+  }
+}
