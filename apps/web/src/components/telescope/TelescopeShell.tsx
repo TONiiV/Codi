@@ -1,5 +1,5 @@
 import { useNavigate } from "@tanstack/react-router";
-import { type CSSProperties, type ReactNode, useState } from "react";
+import { type ReactNode, useState } from "react";
 
 import { isElectron } from "../../env";
 import { cn } from "../../lib/utils";
@@ -38,7 +38,7 @@ import {
   useTasksLayout,
 } from "./telescopeViews";
 
-function TelescopeRail({ view, collapsed }: { view: TelescopeView; collapsed: boolean }) {
+function TelescopeRail({ view }: { view: TelescopeView }) {
   const navigate = useNavigate();
   const navigateToAppMode = useNavigateToAppMode();
   const { isMobile, setOpenMobile } = useSidebar();
@@ -46,10 +46,7 @@ function TelescopeRail({ view, collapsed }: { view: TelescopeView; collapsed: bo
   return (
     <nav
       aria-label="Telescope"
-      className={cn(
-        "flex w-12 shrink-0 flex-col items-center gap-1 py-2",
-        collapsed ? "flex-1 border-t" : "border-e",
-      )}
+      className="flex w-12 shrink-0 flex-col items-center gap-1 border-e py-2"
     >
       {VISIBLE_TELESCOPE_VIEWS.map((item) => (
         <Tooltip key={item.id}>
@@ -107,15 +104,7 @@ export function TelescopeSidebar({
   view: TelescopeView;
   children?: ReactNode;
 }) {
-  const { state, isMobile } = useSidebar();
-  if (state === "collapsed" && !isMobile) {
-    return (
-      <div className="flex min-h-0 flex-1 flex-col">
-        <div className="h-(--workspace-topbar-height) shrink-0" />
-        <TelescopeRail view={view} collapsed />
-      </div>
-    );
-  }
+  const { isMobile } = useSidebar();
   return (
     <>
       {/* The stage artwork runs past the header; stop it at the border under the header. Clip
@@ -130,7 +119,7 @@ export function TelescopeSidebar({
           isMobile && "w-[calc(100vw-(--spacing(12)))]",
         )}
       >
-        <TelescopeRail view={view} collapsed={false} />
+        <TelescopeRail view={view} />
         <SidebarContent className="min-h-full">
           <SidebarGroup>
             {children ??
@@ -171,12 +160,6 @@ export function TelescopeEmptyState({
   );
 }
 
-// Clears the floating sidebar toggle, which sits over the icon rail when the sidebar is collapsed.
-const TITLEBAR_INSET = {
-  "--telescope-collapsed-left":
-    "max(var(--workspace-gutter-start), calc(var(--workspace-titlebar-content-left) - var(--sidebar-width-icon)))",
-} as CSSProperties;
-
 /**
  * Telescope's main area: breadcrumb header and a main slot that falls back to the view's empty
  * state. `background` keeps it inert under Settings or Usage.
@@ -207,8 +190,6 @@ export function TelescopePage({
           <WorkspacePageHeader
             electron={isElectron}
             reserveNativeControls={isElectron && !panel.isOpen}
-            className="md:[[data-sidebar-state=collapsed]_&]:pl-(--telescope-collapsed-left)"
-            style={TITLEBAR_INSET}
           >
             <WorkspaceBreadcrumb ariaLabel="Telescope breadcrumb">
               <WorkspaceBreadcrumbItem>
@@ -220,8 +201,7 @@ export function TelescopePage({
               </WorkspaceBreadcrumbItem>
             </WorkspaceBreadcrumb>
           </WorkspacePageHeader>
-          {/* The top border, not the header's bottom one, lines up with the sidebar's under its header. */}
-          <div className="flex min-h-0 flex-1 flex-col overflow-y-auto border-t">
+          <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
             <BackgroundThreadContext value={background}>
               <FirstRunGate>
                 {children ??

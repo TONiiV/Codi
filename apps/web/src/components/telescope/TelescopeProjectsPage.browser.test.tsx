@@ -1,6 +1,7 @@
+import { RegistryContext } from "@effect/atom-react";
 import type { EnvironmentProject } from "@t3tools/client-runtime/state/shell";
 import { EnvironmentId, ProjectId, Telescope } from "@t3tools/contracts";
-import { Atom, AsyncResult } from "effect/reactivity";
+import { Atom, AsyncResult, AtomRegistry } from "effect/reactivity";
 import { useSyncExternalStore } from "react";
 import { describe, expect, it, vi } from "vite-plus/test";
 import { page, userEvent } from "vite-plus/test/browser";
@@ -50,13 +51,17 @@ const fake = vi.hoisted(() => ({
   environments: [] as ReadonlyArray<{ environmentId: EnvironmentId; label: string }>,
   version: 0,
   listeners: new Set<() => void>(),
+  code: [] as ReadonlyArray<string>,
   projects: [] as ReadonlyArray<unknown>,
   summary: null as unknown,
 }));
 
 // The page reads through hooks, so new data has to arrive the way it does in the app: by notifying.
-function publish(projects: ReadonlyArray<Telescope.Project>) {
-  fake.projects = projects;
+function publish(next: {
+  projects?: ReadonlyArray<Telescope.Project>;
+  code?: ReadonlyArray<string>;
+}) {
+  Object.assign(fake, next);
   fake.version += 1;
   fake.listeners.forEach((listener) => listener());
 }
@@ -73,6 +78,9 @@ function setup(options: {
   fake.role = options.role ?? "admin";
   fake.agents = options.agents ?? [];
   fake.environments = options.environments ?? [];
+  fake.version = 0;
+  fake.listeners.clear();
+  fake.code = ["free", "held"];
   fake.projects = options.projects ?? [];
   fake.summary = options.summary === undefined ? { projects: [] } : options.summary;
 }
@@ -147,7 +155,7 @@ vi.mock(import("../../state/environments"), async (original) => ({
 vi.mock(import("../settings/useSettingsProjectGroups"), () => ({
   useSettingsProjectGroups: () =>
     buildSidebarProjectSnapshots({
-      projects: [codeProject("free"), codeProject("held")],
+      projects: fake.code.map(codeProject),
       settings: { sidebarProjectGroupingMode: "separate", sidebarProjectGroupingOverrides: {} },
       primaryEnvironmentId: environmentId,
       resolveEnvironmentLabel: () => null,
@@ -191,16 +199,23 @@ const chief = (projectId: string): Telescope.Agent => ({
   updatedAt: AT,
 });
 
+// The sent directories live in a session atom, so each test gets a registry of its own.
+const projectsPage = (registry = AtomRegistry.make()) => (
+  <RegistryContext.Provider value={registry}>
+    <TelescopeProjectsPage />
+  </RegistryContext.Provider>
+);
+
 describe("TelescopeProjectsPage 项目行", () => {
   it("offers 设定 only to members who can save the agent", async () => {
     const options = { projects: [held], agents: [chief("held")] };
     setup({ ...options, role: "viewer" });
-    await using viewer = await render(<TelescopeProjectsPage />);
+    await using viewer = await render(projectsPage());
     await expect.element(page.getByRole("cell", { name: "held" }).first()).toBeVisible();
     expect(page.getByRole("button", { name: /^设定/ }).query()).toBeNull();
     await viewer.unmount();
     setup({ ...options, role: "member" });
-    await using _member = await render(<TelescopeProjectsPage />);
+    await using _member = await render(projectsPage());
     await expect.element(page.getByRole("button", { name: /^设定/ })).toBeVisible();
   });
 
@@ -210,7 +225,7 @@ describe("TelescopeProjectsPage 项目行", () => {
       projectId: ProjectId.make("bobs"),
     };
     setup({ projects: [{ ...held, mounts: [bobs] }] });
-    await using _screen = await render(<TelescopeProjectsPage />);
+    await using _screen = await render(projectsPage());
     await expect.element(page.getByText("在另一台机器上")).toBeVisible();
     await expect.element(page.getByRole("cell", { name: "另一台机器", exact: true })).toBeVisible();
     expect(page.getByText("项目未加载").query()).toBeNull();
@@ -226,27 +241,44 @@ describe("TelescopeProjectsPage 项目行", () => {
       projects: [{ ...held, mounts: [bobs] }],
       environments: [{ environmentId: bobs.environmentId, label: "Bob 的笔记本" }],
     });
-    await using _screen = await render(<TelescopeProjectsPage />);
+    await using _screen = await render(projectsPage());
     await expect.element(page.getByText("Bob 的笔记本")).toBeVisible();
   });
 });
 
 describe("TelescopeProjectsPage 接入", () => {
-  it("sends one createProject for a double click while the first is in flight", async () => {
+  it("sends one createProject for a double click, and after leaving and coming back, while the first is in flight", async () => {
     setup({});
-    await using _screen = await render(<TelescopeProjectsPage />);
+    const registry = AtomRegistry.make();
+    await using screen = await render(projectsPage(registry));
     const connect = page.getByRole("button", { name: "接入 free" });
     await userEvent.dblClick(connect);
     await expect.element(connect).toBeDisabled();
+    expect(fake.calls).toHaveLength(1);
+    await screen.unmount();
+    await using _again = await render(projectsPage(registry));
+    await expect.element(connect).toBeDisabled();
+    await userEvent.click(connect, { force: true });
     expect(fake.calls).toHaveLength(1);
   });
 
   it("does not send a directory again after the call returned but the data has not caught up", async () => {
     setup({});
-    await using _screen = await render(<TelescopeProjectsPage />);
+    const registry = AtomRegistry.make();
+    await using screen = await render(projectsPage(registry));
     const connect = page.getByRole("button", { name: "接入 free" });
     await userEvent.click(connect);
     fake.settle[0]?.(AsyncResult.success(undefined));
+    await userEvent.click(connect, { force: true });
+    expect(fake.calls).toHaveLength(1);
+    // Code losing the directory for a moment is not the data listing it as mounted.
+    publish({ code: ["held"] });
+    await expect.element(connect).not.toBeInTheDocument();
+    publish({ code: ["free", "held"] });
+    await expect.element(connect).toBeDisabled();
+    await screen.unmount();
+    await using _again = await render(projectsPage(registry));
+    await expect.element(connect).toBeDisabled();
     await userEvent.click(connect, { force: true });
     expect(fake.calls).toHaveLength(1);
     // A different directory is not held back by the first.
@@ -254,12 +286,18 @@ describe("TelescopeProjectsPage 接入", () => {
     expect(fake.calls).toHaveLength(2);
   });
 
-  it("lets the admin retry a directory whose call failed", async () => {
+  it.each([
+    ["", false],
+    [" while the page was left", true],
+  ] as const)("lets the admin retry a directory whose call failed%s", async (_name, leave) => {
     setup({});
-    await using _screen = await render(<TelescopeProjectsPage />);
+    const registry = AtomRegistry.make();
+    await using screen = await render(projectsPage(registry));
     const connect = page.getByRole("button", { name: "接入 free" });
     await userEvent.click(connect);
+    if (leave) await screen.unmount();
     fake.settle[0]?.(AsyncResult.fail(new Error("offline")));
+    await using _again = leave ? await render(projectsPage(registry)) : undefined;
     await expect.element(connect).toBeEnabled();
     await userEvent.click(connect);
     expect(fake.calls).toHaveLength(2);
@@ -267,19 +305,19 @@ describe("TelescopeProjectsPage 接入", () => {
 
   it("offers a directory again if the data showed it mounted and later lost it", async () => {
     setup({});
-    await using _screen = await render(<TelescopeProjectsPage />);
+    await using _screen = await render(projectsPage());
     const connect = page.getByRole("button", { name: "接入 free" });
     await userEvent.click(connect);
     fake.settle[0]?.(AsyncResult.success(undefined));
-    publish([{ ...held, mounts: [mount("free")] }]);
+    publish({ projects: [{ ...held, mounts: [mount("free")] }] });
     await expect.element(connect).not.toBeInTheDocument();
-    publish([]);
+    publish({ projects: [] });
     await expect.element(connect).toBeEnabled();
   });
 
   it("offers nothing to connect until the binding summary has loaded", async () => {
     setup({ summary: null });
-    await using _screen = await render(<TelescopeProjectsPage />);
+    await using _screen = await render(projectsPage());
     await expect.element(page.getByRole("heading", { name: "项目", level: 2 })).toBeVisible();
     expect(page.getByRole("button", { name: /^接入 / }).query()).toBeNull();
   });
