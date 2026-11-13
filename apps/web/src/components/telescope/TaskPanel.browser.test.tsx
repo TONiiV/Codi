@@ -20,7 +20,11 @@ vi.mock(import("./telescopeState"), async (original) => {
   const allowed = { permissionAtom: () => Atom.make(true) };
   return {
     ...real,
-    telescope: { ...real.telescope, get: () => "self" as never },
+    telescope: {
+      ...real.telescope,
+      get: () => "self" as never,
+      members: (() => Atom.make(AsyncResult.success({ members: [] }))) as never,
+    },
     telescopeBoard: {
       ...real.telescopeBoard,
       task: () => "task" as never,
@@ -52,7 +56,6 @@ vi.mock(import("../../state/query"), async (original) => ({
 }));
 vi.mock(import("./TasksParts"), async (original) => ({
   ...(await original()),
-  useBoardNames: () => names,
   useTaskWrite: (() => async () => true) as never,
 }));
 vi.mock(import("../chat/useSideChat"), async (original) => ({
