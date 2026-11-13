@@ -27,6 +27,7 @@ import { DraftId } from "../../composerDraftStore";
 import { isElectron } from "../../env";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
 import { useRightPanelSurfaceClose } from "../../hooks/useRightPanelSurfaceClose";
+import { useStableCallback } from "../../hooks/useStableCallback";
 import { resolveShortcutCommand, shortcutLabelForCommand } from "../../keybindings";
 import { usePanelAnimationSettings, usePanelPresence } from "../../panelAnimations";
 import { isPreviewSupportedInRuntime, useThreadPreviewState } from "../../previewStateStore";
@@ -163,6 +164,12 @@ function FileTab(props: {
     projectId === undefined ? null : scopeProjectRef(panelRef.environmentId, projectId),
   );
   const availableEditors = useAtomValue(primaryServerAvailableEditorsAtom);
+  // The save session re-subscribes, flushing its write, whenever this listener's identity changes.
+  const onPendingChange = useStableCallback((relativePath: string, pending: boolean) =>
+    props.setPendingSurfaceIds((current) =>
+      withPendingFile(current, fileSurfaceId(relativePath, projectId), pending),
+    ),
+  );
   if (project === null && isWorkspaceFile(surface)) {
     return (
       <p className="m-auto p-4 text-center text-muted-foreground text-sm">
@@ -189,10 +196,7 @@ function FileTab(props: {
           pendingSurfaceIds: props.pendingSurfaceIds,
           onOpenFile: (relativePath) =>
             useRightPanelStore.getState().openFile(panelRef, relativePath, undefined, projectId),
-          onPendingChange: (relativePath, pending) =>
-            props.setPendingSurfaceIds((current) =>
-              withPendingFile(current, fileSurfaceId(relativePath, projectId), pending),
-            ),
+          onPendingChange,
         }}
       />
     </FileMountContext>
@@ -488,6 +492,8 @@ export function TelescopePanel(props: {
             />
           ) : active?.kind === "files" || active?.kind === "file" ? (
             <FileTab
+              // A save can settle after its tab is left; its listener must still name this mount.
+              key={active.projectId}
               surface={active}
               panelRef={panelRef}
               visible={open}

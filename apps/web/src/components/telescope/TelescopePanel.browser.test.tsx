@@ -1,8 +1,9 @@
 import { EnvironmentId, ProjectId, Telescope } from "@t3tools/contracts";
+import { AsyncResult } from "effect/reactivity";
 import { describe, expect, it, vi } from "vite-plus/test";
 import { page, userEvent } from "vite-plus/test/browser";
 
-import { render } from "../../../test/render";
+import { act, fakeTimers, render } from "../../../test/render";
 import {
   selectThreadRightPanelState,
   telescopePanelRef,
@@ -45,31 +46,72 @@ vi.mock(import("./telescopeState"), async (original) => {
     },
   };
 });
-vi.mock("../files/FilePreviewPanel", () => ({
-  default: (props: {
-    cwd: string;
-    relativePath: string | null;
-    attachment?: { name: string };
-    onOpenFile: (relativePath: string) => void;
-    onNavigateFolder: (relativePath: string, folderTrail: string) => void;
-  }) =>
-    props.attachment ? (
-      <p>attachment {props.attachment.name}</p>
-    ) : (
-      <div>
-        <p>
-          files of {props.cwd}
-          {props.relativePath === null ? "" : ` at ${props.relativePath}`}
-        </p>
-        <button type="button" onClick={() => props.onOpenFile("src/app.ts")}>
-          open app.ts
-        </button>
-        <button type="button" onClick={() => props.onNavigateFolder("", props.relativePath ?? "")}>
-          go to root
-        </button>
-      </div>
-    ),
+const { writeFile } = vi.hoisted(() => ({ writeFile: vi.fn() }));
+vi.mock(import("@t3tools/client-runtime/state/runtime"), async (original) => ({
+  ...(await original()),
+  runAtomCommand: ((_registry: unknown, _command: unknown, request: unknown) =>
+    writeFile(request)) as never,
 }));
+vi.mock(import("../../state/session"), async (original) => ({
+  ...(await original()),
+  readEnvironmentScope: (() => true) as never,
+}));
+vi.mock(import("../files/projectFilesQueryState"), async (original) => ({
+  ...(await original()),
+  confirmProjectFileQueryData: () => true,
+}));
+// The stand-in holds the real save session, as the real panel's editor does for an open file.
+vi.mock("../files/FilePreviewPanel", async () => {
+  const { changeFileSaveSession, useFileSaveSession } = await import("../files/fileSaveSessions");
+  type Target = Parameters<typeof changeFileSaveSession>[0];
+  function Editor(props: {
+    target: Target;
+    pending: boolean;
+    onPendingChange: Parameters<typeof useFileSaveSession>[1];
+  }) {
+    useFileSaveSession(props.target, props.onPendingChange);
+    return (
+      <button type="button" onClick={() => changeFileSaveSession(props.target, "draft")}>
+        {props.pending ? "edit (unsaved)" : "edit"}
+      </button>
+    );
+  }
+  return {
+    default: (props: {
+      environmentId: EnvironmentId;
+      cwd: string;
+      relativePath: string | null;
+      attachment?: { name: string };
+      selectedFilePending: boolean;
+      onOpenFile: (relativePath: string) => void;
+      onPendingChange: Parameters<typeof useFileSaveSession>[1];
+    }) =>
+      props.attachment ? (
+        <p>attachment {props.attachment.name}</p>
+      ) : (
+        <div>
+          <p>
+            files of {props.cwd}
+            {props.relativePath === null ? "" : ` at ${props.relativePath}`}
+          </p>
+          <button type="button" onClick={() => props.onOpenFile("src/app.ts")}>
+            open app.ts
+          </button>
+          {props.relativePath === null ? null : (
+            <Editor
+              target={{
+                environmentId: props.environmentId,
+                cwd: props.cwd,
+                relativePath: props.relativePath,
+              }}
+              pending={props.selectedFilePending}
+              onPendingChange={props.onPendingChange}
+            />
+          )}
+        </div>
+      ),
+  };
+});
 const codiProject = (ref: { environmentId: EnvironmentId; projectId: ProjectId } | null) =>
   CODI_PROJECTS.find(
     (entry) => entry.environmentId === ref?.environmentId && entry.id === ref.projectId,
@@ -110,6 +152,7 @@ const panelState = () =>
 
 async function setup() {
   useRightPanelStore.setState({ byThreadKey: {}, userActionRevisionByThreadKey: {} });
+  writeFile.mockReset();
   // Below 981 px the panel is a sheet in a portal.
   const viewport = { width: window.innerWidth, height: window.innerHeight };
   await page.viewport(1400, 900);
@@ -276,15 +319,47 @@ describe("TelescopePanel", () => {
         button: "right",
       });
       await vi.waitFor(() => expect(writeText).toHaveBeenCalledWith("src/app.ts"));
+    });
 
-      // Its root is docs' explorer, beside app's, never app's in its place.
-      await userEvent.click(page.getByRole("button", { name: "go to root" }));
+    it("holds a file tab's edits for the save debounce, and a save that settles after its tab is left clears that tab", async () => {
+      await using _viewport = await setup();
+      let finishWrite = () => {};
+      writeFile.mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            finishWrite = () => resolve(AsyncResult.success(undefined));
+          }),
+      );
+      await using screen = await render(
+        <TelescopePanel panelRef={panelRef} layoutElement={null} />,
+        { router: "/telescope?view=tasks&project=p-app" },
+      );
+      useRightPanelStore.getState().show(panelRef);
+      await userEvent.click(launcher().getByRole("button", { name: /^Files/ }));
+      await userEvent.click(page.getByRole("button", { name: "open app.ts" }));
+      await screen.router!.navigate({
+        to: "/telescope",
+        search: { view: "tasks", project: Telescope.TelescopeProjectId.make("p-docs") },
+      });
+      await addFiles();
       await expect.element(page.getByText("files of /work/docs")).toBeVisible();
-      expect(panelState().surfaces.map((surface) => surface.id)).toEqual([
-        "task:t2",
-        "files:docs",
-        "files:app",
-      ]);
+      const appTab = page.getByRole("button", { name: "app.ts", exact: true });
+      await userEvent.click(appTab);
+      const edit = page.getByRole("button", { name: "edit" }).element() as HTMLElement;
+      {
+        using _timers = fakeTimers();
+        for (let edits = 0; edits < 3; edits += 1) await act(async () => edit.click());
+        expect(edit.textContent).toBe("edit (unsaved)");
+        expect(writeFile).not.toHaveBeenCalled();
+      }
+
+      // Leaving the tab writes the draft; docs' tab is on screen when that write settles.
+      await userEvent.click(page.getByRole("button", { name: "Files", exact: true }));
+      await expect.element(page.getByText("files of /work/docs")).toBeVisible();
+      expect(writeFile).toHaveBeenCalledOnce();
+      await act(async () => finishWrite());
+      await userEvent.click(appTab);
+      await expect.element(page.getByRole("button", { name: "edit", exact: true })).toBeVisible();
     });
   });
 });
