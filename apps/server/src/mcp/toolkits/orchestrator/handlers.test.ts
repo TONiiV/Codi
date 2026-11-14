@@ -33,8 +33,10 @@ import * as ManagedProjectFolders from "../../../project/ManagedProjectFolders.t
 import * as Project from "../../../project/ProjectService.ts";
 import * as DocumentText from "../../../provider/DocumentText.ts";
 import * as PeerForwarding from "../../../peer/PeerForwarding.ts";
+import * as RemoteDelegation from "../../../peer/RemoteDelegation.ts";
 import * as ProviderRegistry from "../../../provider/ProviderRegistry.ts";
 import * as PullRequestReviewGuideService from "../../../pullRequest/PullRequestReviewGuideService.ts";
+import * as PullRequestWatchService from "../../../pullRequest/PullRequestWatchService.ts";
 import * as ServerSettings from "../../../serverSettings.ts";
 import * as ScheduledTasks from "../../../scheduledTasks/ScheduledTaskService.ts";
 import * as GitVcsDriver from "../../../vcs/GitVcsDriver.ts";
@@ -123,17 +125,21 @@ const layer = (opened: Array<string>) =>
               ),
             ),
         }),
-        Layer.mock(Orchestrator.OrchestratorV2)({
-          // A missing thread is looked up again under its `mcp:` alias.
-          getThreadShell: (threadId) =>
-            Effect.sync(() => {
-              if (!threadId.startsWith("mcp:")) opened.push("watch_pull_request");
-              return null;
-            }),
-        }),
+        Layer.mock(Orchestrator.OrchestratorV2)({ getThreadShell: () => Effect.succeed(null) }),
         Layer.mock(AssetSigner.AssetSigner)({}),
         Layer.mock(ServerSecretStore.ServerSecretStore)({}),
         Layer.mock(PullRequestReviewGuideService.PullRequestReviewGuideService)({}),
+        Layer.mock(PullRequestWatchService.PullRequestWatchService)({
+          setWatching: ({ threadId }) =>
+            Effect.sync(() => opened.push("watch_pull_request")).pipe(
+              Effect.andThen(
+                Effect.fail(
+                  new PullRequestWatchService.PullRequestWatchThreadNotFoundError({ threadId }),
+                ),
+              ),
+            ),
+        }),
+        Layer.mock(RemoteDelegation.RemoteDelegation)({}),
         Layer.succeed(
           SecureRandom.SecureRandom,
           SecureRandom.make((size) => new Uint8Array(size)),
@@ -146,7 +152,9 @@ const layer = (opened: Array<string>) =>
           namedProjectsRoot: "/projects",
           ensureScratchProject: Effect.suspend(() => {
             opened.push("t3_thread_launch");
-            return Effect.fail(new ManagedProjectFolders.ScratchUnavailableError());
+            return Effect.fail(
+              new ManagedProjectFolders.ScratchUnavailableError({ baseDir: "/base" }),
+            );
           }),
         }),
         // t3_thread_launch needs these to type-check; the scratch path stops before any of them.
@@ -238,7 +246,7 @@ const setup = Effect.gen(function* () {
       threadId: ThreadId,
     ) =>
     <Name extends keyof Tools & string>(name: Name, params: Tool.Parameters<Tools[Name]>) =>
-      toolkit.handle(name, params).pipe(
+      toolkit.handle(name, params as never).pipe(
         Stream.unwrap,
         Stream.runCollect,
         Effect.map((out) => out.at(-1)?.result),
@@ -445,9 +453,9 @@ it.effect("a PA run's watch_pull_request on its own thread is not gated", () => 
   return Effect.gen(function* () {
     const { on, audit } = yield* setup;
     const pa = yield* on("chief_of_staff");
-    for (const threadId of [undefined, pa.threadId])
+    for (const thread of [{}, { threadId: pa.threadId }])
       yield* Effect.exit(
-        pa.pr("watch_pull_request", { threadId, url: "https://github.com/acme/web/pull/7" }),
+        pa.pr("watch_pull_request", { ...thread, url: "https://github.com/acme/web/pull/7" }),
       );
     assert.deepStrictEqual(opened, ["watch_pull_request", "watch_pull_request"]);
     assert.deepStrictEqual(yield* audit, []);

@@ -77,8 +77,10 @@ describe("runMigrations", () => {
   it.effect("runs an upstream migration below Codi's ids on a database older builds wrote", () =>
     Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
-      const [headId, headName] = migrationManifest.at(-1)!;
-      yield* runMigrations({ toMigrationInclusive: headId - 1 });
+      // Upstream has since used ids that Codi's migrations also have.
+      const firstCodiId = codiMigrationManifest[0]![0];
+      const pending = migrationManifest.filter(([id]) => id >= firstCodiId - 1);
+      yield* runMigrations({ toMigrationInclusive: firstCodiId - 2 });
       yield* runCodiMigrations();
       // Older builds recorded Codi's migrations in upstream's table, above upstream's head.
       yield* sql`
@@ -87,7 +89,7 @@ describe("runMigrations", () => {
       `;
       yield* sql`DROP TABLE ${sql(CODI_MIGRATIONS_TABLE)}`;
 
-      assert.deepStrictEqual(yield* runMigrations(), [[headId, headName]]);
+      assert.deepStrictEqual(yield* runMigrations(), pending);
       assert.deepStrictEqual(yield* history, migrationManifest);
       const codiRows = yield* sql<{ readonly migration_id: number; readonly name: string }>`
         SELECT migration_id, name FROM ${sql(CODI_MIGRATIONS_TABLE)} ORDER BY migration_id
@@ -178,6 +180,36 @@ describe("runMigrations", () => {
       );
       assert.notInclude(String(exit), "57_ScheduledTaskWebhooks");
       assert.deepStrictEqual(yield* history, before);
+    }).pipe(Effect.provide(NodeSqliteClient.layer({ filename: ":memory:" }))),
+  );
+
+  it.effect("keeps the migrations that finished before a later one failed", () =>
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      yield* runMigrations({ toMigrationInclusive: 81 });
+      yield* sql`CREATE TABLE orchestration_v2_projection_turn_item_counts (thread_id TEXT)`;
+
+      const exit = yield* Effect.exit(runMigrations());
+
+      assert.isTrue(Exit.isFailure(exit));
+      assert.deepStrictEqual(
+        yield* history,
+        migrationManifest.filter(([id]) => id <= 84),
+      );
+    }).pipe(Effect.provide(NodeSqliteClient.layer({ filename: ":memory:" }))),
+  );
+
+  it.effect("reapplies peer link migrations whose ledger rows are missing", () =>
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      yield* runMigrations({ toMigrationInclusive: 72 });
+      yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id BETWEEN 70 AND 72`;
+
+      assert.deepStrictEqual(
+        yield* runMigrations(),
+        migrationManifest.filter(([id]) => id >= 70),
+      );
+      assert.deepStrictEqual(yield* history, migrationManifest);
     }).pipe(Effect.provide(NodeSqliteClient.layer({ filename: ":memory:" }))),
   );
 

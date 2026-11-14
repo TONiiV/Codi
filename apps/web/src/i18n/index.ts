@@ -1,17 +1,14 @@
-import type { AppLanguage } from "@t3tools/contracts/settings";
 import i18n from "i18next";
 import { initReactI18next } from "react-i18next";
 
 import en from "./locales/en.json";
 
-type Language = Exclude<AppLanguage, "system">;
+type Language = "en" | "zh-CN";
 
-export function resolveLanguage(
-  preference: AppLanguage,
-  systemLanguage = navigator.language,
-): Language {
-  if (preference !== "system") return preference;
-  return systemLanguage.toLowerCase().startsWith("zh") ? "zh-CN" : "en";
+/** The Language setting holds a locale code; "system" follows the browser's language. */
+export function resolveLanguage(preference: string, systemLanguage = navigator.language): Language {
+  const locale = preference === "system" ? systemLanguage : preference;
+  return locale.toLowerCase().startsWith("zh") ? "zh-CN" : "en";
 }
 
 // English ships in the main bundle; other locales load on first use.
@@ -21,7 +18,7 @@ const loadLocale = {
 
 let latestRequest = 0;
 
-export async function applyLanguage(preference: AppLanguage): Promise<void> {
+export async function applyLanguage(preference: string): Promise<void> {
   const language = resolveLanguage(preference);
   const request = ++latestRequest;
   if (language !== "en" && !i18n.hasResourceBundle(language, "translation")) {
