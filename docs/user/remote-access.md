@@ -60,7 +60,7 @@ settings page, or with `t3 auth connect-device revoke <code>`. With approval on,
 it has to ask again. With approval off, it can connect again on its own, so
 revoking in the app offers to turn approval on first. Devices that connected through T3 Connect while approval was off stay
 approved and appear in that list for you to review. A device that has not
-connected since you updated T3 Code asks for approval like a new one. Older apps
+connected since you updated Codi asks for approval like a new one. Older apps
 cannot show the code, so update them before you turn approval on.
 
 ### Scripts and agents
