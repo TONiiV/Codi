@@ -36,7 +36,10 @@ export function presentSavedCloudEnvironmentConnection(
   connection: EnvironmentConnectionPresentation,
 ): SavedCloudEnvironmentConnectionPresentation {
   return {
-    buttonLabel: i18n.t(PHASE_LABEL_KEY[connection.phase]),
+    buttonLabel:
+      connection.phase === "reconnecting" && connection.awaitingApproval
+        ? "Waiting for approval…"
+        : i18n.t(PHASE_LABEL_KEY[connection.phase]),
     statusText: connectionStatusText(connection),
     tone: PHASE_TONE[connection.phase],
   };

@@ -17,6 +17,8 @@ describe("resolveLanguage", () => {
     ["system", "", "en"],
     ["en", "zh-CN", "en"],
     ["zh-CN", "en-US", "zh-CN"],
+    ["zh", "en-US", "zh-CN"],
+    ["ja", "zh-CN", "en"],
   ] as const)("%s with system %j resolves to %s", (preference, system, expected) => {
     expect(resolveLanguage(preference, system)).toBe(expected);
   });
