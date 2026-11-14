@@ -511,6 +511,7 @@ export function createScopedSettingsWriter(
     plan: (environments: readonly ScopedSettingsEnvironment[]) => ScopedSettingsPlan,
     persistServer: ScopedSettingsPersistServer,
     persistClient: (patch: ClientSettingsPatch) => void,
+    t: TFunction = englishT,
   ) =>
     persistScopedSettingsPlan(
       plan(environments),
@@ -557,6 +558,7 @@ export function createScopedSettingsWriter(
         return save;
       },
       persistClient,
+      t,
     );
 }
 

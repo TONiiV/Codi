@@ -153,9 +153,7 @@ export function useClearProjectOverrides() {
     keys: readonly ProjectScopedServerSettingKey[],
   ) => {
     if (context === null) return;
-    run(context.environments, (current) =>
-      planProjectOverridesClear(current, entries, keys, t),
-    );
+    run(context.environments, (current) => planProjectOverridesClear(current, entries, keys, t));
   };
 }
 
