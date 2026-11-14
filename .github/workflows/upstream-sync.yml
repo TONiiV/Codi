@@ -37,7 +37,7 @@ jobs:
   sync:
     if: github.repository == 'TONiiV/Codi'
     runs-on: ubuntu-latest
-    timeout-minutes: 150
+    timeout-minutes: 240
     steps:
       - uses: actions/checkout@v6
         with:
@@ -206,6 +206,8 @@ jobs:
         if: steps.fetch.outputs.run == 'true'
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # A merge touches hundreds of test files; on 4 cores they take longer than the 900s default.
+          CHECK_CHANGED_TIMEOUT: "3000"
         run: |
           # Git can merge the lockfile without a conflict and still leave it missing entries.
           vp install --fix-lockfile
