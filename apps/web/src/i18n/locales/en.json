@@ -86,6 +86,7 @@
       "sections": "Settings sections"
     },
     "items": {
+      "connect-device-approval": "Require approval for new devices",
       "scheduled-tasks": "Scheduled tasks",
       "keep-awake-while-agents-work": "Keep awake while agents work",
       "screen-reader-window-title": "Screen reader window title",
@@ -2809,6 +2810,7 @@
       }
     },
     "itemTerms": {
+      "connect-device-approval": "t3 connect devices approve deny trust revoke pairing code security account",
       "keep-awake-while-agents-work": "caffeinate sleep prevent stay awake power laptop lid inhibit",
       "screen-reader-window-title": "accessibility a11y screen reader nvda jaws voiceover orca narrator window title tab title alt tab taskbar thread status order working approval",
       "screen-reader-announcements": "accessibility a11y screen reader nvda jaws voiceover orca narrator speech announce read aloud messages activity steps",

@@ -86,6 +86,7 @@
       "sections": "设置分区"
     },
     "items": {
+      "connect-device-approval": "新设备需要批准",
       "scheduled-tasks": "定时任务",
       "keep-awake-while-agents-work": "智能体工作时保持唤醒",
       "screen-reader-window-title": "屏幕阅读器窗口标题",
@@ -2809,6 +2810,7 @@
       }
     },
     "itemTerms": {
+      "connect-device-approval": "设备 批准 拒绝 信任 撤销 配对码 安全 账号 t3 connect devices approve deny trust revoke pairing code security account",
       "keep-awake-while-agents-work": "防止休眠 睡眠 保持唤醒 电源 笔记本 合盖 caffeinate sleep prevent stay awake power laptop lid inhibit",
       "screen-reader-window-title": "无障碍 屏幕阅读器 窗口标题 标签页标题 任务栏 会话状态 accessibility a11y screen reader nvda jaws voiceover orca narrator window title tab title alt tab taskbar thread status order working approval",
       "screen-reader-announcements": "无障碍 屏幕阅读器 朗读 播报 消息 活动 步骤 accessibility a11y screen reader nvda jaws voiceover orca narrator speech announce read aloud messages activity steps",
