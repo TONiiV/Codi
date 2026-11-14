@@ -30,7 +30,8 @@ What reaches you needs judgment.
      and `zh-CN.json`, matching the catalog's title and search terms. An item upstream removed
      loses its keys.
    - The theme backdrop, brand assets under `brand/`, the fork's own
-     `README.md`, and `runs-on: ubuntu-24.04` in workflows.
+     `README.md`, and in workflows `runs-on: ubuntu-24.04` with a job `timeout-minutes` of 20
+     where upstream has 10: the free runners are slower than upstream's.
 3. **Both sides added different things at the same place:** keep both.
 4. **Write product text as upstream has it ("Codi").** A script renames it afterwards.
 5. **A fork quarantine** (`// quarantine: #N <why>` above an `it.skip`) on a test upstream
