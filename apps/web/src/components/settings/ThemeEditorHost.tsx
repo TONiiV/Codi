@@ -9,7 +9,6 @@ import {
 } from "../../themePalette";
 import { stackedThreadToast, toastManager } from "../ui/toast";
 import { useThemeEditorStore } from "./themeEditorStore";
-import { themeModeWord } from "./ThemePreviewCircles";
 import { useTranslation } from "react-i18next";
 
 const ThemeEditorPanel = lazy(() =>
@@ -47,15 +46,6 @@ export function ThemeEditorHost() {
         );
         return false;
       }
-      toastManager.add(
-        stackedThreadToast({
-          type: "success",
-          title: t("settings.text.labelUpdated", { label: savedTheme.label }),
-          description: t("settings.text.itsMergedappearancePaletteWasAdded", {
-            mergedAppearance: themeModeWord(mergedAppearance, t),
-          }),
-        }),
-      );
       return true;
     }
     if (!created) {
@@ -65,15 +55,6 @@ export function ThemeEditorHost() {
         themeHalves?.light === savedTheme.id ||
         themeHalves?.dark === savedTheme.id;
       if (wasActive) refreshTheme();
-      toastManager.add(
-        stackedThreadToast({
-          type: "success",
-          title: t("settings.text.labelSaved", { label: savedTheme.label }),
-          description: wasActive
-            ? t("settings.text.yourChangesAreNowActive")
-            : t("settings.text.yourChangesAreSaved"),
-        }),
-      );
       return true;
     }
 
@@ -87,13 +68,6 @@ export function ThemeEditorHost() {
       );
       return false;
     }
-    toastManager.add(
-      stackedThreadToast({
-        type: "success",
-        title: t("settings.text.labelCreated", { label: savedTheme.label }),
-        description: t("settings.text.itSNowActive"),
-      }),
-    );
     return true;
   };
 

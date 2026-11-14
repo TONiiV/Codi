@@ -369,6 +369,13 @@ function ProjectDetail({
     if (checkProjectAccess(members, t("settings.text.failedToRemoveProject"))) return;
 
     const draftStore = useComposerDraftStore.getState();
+    const remainingMember = allMembers.find(
+      (candidate) =>
+        !members.some(
+          (member) =>
+            member.environmentId === candidate.environmentId && member.id === candidate.id,
+        ),
+    );
     for (const member of members) {
       if (checkProjectAccess([member], t("settings.text.failedToRemoveProject"))) return;
       const memberThreads = projectThreads.filter(
@@ -398,7 +405,13 @@ function ProjectDetail({
         memberThreads.map((thread) => scopeThreadRef(thread.environmentId, thread.id)),
       );
       const projectDraftThread = draftStore.getDraftThreadByProjectRef(projectRef);
-      if (projectDraftThread) {
+      if (projectDraftThread && remainingMember) {
+        draftStore.setDraftThreadContext(projectDraftThread.draftId, {
+          projectRef: scopeProjectRef(remainingMember.environmentId, remainingMember.id),
+          environmentSelection: "manual",
+          loadBalancedEnvironmentId: null,
+        });
+      } else if (projectDraftThread) {
         draftStore.clearDraftThread(projectDraftThread.draftId);
       }
       draftStore.clearProjectDraftThreadId(projectRef);

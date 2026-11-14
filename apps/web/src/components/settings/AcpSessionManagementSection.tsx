@@ -278,7 +278,6 @@ function InstanceSessionManagement(
       setSessions((current) =>
         current.filter((candidate) => candidate.sessionId !== session.sessionId),
       );
-      toastManager.add({ type: "success", title: t("settings.text.acpSessionDeleted") });
       return;
     }
     reportFailure(t("settings.text.couldNotDeleteAcpSession"), result, t);
@@ -351,7 +350,6 @@ function InstanceSessionManagement(
     if (generation !== projectGeneration.current) return;
     setSavingProviderId(null);
     if (result._tag === "Success") {
-      toastManager.add({ type: "success", title: t("settings.text.acpProviderConfigured") });
       await loadProviders(provider.providerId);
       return;
     }
@@ -380,7 +378,6 @@ function InstanceSessionManagement(
     if (generation !== projectGeneration.current) return;
     setSavingProviderId(null);
     if (result._tag === "Success") {
-      toastManager.add({ type: "success", title: t("settings.text.acpProviderDisabled") });
       await loadProviders(provider.providerId);
       return;
     }
@@ -398,7 +395,6 @@ function InstanceSessionManagement(
     if (result._tag === "Success") {
       setSessions([]);
       setNextCursor(null);
-      toastManager.add({ type: "success", title: t("settings.text.loggedOutOfAcpAgent") });
       return;
     }
     reportFailure(t("settings.text.couldNotLogOutOfAcp"), result, t);
