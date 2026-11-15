@@ -37,7 +37,7 @@ jobs:
   sync:
     if: github.repository == 'TONiiV/Codi'
     runs-on: ubuntu-latest
-    timeout-minutes: 150
+    timeout-minutes: 210
     steps:
       - uses: actions/checkout@v6
         with:
@@ -231,8 +231,9 @@ jobs:
           EOF
           # The PR checks, scoped to what the fork changes relative to upstream. Upstream's own CI
           # covers its changes.
+          # The diff against upstream holds every fork test file: more than the default 900 s.
           for attempt in 1 2 3; do
-            if vp run check:changed upstream/main > "$RUNNER_TEMP/check.log" 2>&1; then
+            if vp run check:changed upstream/main --timeout 2400 > "$RUNNER_TEMP/check.log" 2>&1; then
               echo "passed=true" >> "$GITHUB_OUTPUT"
               break
             fi
