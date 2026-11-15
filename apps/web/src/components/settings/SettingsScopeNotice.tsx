@@ -16,6 +16,8 @@ import { useSettingsScope } from "./SettingsScopeContext";
 import { WorkspaceProjectSections } from "../telescope/TelescopeProjectWorkspace";
 import type { SettingsScopeSearch } from "./settingsScope";
 import {
+  projectScopeMenuGroups,
+  selectProjectAxis,
   settingsScopeEnvironmentAddress,
   settingsScopeEnvironmentLabels,
   settingsScopeProjectMachines,
@@ -60,10 +62,8 @@ export function SettingsScopeNotice({
     target === "checkout"
       ? groups.filter((group) => !search.project || group.projectKey === search.project)
       : [null];
-  const renderChoices = (
-    group: SidebarProjectSnapshot | null,
-    projectGroups: readonly SidebarProjectSnapshot[] = groups,
-  ) => {
+  const projectGroups = projectScopeMenuGroups(groups, search);
+  const renderChoices = (group: SidebarProjectSnapshot | null) => {
     const choices: ScopeChoice[] = group
       ? group.memberProjects.map((member) => {
           const environment = environments.find(
@@ -91,7 +91,7 @@ export function SettingsScopeNotice({
             label: group.displayName,
             secondary: [
               ...(group.archived ? [t("settings.parallelA.archivedBadge")] : []),
-              ...(groups.some(
+              ...(projectGroups.some(
                 (other) =>
                   other.projectKey !== group.projectKey && other.displayName === group.displayName,
               )
@@ -100,7 +100,7 @@ export function SettingsScopeNotice({
               group.workspaceRoot,
             ].join(" · "),
             icon: <ProjectFavicon project={group} className="size-4 shrink-0" />,
-            search: { project: group.projectKey },
+            search: selectProjectAxis(search, group.projectKey),
           }))
         : target === "environment"
           ? environments
