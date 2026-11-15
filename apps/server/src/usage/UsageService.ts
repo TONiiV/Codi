@@ -996,6 +996,8 @@ export const make = Effect.gen(function* () {
     if (!fromMemory) yield* refreshForUnlistedModels(rateModels);
 
     const summaryPricing = pricing();
+    // Taken with the pricing metadata: a refresh during the tier or project lookups swaps `rates`.
+    const summaryRates = rates;
 
     const windowEndMs =
       hourlyWindow?.untilTimeMs ??
@@ -1058,7 +1060,7 @@ export const make = Effect.gen(function* () {
       untilDay: input.untilDay,
       resolution: input.resolution ?? "day",
       ...hourlyWindow,
-      rates,
+      rates: summaryRates,
       priceOverrides,
       modelAliases,
       rateModel: (provider, model) => providerRateModels.get(provider)?.(model),
