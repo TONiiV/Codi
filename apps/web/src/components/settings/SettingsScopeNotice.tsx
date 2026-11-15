@@ -63,7 +63,10 @@ export function SettingsScopeNotice({
       ? groups.filter((group) => !search.project || group.projectKey === search.project)
       : [null];
   const projectGroups = projectScopeMenuGroups(groups, search);
-  const renderChoices = (group: SidebarProjectSnapshot | null) => {
+  const renderChoices = (
+    group: SidebarProjectSnapshot | null,
+    visibleProjectGroups: readonly SidebarProjectSnapshot[] = projectGroups,
+  ) => {
     const choices: ScopeChoice[] = group
       ? group.memberProjects.map((member) => {
           const environment = environments.find(
@@ -87,7 +90,7 @@ export function SettingsScopeNotice({
           };
         })
       : target === "project"
-        ? projectGroups.map((group) => ({
+        ? visibleProjectGroups.map((group) => ({
             label: group.displayName,
             secondary: [
               ...(group.archived ? [t("settings.parallelA.archivedBadge")] : []),

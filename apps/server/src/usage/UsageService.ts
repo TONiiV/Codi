@@ -997,19 +997,6 @@ export const make = Effect.gen(function* () {
 
     const summaryPricing = pricing();
 
-    const aggregator = new UsageAggregator({
-      timeZone: input.timeZone,
-      sinceDay: input.sinceDay,
-      untilDay: input.untilDay,
-      resolution: input.resolution ?? "day",
-      ...hourlyWindow,
-      rates,
-      priceOverrides,
-      modelAliases,
-      rateModel: (provider, model) => providerRateModels.get(provider)?.(model),
-      ...(input.modelFilter === undefined ? {} : { modelFilter: input.modelFilter }),
-    });
-
     const windowEndMs =
       hourlyWindow?.untilTimeMs ??
       Date.parse(`${input.untilDay}T00:00:00Z`) + 86400000 + MTIME_SLACK_MS;
@@ -1072,8 +1059,9 @@ export const make = Effect.gen(function* () {
       resolution: input.resolution ?? "day",
       ...hourlyWindow,
       rates,
-      priceOverrides: createOverrideRateTable(settings.usagePriceOverrides),
-      modelAliases: resolveModelAliases(settings.usageModelAliases),
+      priceOverrides,
+      modelAliases,
+      rateModel: (provider, model) => providerRateModels.get(provider)?.(model),
       projectBySession,
       ...(input.modelFilter === undefined ? {} : { modelFilter: input.modelFilter }),
     });
