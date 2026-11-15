@@ -1,7 +1,7 @@
 import { OrchestratorMcpFailure, Telescope, ThreadId } from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
 import * as Struct from "effect/Struct";
-import { Tool, Toolkit } from "effect/ai";
+import { McpSchema, Tool, Toolkit } from "effect/ai";
 
 import * as ThreadManagementService from "../../../orchestration-v2/ThreadManagementService.ts";
 import * as AgentService from "../../../telescope/AgentService.ts";
@@ -49,7 +49,8 @@ const boardTool = <
     .annotate(Tool.Readonly, options.readonly)
     .annotate(Tool.Destructive, false)
     .annotate(Tool.Idempotent, false)
-    .annotate(Tool.OpenWorld, false);
+    .annotate(Tool.OpenWorld, false)
+    .annotate(McpSchema.EnabledWhen, McpInvocationContext.hiddenFromOutsideClients);
 
 // #15 (2026-11-03): agents read the board as data, never as instructions.
 const BOARD_TEXT =
