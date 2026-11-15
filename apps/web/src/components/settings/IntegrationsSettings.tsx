@@ -331,7 +331,7 @@ const rotateViewport = (
 function BrowserViewportSetting({ disabled }: { readonly disabled: boolean }) {
   const { t } = useTranslation();
   const viewport = useClientSettings((settings) => settings.browserDefaultViewport);
-  const updateSettings = useUpdatePrimarySettings();
+  const updateSettings = useUpdateScopedSettings();
 
   const sized = viewport._tag === "fill" ? null : viewport;
   const presentedSize = {
@@ -378,6 +378,7 @@ function BrowserViewportSetting({ disabled }: { readonly disabled: boolean }) {
   return (
     <SettingsRow
       {...searchableSetting("browser-default-viewport", t)}
+      devicePreference
       description={t("settings.text.tabSizeForYouAndAgents")}
       resetAction={
         !disabled && viewport._tag !== DEFAULT_BROWSER_VIEWPORT._tag ? (
@@ -484,11 +485,12 @@ function BrowserViewportSetting({ disabled }: { readonly disabled: boolean }) {
 function BrowserZoomSetting({ disabled }: { readonly disabled: boolean }) {
   const { t } = useTranslation();
   const zoomFactor = useClientSettings((settings) => settings.browserDefaultZoomFactor);
-  const updateSettings = useUpdatePrimarySettings();
+  const updateSettings = useUpdateScopedSettings();
 
   return (
     <SettingsRow
       {...searchableSetting("browser-default-zoom", t)}
+      devicePreference
       description={t("settings.text.pageZoomAppliedToNewBrowser")}
       resetAction={
         !disabled && zoomFactor !== DEFAULT_PREVIEW_ZOOM_FACTOR ? (
@@ -532,11 +534,12 @@ function BrowserZoomSetting({ disabled }: { readonly disabled: boolean }) {
 function BrowserAppearanceSetting({ disabled }: { readonly disabled: boolean }) {
   const { t } = useTranslation();
   const appearance = useClientSettings((settings) => settings.browserDefaultAppearance);
-  const updateSettings = useUpdatePrimarySettings();
+  const updateSettings = useUpdateScopedSettings();
 
   return (
     <SettingsRow
       {...searchableSetting("browser-default-appearance", t)}
+      devicePreference
       description={t("settings.text.theColorSchemePagesAreTold")}
       resetAction={
         !disabled && appearance !== DEFAULT_PREVIEW_APPEARANCE ? (
@@ -580,11 +583,12 @@ function BrowserRecordingInputSettings({ disabled }: { readonly disabled: boolea
   const { t } = useTranslation();
   const showKeys = useClientSettings((settings) => settings.browserRecordingShowKeyPresses);
   const showMouse = useClientSettings((settings) => settings.browserRecordingShowMousePresses);
-  const updateSettings = useUpdatePrimarySettings();
+  const updateSettings = useUpdateScopedSettings();
   return (
     <>
       <SettingsRow
         {...searchableSetting("browser-recording-key-presses", t)}
+        devicePreference
         description={t("settings.text.showPressedKeysAndShortcutsIn")}
         control={
           <Switch
@@ -599,6 +603,7 @@ function BrowserRecordingInputSettings({ disabled }: { readonly disabled: boolea
       />
       <SettingsRow
         {...searchableSetting("browser-recording-mouse-presses", t)}
+        devicePreference
         description={t("settings.text.highlightMousePressesAndHeldButtons")}
         control={
           <Switch
@@ -618,11 +623,12 @@ function BrowserRecordingInputSettings({ disabled }: { readonly disabled: boolea
 function BrowserRecordingFrameRateSetting({ disabled }: { readonly disabled: boolean }) {
   const { t } = useTranslation();
   const frameRate = useClientSettings((settings) => settings.browserRecordingFrameRate);
-  const updateSettings = useUpdatePrimarySettings();
+  const updateSettings = useUpdateScopedSettings();
 
   return (
     <SettingsRow
       {...searchableSetting("browser-recording-frame-rate", t)}
+      devicePreference
       description={t("settings.text.maximumRecordingRate30FpsSaves")}
       resetAction={
         !disabled && frameRate !== DEFAULT_BROWSER_RECORDING_FRAME_RATE ? (
@@ -673,11 +679,12 @@ const linkTargetLabel = (target: BrowserLinkTarget, t: TFunction): string =>
 function BrowserLinkTargetSetting({ disabled }: { readonly disabled: boolean }) {
   const { t } = useTranslation();
   const linkTarget = useClientSettings((settings) => settings.browserLinkTarget);
-  const updateSettings = useUpdatePrimarySettings();
+  const updateSettings = useUpdateScopedSettings();
 
   return (
     <SettingsRow
       {...searchableSetting("browser-link-target", t)}
+      devicePreference
       description={t("settings.text.whereLinksInTheChatAnd")}
       resetAction={
         !disabled && linkTarget !== DEFAULT_BROWSER_LINK_TARGET ? (
@@ -737,12 +744,13 @@ function BrowserSearchEngineSetting() {
   const { t } = useTranslation();
   const engine = useClientSettings((settings) => settings.browserSearchEngine);
   const customUrl = useClientSettings((settings) => settings.browserCustomSearchUrl);
-  const updateSettings = useUpdatePrimarySettings();
+  const updateSettings = useUpdateScopedSettings();
 
   return (
     <>
       <SettingsRow
         {...searchableSetting("browser-search-engine", t)}
+        devicePreference
         description={t("settings.text.whatTheAddressBarSearchesWhen")}
         resetAction={
           engine !== DEFAULT_BROWSER_SEARCH_ENGINE || customUrl !== "" ? (
@@ -787,6 +795,7 @@ function BrowserSearchEngineSetting() {
       {engine === "custom" ? (
         <SettingsRow
           title={t("settings.text.customSearchUrl")}
+          devicePreference
           description={t("settings.text.useSWhereTheSearchTerms")}
           status={
             isValidSearchUrlTemplate(customUrl)
@@ -1119,11 +1128,12 @@ function AgentBrowserAccessSetting() {
 function BrowserAutoShowFloatingPreviewSetting({ disabled }: { readonly disabled: boolean }) {
   const { t } = useTranslation();
   const autoShow = useClientSettings((settings) => settings.browserAutoShowFloatingPreview);
-  const updateSettings = useUpdatePrimarySettings();
+  const updateSettings = useUpdateScopedSettings();
 
   return (
     <SettingsRow
       {...searchableSetting("browser-auto-show-floating-preview", t)}
+      devicePreference
       description={t("settings.text.showTheFloatingPreviewWhenAn")}
       resetAction={
         !disabled && autoShow !== DEFAULT_BROWSER_AUTO_SHOW_FLOATING_PREVIEW ? (
@@ -1156,7 +1166,12 @@ function BrowserProfilesSetting({ disabled }: { readonly disabled: boolean }) {
   const userProfiles = useClientSettings((settings) => settings.browserProfiles);
   const defaultProfileId = useClientSettings((settings) => settings.browserDefaultProfileId);
   const settingsHydrated = useClientSettingsHydrated();
+  // Profile edits pair with profile data on disk, so they save for this device in every scope.
   const updateSettings = useUpdatePrimarySettings();
+  const updateDefaultProfile = useUpdateScopedSettings();
+  const { scope } = useSettingsScope();
+  // The default profile is a device preference, which a project cannot override.
+  const defaultProfileReadOnly = scope.kind === "project" || scope.kind === "checkout";
   const { environments, isReady: environmentsReady } = useEnvironments();
   const primaryEnvironment = usePrimaryEnvironment();
   // Cookie import runs on this desktop, whose policy the primary environment reports.
@@ -1476,10 +1491,10 @@ function BrowserProfilesSetting({ disabled }: { readonly disabled: boolean }) {
                 </MenuTrigger>
                 <MenuPopup align="end">
                   <MenuItem
-                    disabled={!settingsHydrated || isDefault}
+                    disabled={!settingsHydrated || isDefault || defaultProfileReadOnly}
                     onClick={() => {
                       if (settingsHydrated) {
-                        updateSettings({ browserDefaultProfileId: profile.id });
+                        updateDefaultProfile({ browserDefaultProfileId: profile.id });
                       }
                     }}
                   >
