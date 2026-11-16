@@ -86,14 +86,24 @@ export const moveLegacyCodiMigrations = Effect.fn("moveLegacyCodiMigrations")(fu
 
 const run = Migrator.make({});
 
-export const runCodiMigrations = (throughId?: number) =>
-  run({
+// Skip the migrator when nothing is pending: it takes the write lock even for a no-op.
+export const runCodiMigrations = Effect.fn("runCodiMigrations")(function* (throughId?: number) {
+  const sql = yield* SqlClient.SqlClient;
+  const wanted = codiMigrationEntries.filter(([id]) => throughId === undefined || id <= throughId);
+  const tables = yield* sql`
+    SELECT name FROM sqlite_master WHERE type = 'table' AND name = ${CODI_MIGRATIONS_TABLE}
+  `;
+  if (tables.length > 0) {
+    const [latest] = yield* sql<{
+      readonly id: number | null;
+    }>`SELECT MAX(migration_id) AS id FROM ${sql(CODI_MIGRATIONS_TABLE)}`;
+    const latestId = latest?.id ?? 0;
+    if (wanted.every(([id]) => id <= latestId)) return [];
+  }
+  return yield* run({
     table: CODI_MIGRATIONS_TABLE,
     loader: Migrator.fromRecord(
-      Object.fromEntries(
-        codiMigrationEntries
-          .filter(([id]) => throughId === undefined || id <= throughId)
-          .map(([id, name, migration]) => [`${id}_${name}`, migration]),
-      ),
+      Object.fromEntries(wanted.map(([id, name, migration]) => [`${id}_${name}`, migration])),
     ),
   });
+});
