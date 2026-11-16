@@ -1,5 +1,5 @@
 import { MISSING_FILE_ACCESS_MESSAGE } from "@t3tools/client-runtime/state/assets";
-import { EnvironmentId, ThreadId } from "@t3tools/contracts";
+import { EnvironmentId, ProjectId, ThreadId } from "@t3tools/contracts";
 import { AsyncResult } from "effect/reactivity";
 import { type ReactElement } from "react";
 import { describe, expect, it, vi } from "vite-plus/test";
@@ -9,7 +9,11 @@ import { act, render } from "../../test/render";
 import "../index.css";
 
 import { filesystemEnvironment } from "../state/filesystem";
-import { useRightPanelStore } from "../rightPanelStore";
+import {
+  selectThreadRightPanelState,
+  telescopePanelRef,
+  useRightPanelStore,
+} from "../rightPanelStore";
 import { remarkEnableOrderedListNumbers } from "@t3tools/shared/markdownPipeline";
 import { setMarkdownTaskChecked } from "@t3tools/shared/markdownTaskList";
 import { HostImageUrlContext } from "./chat/hostImageUrl";
@@ -134,6 +138,7 @@ vi.mock(import("../hooks/useSettings"), async (original) => {
 
 import ChatMarkdown from "./ChatMarkdown";
 import { chatMarkdownClipboardPayload } from "../markdown-clipboard";
+import { FileMountContext } from "./files/fileMount";
 import { AudioPreview } from "./files/AudioPreview";
 
 it("keeps compact audio playback loaded across signed URL renewals", async () => {
@@ -525,6 +530,32 @@ describe("ChatMarkdown workspace file opens", () => {
 
     expect(openFile).toHaveBeenCalledExactlyOnceWith(threadRef, "/elsewhere/b.md", 9);
     expect(workspaceSearch).toHaveBeenCalledOnce();
+  });
+
+  it("opens a link in a file shown in Telescope's Files as a tab of that file's mount", async () => {
+    setup();
+    useRightPanelStore.setState({ byThreadKey: {} });
+    const panel = telescopePanelRef(EnvironmentId.make("workspace"));
+    await using screen = await render(
+      <FileMountContext value={ProjectId.make("app")}>
+        <ChatMarkdown
+          cwd="/work/app"
+          text="[Host](/work/docs/secret.md) [Up](../docs/secret.md) [Sibling](/work/app-old/x.md) [Guide](/work/app/docs/guide.md)"
+          threadRef={panel}
+        />
+      </FileMountContext>,
+    );
+    using openFile = vi.spyOn(useRightPanelStore.getState(), "openFile");
+    // A link that leaves the mount is not the panel's to open; it takes the editor's path.
+    for (const link of screen.container.querySelectorAll("a")) await act(async () => link.click());
+    expect(openFile.mock.calls.map(([, path]) => path)).toEqual(["docs/guide.md"]);
+    await vi.waitFor(() =>
+      expect(
+        selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, panel).surfaces.map(
+          (surface) => surface.id,
+        ),
+      ).toEqual(["file:app:docs/guide.md"]),
+    );
   });
 });
 

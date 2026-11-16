@@ -1,5 +1,5 @@
 import { scopeThreadRef } from "@t3tools/client-runtime/environment";
-import { type EnvironmentId, RunId, Telescope, ThreadId } from "@t3tools/contracts";
+import { type EnvironmentId, ProjectId, RunId, Telescope, ThreadId } from "@t3tools/contracts";
 import { beforeEach, describe, expect, it } from "vite-plus/test";
 
 import { useClosedViewStore } from "./closedViewStore";
@@ -9,6 +9,7 @@ import {
   migratePersistedRightPanelState,
   pullRequestSurface,
   pullRequestSurfaceId,
+  rightPanelOffers,
   selectActiveRightPanel,
   selectActiveRightPanelSurface,
   selectThreadPanelVisibility,
@@ -73,10 +74,22 @@ describe("rightPanelStore", () => {
       );
     expect(kinds()).toEqual(["side-chat"]);
     store.open(panel, "preview");
+    // A file tab there resolves against the mount its Files browser shows, which a bare path names none of.
+    expect(rightPanelOffers(refB, "file")).toBe(false);
+    store.open(panel, "files");
+    store.openFile(panel, ".", undefined, ProjectId.make("app"));
+    store.openAttachment(refB, {
+      type: "file",
+      id: "att1",
+      name: "notes.md",
+      mimeType: "text/markdown",
+      sizeBytes: 3,
+    });
     const workspaceId = Telescope.WorkspaceId.make("w");
     store.openTask(panel, { workspaceId, taskId: Telescope.TaskId.make("t1") });
     store.openTask(panel, { workspaceId, taskId: Telescope.TaskId.make("t2") });
-    expect(kinds()).toEqual(["side-chat", "preview", "task", "task"]);
+    // An attachment names no mount, so it leaves the project's explorer in place.
+    expect(kinds()).toEqual(["side-chat", "preview", "files", "file", "task", "task"]);
     unhost();
   });
 
@@ -872,6 +885,71 @@ describe("rightPanelStore", () => {
       revealLine: null,
       revealRequestId: 1,
     });
+  });
+
+  it("binds a Telescope file tab, its folder walks and its explorer to the mount it was opened from", () => {
+    const store = useRightPanelStore.getState();
+    const app = ProjectId.make("app");
+    const docs = ProjectId.make("docs");
+    const run = (
+      environmentId: string,
+      steps: (panel: ReturnType<typeof telescopePanelRef>) => void,
+    ) => {
+      const panel = telescopePanelRef(environmentId as EnvironmentId);
+      steps(panel);
+      const state = selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, panel);
+      return [state.activeSurfaceId, ...state.surfaces.map((surface) => surface.id)];
+    };
+
+    expect(
+      run("env-1", (panel) => {
+        store.openFile(panel, "src/app.ts", undefined, app);
+        store.openFile(panel, "src/app.ts", undefined, docs);
+        store.navigateFolder(
+          panel,
+          selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, panel)
+            .activeSurfaceId!,
+          "src",
+          "src/app.ts",
+        );
+        store.openFile(panel, ".", undefined, app);
+        store.openFile(panel, ".", undefined, docs);
+      }),
+    ).toEqual(["files:docs", "file:app:src/app.ts", "file:docs:src", "files:app", "files:docs"]);
+    // The root of a folder tab is its own project's explorer, not another project's.
+    expect(
+      run("env-2", (panel) => {
+        store.openFile(panel, "src", undefined, app);
+        store.openFile(panel, ".", undefined, docs);
+        store.navigateFolder(panel, "file:app:src", "", "src");
+      }),
+    ).toEqual(["files:app", "files:app", "files:docs"]);
+    // A file tab keeps its place beside its root, and opening it leaves the other explorer alone.
+    expect(
+      run("env-3", (panel) => {
+        store.openFile(panel, ".", undefined, docs);
+        store.openFile(panel, "src/app.ts", undefined, app);
+        store.navigateFolder(panel, "file:app:src/app.ts", "", "src/app.ts", true);
+      }),
+    ).toEqual(["files:app", "files:docs", "file:app:src/app.ts", "files:app"]);
+    // No opener puts a path outside the mount in its tab: a host path, or one that climbs out.
+    expect(
+      run("env-4", (panel) => {
+        store.openFile(panel, "src/app.ts", undefined, app);
+        for (const outside of [
+          "/work/docs/secret.md",
+          "/work/app-old/x.md",
+          "~/secret.md",
+          "../docs/secret.md",
+          "src/../../docs/secret.md",
+          "..\\docs\\secret.md",
+        ]) {
+          store.openFile(panel, outside, undefined, app);
+          store.navigateFolder(panel, "file:app:src/app.ts", outside, outside, true);
+        }
+        store.openFile(panel, "src/../README.md", undefined, app);
+      }),
+    ).toEqual(["file:app:src/../README.md", "file:app:src/app.ts", "file:app:src/../README.md"]);
   });
 
   it("switches to a tab that already shows the folder instead of replacing it", () => {

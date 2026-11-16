@@ -19,6 +19,7 @@ const state = vi.hoisted(() => ({
   writeFile: vi.fn(),
   assetUrl: { _tag: "Loading" } as import("~/assets/assetUrls").AssetUrlState,
   mintUrl: vi.fn<() => Promise<string | null>>(),
+  stubCodeView: false,
 }));
 
 vi.mock(import("@t3tools/client-runtime/state/runtime"), async (original) => ({
@@ -85,6 +86,28 @@ vi.mock(import("./FileBrowserPanel"), () => ({
 vi.mock(import("../DiffWorkerPoolProvider"), () => ({
   DiffWorkerPoolProvider: ({ children }: { children?: ReactNode }) => <>{children}</>,
 }));
+// Stands in for the code view where a test asks: a click ends a line selection, and the draft
+// comments show as a count.
+vi.mock(import("@pierre/diffs/react"), async (original) => {
+  const actual = await original();
+  return {
+    ...actual,
+    File: ((props: {
+      options: { onLineSelectionEnd: (range: { start: number; end: number }) => void };
+      lineAnnotations: ReadonlyArray<unknown>;
+    }) =>
+      state.stubCodeView ? (
+        <button
+          type="button"
+          onClick={() => props.options.onLineSelectionEnd({ start: 1, end: 1 })}
+        >
+          comments: {props.lineAnnotations.length}
+        </button>
+      ) : (
+        <actual.File {...(props as Parameters<typeof actual.File>[0])} />
+      )) as never,
+  };
+});
 vi.mock(import("./projectFilesQueryState"), async (original) => ({
   ...(await original()),
   useProjectFileQuery: () => ({
@@ -121,6 +144,7 @@ function setup() {
   state.file = null;
   state.optimistic = null;
   state.assetUrl = { _tag: "Loading" };
+  state.stubCodeView = false;
   let mints = 0;
   state.mintUrl.mockReset().mockImplementation(async () => `/assets/report.docx?mint=${++mints}`);
   state.writeFile.mockReset().mockResolvedValue(AsyncResult.success(undefined));
@@ -133,6 +157,16 @@ function setup() {
       }
     },
   };
+}
+
+function sourcePreview(reviewComments: boolean) {
+  state.file = {
+    relativePath: "a.ts",
+    contents: "const a = 1;\n",
+    byteLength: 13,
+    truncated: false,
+  };
+  return <FilePreviewPanel {...filePreview("a.ts").props} reviewComments={reviewComments} />;
 }
 
 function markdownPreview(truncated: boolean, contents = "- [ ] Keep the rest of this file\n") {
@@ -421,5 +455,20 @@ describe("rendered Markdown select all", () => {
     // A toggled checkbox keeps focus on an input inside the preview.
     await userEvent.click(screen.getByRole("checkbox"));
     await expectFileOnlySelection();
+  });
+});
+
+describe("line comments", () => {
+  it("opens a comment on a line selection only where the panel takes review comments", async () => {
+    using _settings = setup();
+    state.stubCodeView = true;
+    for (const [reviewComments, drafts] of [
+      [true, 1],
+      [false, 0],
+    ] as const) {
+      await using screen = await render(sourcePreview(reviewComments));
+      await userEvent.click(screen.getByRole("button", { name: "comments: 0" }));
+      await expect.element(screen.getByText(`comments: ${drafts}`)).toBeVisible();
+    }
   });
 });
