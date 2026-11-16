@@ -210,6 +210,10 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(t3-mobil
   --text-4xs--line-height: 1;
   --text-5xs: 0.4375rem;
   --text-5xs--line-height: 1;
+  /* Notion's 32px page title and 13px property label, between the scale's steps. */
+  --text-title: 2rem;
+  --text-title--line-height: 1.2;
+  --text-label: 0.8125rem;
   /* Motion. drawer is the decelerating curve for surfaces that slide or pop in
      (composer context, pills). */
   --inset-shadow-control-highlight: 0 1px rgb(255 255 255 / 16%);

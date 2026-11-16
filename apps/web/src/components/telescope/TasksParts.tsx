@@ -39,6 +39,16 @@ export function useBoardTarget(): BoardTarget | null {
   return environmentId && current ? { environmentId, workspaceId: current.id } : null;
 }
 
+/** The agents the caller can see, once each: the company list repeats the caller's visible own. */
+export function useBoardAgents({ environmentId, workspaceId }: BoardTarget) {
+  const query = { environmentId, input: { workspaceId } };
+  const agents = [
+    useAtomValue(telescopeBoard.agents(query)),
+    useAtomValue(telescopeBoard.companyAgents(query)),
+  ].flatMap((result) => AsyncResult.getOrElse(result, () => null)?.agents ?? []);
+  return [...new Map(agents.map((agent) => [agent.id, agent])).values()];
+}
+
 export const TASK_STATUS = {
   todo: { label: "未开始", badge: "outline" },
   in_progress: { label: "进行中", badge: "info" },
