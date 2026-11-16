@@ -6,7 +6,7 @@ description: Rules and fix patterns for resolving a merge of pingdotgg/t3code (u
 # Resolve an upstream merge into Codi
 
 This repository is TONiiV/Codi (product name "Codi"), a fork of pingdotgg/t3code (upstream,
-product name "T3 Code"). A nightly job merges upstream into the fork. Scripts have already
+product name "Codi"). A nightly job merges upstream into the fork. Scripts have already
 resolved the conflicts that come only from the Codi rename, and `agentContextBudget.json`.
 What reaches you needs judgment.
 
@@ -18,18 +18,22 @@ What reaches you needs judgment.
 2. **Keep these fork things** on top of upstream's version:
    - Telescope: `apps/server/src/telescope`, `apps/web/src/components/telescope`, Telescope
      RPCs, settings, layers and navigation.
-   - i18n in `apps/web`: a `t("key")` call stays when its key exists in
+   - i18n in `apps/web`: upstream translates with gt-react (`gt("…")`, `msg("…")`, `m(…)`,
+     `<T>`), and the fork moves to it. Where upstream's side uses gt-react, take upstream's side
+     and drop the fork's `t("key")`. Elsewhere a `t("key")` call stays when its key exists in
      `apps/web/src/i18n/locales/en.json`. When upstream reworded that string, update the value in
      `en.json`. Text upstream added stays an English literal: add no keys. Fork helpers take a
-     `t` argument, such as `searchableSetting(id, t)`.
+     `t` argument, such as `searchableSetting(id, t)`. The Language setting is upstream's: a
+     locale code string. The fork's i18next follows it through `resolveLanguage`.
    - The settings search catalog is the exception to "add no keys": every item in
      `settingsSearch.ts` needs `settings.items.<id>` and `settings.itemTerms.<id>` in `en.json`
      and `zh-CN.json`, matching the catalog's title and search terms. An item upstream removed
      loses its keys.
-   - The theme backdrop, brand assets under `brand/`, the language setting, the fork's own
-     `README.md`, and `runs-on: ubuntu-24.04` in workflows.
+   - The theme backdrop, brand assets under `brand/`, the fork's own
+     `README.md`, and in workflows `runs-on: ubuntu-24.04` with a job `timeout-minutes` of 20
+     where upstream has 10: the free runners are slower than upstream's.
 3. **Both sides added different things at the same place:** keep both.
-4. **Write product text as upstream has it ("T3 Code").** A script renames it afterwards.
+4. **Write product text as upstream has it ("Codi").** A script renames it afterwards.
 5. **A fork quarantine** (`// quarantine: #N <why>` above an `it.skip`) on a test upstream
    changed or renamed: take upstream's test and put the same comment and `.skip` on it. If
    upstream deleted that scenario, drop the quarantine.
@@ -55,7 +59,7 @@ text that still needs i18n keys.
 
 - Read all three sides before deciding: `git show :1:<file>` (base), `:2:` (fork), `:3:`
   (upstream). A fork side that differs from the base only by `Codi` where the base says
-  `T3 Code` has no fork change: take upstream's side.
+  `Codi` has no fork change: take upstream's side.
 - i18n files (most of `apps/web/src/components`): take upstream's JSX and logic, then put the
   fork's `t("…")` back on each string whose key exists. Upstream's new hooks, props and
   components come in as they are; keep `const { t } = useTranslation();` in each component that
@@ -68,6 +72,10 @@ text that still needs i18n keys.
   `git checkout --theirs pnpm-lock.yaml` and `vp install --no-frozen-lockfile`.
 - Leave no conflict markers and `git add` every file you resolve. Do not commit, push or switch
   branches.
+- In the nightly job the shell runs one plain command per call: no loops, pipes into scripts,
+  command substitution or script files. Read a side with `git show :2:<file>`, one file at a
+  time. If a command is refused, do the same work with Read, Grep and single git commands; never
+  stop to ask for approval, because nobody can answer.
 
 ## Fixing check:changed failures
 
@@ -86,7 +94,7 @@ Make the smallest change, and confirm it with the same check on the files you ch
 - **`settingsSearch.test.ts`: "locale keys whose English matches the catalog":** fix
   `settings.items.<id>` and `settings.itemTerms.<id>` in `en.json` (and the `zh-CN.json`
   entry) to match `settingsSearch.ts`. Add keys for new items, remove keys of deleted ones.
-- **A test expects `Codi` and gets `T3 Code`, or the reverse:** the rename script changed one
+- **A test expects `Codi` and gets `Codi`, or the reverse:** the rename script changed one
   side only. You cannot edit `scripts/`. Report the file and line instead of changing the test.
 - **A failure that is not caused by the merge** (it also fails on upstream, or needs a
   machine resource): leave it and report it.

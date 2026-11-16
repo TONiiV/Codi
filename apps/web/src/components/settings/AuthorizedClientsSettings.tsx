@@ -220,23 +220,6 @@ const PairingLinkListRow = memo(function PairingLinkListRow({
     value: string;
     kind: "code" | "hosted-link" | "link";
   }>({
-    onCopy: ({ kind }) => {
-      toastManager.add({
-        type: "success",
-        title:
-          kind === "hosted-link"
-            ? t("settings.text.hostedAppLinkCopied")
-            : kind === "link"
-              ? t("settings.text.pairingUrlCopied")
-              : t("settings.text.pairingCodeCopied"),
-        description:
-          kind === "hosted-link"
-            ? t("settings.text.openItInTheBrowserOn")
-            : kind === "link"
-              ? t("settings.text.openItInTheClientYou")
-              : t("settings.text.pasteItIntoAnotherClientTo"),
-      });
-    },
     onError: (error, { value, kind }) => {
       // Captured per attempt so concurrent copies cannot make the dialog
       // reveal a different value than the one that failed.
