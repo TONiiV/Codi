@@ -9,6 +9,7 @@ import * as TestClock from "effect/testing/TestClock";
 
 import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
 import { runMigrations } from "../persistence/Migrations.ts";
+import Migration0099 from "../persistence/Migrations/codi/099_TelescopeLostThreadUnlinks.ts";
 import * as SqlitePersistence from "../persistence/Sqlite.ts";
 import * as TaskBoardService from "./TaskBoardService.ts";
 import * as WorkspaceService from "./WorkspaceService.ts";
@@ -522,9 +523,11 @@ it.layer(layer)("Telescope task board", (it) => {
       assert.deepStrictEqual(reread.threads, [moved]);
 
       // Before 097 the link was a `threadId` field, so the commit log still names it.
-      yield* sql`UPDATE telescope_task_commits
-        SET changed_fields_json = json_set(changed_fields_json, '$.threadId', 't-moved')
-        WHERE task_id = ${task.id}`;
+      const legacyThreadId = (taskId: Telescope.TaskId, threadId: string) =>
+        sql`UPDATE telescope_task_commits
+          SET changed_fields_json = json_set(changed_fields_json, '$.threadId', ${threadId})
+          WHERE task_id = ${taskId}`;
+      yield* legacyThreadId(task.id, "t-moved");
       const added = {
         environmentId: EnvironmentId.make("env-elsewhere"),
         threadId: ThreadId.make("t-added"),
@@ -574,14 +577,46 @@ it.layer(layer)("Telescope task board", (it) => {
       yield* updateOf(ownLink.id, 2, { title: "Own v2" });
       assert.deepStrictEqual((yield* updateOf(ownLink.id, 1, { threads: [] }, agent)).threads, []);
 
+      const link = (taskId: Telescope.TaskId, threadId: string) =>
+        board.linkThread(alice, { workspaceId: a, taskId, ...elsewhere(threadId) });
       const theirs = yield* board.createTask(alice, { workspaceId: a, title: "Theirs" });
-      yield* board.linkThread(alice, { workspaceId: a, taskId: theirs.id, ...elsewhere("t-x") });
+      yield* link(theirs.id, "t-x");
       yield* legacyLink(theirs.id, "t-x");
       const replaced = yield* updateOf(theirs.id, 1, { threads: [elsewhere("t-y")] }, agent);
       assert.deepStrictEqual(
         [replaced.threads, replaced.overwrote?.map((o) => [o.key, o.name])],
         [[elsewhere("t-y")], [["threads", "Alice"]]],
       );
+
+      // Before 097 two tasks named one thread; 097 kept it on the newer one and dropped it here.
+      const lostTo = (threadId: string) =>
+        Effect.gen(function* () {
+          const lost = yield* board.createTask(alice, { workspaceId: a, title: "Lost" });
+          yield* legacyThreadId(lost.id, threadId);
+          yield* TestClock.adjust("1 minute");
+          const kept = yield* board.createTask(alice, { workspaceId: a, title: "Kept" });
+          yield* link(kept.id, threadId);
+          yield* legacyLink(kept.id, threadId);
+          return lost;
+        });
+      const readFirst = yield* lostTo("t-a");
+      const linkedFirst = yield* lostTo("t-b");
+      const read = yield* board.getTask(agent, { workspaceId: a, taskId: readFirst.id });
+      assert.deepStrictEqual([read.threads, read.version], [[], 1]);
+      yield* link(linkedFirst.id, "t-mb");
+      yield* Migration0099;
+      yield* link(readFirst.id, "t-ma");
+      // The agent resends the list it read at version 1, so the member's later link stays.
+      for (const [lost, linked] of [
+        [readFirst, "t-ma"],
+        [linkedFirst, "t-mb"],
+      ] as const) {
+        const resent = yield* updateOf(lost.id, 1, { status: "in_progress", threads: [] }, agent);
+        assert.deepStrictEqual(
+          [resent.threads, resent.overwrote],
+          [[elsewhere(linked)], undefined],
+        );
+      }
     }),
   );
 
