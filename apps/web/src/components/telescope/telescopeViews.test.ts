@@ -33,6 +33,7 @@ function matchedSearch(url: string) {
 describe("telescope view", () => {
   it("deep links to a known view and layout and falls back otherwise", () => {
     expect(matchedSearch("/telescope?view=tasks")).toEqual({ view: "tasks" });
+    expect(matchedSearch("/telescope?view=projects")).toEqual({ view: "projects" });
     expect(matchedSearch("/telescope?view=tasks&layout=board")).toEqual({
       view: "tasks",
       layout: "board",

@@ -3,6 +3,7 @@ import { useLocation } from "@tanstack/react-router";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import {
+  FolderGit2Icon,
   LayoutDashboardIcon,
   ListChecksIcon,
   MessagesSquareIcon,
@@ -35,6 +36,13 @@ const TELESCOPE_VIEWS = [
     emptyTitle: "还没有任务",
     emptyDescription:
       "这个工作区还没有任务。任务由你或你的 agents 创建，所有成员实时看到同一块板。",
+  },
+  {
+    id: "projects",
+    label: "项目",
+    icon: FolderGit2Icon,
+    emptyTitle: "还没有项目",
+    emptyDescription: "这个工作区还没接入项目。接入后，你在每个项目里的 Chief Agent 会列在这里。",
   },
   {
     id: "dashboard",
