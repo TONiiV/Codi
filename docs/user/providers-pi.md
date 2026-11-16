@@ -7,7 +7,7 @@ extensions, skills, context files, and native session history.
 
 1. Install [Pi](https://pi.dev) on the machine running the Codi server. Pi requires Node.js
    22.19 or newer; its platform installers can install Node if needed. Codi supports Pi
-   0.80.5 or newer.
+   0.84.3 or newer.
 2. Run `pi` in a terminal, then `/login` to connect your model provider or configure its API key.
 3. Open Codi Settings, enable Pi, and refresh the provider.
 

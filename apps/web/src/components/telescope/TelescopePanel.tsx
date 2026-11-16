@@ -178,7 +178,6 @@ export function TelescopePanel(props: {
   const serverBrowser = useEnvironmentSupportsServerBrowser(environmentId);
   const browserAvailable = serverBrowser || isPreviewSupportedInRuntime();
   usePreviewSession(open && canOperatePreview && serverBrowser ? panelRef : null);
-  const explicitDiffOpenRef = useRef<ScopedThreadRef | null>(null);
   const closers = useRightPanelSurfaceClose({
     threadRef: panelRef,
     terminalLabelsById: NO_TERMINALS,
@@ -206,7 +205,6 @@ export function TelescopePanel(props: {
     pullRequestsSurfaceAvailable: false,
     gitCwd: null,
     activeProjectCwd: null,
-    explicitDiffOpenRef,
     onDiffPanelOpen: undefined,
     closeRightPanelSurface: closers.closeSurface,
   });

@@ -1,6 +1,6 @@
 import { OrchestratorMcpFailure, Telescope } from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
-import { Tool, Toolkit } from "effect/ai";
+import { McpSchema, Tool, Toolkit } from "effect/ai";
 
 import * as ThreadManagementService from "../../../orchestration-v2/ThreadManagementService.ts";
 import * as MemoryService from "../../../telescope/MemoryService.ts";
@@ -28,7 +28,8 @@ const MemorySearchTool = Tool.make("memory_search", {
   .annotate(Tool.Readonly, true)
   .annotate(Tool.Destructive, false)
   .annotate(Tool.Idempotent, false)
-  .annotate(Tool.OpenWorld, false);
+  .annotate(Tool.OpenWorld, false)
+  .annotate(McpSchema.EnabledWhen, McpInvocationContext.hiddenFromOutsideClients);
 
 const MemoryWriteTool = Tool.make("memory_write", {
   description:
@@ -43,6 +44,7 @@ const MemoryWriteTool = Tool.make("memory_write", {
   .annotate(Tool.Readonly, false)
   .annotate(Tool.Destructive, false)
   .annotate(Tool.Idempotent, false)
-  .annotate(Tool.OpenWorld, false);
+  .annotate(Tool.OpenWorld, false)
+  .annotate(McpSchema.EnabledWhen, McpInvocationContext.hiddenFromOutsideClients);
 
 export const MemoryToolkit = Toolkit.make(MemorySearchTool, MemoryWriteTool);
