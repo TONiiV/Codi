@@ -39,16 +39,6 @@ export function useBoardTarget(): BoardTarget | null {
   return environmentId && current ? { environmentId, workspaceId: current.id } : null;
 }
 
-/** The agents the caller can see, once each: the company list repeats the caller's visible own. */
-export function useBoardAgents({ environmentId, workspaceId }: BoardTarget) {
-  const query = { environmentId, input: { workspaceId } };
-  const agents = [
-    useAtomValue(telescopeBoard.agents(query)),
-    useAtomValue(telescopeBoard.companyAgents(query)),
-  ].flatMap((result) => AsyncResult.getOrElse(result, () => null)?.agents ?? []);
-  return [...new Map(agents.map((agent) => [agent.id, agent])).values()];
-}
-
 export const TASK_STATUS = {
   todo: { label: "未开始", badge: "outline" },
   in_progress: { label: "进行中", badge: "info" },
@@ -77,19 +67,54 @@ export function NeedsYouBadge({ task }: { task: Pick<Telescope.Task, "conflictDe
   );
 }
 
-/** Display names for the agent and member ids the caller can see. */
-export function useBoardNames({ environmentId, workspaceId }: BoardTarget) {
+/** The members and agents the caller can see, and their display names. */
+export function useBoardPeople({ environmentId, workspaceId }: BoardTarget) {
   const query = { environmentId, input: { workspaceId } };
   const mine = useAtomValue(telescopeBoard.agents(query));
   const company = useAtomValue(telescopeBoard.companyAgents(query));
-  const members = AsyncResult.getOrElse(useAtomValue(telescope.members(query)), () => null);
+  const everyone =
+    AsyncResult.getOrElse(useAtomValue(telescope.members(query)), () => null)?.members ?? [];
+  // The company list repeats the caller's own agent.
+  const agents = [
+    ...new Map(
+      [mine, company]
+        .flatMap((result) => AsyncResult.getOrElse(result, () => null)?.agents ?? [])
+        .map((agent) => [agent.id, agent] as const),
+    ).values(),
+  ];
+  // Names keep removed members: decisions and 汇报 still carry their ids. Only the picker drops them.
   const names = new Map<string, string>([
-    ...[mine, company]
-      .flatMap((result) => AsyncResult.getOrElse(result, () => null)?.agents ?? [])
-      .map((agent) => [agent.id, agent.name] as const),
-    ...(members?.members ?? []).map((member) => [member.subjectId, member.displayName] as const),
+    ...agents.map((agent) => [agent.id, agent.name] as const),
+    ...everyone.map((member) => [member.subjectId, member.displayName] as const),
   ]);
-  return (id: string) => names.get(id);
+  return {
+    members: everyone.filter((member) => member.revokedAt === undefined),
+    agents,
+    name: (id: string) => names.get(id),
+  };
+}
+
+/** The caller as a member, and whether it may edit or add tasks; a 只读 member may do neither. */
+export function useTaskAccess(target: BoardTarget) {
+  const { environmentId, workspaceId } = target;
+  const self = useEnvironmentQuery(telescope.get({ environmentId, input: { workspaceId } })).data
+    ?.self;
+  const mayUpdate = useAtomValue(telescopeBoard.updateTask.permissionAtom(environmentId));
+  const mayCreate = useAtomValue(telescopeBoard.createTask.permissionAtom(environmentId));
+  const writer = self !== undefined && self.role !== "viewer";
+  return { self, mayEdit: writer && mayUpdate, mayCreate: writer && mayCreate };
+}
+
+/** 我的: owned by the caller or by one of the caller's own agents. */
+export function isMyTask(
+  task: Pick<Telescope.Task, "ownerSubjectId" | "ownerAgentId">,
+  selfId: string | undefined,
+  myAgentIds: ReadonlySet<string>,
+) {
+  return (
+    (selfId !== undefined && task.ownerSubjectId === selfId) ||
+    (task.ownerAgentId !== undefined && myAgentIds.has(task.ownerAgentId))
+  );
 }
 
 export const errorText = (error: unknown) =>
@@ -104,7 +129,7 @@ const STALE = {
 export function useTaskWrite(target: BoardTarget) {
   const navigate = useNavigate();
   const { environmentId } = target;
-  const names = useBoardNames(target);
+  const names = useBoardPeople(target).name;
   const update = useAtomCommand(telescopeBoard.updateTask, { reportFailure: false });
   return async (task: Telescope.Task, change: Parameters<typeof taskUpdateInput>[1]) => {
     const result = await update({ environmentId, input: taskUpdateInput(task, change) });
@@ -147,23 +172,28 @@ export function useTaskWrite(target: BoardTarget) {
   };
 }
 
-/** Other writes: a refusal surfaces the server's reason instead of failing quietly. */
+/**
+ * Other writes: a refusal surfaces the server's reason instead of failing quietly. `failed` titles
+ * the toast with what was sent, since the control that sent it may be gone by the time it fails.
+ */
 export function useBoardCommand<W, A, E>(
   command: AtomCommand<W, A, E>,
   explain: (error: unknown) => string | null = () => null,
+  failed: (value: W) => string = () => "没有完成",
 ) {
   const run = useAtomCommand(command, { reportFailure: false });
   return async (value: W) => {
     const result = await run(value);
+    const title = failed(value);
     if (result._tag === "Failure" && isAtomCommandInterrupted(result))
-      toastManager.add({ type: "error", title: "没有完成", description: failureText(result) });
+      toastManager.add({ type: "error", title, description: failureText(result) });
     else if (result._tag === "Failure") {
       const error = squashAtomCommandFailure(result);
       const known = explain(error);
       toastManager.add(
         known === null
-          ? { type: "error", title: "没有完成", description: errorText(error) }
-          : { type: "warning", title: "没有完成", description: known },
+          ? { type: "error", title, description: errorText(error) }
+          : { type: "warning", title, description: known },
       );
     }
     return result._tag === "Success";
@@ -186,7 +216,7 @@ export function BoardFrame(props: {
   const error = query.error === null ? null : failureText(AsyncResult.fail(query.failure));
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex items-center gap-1 border-b px-4 py-2">
+      <div className="mx-4 flex h-10 shrink-0 items-center border-b sm:mx-24">
         {props.actions}
         <Button
           size="icon-xs"
@@ -202,7 +232,7 @@ export function BoardFrame(props: {
       {query.data !== null ? (
         <>
           {error === null ? null : (
-            <div className="border-b px-4 py-2">
+            <div className="mx-4 border-b py-2 sm:mx-24">
               <ErrorNote text={`没有读到最新内容：${error}`} onRetry={query.refresh} />
             </div>
           )}

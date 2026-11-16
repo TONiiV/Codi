@@ -35,7 +35,7 @@ import { ErrorNote } from "./TelescopeAccountDialogs";
 import { PropertyRow, TaskPage, time } from "./TaskPage";
 import { telescope, telescopeBoard } from "./telescopeState";
 import { unlinkThreadFromTask } from "./ThreadTaskLink";
-import { type BoardTarget, useBoardAgents, useBoardNames, useTaskWrite } from "./TasksParts";
+import { type BoardTarget, useBoardPeople, useTaskWrite } from "./TasksParts";
 
 export function LeaseField({
   lease,
@@ -246,10 +246,9 @@ export function TaskDetail({ target, taskId }: { target: BoardTarget; taskId: Te
     const handle = window.setTimeout(refreshLease, delay);
     return () => window.clearTimeout(handle);
   }, [lease, dataUpdatedAt, refreshLease]);
-  const names = useBoardNames(target);
+  const { name: names, agents } = useBoardPeople(target);
   const board = { environmentId, input: { workspaceId: target.workspaceId } };
   const self = useEnvironmentQuery(telescope.get(board)).data?.self ?? null;
-  const agents = useBoardAgents(target);
   // A viewer (只读) is refused every write, so it gets the page without controls.
   const member = self !== null && self.role !== "viewer";
   const mayWrite = useAtomValue(telescopeBoard.updateTask.permissionAtom(environmentId)) && member;
