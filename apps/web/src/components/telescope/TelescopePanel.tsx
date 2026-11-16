@@ -51,10 +51,7 @@ import {
   useProjects,
 } from "../../state/entities";
 import { useEnvironmentQuery } from "../../state/query";
-import {
-  primaryServerAvailableEditorsAtom,
-  primaryServerKeybindingsAtom,
-} from "../../state/server";
+import { primaryServerKeybindingsAtom, serverEnvironment } from "../../state/server";
 import { useEnvironmentScope } from "../../state/session";
 import { BackgroundThreadContext } from "../chat/backgroundThread";
 import { ChatRightPanel } from "../chat/ChatRightPanel";
@@ -163,7 +160,8 @@ function FileTab(props: {
   const project = useProject(
     projectId === undefined ? null : scopeProjectRef(panelRef.environmentId, projectId),
   );
-  const availableEditors = useAtomValue(primaryServerAvailableEditorsAtom);
+  const availableEditors =
+    useAtomValue(serverEnvironment.configValueAtom(panelRef.environmentId))?.availableEditors ?? [];
   // The save session re-subscribes, flushing its write, whenever this listener's identity changes.
   const onPendingChange = useStableCallback((relativePath: string, pending: boolean) =>
     props.setPendingSurfaceIds((current) =>
@@ -308,7 +306,6 @@ export function TelescopePanel(props: {
   const serverBrowser = useEnvironmentSupportsServerBrowser(environmentId);
   const browserAvailable = serverBrowser || isPreviewSupportedInRuntime();
   usePreviewSession(open && canOperatePreview && serverBrowser ? panelRef : null);
-  const explicitDiffOpenRef = useRef<ScopedThreadRef | null>(null);
   const closers = useRightPanelSurfaceClose({
     threadRef: panelRef,
     terminalLabelsById: NO_TERMINALS,
@@ -336,7 +333,6 @@ export function TelescopePanel(props: {
     pullRequestsSurfaceAvailable: false,
     gitCwd: null,
     activeProjectCwd: null,
-    explicitDiffOpenRef,
     onDiffPanelOpen: undefined,
     closeRightPanelSurface: closers.closeSurface,
   });

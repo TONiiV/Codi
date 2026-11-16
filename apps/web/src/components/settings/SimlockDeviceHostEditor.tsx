@@ -315,6 +315,7 @@ function SimlockTokenField(props: {
           key={inputKey}
           id={id}
           aria-label={t("settings.text.agentToken")}
+          environmentId={props.environmentId}
           className="min-w-0 flex-1"
           configured={props.token.kind === "saved" && typeof props.saved === "string"}
           value={
