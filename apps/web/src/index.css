@@ -1976,6 +1976,7 @@ html[data-theme-backdrop] [data-slot="sidebar-inset"] {
    row's overflow-x clip and tucks under the card. */
 html[data-theme-backdrop] [data-slot="composer-context-strip"] {
   background: none;
+  -webkit-backdrop-filter: none;
   backdrop-filter: none;
 }
 html[data-theme-backdrop]
@@ -1992,6 +1993,7 @@ html[data-theme-backdrop]
   z-index: -1;
   pointer-events: none;
   border-radius: 1rem;
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
   backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
   mask-image:
     linear-gradient(to right, transparent, #000 1rem, #000 calc(100% - 1rem), transparent),
