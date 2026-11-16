@@ -56,7 +56,7 @@ function parseTelescopeView(raw: unknown): TelescopeView {
   return VISIBLE_TELESCOPE_VIEWS.find((view) => view.id === raw)?.id ?? "tasks";
 }
 
-const TASKS_LAYOUTS = ["table", "board", "decisions"] as const;
+const TASKS_LAYOUTS = ["table", "board", "mine", "decisions"] as const;
 export type TasksLayout = (typeof TASKS_LAYOUTS)[number];
 
 /** The tasks tab rides along every Telescope URL, so switching views keeps it. */
