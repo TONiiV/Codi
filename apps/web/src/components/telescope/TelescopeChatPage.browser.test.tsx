@@ -32,7 +32,10 @@ vi.mock("../../state/query", () => ({
 vi.mock("../../state/use-atom-command", () => ({ useAtomCommand: () => () => undefined }));
 vi.mock("../../state/entities", () => ({ useQuietThreadShell: () => null }));
 vi.mock("../../state/shell", () => ({ useEnvironmentShellStatus: () => null }));
-vi.mock("../../threadRoutes", () => ({ isThreadRouteSnapshotAuthoritative: () => true }));
+vi.mock("../../threadRoutes", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../threadRoutes")>()),
+  isThreadRouteSnapshotAuthoritative: () => true,
+}));
 vi.mock("../ChatView", () => ({ default: () => null }));
 vi.mock("./TelescopeAccountDialogs", () => ({ ErrorNote: () => null }));
 vi.mock("./TelescopeNeedsYou", () => ({

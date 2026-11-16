@@ -502,7 +502,8 @@ describe("board watch", () => {
       // Once a read is answered again the member is back: the watch reopens and each read re-reads.
       yield* fake.setRevoked(false);
       registry.refresh(tasks);
-      expect(yield* nextReads(1)).toEqual(["tasks"]);
+      // A failed read counts as stale, so the refresh and the revalidation each read once.
+      expect(yield* nextReads(2)).toEqual(["tasks", "tasks"]);
       const restored = yield* nextWatch;
       expect(yield* nextReads(4)).toEqual(["decisions", "task:t2", "tasks", "tasks"]);
       yield* Queue.offer(restored, decided);
