@@ -164,7 +164,7 @@ describe("presentConnectionDiagnosis", () => {
     expect(diagnosis?.steps.join(" ")).toContain("t3 auth connect-device approve K7QM-2XFD");
   });
 
-  it("tells a host that refused this device's login to sign in again, not to start T3 Code", () => {
+  it("tells a host that refused this device's login to sign in again, not to start Codi", () => {
     const failure = mapRemoteEnvironmentError(
       new EnvironmentAuthInvalidError({
         code: "auth_invalid",
@@ -173,7 +173,7 @@ describe("presentConnectionDiagnosis", () => {
       }),
     );
     const steps = diagnose(backoff(failure), "direct")?.steps.join(" ");
-    expect(steps).not.toContain("Make sure T3 Code is running");
+    expect(steps).not.toContain("Make sure Codi is running");
     expect(steps).toMatch(/pair|sign in/i);
   });
 
