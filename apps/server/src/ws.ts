@@ -751,10 +751,15 @@ type SplitWsRpc = Extract<
 >;
 const isSplitWsRpc = (rpc: ServerWsRpc): rpc is SplitWsRpc =>
   SPLIT_WS_RPC_PREFIXES.some((prefix) => rpc._tag.startsWith(`${prefix}.`));
-const isOtherWsRpc = (rpc: ServerWsRpc): rpc is Exclude<ServerWsRpc, SplitWsRpc> =>
-  !isSplitWsRpc(rpc);
+type TelescopeWsRpc = Extract<ServerWsRpc, { readonly _tag: `telescope.${string}` }>;
+const isTelescopeWsRpc = (rpc: ServerWsRpc): rpc is TelescopeWsRpc =>
+  rpc._tag.startsWith("telescope.");
+type OtherWsRpc = Exclude<ServerWsRpc, SplitWsRpc | TelescopeWsRpc>;
+const isOtherWsRpc = (rpc: ServerWsRpc): rpc is OtherWsRpc =>
+  !isSplitWsRpc(rpc) && !isTelescopeWsRpc(rpc);
 const serverWsRpcs = Array.from(ServerWsRpcGroup.requests.values());
 const SplitWsRpcGroup = RpcGroup.make(...serverWsRpcs.filter(isSplitWsRpc));
+const TelescopeWsRpcGroup = RpcGroup.make(...serverWsRpcs.filter(isTelescopeWsRpc));
 const OtherWsRpcGroup = RpcGroup.make(...serverWsRpcs.filter(isOtherWsRpc));
 function toAuthAccessStreamEvent(
   change: Exclude<
@@ -3766,10 +3771,13 @@ export const layerWsRpc = (
           ),
       });
       const splitHandlers: Pick<typeof handlers, SplitWsRpc["_tag"]> = handlers;
-      const otherHandlers: Pick<typeof handlers, Exclude<ServerWsRpc, SplitWsRpc>["_tag"]> =
-        handlers;
+      const telescopeHandlers: Pick<typeof handlers, TelescopeWsRpc["_tag"]> = handlers;
+      const otherHandlers: Pick<typeof handlers, OtherWsRpc["_tag"]> = handlers;
       return Context.merge(
-        yield* SplitWsRpcGroup.toHandlers(splitHandlers),
+        Context.merge(
+          yield* SplitWsRpcGroup.toHandlers(splitHandlers),
+          yield* TelescopeWsRpcGroup.toHandlers(telescopeHandlers),
+        ),
         yield* OtherWsRpcGroup.toHandlers(otherHandlers),
       );
     }),
@@ -3907,28 +3915,19 @@ export const layer = Layer.unwrap(
               ),
               Layer.provide(Layer.succeed(PeerLinks.PeerLinks, peerLinks)),
               Layer.provide(Layer.succeed(PeerLinkRequests.PeerLinkRequests, peerLinkRequests)),
-              Layer.provide(
-                Layer.succeed(TelescopeWorkspaces.WorkspaceService, telescopeWorkspaces),
-              ),
-              Layer.provide(Layer.succeed(TelescopeBoard.TaskBoardService, telescopeBoard)),
-              Layer.provide(
-                Layer.merge(
-                  Layer.succeed(TelescopeAgents.AgentService, telescopeAgents),
-                  Layer.succeed(TelescopeAgentRuntime.AgentRuntime, telescopeAgentRuntime),
-                ),
-              ),
-              Layer.provide(Layer.succeed(TelescopeRuns.RunRecordService, telescopeRuns)),
-              Layer.provide(Layer.succeed(TelescopeWakeQueue.WakeQueueService, telescopeWakes)),
+              // One argument: Effect's pipe takes at most 20.
               Layer.provide(
                 Layer.mergeAll(
+                  Layer.succeed(TelescopeWorkspaces.WorkspaceService, telescopeWorkspaces),
+                  Layer.succeed(TelescopeBoard.TaskBoardService, telescopeBoard),
+                  Layer.succeed(TelescopeAgents.AgentService, telescopeAgents),
+                  Layer.succeed(TelescopeAgentRuntime.AgentRuntime, telescopeAgentRuntime),
+                  Layer.succeed(TelescopeRuns.RunRecordService, telescopeRuns),
+                  Layer.succeed(TelescopeWakeQueue.WakeQueueService, telescopeWakes),
                   Layer.succeed(TelescopeTokenSaver.TokenSaverService, telescopeTokenSaver),
                   Layer.succeed(TelescopeAttribution.AttributionService, telescopeAttribution),
                   Layer.succeed(TelescopeBoardChanges.BoardChanges, telescopeBoardChanges),
                   Layer.succeed(TelescopeWorkspaceData.WorkspaceDataService, telescopeData),
-                ),
-              ),
-              Layer.provide(
-                Layer.mergeAll(
                   Layer.succeed(TelescopeGrants.GrantService, telescopeGrants),
                   Layer.succeed(TelescopeToolGateway.ToolGateway, telescopeGateway),
                   Layer.succeed(TelescopeMemory.MemoryService, telescopeMemory),
