@@ -113,7 +113,7 @@ jobs:
           fail() { echo "reason=$1" >> "$GITHUB_OUTPUT"; echo "::error::$1"; exit 1; }
           unmerged() { git diff --name-only --diff-filter=U; }
           # The vp node shim parses package.json, which fails while it holds conflict markers.
-          node=$(node -p process.execPath)
+          PATH="$(dirname "$(node -p process.execPath)"):$PATH"
           # Changes outside these belong to the conflicts; Claude may also touch the locale files.
           outside() { awk 'NR == FNR { c[$0] = 1; next } { split($0, a, "\t") } !(a[2] in c) && a[2] != "pnpm-lock.yaml" && a[2] !~ /^apps\/web\/src\/i18n\/locales\//' "$RUNNER_TEMP/conflicts" -; }
 
@@ -124,7 +124,7 @@ jobs:
             if [ -n "$(git ls-files -u -- "$BUDGET")" ]; then
               git checkout --theirs -- "$BUDGET" && git add -- "$BUDGET"
             fi
-            "$node" scripts/resolve-rebrand-conflicts.mjs > "$RUNNER_TEMP/by-script"
+            node scripts/resolve-rebrand-conflicts.mjs > "$RUNNER_TEMP/by-script"
             echo "Resolved by script: $(wc -l < "$RUNNER_TEMP/by-script") files"
             unmerged > "$RUNNER_TEMP/conflicts"
             if [ -s "$RUNNER_TEMP/conflicts" ]; then
