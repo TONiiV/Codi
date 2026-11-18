@@ -1971,6 +1971,35 @@ html[data-theme-backdrop]
 html[data-theme-backdrop] [data-slot="sidebar-inset"] {
   background-color: color-mix(in srgb, var(--background) 80%, transparent);
 }
+/* The inset's veil already tints the context row, and a box-shaped blur ends in a hard line beside
+   sharp text. The blur moves to a feathered layer on the row's wrapper, which can spread past the
+   row's overflow-x clip and tucks under the card. */
+html[data-theme-backdrop] [data-slot="composer-context-strip"] {
+  background: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+html[data-theme-backdrop]
+  [data-slot="composer-shell"][data-context-row]
+  > div:not([data-slot="composer-host"]) {
+  position: relative;
+}
+html[data-theme-backdrop]
+  [data-slot="composer-shell"][data-context-row]
+  > div:not([data-slot="composer-host"])::before {
+  content: "";
+  position: absolute;
+  inset: -2px -1rem -1rem;
+  z-index: -1;
+  pointer-events: none;
+  border-radius: 1rem;
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
+  mask-image:
+    linear-gradient(to right, transparent, #000 1rem, #000 calc(100% - 1rem), transparent),
+    linear-gradient(to bottom, #000 calc(100% - 1rem), transparent);
+  mask-composite: intersect;
+}
 /* Unveiled edges would show the raw backdrop as bright seams: the sidebar's translucent
    border-r, and the Windows desktop resize strip reserved by #root's padding-right. */
 html[data-theme-backdrop] [data-slot="sidebar-container"] {
