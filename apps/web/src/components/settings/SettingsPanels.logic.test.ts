@@ -1,10 +1,6 @@
 import { DEFAULT_UNIFIED_SETTINGS } from "@t3tools/contracts";
-import { AUTH_SCOPE_OPTIONS } from "@t3tools/shared/authScopeOptions";
 import * as Duration from "effect/Duration";
 import { describe, expect, it } from "vite-plus/test";
-
-import { englishT } from "~/i18n/englishT";
-import { authScopeText } from "./SettingsPanels.enumLabels";
 import {
   autoSettleDaysField,
   type AutoSettleDaysField,
@@ -15,7 +11,6 @@ import {
   failAutoSettleDaysField,
   getChangedBrowserSettingLabels,
   hasChangedBackgroundActivitySettings,
-  responseStreamingModeCopy,
   syncAutoSettleDaysField,
 } from "./SettingsPanels.logic";
 
@@ -98,27 +93,6 @@ describe("getChangedBrowserSettingLabels", () => {
         browserCustomSearchUrl: "https://search.example/?q=%s",
       }),
     ).toEqual(["Search engine"]);
-  });
-});
-
-describe("responseStreamingModeCopy", () => {
-  it("resolves the label and description instead of returning raw keys", () => {
-    expect(responseStreamingModeCopy("turn")).toEqual({
-      label: "Wait for the full response",
-      description: "Text appears once the agent finishes its turn.",
-    });
-    expect(responseStreamingModeCopy("paragraph")).toEqual({
-      label: "Show finished paragraphs",
-      description: "Each paragraph or code block appears as soon as it is complete.",
-    });
-  });
-});
-
-describe("authScopeText", () => {
-  it("has a key for every scope and keeps the shared English copy", () => {
-    for (const { scope, title, description } of AUTH_SCOPE_OPTIONS) {
-      expect(authScopeText(scope, englishT), scope).toEqual({ title, description });
-    }
   });
 });
 

@@ -71,7 +71,7 @@ function Loading() {
   );
 }
 
-// Never called: `panels={false}` drops the diff and shell links that would use them.
+// Never called: an embedded chat has no panel for the diff and shell links that would use them.
 const PANELLESS = { openToolDiff: () => {}, runShellCommand: () => {} };
 
 /** The agent's resident thread once the shell lists it; a deleted or archived one starts over. */
@@ -79,11 +79,11 @@ export function AgentChat({
   environmentId,
   workspace,
   agent,
-  sideChat = false,
 }: {
   environmentId: EnvironmentId;
   workspace: Telescope.Workspace;
   agent: Telescope.Agent;
+  /** Kept for callers; ChatView's `embedded` mode now covers both the page and the side chat. */
   sideChat?: boolean;
 }) {
   const [opened, setOpened] = useState<ThreadId | null>(null);
@@ -119,8 +119,7 @@ export function AgentChat({
         environmentId={environmentId}
         threadId={threadId}
         routeKind="server"
-        panels={false}
-        {...(sideChat ? { embedded: PANELLESS } : { reserveTitleBarControlInset: false })}
+        embedded={PANELLESS}
       />
     );
   // Not loaded yet, or just opened and the lists have not caught up: the shell lists it soon.

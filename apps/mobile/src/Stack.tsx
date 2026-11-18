@@ -173,6 +173,7 @@ const ROUTE_TITLES: Readonly<Record<string, string>> = {
   SettingsEnvironmentAgentBehavior: msg("Threads"),
   SettingsWorktrees: msg("Worktrees"),
   SettingsLabs: msg("Labs"),
+  SettingsTelescope: msg("Telescope"),
   SettingsProviderAccounts: msg("Providers"),
   SettingsEnvironmentMaintenance: msg("Maintenance"),
   SettingsNotifications: msg("Notifications"),
@@ -425,7 +426,7 @@ const SETTINGS_SCREENS = {
   SettingsTelescope: createNativeStackScreen({
     screen: TelescopeRouteScreen,
     linking: "settings/telescope",
-    options: settingsPage("Telescope"),
+    options: settingsPage(),
   }),
   SettingsAuth: createNativeStackScreen({
     screen: SettingsAuthRouteScreen,

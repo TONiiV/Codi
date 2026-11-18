@@ -18,7 +18,11 @@ import type { SetStateAction } from "react";
 import { applyClaudePromptEffortPrefix, resolvePromptInjectedEffort } from "@t3tools/shared/model";
 import { getProviderModelCapabilities } from "../providerModels";
 import { sanitizeThreadErrorMessage, thrownErrorMessage } from "@t3tools/client-runtime/errors";
-import type { EnvironmentThread, ThreadStructure } from "@t3tools/client-runtime/state/shell";
+import type {
+  EnvironmentThread,
+  EnvironmentThreadShell,
+  ThreadStructure,
+} from "@t3tools/client-runtime/state/shell";
 import {
   ANTIGRAVITY_DEFAULT_MODEL,
   PROVIDER_SEND_TURN_MAX_ATTACHMENTS,
@@ -27,6 +31,7 @@ import {
   type ChatFileAttachment,
   type CommandId,
   type EnvironmentId,
+  type ExecutionEnvironmentCapabilities,
   isProviderDriverKind,
   ProjectId,
   type MessageId,
@@ -1647,6 +1652,33 @@ export function deriveAvailableRevertTurnCounts(projection: ThreadStructure | nu
     if (providerTurn?.providerThreadId === providerThread.id) available.add(run.ordinal);
   }
   return available;
+}
+
+/**
+ * Why `thread` cannot start side chats: they do not nest or start from subagents, the server
+ * config is loading (null) or too old, or the viewer cannot change threads. Mirrors the server's
+ * refusal in ThreadForkService; `thread` is a shell or a thread family row.
+ */
+export function sideChatSourceBlock(
+  thread:
+    | (Pick<EnvironmentThreadShell, "lineage"> & {
+        readonly delegatedFrom?: EnvironmentThreadShell["delegatedFrom"] | undefined;
+      })
+    | null,
+  capabilities: Pick<ExecutionEnvironmentCapabilities, "sideChats"> | null,
+  canOperate: boolean,
+): "sideChat" | "subagent" | "loading" | "unsupported" | "forbidden" | null {
+  if (thread?.lineage.sideChat === true) return "sideChat";
+  // A delegated task is a remote thread's subagent.
+  if (
+    thread?.lineage.relationshipToParent === "subagent" ||
+    (thread?.delegatedFrom ?? null) !== null
+  )
+    return "subagent";
+  if (capabilities === null) return "loading";
+  if (capabilities.sideChats !== true) return "unsupported";
+  // Checked last so read-only viewers still see the thread's or server's own reason.
+  return canOperate ? null : "forbidden";
 }
 
 /** An imported native session is bound before it has messages or runs, and its cwd is fixed. */

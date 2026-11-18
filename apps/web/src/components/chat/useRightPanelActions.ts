@@ -68,6 +68,33 @@ interface RightPanelActionsInput {
  * Opening, closing, and arranging the right panel's surfaces: browser, diff, files, pull
  * requests, device, and terminal tabs.
  */
+export function copyFilePathToClipboard(relativePath: string, cwd: string) {
+  if (typeof window === "undefined" || !navigator.clipboard?.writeText) {
+    toastManager.add(
+      stackedThreadToast({
+        type: "error",
+        title: m(msg("Failed to copy path")),
+        description: m(msg("Clipboard API unavailable.")),
+      }),
+    );
+    return;
+  }
+
+  const clipboardPath = formatFilePathForClipboard(
+    relativePath,
+    resolvePathLinkTarget(relativePath, cwd),
+  );
+  void navigator.clipboard.writeText(clipboardPath).then(undefined, (error) => {
+    toastManager.add(
+      stackedThreadToast({
+        type: "error",
+        title: m(msg("Failed to copy path")),
+        description: thrownErrorMessage(error, m) ?? m(msg("An error occurred.")),
+      }),
+    );
+  });
+}
+
 export function useRightPanelActions(input: RightPanelActionsInput) {
   const {
     closeRightPanelSurface,
@@ -255,32 +282,8 @@ export function useRightPanelActions(input: RightPanelActionsInput) {
       useRightPanelStore.getState().moveSurface(activeThreadRef, surfaceId, toIndex);
   };
   const moveRightPanelSurfaceStable = useStableCallback(moveRightPanelSurface);
-  const copyRightPanelFilePath = (relativePath: string) => {
-    if (typeof window === "undefined" || !navigator.clipboard?.writeText) {
-      toastManager.add(
-        stackedThreadToast({
-          type: "error",
-          title: m(msg("Failed to copy path")),
-          description: m(msg("Clipboard API unavailable.")),
-        }),
-      );
-      return;
-    }
-
-    const clipboardPath = formatFilePathForClipboard(
-      relativePath,
-      resolvePathLinkTarget(relativePath, gitCwd ?? activeProjectCwd ?? ""),
-    );
-    void navigator.clipboard.writeText(clipboardPath).then(undefined, (error) => {
-      toastManager.add(
-        stackedThreadToast({
-          type: "error",
-          title: m(msg("Failed to copy path")),
-          description: thrownErrorMessage(error, m) ?? m(msg("An error occurred.")),
-        }),
-      );
-    });
-  };
+  const copyRightPanelFilePath = (relativePath: string) =>
+    copyFilePathToClipboard(relativePath, gitCwd ?? activeProjectCwd ?? "");
   const copyRightPanelFilePathStable = useStableCallback(copyRightPanelFilePath);
   const addPullRequestSurface = () => {
     if (!supportsPullRequests || activeThreadRef === null || pullRequestPanelTarget === null)

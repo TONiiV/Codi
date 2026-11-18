@@ -16,7 +16,6 @@ import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import { msg, T, useGT, useMessages, Var } from "gt-react";
 import { type ReactNode, useEffect, useState } from "react";
-import type { TFunction } from "i18next";
 
 import { m, type MessageResolver } from "../../i18n/messages";
 
@@ -47,37 +46,6 @@ export const accessConfig: Record<
   },
   ...runtimeModeConfig,
 };
-
-const ACCESS_TEXT_KEYS: Record<
-  AuthMcpClientAccess,
-  { readonly label: string; readonly description: string }
-> = {
-  "read-only": {
-    label: "settings.text.readOnly",
-    description: "settings.parallelShared.accessReadOnlyDescription",
-  },
-  "approval-required": {
-    label: "settings.parallelA.runtimeSupervised",
-    description: "settings.parallelA.runtimeSupervisedDesc",
-  },
-  "auto-accept-edits": {
-    label: "settings.parallelA.runtimeAutoAcceptEdits",
-    description: "settings.parallelA.runtimeAutoAcceptEditsDesc",
-  },
-  auto: {
-    label: "settings.parallelA.runtimeAuto",
-    description: "settings.parallelA.runtimeAutoDesc",
-  },
-  "full-access": {
-    label: "settings.parallelA.runtimeFullAccess",
-    description: "settings.parallelA.runtimeFullAccessDesc",
-  },
-};
-
-export function accessText(access: AuthMcpClientAccess, t: TFunction) {
-  const keys = ACCESS_TEXT_KEYS[access];
-  return { label: t(keys.label), description: t(keys.description) };
-}
 
 const ARM_DELAY_MS = 700;
 const UNSAFE_REDIRECT = msg("The environment returned an address this page will not open.");

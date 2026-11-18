@@ -103,9 +103,7 @@ function describeOffer(offer: StartupRecoveryOffer): { text: string; action: str
                 version: offer.version,
               })
             : m(
-                msg(
-                  "Downloading {version} ({percent}%). Codi restarts when the download is done.",
-                ),
+                msg("Downloading {version} ({percent}%). Codi restarts when the download is done."),
                 { version: offer.version, percent: String(Math.floor(offer.percent / 10) * 10) },
               ),
         action: "",
