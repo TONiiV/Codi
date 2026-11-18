@@ -1666,7 +1666,7 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
     }
     const repository = yield* resolveRepositoryPaths(cwd);
     if (repository?.worktreeRoot == null) return null;
-    // The cached branch outlives a checkout made outside T3 Code, so it is read fresh.
+    // The cached branch outlives a checkout made outside Codi, so it is read fresh.
     const currentBranch = needsCurrentBranch
       ? yield* readCurrentBranch("GitVcsDriver.review.currentBranch", cwd)
       : null;
