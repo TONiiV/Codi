@@ -526,7 +526,7 @@ it.layer(layerCodexTextGenerationTest)("CodexTextGeneration", (it) => {
 
   it.effect("identifies codex exec as Codi", () =>
     withFakeCodexEnv(
-      { output: JSON.stringify({ title: "Live title" }), requireOriginator: "Codi" },
+      { output: JSON.stringify({ title: "Live title" }), requireOriginator: "T3 Code" },
       (textGeneration) =>
         Effect.gen(function* () {
           const result = yield* textGeneration.generateThreadTitle({

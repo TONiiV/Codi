@@ -15,7 +15,7 @@ const SKIP_PATH =
 // marker old launchers carry, and the client name sent to providers. Beta, Dev and Nightly are
 // current product names and must be renamed.
 const SKIP_LINE =
-  /T3 Code \(Alpha\)|\/opt\/T3 Code\/|Written by T3 Code|CODEX_CLIENT_NAME|clientInfo/;
+  /T3 Code \(Alpha\)|\/opt\/T3 Code\/|Written by T3 Code|CODEX_CLIENT_NAME|requireOriginator|clientInfo/;
 
 // A recorded transcript keeps its text, except the runtime_info prompt a replay expects the server
 // to send: that is built from the renamed source, so a recording that carries it must match.
