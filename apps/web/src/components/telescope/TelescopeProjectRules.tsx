@@ -27,7 +27,7 @@ import {
   useRoutingNames,
 } from "./telescopeSettingsParts";
 
-export const projectRules = ProjectRules.createTelescopeProjectRuleAtoms(
+const projectRules = ProjectRules.createTelescopeProjectRuleAtoms(
   connectionAtomRuntime,
   telescope.get,
 );
