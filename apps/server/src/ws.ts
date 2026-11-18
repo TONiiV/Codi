@@ -268,6 +268,8 @@ import * as UsageService from "./usage/UsageService.ts";
 import * as TraceDiagnostics from "./diagnostics/TraceDiagnostics.ts";
 import * as TriageService from "./triage/TriageService.ts";
 import * as PullRequestService from "./pullRequest/PullRequestService.ts";
+import * as IssueService from "./issue/IssueService.ts";
+import * as IssueTrackerConnections from "./issue/IssueTrackerConnections.ts";
 import * as PullRequestReviewGuideService from "./pullRequest/PullRequestReviewGuideService.ts";
 import { listLinkedPullRequestThreads } from "./pullRequest/linkedThreads.ts";
 import { pullRequestSyncKey } from "./pullRequest/pullRequestSyncKey.ts";
@@ -735,17 +737,29 @@ const ServerWsRpcGroup = WsRpcGroup.middleware(RpcInstrumentation);
 // crosses TypeScript's instantiation limit and the layer's requirements degrade to
 // `any`, so the handlers are registered as two disjoint, smaller groups.
 type ServerWsRpc = RpcGroup.Rpcs<typeof ServerWsRpcGroup>;
-const SPLIT_WS_RPC_PREFIXES = ["server", "pullRequests", "provider", "orchestration"] as const;
+const SPLIT_WS_RPC_PREFIXES = [
+  "server",
+  "pullRequests",
+  "issues",
+  "issueTrackers",
+  "provider",
+  "orchestration",
+] as const;
 type SplitWsRpc = Extract<
   ServerWsRpc,
   { readonly _tag: `${(typeof SPLIT_WS_RPC_PREFIXES)[number]}.${string}` }
 >;
 const isSplitWsRpc = (rpc: ServerWsRpc): rpc is SplitWsRpc =>
   SPLIT_WS_RPC_PREFIXES.some((prefix) => rpc._tag.startsWith(`${prefix}.`));
-const isOtherWsRpc = (rpc: ServerWsRpc): rpc is Exclude<ServerWsRpc, SplitWsRpc> =>
-  !isSplitWsRpc(rpc);
+type TelescopeWsRpc = Extract<ServerWsRpc, { readonly _tag: `telescope.${string}` }>;
+const isTelescopeWsRpc = (rpc: ServerWsRpc): rpc is TelescopeWsRpc =>
+  rpc._tag.startsWith("telescope.");
+type OtherWsRpc = Exclude<ServerWsRpc, SplitWsRpc | TelescopeWsRpc>;
+const isOtherWsRpc = (rpc: ServerWsRpc): rpc is OtherWsRpc =>
+  !isSplitWsRpc(rpc) && !isTelescopeWsRpc(rpc);
 const serverWsRpcs = Array.from(ServerWsRpcGroup.requests.values());
 const SplitWsRpcGroup = RpcGroup.make(...serverWsRpcs.filter(isSplitWsRpc));
+const TelescopeWsRpcGroup = RpcGroup.make(...serverWsRpcs.filter(isTelescopeWsRpc));
 const OtherWsRpcGroup = RpcGroup.make(...serverWsRpcs.filter(isOtherWsRpc));
 function toAuthAccessStreamEvent(
   change: Exclude<
@@ -1534,6 +1548,8 @@ export const layerWsRpc = (
       const secretRequests = yield* SecretRequests.SecretRequests;
       const guestShares = yield* GuestShareService.GuestShareService;
       const pullRequests = yield* PullRequestService.PullRequestService;
+      const issues = yield* IssueService.IssueService;
+      const issueTrackers = yield* IssueTrackerConnections.IssueTrackerConnections;
       const reviewGuides = yield* PullRequestReviewGuideService.PullRequestReviewGuideService;
       const pullRequestSync = yield* PullRequestSyncReactor.PullRequestSyncReactor;
       const deviceService = yield* DeviceService.DeviceService;
@@ -2024,6 +2040,19 @@ export const layerWsRpc = (
       });
 
       const handlers = ServerWsRpcGroup.of({
+        [WS_METHODS.issuesList]: (input) => issues.list(input),
+        [WS_METHODS.issuesDetail]: (input) => issues.detail(input),
+        [WS_METHODS.issuesComments]: (input) => issues.comments(input),
+        [WS_METHODS.issuesTemplates]: (input) => issues.templates(input),
+        [WS_METHODS.issuesCandidates]: (input) => issues.candidates(input),
+        [WS_METHODS.issuesCreate]: (input) => issues.create(input),
+        [WS_METHODS.issuesComment]: (input) => issues.comment(input),
+        [WS_METHODS.issuesUpdate]: (input) => issues.update(input),
+        [WS_METHODS.issuesSetState]: (input) => issues.setState(input),
+        [WS_METHODS.issuesReact]: (input) => issues.react(input),
+        [WS_METHODS.issueTrackersList]: () => issueTrackers.list,
+        [WS_METHODS.issueTrackersConnect]: (input) => issueTrackers.connect(input),
+        [WS_METHODS.issueTrackersBindProject]: (input) => issueTrackers.bindProject(input),
         [ORCHESTRATION_V2_WS_METHODS.dispatchCommand]: (command) =>
           Effect.annotateCurrentSpan({
             "orchestration_v2.command_id": command.commandId,
@@ -2315,6 +2344,13 @@ export const layerWsRpc = (
                         cause,
                       }),
                     ThreadLaunchBaseRefError: (cause) =>
+                      new OrchestrationV2ThreadLaunchError({
+                        commandId: input.commandId,
+                        projectId: input.projectId,
+                        message: cause.message,
+                        cause,
+                      }),
+                    ThreadLaunchBranchExistsError: (cause) =>
                       new OrchestrationV2ThreadLaunchError({
                         commandId: input.commandId,
                         projectId: input.projectId,
@@ -3218,6 +3254,7 @@ export const layerWsRpc = (
             if (
               input.resource._tag === "attachment" ||
               input.resource._tag === "native-app-icon" ||
+              input.resource._tag === "environment-theme-background" ||
               input.resource._tag === "tool-output-image" ||
               input.resource._tag === SOURCE_CONTROL_MEDIA_ASSET ||
               // A network path is served only from the thread's project, looked up below.
@@ -3734,10 +3771,13 @@ export const layerWsRpc = (
           ),
       });
       const splitHandlers: Pick<typeof handlers, SplitWsRpc["_tag"]> = handlers;
-      const otherHandlers: Pick<typeof handlers, Exclude<ServerWsRpc, SplitWsRpc>["_tag"]> =
-        handlers;
+      const telescopeHandlers: Pick<typeof handlers, TelescopeWsRpc["_tag"]> = handlers;
+      const otherHandlers: Pick<typeof handlers, OtherWsRpc["_tag"]> = handlers;
       return Context.merge(
-        yield* SplitWsRpcGroup.toHandlers(splitHandlers),
+        Context.merge(
+          yield* SplitWsRpcGroup.toHandlers(splitHandlers),
+          yield* TelescopeWsRpcGroup.toHandlers(telescopeHandlers),
+        ),
         yield* OtherWsRpcGroup.toHandlers(otherHandlers),
       );
     }),
@@ -3755,6 +3795,8 @@ export const layer = Layer.unwrap(
     const serverSelfUpdate = yield* ServerSelfUpdate.ServerSelfUpdate;
     const npmRelease = yield* NpmRelease.NpmRelease;
     const pullRequests = yield* PullRequestService.PullRequestService;
+    const issues = yield* IssueService.IssueService;
+    const issueTrackers = yield* IssueTrackerConnections.IssueTrackerConnections;
     const reviewGuides = yield* PullRequestReviewGuideService.PullRequestReviewGuideService;
     const peerLinks = yield* PeerLinks.PeerLinks;
     const peerLinkRequests = yield* PeerLinkRequests.PeerLinkRequests;
@@ -3860,6 +3902,10 @@ export const layer = Layer.unwrap(
               Layer.provide(Layer.succeed(ServerSelfUpdate.ServerSelfUpdate, serverSelfUpdate)),
               // Share server-lifetime PR caches so WS mutations invalidate every client's HTTP diffs.
               Layer.provide(Layer.succeed(PullRequestService.PullRequestService, pullRequests)),
+              Layer.provide(Layer.succeed(IssueService.IssueService, issues)),
+              Layer.provide(
+                Layer.succeed(IssueTrackerConnections.IssueTrackerConnections, issueTrackers),
+              ),
               Layer.provide(OtlpEndpointCheck.layer),
               Layer.provide(
                 Layer.succeed(
@@ -3869,28 +3915,19 @@ export const layer = Layer.unwrap(
               ),
               Layer.provide(Layer.succeed(PeerLinks.PeerLinks, peerLinks)),
               Layer.provide(Layer.succeed(PeerLinkRequests.PeerLinkRequests, peerLinkRequests)),
-              Layer.provide(
-                Layer.succeed(TelescopeWorkspaces.WorkspaceService, telescopeWorkspaces),
-              ),
-              Layer.provide(Layer.succeed(TelescopeBoard.TaskBoardService, telescopeBoard)),
-              Layer.provide(
-                Layer.merge(
-                  Layer.succeed(TelescopeAgents.AgentService, telescopeAgents),
-                  Layer.succeed(TelescopeAgentRuntime.AgentRuntime, telescopeAgentRuntime),
-                ),
-              ),
-              Layer.provide(Layer.succeed(TelescopeRuns.RunRecordService, telescopeRuns)),
-              Layer.provide(Layer.succeed(TelescopeWakeQueue.WakeQueueService, telescopeWakes)),
+              // One argument: Effect's pipe takes at most 20.
               Layer.provide(
                 Layer.mergeAll(
+                  Layer.succeed(TelescopeWorkspaces.WorkspaceService, telescopeWorkspaces),
+                  Layer.succeed(TelescopeBoard.TaskBoardService, telescopeBoard),
+                  Layer.succeed(TelescopeAgents.AgentService, telescopeAgents),
+                  Layer.succeed(TelescopeAgentRuntime.AgentRuntime, telescopeAgentRuntime),
+                  Layer.succeed(TelescopeRuns.RunRecordService, telescopeRuns),
+                  Layer.succeed(TelescopeWakeQueue.WakeQueueService, telescopeWakes),
                   Layer.succeed(TelescopeTokenSaver.TokenSaverService, telescopeTokenSaver),
                   Layer.succeed(TelescopeAttribution.AttributionService, telescopeAttribution),
                   Layer.succeed(TelescopeBoardChanges.BoardChanges, telescopeBoardChanges),
                   Layer.succeed(TelescopeWorkspaceData.WorkspaceDataService, telescopeData),
-                ),
-              ),
-              Layer.provide(
-                Layer.mergeAll(
                   Layer.succeed(TelescopeGrants.GrantService, telescopeGrants),
                   Layer.succeed(TelescopeToolGateway.ToolGateway, telescopeGateway),
                   Layer.succeed(TelescopeMemory.MemoryService, telescopeMemory),

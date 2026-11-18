@@ -1,18 +1,19 @@
+import { useGT } from "gt-react";
 import { useRef } from "react";
 
 import { Textarea } from "../ui/textarea";
-import { SettingsRow, TranslatedSettingResetButton } from "./settingsLayout";
+import { SettingsRow, SettingResetButton } from "./settingsLayout";
 import { useSettingsScope } from "./SettingsScopeContext";
-import { searchableSetting } from "./settingsSearch";
+import { useSearchableSetting } from "./settingsSearch";
 import {
   useScopedSettings,
   useScopedSettingsMixed,
   useUpdateScopedSettings,
 } from "./useScopedSettings";
-import { useTranslation } from "react-i18next";
 
 export function ThreadTitleInstructionsSettings() {
-  const { t } = useTranslation();
+  const gt = useGT();
+  const searchableSetting = useSearchableSetting();
   const settings = useScopedSettings();
   const { targets } = useSettingsScope();
   const scopeKey = targets.map((target) => `${target.environmentId}:${target.projectId}`).join(",");
@@ -24,12 +25,12 @@ export function ThreadTitleInstructionsSettings() {
     <SettingsRow
       serverScoped
       settingKeys={["threadTitleInstructions"]}
-      {...searchableSetting("thread-title-instructions", t)}
-      description={t("settings.text.appendedToThePromptForNew")}
+      {...searchableSetting("thread-title-instructions")}
+      description={gt("Appended to the prompt for new and regenerated thread titles.")}
       resetAction={
         mixed || settings.threadTitleInstructions !== "" ? (
-          <TranslatedSettingResetButton
-            label={t("settings.text.threadTitleInstructions")}
+          <SettingResetButton
+            ariaLabel={gt("Reset thread title instructions to default")}
             onClick={() => updateSettings({ threadTitleInstructions: "" })}
           />
         ) : null
@@ -38,7 +39,7 @@ export function ThreadTitleInstructionsSettings() {
       <div className="mt-3 max-w-2xl pb-3.5">
         <Textarea
           key={`${scopeKey}:${mixed}:${settings.threadTitleInstructions}`}
-          aria-label={t("settings.text.threadTitleInstructions2")}
+          aria-label={gt("Thread title instructions")}
           onChange={() => {
             edited.current = true;
           }}
@@ -46,8 +47,8 @@ export function ThreadTitleInstructionsSettings() {
           defaultValue={mixed ? "" : settings.threadTitleInstructions}
           placeholder={
             mixed
-              ? t("settings.text.mixedEnterInstructionsToApplyTo")
-              : t("settings.text.keepTitlesToAFewWords")
+              ? gt("Mixed. Enter instructions to apply to all selected targets.")
+              : gt("Keep titles to a few words. Lead with the main subject.")
           }
           onBlur={(event) => {
             const value = event.target.value.trim();

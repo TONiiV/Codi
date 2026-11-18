@@ -150,7 +150,7 @@ describe("rightPanelStore", () => {
     useRightPanelStore.getState().show(refA);
     const { storage, name } = useRightPanelStore.persist.getOptions();
     const persisted = await storage!.getItem(name!);
-    await storage!.setItem(name!, { ...persisted!, version: 14 });
+    await storage!.setItem(name!, { ...persisted!, version: 15 });
     await useRightPanelStore.persist.rehydrate();
     expect(
       selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, refA).isOpen,

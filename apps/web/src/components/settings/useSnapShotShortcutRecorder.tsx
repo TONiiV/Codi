@@ -1,9 +1,12 @@
+import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
+import { m } from "~/i18n/messages";
 import {
   isModifierPairShortcut,
   type SnapShotModifier,
   type SnapShotShortcut,
 } from "@t3tools/contracts";
 import { parseKeybindingShortcut } from "@t3tools/shared/keybindings";
+import { useGT } from "gt-react";
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { getDesktopSnapShotBridge } from "../../lib/desktopSnapShot";
 import {
@@ -14,7 +17,6 @@ import { SnapShotShortcutKeys } from "../desktop/SnapShotShortcutKeys";
 import { Button } from "../ui/button";
 import { keybindingFromKeyboardEvent } from "./KeybindingsSettings.logic";
 import { createRecordingRequestTracker } from "./SnapShotSettings.logic";
-import { useTranslation } from "react-i18next";
 
 const MODIFIER_FROM_KEY: Readonly<Record<string, SnapShotModifier>> = {
   Shift: "shift",
@@ -48,7 +50,7 @@ export function useSnapShotShortcutRecorder({
   onStart?: () => void;
   onError: (message: string) => void;
 }) {
-  const { t } = useTranslation();
+  const gt = useGT();
   const bridge = getDesktopSnapShotBridge();
   const displayShortcut = shortcutLabel ? parseDesktopSnapShotShortcut(shortcutLabel) : shortcut;
   const [recording, setRecording] = useState(false);
@@ -73,7 +75,9 @@ export function useSnapShotShortcutRecorder({
       if (!requests.owns(request)) return;
       requests.clear();
       onError(
-        error instanceof Error ? error.message : t("settings.text.couldNotStartShortcutRecording"),
+        error instanceof Error
+          ? (thrownErrorMessage(error, m) ?? error.message)
+          : gt("Could not start shortcut recording."),
       );
     }
   };
@@ -100,7 +104,7 @@ export function useSnapShotShortcutRecorder({
       const [left, right] = MODIFIER_CODES[modifier];
       if (held.has(left) && held.has(right)) {
         if (!allowModifierPairs) {
-          onError(t("settings.text.addALetterNumberOrFunction"));
+          onError(gt("Add a letter, number, or function key to your shortcut."));
           return;
         }
         stopRecording();
@@ -131,10 +135,10 @@ export function useSnapShotShortcutRecorder({
         disabled={disabled}
         aria-label={
           displayShortcut
-            ? t("settings.parallelA.snapShotRecordAria", {
+            ? gt("Record snapshot shortcut, currently {shortcut}", {
                 shortcut: formatSnapShotShortcutLabel(displayShortcut),
               })
-            : t("settings.text.changeSnapshotShortcut")
+            : gt("Change snapshot shortcut")
         }
         aria-pressed={recording}
         data-keybinding-capture=""
@@ -144,11 +148,11 @@ export function useSnapShotShortcutRecorder({
         onBlur={stopRecording}
       >
         {recording ? (
-          t("settings.text.pressShortcut2")
+          gt("Press shortcut…")
         ) : !displayShortcut ? (
-          t("settings.text.changeShortcut")
+          gt("Change shortcut")
         ) : !allowModifierPairs && isModifierPairShortcut(displayShortcut) ? (
-          t("settings.text.chooseShortcut")
+          gt("Choose shortcut")
         ) : (
           <SnapShotShortcutKeys shortcut={displayShortcut} />
         )}

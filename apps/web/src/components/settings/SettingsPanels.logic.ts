@@ -12,7 +12,6 @@ import {
   DEFAULT_UNIFIED_SETTINGS,
   MAX_SIDEBAR_AUTO_SETTLE_AFTER_DAYS,
   MIN_SIDEBAR_AUTO_SETTLE_AFTER_DAYS,
-  type ResponseStreamingMode,
 } from "@t3tools/contracts/settings";
 import {
   getBackgroundActivityBaseProfile,
@@ -22,8 +21,9 @@ import {
 } from "@t3tools/shared/backgroundActivitySettings";
 import * as Duration from "effect/Duration";
 import * as Equal from "effect/Equal";
-import type { TFunction } from "i18next";
-import { englishT } from "~/i18n/englishT";
+import { msg } from "gt-react";
+
+import { m, type MessageResolver } from "../../i18n/messages";
 
 export function isProjectGroupingEnabled(mode: SidebarProjectGroupingMode): boolean {
   return mode !== "separate";
@@ -93,24 +93,24 @@ type TypographySettings = Pick<
 
 export function getChangedTypographySettingLabels(
   settings: TypographySettings,
-  t: TFunction = englishT,
+  resolve: MessageResolver = m,
 ): string[] {
   return [
     ...(settings.fontFamilySans !== DEFAULT_UNIFIED_SETTINGS.fontFamilySans ||
     settings.fontSizeInterface !== DEFAULT_UNIFIED_SETTINGS.fontSizeInterface
-      ? [t("settings.text.interfaceFont")]
+      ? [resolve(msg("Interface font"))]
       : []),
     ...(settings.fontFamilyComposer !== DEFAULT_UNIFIED_SETTINGS.fontFamilyComposer ||
     settings.fontSizePrompt !== DEFAULT_UNIFIED_SETTINGS.fontSizePrompt
-      ? [t("settings.text.promptFont")]
+      ? [resolve(msg("Prompt font"))]
       : []),
     ...(settings.fontFamilyCode !== DEFAULT_UNIFIED_SETTINGS.fontFamilyCode ||
     settings.fontSizeCode !== DEFAULT_UNIFIED_SETTINGS.fontSizeCode
-      ? [t("settings.text.codeFont")]
+      ? [resolve(msg("Code font"))]
       : []),
     ...(settings.fontFamilyTerminal !== DEFAULT_UNIFIED_SETTINGS.fontFamilyTerminal ||
     settings.fontSizeTerminal !== DEFAULT_UNIFIED_SETTINGS.fontSizeTerminal
-      ? [t("settings.text.terminalFont")]
+      ? [resolve(msg("Terminal font"))]
       : []),
   ];
 }
@@ -144,7 +144,7 @@ function isSamePreviewViewport(
 
 export function getChangedBrowserSettingLabels(
   settings: BrowserDefaultSettings,
-  t: TFunction = englishT,
+  resolve: MessageResolver = m,
 ): string[] {
   return [
     ...(isSamePreviewViewport(
@@ -152,33 +152,31 @@ export function getChangedBrowserSettingLabels(
       DEFAULT_UNIFIED_SETTINGS.browserDefaultViewport,
     )
       ? []
-      : [t("settings.text.browserViewport")]),
+      : [resolve(msg("Browser viewport"))]),
     ...(settings.browserDefaultZoomFactor !== DEFAULT_UNIFIED_SETTINGS.browserDefaultZoomFactor
-      ? [t("settings.text.browserZoom")]
+      ? [resolve(msg("Browser zoom"))]
       : []),
     ...(settings.browserDefaultAppearance !== DEFAULT_UNIFIED_SETTINGS.browserDefaultAppearance
-      ? [t("settings.text.browserAppearance")]
+      ? [resolve(msg("Browser appearance"))]
       : []),
     ...(settings.browserRecordingFrameRate !== DEFAULT_UNIFIED_SETTINGS.browserRecordingFrameRate
-      ? [t("settings.text.recordingFrameRate")]
+      ? [resolve(msg("Recording frame rate"))]
       : []),
-    ...(settings.browserRecordingShowKeyPresses ? [t("settings.text.recordingKeyPresses")] : []),
-    ...(settings.browserRecordingShowMousePresses
-      ? [t("settings.text.recordingMousePresses")]
-      : []),
+    ...(settings.browserRecordingShowKeyPresses ? [resolve(msg("Recording key presses"))] : []),
+    ...(settings.browserRecordingShowMousePresses ? [resolve(msg("Recording mouse presses"))] : []),
     ...(settings.browserLinkTarget !== DEFAULT_UNIFIED_SETTINGS.browserLinkTarget
-      ? [t("settings.text.openLinksIn")]
+      ? [resolve(msg("Open links in"))]
       : []),
     ...(settings.browserSearchEngine !== DEFAULT_UNIFIED_SETTINGS.browserSearchEngine ||
     settings.browserCustomSearchUrl !== DEFAULT_UNIFIED_SETTINGS.browserCustomSearchUrl
-      ? [t("settings.text.searchEngine2")]
+      ? [resolve(msg("Search engine"))]
       : []),
     ...(settings.browserAutoShowFloatingPreview !==
     DEFAULT_UNIFIED_SETTINGS.browserAutoShowFloatingPreview
-      ? [t("settings.text.floatingPreview")]
+      ? [resolve(msg("Floating preview"))]
       : []),
     ...(settings.pullRequestLinksOpenInApp !== DEFAULT_UNIFIED_SETTINGS.pullRequestLinksOpenInApp
-      ? [t("settings.text.openPullRequestsInCodi2")]
+      ? [resolve(msg("Open pull requests in Codi"))]
       : []),
   ];
 }
@@ -285,23 +283,6 @@ export function backgroundActivityOverrideSettings(
       overrides: nextOverrides as BackgroundActivitySettings["overrides"],
     },
   };
-}
-
-const RESPONSE_STREAMING_MODE_KEYS = {
-  turn: {
-    label: "settings.parallelA.streamTurn",
-    description: "settings.parallelA.streamTurnDesc",
-  },
-  paragraph: {
-    label: "settings.parallelA.streamParagraph",
-    description: "settings.parallelA.streamParagraphDesc",
-  },
-} as const satisfies Record<ResponseStreamingMode, { label: string; description: string }>;
-
-/** Resolves the copy here so callers cannot render a key map's raw keys. */
-export function responseStreamingModeCopy(mode: ResponseStreamingMode, t: TFunction = englishT) {
-  const keys = RESPONSE_STREAMING_MODE_KEYS[mode];
-  return { label: t(keys.label), description: t(keys.description) };
 }
 
 /**

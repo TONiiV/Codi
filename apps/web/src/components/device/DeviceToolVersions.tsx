@@ -1,14 +1,8 @@
+import { msg, T, useGT, useMessages } from "gt-react";
 import type { ReactNode } from "react";
-import { useTranslation } from "react-i18next";
 import type { DeviceToolVersions as ToolVersions } from "@t3tools/contracts";
 import { InlineButton } from "~/components/ui/button";
 import { Popover, PopoverPopup, PopoverTitle, PopoverTrigger } from "~/components/ui/popover";
-
-const R = "settings.remaining.";
-const TOOL_LABEL_KEYS = {
-  hub: "settings.text.deviceHub",
-  agent: "settings.remaining.agentDevice",
-} as const satisfies Record<keyof ToolVersions, string>;
 
 export function DeviceToolVersions({
   tools,
@@ -23,7 +17,6 @@ export function DeviceToolVersions({
   owner?: string | undefined;
   error?: string | undefined;
 }) {
-  const { t } = useTranslation();
   const selected = kind ? tools?.[kind] : undefined;
   const version =
     selected?.runningVersion ??
@@ -32,18 +25,19 @@ export function DeviceToolVersions({
       : selected?.installedVersions
           .toSorted((a, b) => a.localeCompare(b, undefined, { numeric: true }))
           .at(-1));
-  const label = kind ? t(TOOL_LABEL_KEYS[kind]) : undefined;
+  const gt = useGT();
+  const m = useMessages();
+  const label = kind === "hub" ? msg("Device hub") : msg("Agent device");
   return (
     <Popover>
       <PopoverTrigger
         aria-label={
           kind
-            ? t(`${R}toolStatusAria`, {
-                label,
-                status: version
-                  ? t(`${R}toolVersion`, { version })
-                  : t(selected ? `${R}toolNotInstalled` : `${R}toolVersionUnknown`),
-              })
+            ? version
+              ? gt("{tool}: version {version}. Show details", { tool: m(label), version })
+              : selected
+                ? gt("{tool}: not installed. Show details", { tool: m(label) })
+                : gt("{tool}: version unknown. Show details", { tool: m(label) })
             : undefined
         }
         render={<InlineButton tone="muted" />}
@@ -51,48 +45,56 @@ export function DeviceToolVersions({
         {kind
           ? version
             ? `v${version}`
-            : t(selected ? "settings.text.notInstalled" : `${R}versionUnknown`)
-          : t(error ? `${R}versionsUnavailable` : `${R}versions`)}
+            : selected
+              ? gt("Not installed")
+              : gt("Version unknown")
+          : error
+            ? gt("Versions unavailable")
+            : gt("Versions")}
       </PopoverTrigger>
       <PopoverPopup align="end" width="md">
-        <PopoverTitle>{label ?? t(`${R}deviceTools`)}</PopoverTitle>
+        <PopoverTitle>{kind ? m(label) : gt("Device tools")}</PopoverTitle>
         {tools ? (
           <div className="mt-4 divide-y divide-border/50">
-            {(["hub", "agent"] as const)
-              .filter((name) => !kind || name === kind)
-              .map((name) => {
-                const tool = tools[name];
-                return (
-                  <div key={name} className="space-y-2 py-3 first:pt-0 last:pb-0">
-                    {!kind ? (
-                      <p className="text-xs font-medium">{t(TOOL_LABEL_KEYS[name])}</p>
-                    ) : null}
-                    <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-1 text-xs">
-                      <dt className="text-muted-foreground">{t(`${R}running`)}</dt>
-                      <dd className="text-right font-mono">
-                        {tool.runningVersion ?? t(`${R}notRunning`)}
-                      </dd>
-                      <dt className="text-muted-foreground">{t(`${R}required`)}</dt>
-                      <dd className="text-right font-mono">{tool.requiredVersion}</dd>
-                      <dt className="text-muted-foreground">{t(`${R}installed`)}</dt>
-                      <dd className="text-right font-mono break-words">
-                        {tool.installedVersions.join(", ") || t("settings.text.none")}
-                      </dd>
-                    </dl>
-                  </div>
-                );
-              })}
+            {(
+              [
+                [msg("Device hub"), tools.hub],
+                [msg("Agent device"), tools.agent],
+              ] as const
+            )
+              .filter(([name]) => !kind || name === label)
+              .map(([name, tool]) => (
+                <div key={name} className="space-y-2 py-3 first:pt-0 last:pb-0">
+                  {!kind ? <p className="text-xs font-medium">{m(name)}</p> : null}
+                  <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-1 text-xs">
+                    <dt className="text-muted-foreground">
+                      <T context="running tool version">Running</T>
+                    </dt>
+                    <dd className="text-right font-mono">
+                      {tool.runningVersion ?? gt("Not running")}
+                    </dd>
+                    <dt className="text-muted-foreground">
+                      <T context="required tool version">Required</T>
+                    </dt>
+                    <dd className="text-right font-mono">{tool.requiredVersion}</dd>
+                    <dt className="text-muted-foreground">
+                      <T context="installed tool versions">Installed</T>
+                    </dt>
+                    <dd className="text-right font-mono break-words">
+                      {tool.installedVersions.join(", ") || gt("None", { $context: "no versions" })}
+                    </dd>
+                  </dl>
+                </div>
+              ))}
           </div>
         ) : (
-          <p className="mt-3 text-xs text-muted-foreground">{t(`${R}versionsNotChecked`)}</p>
+          <p className="mt-3 text-xs text-muted-foreground">
+            <T>Versions have not been checked.</T>
+          </p>
         )}
         <p className="mt-4 border-t border-border/50 pt-3 text-xs text-muted-foreground">
-          {owner
-            ? t(`${R}sentencePair`, {
-                first: t(`${R}managedBy`, { owner }),
-                second: t(`${R}toolsUpdateAutomatically`),
-              })
-            : t(`${R}toolsUpdateAutomatically`)}
+          {owner ? `${gt("Managed by {owner}.", { owner })} ` : ""}
+          {gt("Tools update automatically on this host when needed.")}
         </p>
         {error ? (
           <p role="status" className="mt-2 text-xs text-destructive">

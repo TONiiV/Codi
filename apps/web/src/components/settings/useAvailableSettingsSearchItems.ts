@@ -1,5 +1,5 @@
+import { useMessages } from "gt-react";
 import { AuthEnvironmentMaintainScope } from "@t3tools/contracts";
-import { useTranslation } from "react-i18next";
 
 import { usePrimaryCloudLinkState } from "~/cloud/cloudLinkState";
 import { hasCloudPublicConfig } from "~/cloud/publicConfig";
@@ -15,7 +15,6 @@ import { isProviderSettingsEnvironmentAvailable } from "./ProviderSettingsPanel.
 import {
   filterAvailableSettingsSearchItems,
   getThreadAutoSettlementSearchAvailability,
-  localizeSettingsSearchItem,
 } from "./settingsSearch";
 
 export function useAvailableSettingsSearchItems() {
@@ -57,13 +56,13 @@ export function useAvailableSettingsSearchItems() {
   const canManageLocalBackend = !localEnvironmentDisabled && canMaintain;
   const desktopWsl = useEnvironmentQuery(
     isElectron && canManageLocalBackend ? desktopWslStateAtom : null,
+    useMessages(),
   );
   const cloudPublicConfig = hasCloudPublicConfig() === true;
   const wslSettingsRowVisible =
     isWslSettingsRowVisible({ state: desktopWsl.data, error: desktopWsl.error }) === true;
 
-  const { t } = useTranslation();
-  const items = filterAvailableSettingsSearchItems({
+  return filterAvailableSettingsSearchItems({
     localEnvironmentDisabled,
     hasCloudPublicConfig: cloudPublicConfig,
     hasEnvironment,
@@ -77,5 +76,4 @@ export function useAvailableSettingsSearchItems() {
     hasTextGeneratorsEnvironment,
     hasPrimaryEnvironment: primaryEnvironmentId !== null,
   });
-  return items.map((item) => localizeSettingsSearchItem(item, t));
 }

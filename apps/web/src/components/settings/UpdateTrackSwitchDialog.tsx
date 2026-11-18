@@ -1,8 +1,11 @@
+import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
+import { m as resolveMessage } from "~/i18n/messages";
 import { useAtomValue } from "@effect/atom-react";
 import { settlePromise, squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import type { DesktopUpdateChannel } from "@t3tools/contracts";
 import { acceptsTrackSwitchRelease, desktopUpdateChannelOf } from "@t3tools/shared/cliRelease";
 import { isMacPlatform } from "@t3tools/shared/keybindings";
+import { T, useGT, useMessages, Var } from "gt-react";
 import { useState } from "react";
 import { AsyncResult } from "effect/reactivity";
 
@@ -14,6 +17,7 @@ import { npmReleaseAtom, npmReleaseFailureMessage } from "~/state/npmRelease";
 import { downloadLocalUpdate, installLocalUpdate } from "../sidebar/SidebarUpdatePill";
 import { UpdateEverythingDialog } from "../sidebar/UpdateEverythingDialog";
 import {
+  channelSwitchLabel,
   localSwitchBlockReason,
   type ChannelSwitchRelease,
 } from "../sidebar/updateEverything.logic";
@@ -34,7 +38,6 @@ import {
 } from "../ui/alert-dialog";
 import { Button } from "../ui/button";
 import { stackedThreadToast, toastManager } from "../ui/toast";
-import { useTranslation } from "react-i18next";
 
 /** Moves this app and every connected machine to `channel`. */
 export function UpdateTrackSwitchDialog({
@@ -44,29 +47,39 @@ export function UpdateTrackSwitchDialog({
   readonly channel: DesktopUpdateChannel;
   readonly onClose: () => void;
 }) {
-  const { t } = useTranslation();
+  const gt = useGT();
+  const m = useMessages();
   // npm dist-tags match the desktop channel names.
   const release = useAtomValue(npmReleaseAtom(channel));
   if (AsyncResult.isSuccess(release) && release.value !== null) {
     return <SwitchPlan release={{ channel, ...release.value }} onClose={onClose} />;
   }
-  const label = t(channel === "nightly" ? "settings.text.nightly" : "settings.text.stable");
+  const label = channelSwitchLabel(channel, m);
   return (
     <AlertDialog open onOpenChange={(open) => !open && onClose()}>
       <AlertDialogPopup>
         <AlertDialogHeader>
-          <AlertDialogTitle>{t("settings.text.switchToLabel3", { label })}</AlertDialogTitle>
+          <AlertDialogTitle>
+            <T>
+              Switch to <Var>{label}</Var>
+            </T>
+          </AlertDialogTitle>
           <AlertDialogDescription>
             {AsyncResult.isFailure(release)
-              ? npmReleaseFailureMessage(release.cause)
+              ? npmReleaseFailureMessage(release.cause, m)
               : AsyncResult.isSuccess(release)
-                ? t("settings.text.couldNotFindTheLatestLabel", { label })
-                : t("settings.text.checkingReleases")}
+                ? gt(
+                    "Could not find the latest {label} release in this environment's npm registry.",
+                    {
+                      label,
+                    },
+                  )
+                : gt("Checking releases…")}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogClose render={<Button variant="outline" />}>
-            {t("settings.text.cancel")}
+            <T>Cancel</T>
           </AlertDialogClose>
         </AlertDialogFooter>
       </AlertDialogPopup>
@@ -81,7 +94,8 @@ function SwitchPlan({
   readonly release: ChannelSwitchRelease;
   readonly onClose: () => void;
 }) {
-  const { t } = useTranslation();
+  const gt = useGT();
+  const m = useMessages();
   const updateState = useDesktopUpdateState();
   const { environments } = useEnvironments();
   const crossesLocal = desktopUpdateChannelOf(APP_VERSION) !== release.channel;
@@ -90,16 +104,19 @@ function SwitchPlan({
   const switchesLocal = crossesLocal && !updatesOff;
   const [checking, setChecking] = useState(false);
   const everything = useUpdateEverything(switchesLocal ? release.version : null, release);
-  const label = t(release.channel === "nightly" ? "settings.text.nightly" : "settings.text.stable");
-  const idle = nothingToMove({
-    label,
-    channel: release.channel,
-    savedChannel: updateState?.channel ?? null,
-    switchesLocal,
-    crossesLocal,
-    rows: everything.rows,
-    hasTargets: everything.hasUpdates,
-  });
+  const label = channelSwitchLabel(release.channel, m);
+  const idle = nothingToMove(
+    {
+      label,
+      channel: release.channel,
+      savedChannel: updateState?.channel ?? null,
+      switchesLocal,
+      crossesLocal,
+      rows: everything.rows,
+      hasTargets: everything.hasUpdates,
+    },
+    m,
+  );
   // This app's reinstall restarts every server it hosts, so each of their databases must allow it.
   const localBlocked = localSwitchBlockReason(
     APP_VERSION,
@@ -110,6 +127,7 @@ function SwitchPlan({
     })),
     window.desktopBridge?.getLocalEnvironmentBootstraps().length ?? 0,
     !isLocalEnvironmentDisabled(),
+    m,
   );
 
   const run = async () => {
@@ -121,19 +139,15 @@ function SwitchPlan({
       toastManager.add(
         stackedThreadToast({
           type: "error",
-          title: t("settings.text.couldNotSwitchToLabel", { label }),
+          title: gt("Could not switch to {label}", { label }),
           description,
         }),
       );
-    const prepared = await prepareLocalTrackSwitch(
-      bridge,
-      {
-        channel: release.channel,
-        version: release.version,
-        reinstall: switchesLocal,
-      },
-      t,
-    );
+    const prepared = await prepareLocalTrackSwitch(bridge, {
+      channel: release.channel,
+      version: release.version,
+      reinstall: switchesLocal,
+    });
     onClose();
     if (!prepared.ok) {
       fail(prepared.message);
@@ -159,11 +173,15 @@ function SwitchPlan({
                   !acceptsTrackSwitchRelease(downloadedVersion, release.channel, release.version)
                 ) {
                   reportError(
-                    t("settings.text.couldNotInstallUpdate"),
-                    t("settings.parallelSystem.trackSwitchDownloadedBuild", {
-                      downloaded: downloadedVersion ?? t("settings.parallelSystem.nothing"),
-                      version: release.version,
-                    }),
+                    gt("Could not install update"),
+                    downloadedVersion === null
+                      ? gt("This app downloaded nothing, not {version} or newer.", {
+                          version: release.version,
+                        })
+                      : gt("This app downloaded {downloaded}, not {version} or newer.", {
+                          downloaded: downloadedVersion,
+                          version: release.version,
+                        }),
                   );
                   return false;
                 }
@@ -174,7 +192,11 @@ function SwitchPlan({
     );
     if (result._tag === "Failure") {
       const error = squashAtomCommandFailure(result);
-      fail(error instanceof Error ? error.message : t("settings.text.anUnexpectedErrorOccurred"));
+      fail(
+        error instanceof Error
+          ? (thrownErrorMessage(error, resolveMessage) ?? error.message)
+          : gt("An unexpected error occurred."),
+      );
     }
   };
 
@@ -182,30 +204,23 @@ function SwitchPlan({
     <UpdateEverythingDialog
       open
       onOpenChange={(open) => !open && !checking && onClose()}
-      title={t("settings.text.switchToLabel2", { label })}
+      title={gt("Switch to {label}?", { label })}
       version={release.version}
       providerCount={0}
       rows={everything.rows}
       notes={[
         ...(idle.note === null ? [] : [idle.note]),
         ...(crossesLocal && updatesOff
-          ? ["This app's updates are off here, so reinstall it yourself to switch."]
+          ? [gt("This app's updates are off here, so reinstall it yourself to switch.")]
           : []),
-        ...(crossesLocal && updatesOff ? [t("settings.text.thisAppSUpdatesAreOff")] : []),
         ...(switchesLocal && isMacPlatform(navigator.platform)
-          ? [t("settings.text.ifCodiDoesNotReopenAfter")]
+          ? [gt("If Codi does not reopen after it restarts, open it again.")]
           : []),
       ]}
       restarts={everything.restarts}
-      confirmLabel={
-        checking ? t("settings.text.checking") : t("settings.text.switchToLabel3", { label })
-      }
+      confirmLabel={checking ? gt("Checking…") : gt("Switch to {label}", { label })}
       busy={checking}
-      disabledReason={
-        switchesLocal && localBlocked !== null
-          ? t("settings.text.thisAppCannotSwitchLocalblocked", { localBlocked })
-          : idle.disabledReason
-      }
+      disabledReason={switchesLocal && localBlocked !== null ? localBlocked : idle.disabledReason}
       onConfirm={() => void run()}
     />
   );

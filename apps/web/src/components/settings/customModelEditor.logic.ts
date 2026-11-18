@@ -4,8 +4,9 @@ import {
   type ProviderOptionDescriptor,
 } from "@t3tools/contracts";
 import { type CustomModelDefinition, createModelCapabilities } from "@t3tools/shared/model";
-import type { TFunction } from "i18next";
-import { englishT } from "~/i18n/englishT";
+import { msg } from "gt-react";
+
+import { m, type MessageResolver } from "../../i18n/messages";
 
 export interface EditorChoice {
   readonly key: string;
@@ -33,16 +34,16 @@ export interface CustomModelDraft {
 
 export interface DescriptorPreset {
   readonly id: string;
-  readonly labelKey: string;
+  readonly label: string;
   readonly type: "select" | "boolean";
-  readonly choices?: ReadonlyArray<{ id: string; labelKey: string; isDefault?: boolean }>;
+  readonly choices?: ReadonlyArray<{ id: string; label: string; isDefault?: boolean }>;
 }
 
 const EFFORT_CHOICES = [
-  { id: "low", labelKey: "settings.parallelProviders.presetLow" },
-  { id: "medium", labelKey: "settings.parallelProviders.presetMedium", isDefault: true },
-  { id: "high", labelKey: "settings.parallelProviders.presetHigh" },
-  { id: "xhigh", labelKey: "settings.parallelProviders.presetExtraHigh" },
+  { id: "low", label: msg("Low", { $context: "reasoning level" }) },
+  { id: "medium", label: msg("Medium", { $context: "reasoning level" }), isDefault: true },
+  { id: "high", label: msg("High", { $context: "reasoning level" }) },
+  { id: "xhigh", label: msg("Extra High", { $context: "reasoning level" }) },
 ] as const;
 
 export const DESCRIPTOR_PRESETS_BY_KIND: Partial<
@@ -51,66 +52,50 @@ export const DESCRIPTOR_PRESETS_BY_KIND: Partial<
   [ProviderDriverKind.make("codex")]: [
     {
       id: "reasoningEffort",
-      labelKey: "settings.parallelProviders.presetReasoning",
+      label: msg("Reasoning", { $context: "model option name" }),
       type: "select",
       choices: EFFORT_CHOICES,
     },
     {
       id: "serviceTier",
-      labelKey: "settings.parallelProviders.presetSpeed",
+      label: msg("Speed", { $context: "model option name" }),
       type: "select",
       choices: [
-        { id: "default", labelKey: "settings.parallelProviders.presetStandard", isDefault: true },
-        { id: "fast", labelKey: "settings.parallelProviders.presetFast" },
+        { id: "default", label: msg("Standard", { $context: "speed tier" }), isDefault: true },
+        { id: "fast", label: msg("Fast", { $context: "speed tier" }) },
       ],
     },
   ],
   [ProviderDriverKind.make("claudeAgent")]: [
     {
       id: "effort",
-      labelKey: "settings.parallelProviders.presetReasoning",
+      label: msg("Reasoning", { $context: "model option name" }),
       type: "select",
       choices: [
-        { id: "low", labelKey: "settings.parallelProviders.presetLow" },
-        { id: "medium", labelKey: "settings.parallelProviders.presetMedium" },
-        { id: "high", labelKey: "settings.parallelProviders.presetHigh", isDefault: true },
-        { id: "xhigh", labelKey: "settings.parallelProviders.presetExtraHigh" },
-        { id: "max", labelKey: "settings.parallelProviders.presetMax" },
+        { id: "low", label: msg("Low", { $context: "reasoning level" }) },
+        { id: "medium", label: msg("Medium", { $context: "reasoning level" }) },
+        { id: "high", label: msg("High", { $context: "reasoning level" }), isDefault: true },
+        { id: "xhigh", label: msg("Extra High", { $context: "reasoning level" }) },
+        { id: "max", label: msg("Max", { $context: "reasoning level" }) },
       ],
     },
-    {
-      id: "fastMode",
-      labelKey: "settings.parallelProviders.presetFastMode",
-      type: "boolean",
-    },
-    {
-      id: "thinking",
-      labelKey: "settings.parallelProviders.presetThinking",
-      type: "boolean",
-    },
+    { id: "fastMode", label: msg("Fast Mode", { $context: "model option name" }), type: "boolean" },
+    { id: "thinking", label: msg("Thinking", { $context: "model option name" }), type: "boolean" },
   ],
   [ProviderDriverKind.make("cursor")]: [
     {
       id: "reasoning",
-      labelKey: "settings.parallelProviders.presetReasoning",
+      label: msg("Reasoning", { $context: "model option name" }),
       type: "select",
       choices: EFFORT_CHOICES,
     },
-    {
-      id: "fastMode",
-      labelKey: "settings.parallelProviders.presetFastMode",
-      type: "boolean",
-    },
-    {
-      id: "thinking",
-      labelKey: "settings.parallelProviders.presetThinking",
-      type: "boolean",
-    },
+    { id: "fastMode", label: msg("Fast Mode", { $context: "model option name" }), type: "boolean" },
+    { id: "thinking", label: msg("Thinking", { $context: "model option name" }), type: "boolean" },
   ],
   [ProviderDriverKind.make("grok")]: [
     {
       id: "reasoningEffort",
-      labelKey: "settings.parallelProviders.presetReasoning",
+      label: msg("Reasoning", { $context: "model option name" }),
       type: "select",
       choices: EFFORT_CHOICES,
     },
@@ -118,33 +103,33 @@ export const DESCRIPTOR_PRESETS_BY_KIND: Partial<
   [ProviderDriverKind.make("pi")]: [
     {
       id: "thinking",
-      labelKey: "settings.parallelProviders.presetThinking",
+      label: msg("Thinking", { $context: "model option name" }),
       type: "select",
       choices: [
-        { id: "off", labelKey: "settings.parallelProviders.presetOff" },
-        { id: "minimal", labelKey: "settings.parallelProviders.presetMinimal" },
-        { id: "low", labelKey: "settings.parallelProviders.presetLow" },
-        { id: "medium", labelKey: "settings.parallelProviders.presetMedium", isDefault: true },
-        { id: "high", labelKey: "settings.parallelProviders.presetHigh" },
-        { id: "xhigh", labelKey: "settings.parallelProviders.presetExtraHigh" },
-        { id: "max", labelKey: "settings.parallelProviders.presetMax" },
+        { id: "off", label: msg("Off", { $context: "reasoning level" }) },
+        { id: "minimal", label: msg("Minimal", { $context: "reasoning level" }) },
+        { id: "low", label: msg("Low", { $context: "reasoning level" }) },
+        { id: "medium", label: msg("Medium", { $context: "reasoning level" }), isDefault: true },
+        { id: "high", label: msg("High", { $context: "reasoning level" }) },
+        { id: "xhigh", label: msg("Extra High", { $context: "reasoning level" }) },
+        { id: "max", label: msg("Max", { $context: "reasoning level" }) },
       ],
     },
   ],
   [ProviderDriverKind.make("opencode")]: [
     {
       id: "variant",
-      labelKey: "settings.parallelProviders.presetReasoning",
+      label: msg("Reasoning", { $context: "model option name" }),
       type: "select",
       choices: EFFORT_CHOICES,
     },
     {
       id: "agent",
-      labelKey: "settings.parallelProviders.presetAgent",
+      label: msg("Agent", { $context: "model option name" }),
       type: "select",
       choices: [
-        { id: "build", labelKey: "settings.parallelProviders.presetBuild", isDefault: true },
-        { id: "plan", labelKey: "settings.parallelProviders.presetPlan" },
+        { id: "build", label: msg("Build", { $context: "OpenCode agent name" }), isDefault: true },
+        { id: "plan", label: msg("Plan", { $context: "OpenCode agent name" }) },
       ],
     },
   ],
@@ -156,32 +141,21 @@ function newEditorKey(): string {
   return `k${nextKey}`;
 }
 
-export function choiceFromPreset(
-  choice: {
-    id: string;
-    labelKey: string;
-    isDefault?: boolean;
-  },
-  t: TFunction = englishT,
-): EditorChoice {
-  return {
-    key: newEditorKey(),
-    id: choice.id,
-    label: t(choice.labelKey),
-    isDefault: !!choice.isDefault,
-  };
+export function choiceFromPreset(choice: {
+  id: string;
+  label: string;
+  isDefault?: boolean;
+}): EditorChoice {
+  return { key: newEditorKey(), id: choice.id, label: choice.label, isDefault: !!choice.isDefault };
 }
 
-export function descriptorFromPreset(
-  preset: DescriptorPreset,
-  t: TFunction = englishT,
-): EditorDescriptor {
+export function descriptorFromPreset(preset: DescriptorPreset): EditorDescriptor {
   return {
     key: newEditorKey(),
     type: preset.type,
     id: preset.id,
-    label: t(preset.labelKey),
-    choices: (preset.choices ?? []).map((choice) => choiceFromPreset(choice, t)),
+    label: preset.label,
+    choices: (preset.choices ?? []).map(choiceFromPreset),
   };
 }
 
@@ -243,25 +217,32 @@ export function descriptorsFromCapabilities(
     .map(descriptorToEditor);
 }
 
-export function validateDraft(draft: CustomModelDraft, t: TFunction = englishT): string | null {
+export function validateDraft(
+  draft: CustomModelDraft,
+  resolve: MessageResolver = m,
+): string | null {
   const seenIds = new Set<string>();
   for (const [index, descriptor] of draft.descriptors.entries()) {
-    const position = t("settings.parallelProviders.optionNumber", { number: index + 1 });
+    const position = index + 1;
     const id = descriptor.id.trim();
-    if (!id) return t("settings.text.positionNeedsAnId", { position });
-    if (seenIds.has(id)) return t("settings.text.positionIdIdIsUsedTwice", { position, id });
+    if (!id) return resolve(msg("Option {position} needs an id.", { position }));
+    if (seenIds.has(id))
+      return resolve(msg('Option {position}: id "{id}" is used twice.', { position, id }));
     seenIds.add(id);
     if (!descriptor.label.trim())
-      return t("settings.parallelProviders.positionNeedsALabel", { position });
+      return resolve(msg("Option {position} needs a label.", { position }));
     if (descriptor.type !== "select") continue;
     if (descriptor.choices.length === 0)
-      return t("settings.text.positionNeedsAtLeastOneChoice", { position });
+      return resolve(msg("Option {position} needs at least one choice.", { position }));
     const seenChoices = new Set<string>();
     for (const choice of descriptor.choices) {
       const choiceId = choice.id.trim();
-      if (!choiceId) return t("settings.text.positionHasAChoiceWithoutA", { position });
+      if (!choiceId)
+        return resolve(msg("Option {position} has a choice without a value.", { position }));
       if (seenChoices.has(choiceId)) {
-        return t("settings.text.positionChoiceChoiceidIsUsedTwice", { position, choiceId });
+        return resolve(
+          msg('Option {position}: choice "{choiceId}" is used twice.', { position, choiceId }),
+        );
       }
       seenChoices.add(choiceId);
     }

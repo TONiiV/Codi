@@ -1,6 +1,7 @@
 import type { EnvironmentId, SecretProviderConfig, SecretProviderId } from "@t3tools/contracts";
 import * as Result from "effect/Result";
 import { useState } from "react";
+import { T, useGT, useMessages, Var } from "gt-react";
 
 import { useUpdateEnvironmentSettings } from "../../hooks/useSettings";
 import { Button } from "../ui/button";
@@ -20,7 +21,6 @@ import {
   secretProviderFromDraft,
   type SecretProviderDraft,
 } from "./SecretProviderDialog.logic";
-import { useTranslation } from "react-i18next";
 
 /** Mounted per open, so each open starts from a fresh draft. */
 export function SecretProviderDialog({
@@ -36,7 +36,8 @@ export function SecretProviderDialog({
   readonly existingIds: ReadonlySet<string>;
   readonly existing?: { readonly id: SecretProviderId; readonly config: SecretProviderConfig };
 }) {
-  const { t } = useTranslation();
+  const messages = useMessages();
+  const gt = useGT();
   const updateSettings = useUpdateEnvironmentSettings(environmentId);
   const [draft, setDraft] = useState<SecretProviderDraft>(
     existing ? draftFromSecretProvider(existing.config) : { name: "", account: "" },
@@ -46,7 +47,7 @@ export function SecretProviderDialog({
     draft,
     existingIds,
     existing ? { mode: "edit", id: existing.id } : { mode: "add" },
-    t,
+    messages,
   );
   const issues = Result.isFailure(result) ? result.failure : {};
   const nameError = submitted ? issues.name : undefined;
@@ -71,11 +72,14 @@ export function SecretProviderDialog({
         <DialogHeader>
           <DialogTitle>
             {existing
-              ? t("settings.text.editLabel", { label: existing.config.label })
-              : t("settings.text.addA1passwordProvider")}
+              ? gt("Edit {label}", { label: existing.config.label })
+              : gt("Add a 1Password provider")}
           </DialogTitle>
           <DialogDescription>
-            {t("settings.text.providerVariablesOnEnvironmentlabelCanRead", { environmentLabel })}
+            <T>
+              Provider variables on <Var>{environmentLabel}</Var> can read values from it by name.
+              Values are read with the op CLI on that server when a provider starts.
+            </T>
           </DialogDescription>
         </DialogHeader>
         <DialogPanel>
@@ -88,10 +92,12 @@ export function SecretProviderDialog({
             }}
           >
             <div className="grid gap-1.5">
-              <Label htmlFor="secret-provider-name">{t("settings.text.name")}</Label>
+              <Label htmlFor="secret-provider-name">
+                <T>Name</T>
+              </Label>
               <Input
                 id="secret-provider-name"
-                placeholder={t("settings.text.personal")}
+                placeholder={gt("Personal")}
                 value={draft.name}
                 onChange={(event) => update({ name: event.target.value })}
                 maxLength={64}
@@ -112,7 +118,9 @@ export function SecretProviderDialog({
               ) : null}
             </div>
             <div className="grid gap-1.5">
-              <Label htmlFor="secret-provider-account">{t("settings.text.account")}</Label>
+              <Label htmlFor="secret-provider-account">
+                <T>Account</T>
+              </Label>
               <Input
                 id="secret-provider-account"
                 placeholder="my.1password.com"
@@ -135,21 +143,24 @@ export function SecretProviderDialog({
                 </p>
               ) : null}
               <p className="text-xs text-muted-foreground">
-                {t("settings.text.theAccountShorthandSignInAddress")}
+                <T>
+                  The account shorthand, sign-in address without https://, or ID that op account
+                  list shows.
+                </T>
               </p>
             </div>
           </form>
         </DialogPanel>
         <DialogFooter variant="bare">
           <Button variant="outline" onClick={onClose}>
-            {t("settings.text.cancel")}
+            <T>Cancel</T>
           </Button>
           <Button
             type="submit"
             form="secret-provider-form"
             disabled={submitted && Result.isFailure(result)}
           >
-            {existing ? t("settings.text.saveChanges") : t("settings.text.addProvider")}
+            {existing ? gt("Save changes") : gt("Add provider")}
           </Button>
         </DialogFooter>
       </DialogPopup>

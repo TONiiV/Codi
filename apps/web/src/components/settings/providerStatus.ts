@@ -3,13 +3,9 @@ import type {
   ServerProviderVersionAdvisory,
   ServerProviderCompatibilityAdvisory,
 } from "@t3tools/contracts";
-import type {
-  EnvironmentConnectionPhase,
-  EnvironmentConnectionPresentation,
-} from "@t3tools/client-runtime/connection";
-import type { TFunction } from "i18next";
+import { msg } from "gt-react";
 
-import { englishT } from "~/i18n/englishT";
+import { m, type MessageResolver } from "../../i18n/messages";
 
 export const PROVIDER_STATUS_STYLES = {
   disabled: {
@@ -31,6 +27,15 @@ export const PROVIDER_STATUS_STYLES = {
 
 export type ProviderStatusKey = keyof typeof PROVIDER_STATUS_STYLES;
 
+/** The server names a custom endpoint in English; other auth labels are product or plan names. */
+export function providerAuthLabel(
+  auth: Pick<ServerProvider["auth"], "label" | "type">,
+  resolve: MessageResolver = m,
+): string | undefined {
+  if (auth.type === "customEndpoint") return resolve(msg("Custom API endpoint"));
+  return auth.label ?? auth.type;
+}
+
 // Antigravity's local health check verifies installation, not Google sign-in.
 // API-key and Agent Platform warnings still need attention.
 function isAntigravitySignInUnchecked(provider: ServerProvider): boolean {
@@ -51,63 +56,72 @@ export function getProviderStatusKey(provider: ServerProvider | undefined): Prov
   return provider?.status ?? "warning";
 }
 
-export function getProviderSummary(provider: ServerProvider | undefined, t: TFunction = englishT) {
+export function getProviderSummary(
+  provider: ServerProvider | undefined,
+  resolve: MessageResolver = m,
+) {
   if (!provider) {
     return {
-      headline: t("settings.text.checkingProviderStatus"),
-      detail: t("settings.text.waitingForTheServerToReport"),
+      headline: resolve(msg("Checking provider status")),
+      detail: resolve(
+        msg("Waiting for the server to report installation and authentication details."),
+      ),
     };
   }
   if (!provider.enabled || provider.status === "disabled") {
     return {
-      headline: t("settings.text.disabled"),
-      detail: provider.message ?? t("settings.text.thisProviderIsInstalledButDisabled"),
+      headline: resolve(msg("Disabled", { $context: "provider status" })),
+      detail:
+        provider.message ??
+        resolve(msg("This provider is installed but disabled for new sessions in Codi.")),
     };
   }
   if (!provider.installed) {
     return {
-      headline: t("settings.text.notFound"),
-      detail: provider.message ?? t("settings.text.cliNotDetectedOnPath"),
+      headline: resolve(msg("Not found", { $context: "provider status, CLI is missing" })),
+      detail: provider.message ?? resolve(msg("CLI not detected on PATH.")),
     };
   }
   if (provider.auth.status === "unauthenticated") {
-    const authLabel = provider.auth.label ?? provider.auth.type;
+    const authLabel = providerAuthLabel(provider.auth, resolve);
     return {
       headline: authLabel
-        ? t("settings.manual.providerStatus.notAuthenticatedWith", { authLabel })
-        : t("settings.manual.providerStatus.notAuthenticated"),
+        ? resolve(msg("Not authenticated · {method}", { method: authLabel }))
+        : resolve(msg("Not authenticated")),
       detail: provider.message ?? null,
     };
   }
   if (isAntigravitySignInUnchecked(provider)) {
     return {
-      headline: t("settings.text.installedSignInNotChecked"),
+      headline: resolve(msg("Installed · Sign-in not checked")),
       detail: provider.message ?? null,
     };
   }
   if (provider.status === "warning") {
     return {
-      headline: t("settings.text.needsAttention"),
-      detail: provider.message ?? t("settings.text.theProviderIsInstalledButThe"),
+      headline: resolve(msg("Needs attention")),
+      detail:
+        provider.message ??
+        resolve(msg("The provider is installed, but the server could not fully verify it.")),
     };
   }
   if (provider.status === "error") {
     return {
-      headline: t("settings.text.unavailable"),
-      detail: provider.message ?? t("settings.text.theProviderFailedItsStartupChecks"),
+      headline: resolve(msg("Unavailable", { $context: "provider status" })),
+      detail: provider.message ?? resolve(msg("The provider failed its startup checks.")),
     };
   }
   if (provider.auth.status === "authenticated") {
-    const authLabel = provider.auth.label ?? provider.auth.type;
+    const authLabel = providerAuthLabel(provider.auth, resolve);
     return {
       headline: authLabel
-        ? t("settings.manual.providerStatus.authenticatedWith", { authLabel })
-        : t("settings.manual.providerStatus.authenticated"),
+        ? resolve(msg("Authenticated · {method}", { method: authLabel }))
+        : resolve(msg("Authenticated")),
       detail: provider.message ?? null,
     };
   }
   return {
-    headline: t("settings.text.available"),
+    headline: resolve(msg("Available", { $context: "provider status" })),
     detail: provider.message ?? null,
   };
 }
@@ -123,16 +137,16 @@ export function getProviderVersionLabel(version: string | null | undefined) {
 }
 
 const COMPATIBILITY_TITLES = {
-  graceful: "settings.manual.providerStatus.limitedSupport",
-  unsupported: "settings.manual.providerStatus.unsupportedVersion",
-  broken: "settings.manual.providerStatus.brokenVersion",
+  graceful: msg("Limited support"),
+  unsupported: msg("Unsupported version"),
+  broken: msg("Known broken version"),
 } as const;
 
 export function getProviderVersionAdvisoryPresentation(
   advisory: ServerProviderVersionAdvisory | undefined,
   compatibility?: ServerProviderCompatibilityAdvisory | undefined,
   showCompatibility = true,
-  t: TFunction = englishT,
+  resolve: MessageResolver = m,
 ): {
   readonly title: string;
   readonly detail: string;
@@ -155,12 +169,12 @@ export function getProviderVersionAdvisoryPresentation(
     // Latest package versions cannot be updated into recommendations requiring another package.
     const isAlreadyLatest = advisory?.status === "current";
     return {
-      title: t(COMPATIBILITY_TITLES[compatibility.status]),
+      title: resolve(COMPATIBILITY_TITLES[compatibility.status]),
       detail:
         compatibility.message ??
         (recommendation
-          ? t("settings.manual.providerStatus.useForFullSupport", { recommendation })
-          : t("settings.manual.providerStatus.updateForFullSupport")),
+          ? resolve(msg("Use {version} for full support.", { version: recommendation }))
+          : resolve(msg("Update for full support."))),
       updateCommand:
         targetVersion || latestIsIncompatible || isAlreadyLatest
           ? null
@@ -178,41 +192,18 @@ export function getProviderVersionAdvisoryPresentation(
     return null;
   }
 
-  const label = t("settings.manual.providerStatus.updateAvailable");
   const version = advisory.latestVersion;
   const versionLabel = getProviderVersionLabel(version);
 
   return {
-    title: label,
+    title: resolve(msg("Update available")),
     detail:
       advisory.message ??
       (versionLabel
-        ? t("settings.manual.providerStatus.installVersion", { label, versionLabel })
-        : t("settings.manual.providerStatus.installLatest", { label })),
+        ? resolve(msg("Update available: install {version}.", { version: versionLabel }))
+        : resolve(msg("Update available: install the latest provider version."))),
     updateCommand: advisory.updateCommand,
     emphasis: "normal" as const,
     targetVersion: null,
   };
-}
-
-const CONNECTION_PHASE_KEYS = {
-  available: "settings.text.connectionAvailable",
-  offline: "settings.text.connectionOffline",
-  connecting: "settings.text.connectionConnecting",
-  reconnecting: "settings.text.connectionReconnecting",
-  connected: "settings.text.connectionConnected",
-  unsupported: "settings.text.connectionUnsupported",
-  error: "settings.text.connectionFailed",
-} as const satisfies Record<EnvironmentConnectionPhase, string>;
-
-/** client-runtime's `connectionStatusTitle`, translated; mobile shares that helper in English. */
-export function connectionStatusTitleText(
-  connection: EnvironmentConnectionPresentation,
-  t: TFunction = englishT,
-): string {
-  return t(
-    connection.phase === "reconnecting" && connection.error
-      ? "settings.text.connectionReconnectingFailed"
-      : CONNECTION_PHASE_KEYS[connection.phase],
-  );
 }

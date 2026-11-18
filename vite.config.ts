@@ -583,6 +583,31 @@ export default defineConfig({
           ],
         },
       },
+      // Registered always so a disable comment for intentional English counts as used.
+      // `vp run i18n:untranslated` counts what it flags.
+      {
+        files: ["apps/web/src/**", "apps/mobile/src/**", "packages/client-runtime/src/**"],
+        excludeFiles: [
+          "**/*.{test,spec,bench}.{ts,tsx}",
+          "**/{test,testkit,testing,fixtures}/**",
+          "**/*.test-fixtures.ts",
+          "**/{test-fixtures,*TestFixtures}.ts",
+          "apps/mobile/src/features/development/**",
+          "packages/client-runtime/src/rpc/**",
+          // Codi fork features keep English literals (and fork i18next keys) rather than gt-react.
+          "apps/web/src/components/telescope/**",
+          "apps/mobile/src/features/telescope/**",
+          "packages/client-runtime/src/telescope/**",
+          "apps/web/src/components/usage/UsageFlow.tsx",
+          "apps/mobile/src/features/usage/UsageProjectsSection.tsx",
+          "apps/web/src/components/settings/settingsSearch.ts",
+          "apps/web/src/components/threadActionMenu.logic.ts",
+          "apps/web/src/components/sidebar/SidebarChrome.tsx",
+          "apps/web/src/components/CommandPalette.tsx",
+          "apps/mobile/src/features/keyboard/CommandPalette.tsx",
+        ],
+        rules: { "t3code/no-untranslated-copy": "error" },
+      },
       {
         // React Compiler owns memoization; upstream rules do not ban redundant useMemo/useCallback.
         files: ["apps/web/src/**/*.{ts,tsx}"],
@@ -647,6 +672,7 @@ export default defineConfig({
           "apps/mobile/src/features/review/useNativeReviewDiffBridge.ts",
           "apps/mobile/src/features/settings/SettingsEnvironmentsRouteScreen.tsx",
           "apps/mobile/src/features/threads/ThreadComposer.tsx",
+          "apps/mobile/src/components/ComposerSurface.tsx",
           "apps/mobile/src/features/threads/ThreadFeed.tsx",
           "apps/mobile/src/features/threads/ThreadQueueControl.tsx",
           "apps/mobile/src/features/review/ReviewCommentCard.tsx",

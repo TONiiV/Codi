@@ -21,7 +21,7 @@ import { PlusIcon, Settings2Icon } from "lucide-react";
 import { useState, type ReactNode } from "react";
 
 import { connectionAtomRuntime } from "../../connection/runtime";
-import { useEnvironmentQuery, type EnvironmentQueryView } from "../../state/query";
+import { useEnvironmentQuery } from "../../state/query";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { SettingsPageContainer, SettingsRow, SettingsSection } from "../settings/settingsLayout";
 import { Badge } from "../ui/badge";
@@ -41,7 +41,7 @@ import {
   useFreshMembers,
   WORKSPACE_ROLE_LABEL,
 } from "./TelescopeAccountDialogs";
-import { projectRules, ProjectRulesSection } from "./TelescopeProjectRules";
+import { ProjectRulesSection } from "./TelescopeProjectRules";
 import { ProjectsSection } from "./TelescopeProjectWorkspace";
 import {
   noAdminScopeText,
@@ -724,30 +724,11 @@ function RoutingSection(props: Scoped) {
   );
 }
 
-const settled = (query: EnvironmentQueryView<unknown>) =>
-  query.data !== null || query.error !== null;
-
 function WorkspaceSettings(props: Scoped) {
-  const { environmentId, workspace, self } = props;
-  const scoped = { environmentId, input: { workspaceId: workspace.id } };
-  const mayReadGovernance =
-    useAtomValue(governance.readPermissionAtom(environmentId)) && self.role === "admin";
+  const { workspace } = props;
   const company = workspace.kind === "enterprise";
-  const lists = [
-    useEnvironmentQuery(telescope.members(scoped)),
-    useEnvironmentQuery(telescope.projects(scoped)),
-    useEnvironmentQuery(routing.list(scoped)),
-    useEnvironmentQuery(projectRules.list(scoped)),
-  ];
-  const budgets = useEnvironmentQuery(mayReadGovernance ? governance.state(scoped) : null);
-  const agents = useEnvironmentQuery(company ? telescopeAgents.listCompany(scoped) : null);
-  // A search target scrolls into view once the sections above it have their rows.
-  const ready =
-    lists.every(settled) &&
-    (!mayReadGovernance || settled(budgets)) &&
-    (!company || settled(agents));
   return (
-    <SettingsPageContainer searchTargetReady={ready}>
+    <SettingsPageContainer>
       <SettingsSection title="当前工作区">
         <SettingsRow
           className="wrap-anywhere"
@@ -809,7 +790,7 @@ export function TelescopeSettingsPanel() {
   if (environmentId !== null && detail.data !== null)
     return <WorkspaceSettings environmentId={environmentId} {...detail.data} />;
   return (
-    <SettingsPageContainer searchTargetReady={empty}>
+    <SettingsPageContainer>
       <SettingsSection id="telescope-members" title="成员与角色">
         {empty ? (
           <NoWorkspaceRow environmentId={environmentId} />

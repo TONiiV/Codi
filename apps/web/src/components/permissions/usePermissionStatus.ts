@@ -1,11 +1,12 @@
+import { msg } from "gt-react";
 import { useState, useSyncExternalStore } from "react";
-import { useTranslation } from "react-i18next";
 
 import { useStableCallback } from "~/hooks/useStableCallback";
+import { m } from "~/i18n/messages";
 import { getDocumentActivity, subscribeDocumentActivity } from "~/lib/documentActivity";
 
 const POLL_INTERVAL_MS = 1500;
-const CHECK_FAILED_KEY = "settings.remaining.couldNotCheckPermissions";
+const CHECK_FAILED_MESSAGE = msg("Could not check permissions. We'll try again automatically.");
 
 interface PermissionSnapshot<Id extends string> {
   readonly status: Record<Id, boolean>;
@@ -38,7 +39,7 @@ export function createPermissionPoller<Id extends string>(
         try {
           publish({ status: await check(), error: null });
         } catch {
-          publish({ status: snapshot.status, error: CHECK_FAILED_KEY });
+          publish({ status: snapshot.status, error: m(CHECK_FAILED_MESSAGE) });
         }
         checking = false;
       };
@@ -71,7 +72,6 @@ export function usePermissionStatus<Id extends string>(
   initialStatus: Record<Id, boolean>,
   enabled = true,
 ) {
-  const { t } = useTranslation();
   const checkLatest = useStableCallback(check);
   const [poller] = useState(() => createPermissionPoller(checkLatest, initialStatus));
   const { status, error } = useSyncExternalStore(
@@ -80,7 +80,7 @@ export function usePermissionStatus<Id extends string>(
   );
   return {
     status,
-    error: error === null ? null : t(error),
+    error,
     isReady: (required: readonly Id[]) => error === null && required.every((id) => status[id]),
   };
 }

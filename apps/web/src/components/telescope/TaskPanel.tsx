@@ -25,7 +25,7 @@ import { buildThreadRouteParams } from "../../threadRoutes";
 import { sideChatSourceBlock } from "../ChatView.logic";
 import { resolveThreadStatusPill } from "../Sidebar.logic";
 import { ThreadStatusLabel } from "../ThreadStatusIndicators";
-import { type SideChatFailureStage, useSideChat } from "../chat/useSideChat";
+import { useSideChat } from "../chat/useSideChat";
 import { Button } from "../ui/button";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "../ui/empty";
 import { Skeleton } from "../ui/skeleton";
@@ -78,13 +78,6 @@ const SIDE_CHAT_BLOCKED = {
   forbidden: "你在这个环境里没有操作对话的权限。",
   gone: "关联的对话已归档或删除，不能从它开 side chat。",
 } as const;
-
-const SIDE_CHAT_FAILED: Record<SideChatFailureStage, string> = {
-  fork: "服务器没有开出 side chat，请稍后再试。",
-  refused: "服务器不允许从关联的对话开 side chat，它可能已归档，或是 subagent、side chat。",
-  sync: "side chat 没有同步到这台设备，请再试一次。",
-  send: "第一条消息没有发出去，请再试一次。",
-};
 
 function SubTask({
   thread,
@@ -186,11 +179,11 @@ function SideChatButton({ task }: { task: Telescope.Task }) {
       runtimeMode: thread?.runtimeMode ?? DEFAULT_RUNTIME_MODE,
       modelSelection: undefined,
     }),
-    onError: (_message, stage) =>
+    onError: (message) =>
       toastManager.add({
         type: "error",
         title: "没能加到 side chat",
-        description: SIDE_CHAT_FAILED[stage],
+        description: message,
       }),
   });
   const prompt = [

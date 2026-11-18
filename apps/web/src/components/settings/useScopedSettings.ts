@@ -7,6 +7,7 @@ import {
 import { readEnvironmentScope } from "../../state/session";
 import * as Cause from "effect/Cause";
 import { AsyncResult } from "effect/reactivity";
+import { msg } from "gt-react";
 import {
   DEFAULT_SERVER_SETTINGS,
   type EnvironmentId,
@@ -16,6 +17,7 @@ import {
 } from "@t3tools/contracts";
 
 import { persistClientSettingsPatch, useMergedSettings } from "../../hooks/useSettings";
+import { m } from "../../i18n/messages";
 import { appAtomRegistry } from "../../rpc/atomRegistry";
 import { readEnvironment } from "../../state/environments";
 import { serverEnvironment } from "../../state/server";
@@ -34,7 +36,6 @@ import {
   type ProjectOverrideEntry,
   type ScopedSettingsPatch,
 } from "./scopedSettings";
-import { useTranslation } from "react-i18next";
 
 const readSettings = (environmentId: EnvironmentId) =>
   readEnvironment(environmentId)?.serverConfig?.settings ?? null;
@@ -58,7 +59,6 @@ export function useScopedSettingSource(keys: readonly (keyof ServerSettings)[]) 
 }
 
 function useRunScopedPlan() {
-  const { t } = useTranslation();
   const persistServer = useAtomCommand(serverEnvironment.updateSettings, { reportFailure: false });
   return (
     environments: Parameters<typeof writeScopedSettings>[0],
@@ -69,7 +69,7 @@ function useRunScopedPlan() {
     if (plan.unavailableReason) {
       toastManager.add({
         type: "warning",
-        title: t("settings.text.settingNotSaved"),
+        title: m(msg("Setting not saved")),
         description: plan.unavailableReason,
       });
       onFailed?.();
@@ -101,7 +101,7 @@ function useRunScopedPlan() {
               Cause.fail(
                 new EnvironmentAuthorizationError({
                   requiredScope: missing,
-                  message: t("settings.text.thisConnectionLacksPermissionToChange"),
+                  message: m(msg("This connection lacks permission to change these settings.")),
                 }),
               ),
             )
@@ -113,7 +113,6 @@ function useRunScopedPlan() {
         return result;
       },
       persistClientSettingsPatch,
-      t,
     ).then(({ failedEnvironments, savedEnvironments, savedEnvironmentCount }) => {
       if (failedEnvironments.length === 0) return;
       onFailed?.();
@@ -121,19 +120,19 @@ function useRunScopedPlan() {
         type: "error",
         title:
           savedEnvironmentCount > 0
-            ? t("settings.text.settingSavedOnSomeEnvironments")
-            : t("settings.text.settingNotSaved"),
+            ? m(msg("Setting saved on some environments"))
+            : m(msg("Setting not saved")),
         description: [
           ...failedEnvironments.map(({ label, message }) =>
-            t("settings.manual.scopedSave.couldNotSaveOn", { label, message }),
+            m(msg("Could not save on {label}: {message}", { label, message })),
           ),
           ...(savedEnvironmentCount > 0
             ? [
-                t("settings.manual.scopedSave.savedOn", {
-                  labels: savedEnvironments
-                    .map(({ label }) => label)
-                    .join(t("settings.parallelA.listSeparator")),
-                }),
+                m(
+                  msg("Saved on {environments}.", {
+                    environments: savedEnvironments.map(({ label }) => label).join(", "),
+                  }),
+                ),
               ]
             : []),
         ].join("\n"),
@@ -143,32 +142,27 @@ function useRunScopedPlan() {
 }
 
 export function useUpdateScopedSettings() {
-  const { t } = useTranslation();
   const { scope, environments, deviceOnly } = useSettingsScope();
   const run = useRunScopedPlan();
   /** `onFailed` runs when any target rejects or drops the patch, so a draft can fall back. */
   return (patch: ScopedSettingsPatch, options?: { readonly onFailed?: () => void }) =>
     run(
       environments,
-      (current) => planScopedSettingsPatch(scope, current, patch, { deviceOnly }, t),
+      (current) => planScopedSettingsPatch(scope, current, patch, { deviceOnly }),
       options?.onFailed,
     );
 }
 
 export function useClearScopedSettings() {
-  const { t } = useTranslation();
   const context = useOptionalSettingsScope();
   const run = useRunScopedPlan();
   return (keys: readonly ProjectScopedServerSettingKey[]) => {
     if (context === null) return;
-    run(context.environments, (current) =>
-      planScopedSettingsClear(context.scope, current, keys, t),
-    );
+    run(context.environments, (current) => planScopedSettingsClear(context.scope, current, keys));
   };
 }
 
 export function useClearProjectOverrides() {
-  const { t } = useTranslation();
   const context = useOptionalSettingsScope();
   const run = useRunScopedPlan();
   return (
@@ -176,7 +170,7 @@ export function useClearProjectOverrides() {
     keys: readonly ProjectScopedServerSettingKey[],
   ) => {
     if (context === null) return;
-    run(context.environments, (current) => planProjectOverridesClear(current, entries, keys, t));
+    run(context.environments, (current) => planProjectOverridesClear(current, entries, keys));
   };
 }
 

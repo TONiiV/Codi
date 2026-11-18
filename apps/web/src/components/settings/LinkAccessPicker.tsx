@@ -1,9 +1,9 @@
 import { AuthMcpClientAccess } from "@t3tools/contracts";
+import { T, useMessages } from "gt-react";
 import { useId } from "react";
 
-import { accessConfig, accessText } from "../auth/ConnectAgentSurface";
+import { accessConfig } from "../auth/ConnectAgentSurface";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
-import { useTranslation } from "react-i18next";
 
 /** What agents here may do in an environment being linked, with what that does not allow. */
 export function LinkAccessPicker({
@@ -15,14 +15,13 @@ export function LinkAccessPicker({
   readonly onChange: (access: AuthMcpClientAccess) => void;
   readonly disabled?: boolean;
 }) {
-  const { t } = useTranslation();
   const labelId = useId();
+  const m = useMessages();
   const selected = accessConfig[value];
-  const selectedText = accessText(value, t);
   return (
     <div className="space-y-1.5">
       <span id={labelId} className="block text-xs font-medium">
-        {t("settings.text.whatAgentsHereMayDoThere")}
+        <T>What agents here may do there</T>
       </span>
       <Select
         value={value}
@@ -35,22 +34,21 @@ export function LinkAccessPicker({
           <SelectValue>
             <span className="flex items-center gap-2">
               <selected.icon aria-hidden className="size-4" />
-              {selectedText.label}
+              {m(selected.label)}
             </span>
           </SelectValue>
         </SelectTrigger>
         <SelectPopup alignItemWithTrigger={false}>
           {AuthMcpClientAccess.literals.map((option) => {
-            const { icon: Icon } = accessConfig[option];
-            const { label, description } = accessText(option, t);
+            const { label, description, icon: Icon } = accessConfig[option];
             return (
               <SelectItem key={option} value={option} hideIndicator>
                 <span className="grid min-w-0 gap-0.5 py-0.5">
                   <span className="inline-flex items-center gap-1.5 font-medium text-foreground">
                     <Icon aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
-                    {label}
+                    {m(label)}
                   </span>
-                  <span className="text-xs leading-4 text-muted-foreground">{description}</span>
+                  <span className="text-xs leading-4 text-muted-foreground">{m(description)}</span>
                 </span>
               </SelectItem>
             );
@@ -58,9 +56,12 @@ export function LinkAccessPicker({
         </SelectPopup>
       </Select>
       <p className="text-xs text-muted-foreground">
-        {t("settings.text.descriptionAnAgentNeverGetsMore", {
-          description: selectedText.description,
-        })}
+        {m(selected.description)}{" "}
+        <T>
+          An agent never gets more access there than its own mode here. Below full access, it can
+          change only threads this link started, not that machine's own threads, projects or
+          settings.
+        </T>
       </p>
     </div>
   );

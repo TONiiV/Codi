@@ -1,6 +1,7 @@
 import type { EnvironmentId } from "@t3tools/contracts";
 import type { SourceControlDefinition } from "@t3tools/client-runtime/source-control-clients";
 import * as Equal from "effect/Equal";
+import { T } from "gt-react";
 import { useState } from "react";
 
 import { useEnvironmentSettings } from "../../hooks/useSettings";
@@ -8,7 +9,6 @@ import { serverEnvironment } from "../../state/server";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { Button } from "../ui/button";
 import { ProviderSettingsForm } from "./ProviderSettingsForm";
-import { useTranslation } from "react-i18next";
 
 export function SourceControlHostSettings({
   environmentId,
@@ -21,7 +21,6 @@ export function SourceControlHostSettings({
   };
   readonly onSaved: () => void;
 }) {
-  const { t } = useTranslation();
   const saved = useEnvironmentSettings(
     environmentId,
     (settings) => settings.sourceControlHosts[definition.kind],
@@ -70,7 +69,7 @@ export function SourceControlHostSettings({
               void save(Object.fromEntries(Object.keys(saved ?? {}).map((key) => [key, ""])))
             }
           >
-            {t("settings.text.remove")}
+            <T>Remove</T>
           </Button>
         </div>
       ) : null}

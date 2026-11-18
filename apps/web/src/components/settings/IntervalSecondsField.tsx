@@ -7,22 +7,20 @@ import {
   NumberFieldInput,
 } from "../ui/number-field";
 import { normalizeIntervalSeconds } from "./SettingsPanels.logic";
-import { useTranslation } from "react-i18next";
 
 export function IntervalSecondsField({
-  label,
+  labels,
   value,
   min,
   step,
   onCommit,
 }: {
-  label: string;
+  labels: { readonly decrease: string; readonly input: string; readonly increase: string };
   value: number;
   min: number;
   step: number;
   onCommit: (seconds: number, options: { onFailed: () => void }) => void;
 }) {
-  const { t } = useTranslation();
   const [field, setField] = useState({
     saved: value,
     draft: value as number | null,
@@ -68,11 +66,9 @@ export function IntervalSecondsField({
       }}
     >
       <NumberFieldGroup>
-        <NumberFieldDecrement aria-label={t("settings.text.decreaseLabel", { label })} />
-        <NumberFieldInput
-          aria-label={`${label.charAt(0).toUpperCase()}${label.slice(1)} in seconds`}
-        />
-        <NumberFieldIncrement aria-label={t("settings.text.increaseLabel", { label })} />
+        <NumberFieldDecrement aria-label={labels.decrease} />
+        <NumberFieldInput aria-label={labels.input} />
+        <NumberFieldIncrement aria-label={labels.increase} />
       </NumberFieldGroup>
     </NumberField>
   );

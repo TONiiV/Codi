@@ -11,8 +11,9 @@ import {
 import * as Option from "effect/Option";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
-import type { TFunction } from "i18next";
-import { englishT } from "~/i18n/englishT";
+import { msg } from "gt-react";
+
+import { m, type MessageResolver } from "../../i18n/messages";
 
 const decodeSecretProviderId = Schema.decodeOption(SecretProviderId);
 const decodeOnePasswordConfig = Schema.decodeUnknownOption(OnePasswordSecretProviderConfig);
@@ -77,20 +78,16 @@ export function secretProviderFromDraft(
   draft: SecretProviderDraft,
   existingIds: ReadonlySet<string>,
   target: SecretProviderTarget,
-  t: TFunction = englishT,
+  resolve: MessageResolver = m,
 ): Result.Result<
   { readonly id: SecretProviderId; readonly config: SecretProviderConfig },
   SecretProviderDraftIssues
 > {
-  const label = decodeField(
-    SecretProviderLabel,
-    draft.name,
-    t("settings.parallelSystem.enterAName"),
-  );
+  const label = decodeField(SecretProviderLabel, draft.name, resolve(msg("Enter a name.")));
   const account = decodeField(
     OnePasswordSecretProviderConfig.fields.account,
     draft.account,
-    t("settings.text.enterThe1passwordAccount"),
+    resolve(msg("Enter the 1Password account.")),
   );
 
   let id: SecretProviderId | null = null;
@@ -99,9 +96,9 @@ export function secretProviderFromDraft(
     nameIssue = label.failure;
   } else {
     id = target.mode === "edit" ? target.id : secretProviderIdFromName(label.success);
-    if (id === null) nameIssue = t("settings.text.theNameNeedsAtLeastOne");
+    if (id === null) nameIssue = resolve(msg("The name needs at least one letter or digit."));
     else if (target.mode === "add" && existingIds.has(id))
-      nameIssue = t("settings.text.aSecretProviderWithThisName");
+      nameIssue = resolve(msg("A secret provider with this name exists."));
   }
 
   if (

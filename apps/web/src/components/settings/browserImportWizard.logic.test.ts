@@ -1,12 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
-import {
-  BROWSER_IMPORT_FAILURE_COPY,
-  BrowserImportFailureReason,
-  type BrowserImportSource,
-} from "@t3tools/contracts";
+import type { BrowserImportSource } from "@t3tools/contracts";
 
 import {
-  browserImportFailureText,
   initialWizardStep,
   initialTargetSelection,
   refreshedSourceProfileDirectory,
@@ -65,13 +60,5 @@ describe("refreshedSourceProfileDirectory", () => {
   it("falls back only when the old profile vanished and clears an empty result", () => {
     expect(refreshedSourceProfileDirectory("Removed", refreshed)).toBe("Default");
     expect(refreshedSourceProfileDirectory("Removed", source({ profiles: [] }))).toBe("");
-  });
-});
-
-describe("browserImportFailureText", () => {
-  it("keeps the contract's English copy for every failure reason", () => {
-    for (const reason of BrowserImportFailureReason.literals) {
-      expect(browserImportFailureText(reason)).toBe(BROWSER_IMPORT_FAILURE_COPY[reason]);
-    }
   });
 });
