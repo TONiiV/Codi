@@ -6,10 +6,12 @@ import {
   type EnvironmentId,
   type ServerConfig,
 } from "@t3tools/contracts";
+import { msg, T, useGT, useMessages } from "gt-react";
 
+import { m, type MessageResolver } from "../../i18n/messages";
 import { useUpdateEnvironmentSettings } from "../../hooks/useSettings";
 import { useEnvironmentScope } from "../../state/session";
-import { EnvironmentMachineIcon, environmentMachineKindLabel } from "../EnvironmentMachineIcon";
+import { ENVIRONMENT_MACHINE_KIND_LABELS, EnvironmentMachineIcon } from "../EnvironmentMachineIcon";
 import {
   MenuItem,
   MenuRadioGroup,
@@ -19,22 +21,19 @@ import {
   MenuSubPopup,
   MenuSubTrigger,
 } from "../ui/menu";
-import { useTranslation } from "react-i18next";
-import type { TFunction } from "i18next";
-import { englishT } from "~/i18n/englishT";
 
 export function resolveEnvironmentIconPickerLock(
   input: {
     readonly serverConfig: Pick<ServerConfig, "environment"> | null;
     readonly operateAccess: "granted" | "denied" | "pending";
   },
-  t: TFunction = englishT,
+  resolve: MessageResolver = m,
 ): string | null {
   if (input.serverConfig === null) {
-    return t("settings.text.connectToThisEnvironmentToChange");
+    return resolve(msg("Connect to this environment to change its icon."));
   }
   if (input.operateAccess !== "granted") {
-    return t("settings.text.yourSessionOnThisEnvironmentCannot");
+    return resolve(msg("Your session on this environment cannot change its settings."));
   }
   return null;
 }
@@ -46,12 +45,13 @@ export function EnvironmentIconMenu({
   readonly environmentId: EnvironmentId;
   readonly serverConfig: Pick<ServerConfig, "environment"> | null;
 }) {
-  const { t } = useTranslation();
+  const gt = useGT();
+  const resolve = useMessages();
   const updateSettings = useUpdateEnvironmentSettings(environmentId);
   const operateAccess = useEnvironmentScope(environmentId, AuthSettingsWriteScope)
     ? "granted"
     : "denied";
-  const lock = resolveEnvironmentIconPickerLock({ serverConfig, operateAccess }, t);
+  const lock = resolveEnvironmentIconPickerLock({ serverConfig, operateAccess }, resolve);
   const detected = serverConfig?.environment.platform.machine ?? "server";
   const resolved = resolveEnvironmentMachineKind(serverConfig);
 
@@ -59,7 +59,7 @@ export function EnvironmentIconMenu({
     <MenuSub>
       <MenuSubTrigger>
         <EnvironmentMachineIcon kind={resolved} />
-        {t("settings.text.icon")}
+        <T>Icon</T>
       </MenuSubTrigger>
       <MenuSubPopup>
         {lock !== null ? (
@@ -82,13 +82,13 @@ export function EnvironmentIconMenu({
               <span className="flex min-w-0 items-center gap-2">
                 <EnvironmentMachineIcon kind={kind} className="size-3.5 shrink-0" />
                 <span className="min-w-0 flex-1 truncate">
-                  {environmentMachineKindLabel(kind, t)}
+                  {resolve(ENVIRONMENT_MACHINE_KIND_LABELS[kind])}
                 </span>
                 {kind === detected ? (
                   <span className="shrink-0 text-xs text-muted-foreground">
                     {serverConfig?.environment.platform.machine
-                      ? t("settings.parallelConnections.detected")
-                      : t("settings.text.default")}
+                      ? gt("detected", { $context: "machine kind detected automatically" })
+                      : gt("default", { $context: "machine kind used when none is detected" })}
                   </span>
                 ) : null}
               </span>

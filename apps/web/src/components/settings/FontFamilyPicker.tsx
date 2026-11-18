@@ -1,5 +1,6 @@
 import { useLegendListRef } from "~/hooks/useLegendListRef";
 import { LegendList, type LegendListRef } from "@legendapp/list/react";
+import { T, useGT } from "gt-react";
 import { CheckIcon } from "lucide-react";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import {
@@ -18,7 +19,6 @@ import {
 } from "../ui/combobox";
 import { SelectButton } from "../ui/select";
 import { stackedThreadToast, toastManager } from "../ui/toast";
-import { useTranslation } from "react-i18next";
 
 const DEFAULT_FONT_VALUE = "__default__";
 
@@ -99,7 +99,7 @@ export function FontFamilyPicker({
   initialOpen?: boolean;
   onSelect: (family: string) => void;
 }) {
-  const { t } = useTranslation();
+  const gt = useGT();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   // Base UI needs an initial closed commit; mounting open loses exit transitionend and leaves the popup
@@ -146,8 +146,10 @@ export function FontFamilyPicker({
       toastManager.add(
         stackedThreadToast({
           type: "error",
-          title: t("settings.text.valueIsnTMonospace", { value }),
-          description: t("settings.text.codeAndTerminalNeedAFixed"),
+          title: gt('"{font}" isn\'t monospace', { font: value }),
+          description: gt(
+            "Code and terminal need a fixed-width font, so the current font was kept.",
+          ),
         }),
       );
       return;
@@ -167,7 +169,7 @@ export function FontFamilyPicker({
           <span className="flex shrink-0 items-center gap-1.5">
             {isDefault ? (
               <span className="text-3xs text-muted-foreground/60">
-                {t("settings.text.default3")}
+                {gt("default", { $context: "marks the default font" })}
               </span>
             ) : null}
             {item === selectedValue ? (
@@ -203,12 +205,14 @@ export function FontFamilyPicker({
       </ComboboxTrigger>
       <ComboboxPopup align="end" className="flex w-72 flex-col">
         <ComboboxSearchInput
-          placeholder={t("settings.text.searchFonts")}
+          placeholder={gt("Search fonts…")}
           value={query}
           onChange={(event) => setQuery(event.target.value)}
         />
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          <ComboboxEmpty>{t("settings.text.noFontsFound")}</ComboboxEmpty>
+          <ComboboxEmpty>
+            <T>No fonts found.</T>
+          </ComboboxEmpty>
           {/* Short windows cap the popup; every level down to the list must shrink or rows are clipped unreachably. */}
           <div className="relative flex min-h-0 max-h-72 w-full flex-1 flex-col overflow-hidden">
             <ComboboxListVirtualized className="flex min-h-0 flex-col">

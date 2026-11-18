@@ -1,3 +1,4 @@
+import { errorDisplayMessage } from "@t3tools/client-runtime/errors";
 import {
   ClientSettingsSchema,
   type ClientSettingsPatch,
@@ -25,11 +26,11 @@ import { applyServerSettingsPatch } from "@t3tools/shared/serverSettings";
 import * as Equal from "effect/Equal";
 import * as Cause from "effect/Cause";
 import { Atom } from "effect/reactivity";
+import { msg } from "gt-react";
+
+import { m } from "../../i18n/messages";
 
 import type { ResolvedSettingsScope } from "./settingsScope";
-import type { TFunction } from "i18next";
-
-import { englishT } from "~/i18n/englishT";
 
 export type ScopedSettingsPatch = ServerSettingsPatch & ClientSettingsPatch;
 
@@ -290,7 +291,6 @@ export function planScopedSettingsPatch(
   environments: readonly ScopedSettingsEnvironment[],
   patch: ScopedSettingsPatch,
   options?: { readonly deviceOnly?: boolean },
-  t: TFunction = englishT,
 ) {
   const isProjectScope = scope.kind === "project" || scope.kind === "checkout";
   const refusesClientKeys = isProjectScope && options?.deviceOnly !== true;
@@ -405,12 +405,16 @@ export function planScopedSettingsPatch(
       : scope.kind === "unavailable"
         ? scope.message
         : unscopableKeys.length > 0
-          ? t("settings.text.thisSettingIsEnvironmentWideAnd")
+          ? m(msg("This setting is environment-wide and cannot be overridden by a project."))
           : isProjectScope
-            ? t("settings.text.connectTheSelectedCheckoutsOrUpdate")
+            ? m(
+                msg(
+                  "Connect the selected checkouts, or update their environments, to save a project override.",
+                ),
+              )
             : scope.kind === "environment"
-              ? t("settings.parallelA.scopedConnectToSave", { label: scope.label })
-              : t("settings.parallelA.scopedConnectAnEnvironmentToSave");
+              ? m(msg("Connect {environment} to save this setting.", { environment: scope.label }))
+              : m(msg("Connect an environment to save this setting."));
   return { clientPatch, hasClientWrite, serverWrites, unavailableReason };
 }
 
@@ -418,7 +422,6 @@ export function planScopedSettingsClear(
   scope: ResolvedSettingsScope,
   environments: readonly ScopedSettingsEnvironment[],
   keys: readonly ProjectScopedServerSettingKey[],
-  t: TFunction = englishT,
 ) {
   const serverWrites =
     scope.kind === "project" || scope.kind === "checkout"
@@ -431,7 +434,13 @@ export function planScopedSettingsClear(
     hasClientWrite: false,
     serverWrites,
     unavailableReason:
-      serverWrites.length > 0 ? null : t("settings.text.connectTheSelectedCheckoutsOrUpdate2"),
+      serverWrites.length > 0
+        ? null
+        : m(
+            msg(
+              "Connect the selected checkouts, or update their environments, to reset this override.",
+            ),
+          ),
   };
 }
 
@@ -461,7 +470,6 @@ export function planProjectOverridesClear(
   environments: readonly ScopedSettingsEnvironment[],
   entries: readonly ProjectOverrideEntry[],
   keys: readonly ProjectScopedServerSettingKey[],
-  t: TFunction = englishT,
 ) {
   const byId = new Map(environments.map((environment) => [environment.environmentId, environment]));
   const writes = new Map<EnvironmentId, ScopedServerWrite>();
@@ -488,7 +496,7 @@ export function planProjectOverridesClear(
     hasClientWrite: false,
     serverWrites,
     unavailableReason:
-      serverWrites.length > 0 ? null : t("settings.text.connectTheEnvironmentsToResetThese"),
+      serverWrites.length > 0 ? null : m(msg("Connect the environments to reset these overrides.")),
   };
 }
 
@@ -576,7 +584,6 @@ export function createScopedSettingsWriter(
     plan: (environments: readonly ScopedSettingsEnvironment[]) => ScopedSettingsPlan,
     persistServer: ScopedSettingsPersistServer,
     persistClient: (patch: ClientSettingsPatch) => void,
-    t: TFunction = englishT,
   ) =>
     persistScopedSettingsPlan(
       plan(environments),
@@ -623,7 +630,6 @@ export function createScopedSettingsWriter(
         return save;
       },
       persistClient,
-      t,
     );
 }
 
@@ -646,7 +652,6 @@ async function persistScopedSettingsPlan(
     readonly result: Awaited<ReturnType<ScopedSettingsPersistServer>>;
   }>,
   persistClient: (patch: ClientSettingsPatch) => void,
-  t: TFunction = englishT,
 ) {
   if (plan.hasClientWrite) persistClient(plan.clientPatch);
   const results = await Promise.allSettled(plan.serverWrites.map(persistWrite));
@@ -669,7 +674,7 @@ async function persistScopedSettingsPlan(
       return [
         {
           ...environment,
-          message: t("settings.manual.scopedSave.unsupported"),
+          message: m(msg("This environment does not support this setting. Update T3 Code on it.")),
         },
       ];
     }
@@ -682,7 +687,10 @@ async function persistScopedSettingsPlan(
     return [
       {
         ...environment,
-        message: error instanceof Error ? error.message : t("settings.manual.scopedSave.failed"),
+        message:
+          error instanceof Error
+            ? (errorDisplayMessage(error, m) ?? error.message)
+            : m(msg("The save failed. Try reconnecting and saving again.")),
       },
     ];
   });

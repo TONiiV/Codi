@@ -1,3 +1,4 @@
+import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
 import { AuthSettingsWriteScope, EnvironmentAuthorizationError } from "@t3tools/contracts";
 import { readEnvironmentScope } from "../../state/session";
 import {
@@ -17,6 +18,7 @@ import { resolveProjectScripts } from "@t3tools/shared/projectScripts";
 import { clearProjectSettingsOverrides } from "@t3tools/shared/projectSettings";
 import * as Cause from "effect/Cause";
 import { AsyncResult } from "effect/reactivity";
+import { msg } from "gt-react";
 import { useRef, useState } from "react";
 
 import {
@@ -33,18 +35,19 @@ import { useProjects } from "../../state/entities";
 import { serverEnvironment } from "../../state/server";
 import { useAtomCommand } from "../../state/use-atom-command";
 import type { NewProjectScriptInput } from "../projectScriptEditor";
+import { m } from "../../i18n/messages";
 import { toastManager } from "../ui/toast";
-import { useTranslation } from "react-i18next";
-import type { TFunction } from "i18next";
-import { englishT } from "~/i18n/englishT";
 
-function reportScriptFailure(result: AtomCommandResult<unknown, unknown>, t: TFunction = englishT) {
+function reportScriptFailure(result: AtomCommandResult<unknown, unknown>) {
   if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
     const error = squashAtomCommandFailure(result);
     toastManager.add({
       type: "error",
-      title: t("settings.text.failedToSaveProjectActions"),
-      description: error instanceof Error ? error.message : t("settings.text.anErrorOccurred"),
+      title: m(msg("Failed to save project actions")),
+      description:
+        error instanceof Error
+          ? (thrownErrorMessage(error, m) ?? error.message)
+          : m(msg("An error occurred.")),
     });
   }
   return mapAtomCommandResult(result, () => undefined);
@@ -58,7 +61,6 @@ export function useProjectScriptSettings(
     project?: { id: ProjectId; scripts: readonly ProjectScript[] };
   }[],
 ) {
-  const { t } = useTranslation();
   const projects = useProjects();
   const [saving, setSaving] = useState(false);
   const savingRef = useRef(false);
@@ -78,10 +80,10 @@ export function useProjectScriptSettings(
     keybinding?: string | null,
   ): Promise<AtomCommandResult<void, unknown>> {
     if (savingRef.current || targets.length === 0) {
-      const message = t("settings.text.noAvailableMachineOrAnotherAction");
+      const message = m(msg("No available machine, or another action change is saving."));
       toastManager.add({
         type: "error",
-        title: t("settings.text.actionsNotSaved"),
+        title: m(msg("Actions not saved")),
         description: message,
       });
       return AsyncResult.failure(Cause.fail(new Error(message)));
@@ -96,11 +98,10 @@ export function useProjectScriptSettings(
           Cause.fail(
             new EnvironmentAuthorizationError({
               requiredScope: AuthSettingsWriteScope,
-              message: t("settings.text.thisConnectionCannotChangeEnvironmentSettings"),
+              message: m(msg("This connection cannot change environment settings.")),
             }),
           ),
         ),
-        t,
       );
     }
     savingRef.current = true;
@@ -142,7 +143,7 @@ export function useProjectScriptSettings(
             : { defaultProjectScripts: nextScripts ?? [] },
         },
       });
-      if (result._tag === "Failure") return reportScriptFailure(result, t);
+      if (result._tag === "Failure") return reportScriptFailure(result);
       const changedIds = scriptId
         ? [scriptId]
         : current
@@ -182,7 +183,7 @@ export function useProjectScriptSettings(
           : previous && !retainedElsewhere
             ? await removeKeybinding({ environmentId, input: previous })
             : null;
-        if (bindingResult?._tag === "Failure") return reportScriptFailure(bindingResult, t);
+        if (bindingResult?._tag === "Failure") return reportScriptFailure(bindingResult);
       }
     }
     return AsyncResult.success(undefined);

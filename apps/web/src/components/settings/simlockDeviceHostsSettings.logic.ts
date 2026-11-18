@@ -6,8 +6,9 @@ import {
 } from "@t3tools/contracts";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
-import type { TFunction } from "i18next";
-import { englishT } from "~/i18n/englishT";
+import { msg } from "gt-react";
+
+import { m, type MessageResolver } from "../../i18n/messages";
 
 const parseSimlockDeviceHostDraft = Schema.decodeUnknownOption(SimlockDeviceHostConfig);
 
@@ -36,24 +37,29 @@ export function updateSimlockDeviceHosts(
 /** Why the shared fields keep a draft from saving, or null; tokens are checked per environment. */
 export function simlockDeviceHostProblem(
   host: SimlockDeviceHostConfigType,
-  t: TFunction = englishT,
+  resolve: MessageResolver = m,
 ): string | null {
   const withToken = { ...host, agentToken: "token" };
   if (Option.isSome(parseSimlockDeviceHostDraft(withToken))) return null;
-  if (!host.label.trim()) return t("settings.text.giveTheHostALabel");
+  if (!host.label.trim()) return resolve(msg("Give the host a label."));
   // With in-range limits, a draft that still fails has a bad gateway URL.
   return Option.isNone(
     parseSimlockDeviceHostDraft({ ...withToken, maxLeases: 1, maxLeaseMinutes: 60 }),
   )
-    ? t("settings.text.enterTheGatewaySOriginSuch")
-    : t("settings.text.keepTheLimitsWithinTheRanges");
+    ? resolve(msg("Enter the gateway's origin, such as https://gateway.example.ts.net:4700."))
+    : resolve(msg("Keep the limits within the ranges shown."));
 }
 
-export function simlockLeaseLimits(host: SimlockDeviceHostConfigType, t: TFunction = englishT) {
-  return t("settings.parallelConnections.deviceLimits", {
-    count: host.maxLeases,
-    maxLeaseMinutes: host.maxLeaseMinutes,
-  });
+export function simlockLeaseLimits(
+  host: SimlockDeviceHostConfigType,
+  resolve: MessageResolver = m,
+) {
+  return resolve(
+    msg(
+      "{count, plural, one {Up to {count} device at once, each released after {minutes} min} other {Up to {count} devices at once, each released after {minutes} min}}",
+      { count: host.maxLeases, minutes: host.maxLeaseMinutes },
+    ),
+  );
 }
 
 export interface SimlockHostEnvironment {
@@ -76,7 +82,7 @@ export function planSimlockDeviceHostSave(
   environments: ReadonlyArray<SimlockHostEnvironment>,
   draft: SimlockDeviceHostConfigType,
   tokens: ReadonlyMap<EnvironmentId, SimlockTokenEntry>,
-  t: TFunction = englishT,
+  resolve: MessageResolver = m,
 ):
   | { readonly problem: string }
   | {
@@ -85,7 +91,7 @@ export function planSimlockDeviceHostSave(
         hosts: ReadonlyArray<SimlockDeviceHostConfigType>;
       }>;
     } {
-  const shared = simlockDeviceHostProblem(draft, t);
+  const shared = simlockDeviceHostProblem(draft, resolve);
   if (shared) return { problem: shared };
   const patches = [];
   for (const environment of environments) {

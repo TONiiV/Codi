@@ -1,6 +1,7 @@
 import type { EnvironmentId, SecretProviderConfig, SecretProviderId } from "@t3tools/contracts";
 import { PlusIcon } from "lucide-react";
 import { useState } from "react";
+import { T, useGT, useMessages, Var } from "gt-react";
 
 import { useEnvironmentSettings, useUpdateEnvironmentSettings } from "../../hooks/useSettings";
 import type { EnvironmentPresentation } from "../../state/environments";
@@ -25,9 +26,8 @@ import {
 } from "./ProviderSettingsPanel.logic";
 import { useSettingsScope } from "./SettingsScopeContext";
 import { RedactedSensitiveText } from "./RedactedSensitiveText";
-import { searchableSetting } from "./settingsSearch";
+import { useSearchableSetting } from "./settingsSearch";
 import { SettingsPageContainer, SettingsRow, SettingsSection } from "./settingsLayout";
-import { useTranslation } from "react-i18next";
 
 const SECRET_PROVIDER_KINDS: Readonly<
   Record<string, { readonly name: string; readonly icon: Icon }>
@@ -36,7 +36,7 @@ const SECRET_PROVIDER_KINDS: Readonly<
 };
 
 export function SecretsSettingsPanel() {
-  const { t } = useTranslation();
+  const setting = useSearchableSetting();
   const { scope, environment } = useSettingsScope();
   const connected = environment?.connection.phase === "connected";
   return (
@@ -44,9 +44,11 @@ export function SecretsSettingsPanel() {
       {connected &&
       environment.serverConfig !== null &&
       environment.serverConfig.secretProviderSettings !== true ? (
-        <SettingsSection {...searchableSetting("secret-providers", t)}>
+        <SettingsSection {...setting("secret-providers")}>
           <p className="px-4 py-3 text-sm text-muted-foreground">
-            {t("settings.text.updateCodiOnLabelToManage", { label: environment.label })}
+            <T>
+              Update T3 Code on <Var>{environment.label}</Var> to manage its secret providers.
+            </T>
           </p>
         </SettingsSection>
       ) : connected ? (
@@ -56,9 +58,12 @@ export function SecretsSettingsPanel() {
           projectScoped={scope.kind === "project" || scope.kind === "checkout"}
         />
       ) : (
-        <SettingsSection {...searchableSetting("secret-providers", t)}>
+        <SettingsSection {...setting("secret-providers")}>
           <p className="px-4 py-3 text-sm text-muted-foreground">
-            {t("settings.text.connectAnEnvironmentToManageThe")}
+            <T>
+              Connect an environment to manage the secret providers its provider variables read
+              from.
+            </T>
           </p>
         </SettingsSection>
       )}
@@ -73,7 +78,8 @@ function EnvironmentSecretProviders({
   readonly environment: EnvironmentPresentation;
   readonly projectScoped: boolean;
 }) {
-  const { t } = useTranslation();
+  const setting = useSearchableSetting();
+  const gt = useGT();
   const environmentId = environment.environmentId;
   const sessionState = useEnvironmentSessionState(environmentId);
   // The server requires the same grant for secret providers as for provider settings.
@@ -101,25 +107,27 @@ function EnvironmentSecretProviders({
   return (
     <>
       <SettingsSection
-        {...searchableSetting("secret-providers", t)}
+        {...setting("secret-providers")}
         headerAction={
           !readOnly ? (
             <Button size="xs" variant="outline" onClick={() => setDialog({ mode: "add" })}>
               <PlusIcon className="size-3" aria-hidden />
-              {t("settings.text.addProvider")}
+              <T>Add provider</T>
             </Button>
           ) : null
         }
       >
         {projectScoped ? (
           <p className="px-4 pt-3 text-xs text-muted-foreground">
-            {t("settings.text.environmentWideSettingSelectAnEnvironment")}
+            <T>Environment-wide setting. Select an environment to change it.</T>
           </p>
         ) : null}
         {entries.length === 0 ? (
           <SettingsRow
-            title={t("settings.text.noSecretProvidersConfigured")}
-            description={t("settings.text.addA1passwordAccountThenPick")}
+            title={gt("No secret providers configured.")}
+            description={gt(
+              "Add a 1Password account, then pick it as the source of a provider variable.",
+            )}
           />
         ) : (
           entries.map(([id, config]) => {
@@ -145,14 +153,14 @@ function EnvironmentSecretProviders({
                       <span className="shrink-0">{kind.name} ·</span>
                       <RedactedSensitiveText
                         value={classified.account}
-                        ariaLabel={t("settings.text.toggleAccountVisibility")}
-                        revealTooltip={t("settings.text.clickToRevealAccount")}
-                        hideTooltip={t("settings.text.clickToHideAccount")}
+                        ariaLabel={gt("Toggle account visibility")}
+                        revealTooltip={gt("Click to reveal account")}
+                        hideTooltip={gt("Click to hide account")}
                         className="max-w-full truncate"
                       />
                     </span>
                   ) : (
-                    t("settings.text.unsupportedProviderKind", { kind: config.kind })
+                    gt("Unsupported provider ({kind})", { kind: config.kind })
                   )
                 }
                 control={
@@ -164,7 +172,7 @@ function EnvironmentSecretProviders({
                           variant="ghost"
                           onClick={() => setDialog({ mode: "edit", id })}
                         >
-                          {t("settings.text.edit")}
+                          <T>Edit</T>
                         </Button>
                       ) : null}
                       <RemoveSecretProviderButton
@@ -205,22 +213,25 @@ function RemoveSecretProviderButton({
   readonly label: string;
   readonly onConfirm: () => void;
 }) {
-  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   return (
     <>
       <Button size="xs" variant="ghost" onClick={() => setOpen(true)}>
-        {t("settings.text.remove")}
+        <T>Remove</T>
       </Button>
       <AlertDialog open={open} onOpenChange={setOpen}>
         <AlertDialogPopup>
           <AlertDialogHeader>
-            <AlertDialogTitle>{t("settings.text.removeLabel", { label })}</AlertDialogTitle>
+            <AlertDialogTitle>
+              <T>
+                Remove <Var>{label}</Var>?
+              </T>
+            </AlertDialogTitle>
             <SecretProviderUses environmentId={environmentId} id={id} label={label} />
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogClose render={<Button variant="outline" />}>
-              {t("settings.text.cancel")}
+              <T>Cancel</T>
             </AlertDialogClose>
             <Button
               variant="destructive"
@@ -229,7 +240,7 @@ function RemoveSecretProviderButton({
                 onConfirm();
               }}
             >
-              {t("settings.text.removeProvider")}
+              <T>Remove provider</T>
             </Button>
           </AlertDialogFooter>
         </AlertDialogPopup>
@@ -247,19 +258,24 @@ function SecretProviderUses({
   readonly id: SecretProviderId;
   readonly label: string;
 }) {
-  const { t } = useTranslation();
-  const uses = secretProviderUses(useEnvironmentSettings(environmentId), id);
+  const messages = useMessages();
+  const uses = secretProviderUses(useEnvironmentSettings(environmentId), id, messages);
   if (uses.length === 0) {
     return (
       <AlertDialogDescription>
-        {t("settings.text.nothingReadsFromLabel", { label })}
+        <T>
+          Nothing reads from <Var>{label}</Var>. The secrets themselves are untouched.
+        </T>
       </AlertDialogDescription>
     );
   }
   return (
     <>
       <AlertDialogDescription>
-        {t("settings.text.theseReadFromLabelAndWillBeUnset", { label })}
+        <T>
+          These read from <Var>{label}</Var> and will be unset. The secrets themselves are
+          untouched.
+        </T>
       </AlertDialogDescription>
       <ul className="max-h-48 list-disc space-y-0.5 overflow-y-auto ps-5 text-sm wrap-anywhere">
         {uses.map((use) => (

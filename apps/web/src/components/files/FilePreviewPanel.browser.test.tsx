@@ -19,7 +19,8 @@ const state = vi.hoisted(() => ({
   writeFile: vi.fn(),
   assetUrl: { _tag: "Loading" } as import("~/assets/assetUrls").AssetUrlState,
   mintUrl: vi.fn<() => Promise<string | null>>(),
-  stubCodeView: false,
+  browserAssetMints: 0,
+  openedBrowserUrls: [] as string[],
 }));
 
 vi.mock(import("@t3tools/client-runtime/state/runtime"), async (original) => ({
@@ -66,6 +67,56 @@ vi.mock(import("~/assets/assetUrls"), async (original) => ({
   useAssetUrlRefresh: () => state.mintUrl,
   useAssetUrlState: () => state.assetUrl,
 }));
+vi.mock(import("~/browser/previewRuntime"), async (original) => ({
+  ...(await original()),
+  usePreviewAvailable: () => true,
+}));
+vi.mock(import("~/state/environments"), async (original) => ({
+  ...(await original()),
+  useEnvironmentHttpBaseUrl: () => "http://environment.test",
+}));
+vi.mock(import("~/state/assets"), async (original) => {
+  const actual = await original();
+  const { Atom } = await import("effect/reactivity");
+  const Effect = await import("effect/Effect");
+  // Like the real query family, a minted URL stays cached until the atom is refreshed.
+  const createUrl = Atom.family((_key: string) =>
+    Atom.make(
+      Effect.sync(() => ({
+        relativeUrl: `/api/assets/mint-${++state.browserAssetMints}/page.html`,
+        expiresAt: Number.MAX_SAFE_INTEGER,
+      })),
+    ).pipe(Atom.keepAlive),
+  );
+  return {
+    ...actual,
+    assetEnvironment: {
+      ...actual.assetEnvironment,
+      createUrl: ((target: { input: { resource: { path: string } } }) =>
+        createUrl(target.input.resource.path)) as never,
+    },
+  };
+});
+vi.mock(import("~/browser/openFileInPreview"), async (original) => {
+  const actual = await original();
+  return {
+    ...actual,
+    openFileInPreview: (async (input: Parameters<typeof actual.openFileInPreview>[0]) => {
+      const result = await input.createAssetUrl({
+        environmentId: input.threadRef.environmentId,
+        input: {
+          resource: {
+            _tag: "workspace-file",
+            threadId: input.threadRef.threadId,
+            path: input.filePath,
+          },
+        },
+      });
+      if (result._tag === "Success") state.openedBrowserUrls.push(result.value.relativeUrl);
+      return AsyncResult.success(undefined);
+    }) as never,
+  };
+});
 // The Word engine compiles a large WebAssembly bundle; these tests only need the URL it loads.
 vi.mock(import("./OfficeFilePreview"), () => ({
   OfficeFilePreview: ({ src }: { src: string }) => <div data-testid="office-preview">{src}</div>,
@@ -86,28 +137,6 @@ vi.mock(import("./FileBrowserPanel"), () => ({
 vi.mock(import("../DiffWorkerPoolProvider"), () => ({
   DiffWorkerPoolProvider: ({ children }: { children?: ReactNode }) => <>{children}</>,
 }));
-// Stands in for the code view where a test asks: a click ends a line selection, and the draft
-// comments show as a count.
-vi.mock(import("@pierre/diffs/react"), async (original) => {
-  const actual = await original();
-  return {
-    ...actual,
-    File: ((props: {
-      options: { onLineSelectionEnd: (range: { start: number; end: number }) => void };
-      lineAnnotations: ReadonlyArray<unknown>;
-    }) =>
-      state.stubCodeView ? (
-        <button
-          type="button"
-          onClick={() => props.options.onLineSelectionEnd({ start: 1, end: 1 })}
-        >
-          comments: {props.lineAnnotations.length}
-        </button>
-      ) : (
-        <actual.File {...(props as Parameters<typeof actual.File>[0])} />
-      )) as never,
-  };
-});
 vi.mock(import("./projectFilesQueryState"), async (original) => ({
   ...(await original()),
   useProjectFileQuery: () => ({
@@ -144,7 +173,7 @@ function setup() {
   state.file = null;
   state.optimistic = null;
   state.assetUrl = { _tag: "Loading" };
-  state.stubCodeView = false;
+  state.openedBrowserUrls = [];
   let mints = 0;
   state.mintUrl.mockReset().mockImplementation(async () => `/assets/report.docx?mint=${++mints}`);
   state.writeFile.mockReset().mockResolvedValue(AsyncResult.success(undefined));
@@ -157,16 +186,6 @@ function setup() {
       }
     },
   };
-}
-
-function sourcePreview(reviewComments: boolean) {
-  state.file = {
-    relativePath: "a.ts",
-    contents: "const a = 1;\n",
-    byteLength: 13,
-    truncated: false,
-  };
-  return <FilePreviewPanel {...filePreview("a.ts").props} reviewComments={reviewComments} />;
 }
 
 function markdownPreview(truncated: boolean, contents = "- [ ] Keep the rest of this file\n") {
@@ -443,6 +462,29 @@ describe("workspace document previews", () => {
   });
 });
 
+describe("open file in preview browser", () => {
+  it("mints a fresh asset URL on every click so the browser cannot reuse cached bytes", async () => {
+    using _settings = setup();
+    state.file = {
+      relativePath: "page.html",
+      contents: "<h1>page</h1>",
+      byteLength: 13,
+      truncated: false,
+    };
+    await using screen = await render(filePreview("page.html"));
+    const button = screen.getByRole("button", { name: "Open file in preview browser" });
+
+    await userEvent.click(button);
+    await vi.waitFor(() => expect(state.openedBrowserUrls).toHaveLength(1));
+    await userEvent.click(button);
+    await vi.waitFor(() => expect(state.openedBrowserUrls).toHaveLength(2));
+
+    expect(state.openedBrowserUrls[1], "the second click reused the first signed URL").not.toBe(
+      state.openedBrowserUrls[0],
+    );
+  });
+});
+
 describe("rendered Markdown select all", () => {
   it("selects only the rendered file, including after a task toggle", async () => {
     using _settings = setup();
@@ -466,20 +508,5 @@ describe("rendered Markdown select all", () => {
     // A toggled checkbox keeps focus on an input inside the preview.
     await userEvent.click(screen.getByRole("checkbox"));
     await expectFileOnlySelection();
-  });
-});
-
-describe("line comments", () => {
-  it("opens a comment on a line selection only where the panel takes review comments", async () => {
-    using _settings = setup();
-    state.stubCodeView = true;
-    for (const [reviewComments, drafts] of [
-      [true, 1],
-      [false, 0],
-    ] as const) {
-      await using screen = await render(sourcePreview(reviewComments));
-      await userEvent.click(screen.getByRole("button", { name: "comments: 0" }));
-      await expect.element(screen.getByText(`comments: ${drafts}`)).toBeVisible();
-    }
   });
 });

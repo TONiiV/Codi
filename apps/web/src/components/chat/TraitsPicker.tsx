@@ -22,9 +22,8 @@ import {
   isClaudeUltrathinkPrompt,
   normalizeModelSlug,
 } from "@t3tools/shared/model";
+import { msg, T, useMessages } from "gt-react";
 import { memo } from "react";
-import type { TFunction } from "i18next";
-import { useTranslation } from "react-i18next";
 import { GaugeIcon } from "lucide-react";
 import {
   Menu,
@@ -37,6 +36,7 @@ import {
 } from "../ui/menu";
 import { useComposerDraftStore, DraftId } from "../../composerDraftStore";
 import { getProviderModelCapabilities, keepsUnavailableModelOptions } from "../../providerModels";
+import { m, type MessageResolver } from "~/i18n/messages";
 import { cn } from "~/lib/utils";
 import { Badge } from "../ui/badge";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
@@ -57,33 +57,36 @@ export function readPromptUltrathink(prompt: string): PromptUltrathink {
 }
 
 const SAVED_OPTION_LABELS: Readonly<Record<string, string>> = {
-  agent: "Agent",
-  effort: "Effort",
-  reasoningEffort: "Reasoning effort",
-  variant: "Reasoning",
+  agent: msg("Agent", { $context: "model option name" }),
+  effort: msg("Effort", { $context: "model option name" }),
+  reasoningEffort: msg("Reasoning effort"),
+  variant: msg("Reasoning", { $context: "model option name" }),
 };
 
-function savedOptionLabel(id: string): string {
-  return (
-    SAVED_OPTION_LABELS[id] ??
-    id.replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(/^./, (character) => character.toUpperCase())
-  );
+function savedOptionLabel(id: string, resolve: MessageResolver): string {
+  const saved = SAVED_OPTION_LABELS[id];
+  return saved !== undefined
+    ? resolve(saved)
+    : id
+        .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+        .replace(/^./, (character) => character.toUpperCase());
 }
 
 function buildUnavailableModelOptionDescriptors(
   selections: ProviderOptions | null | undefined,
+  resolve: MessageResolver,
 ): ReadonlyArray<ProviderOptionDescriptor> {
   return (selections ?? []).map((selection) =>
     typeof selection.value === "boolean"
       ? {
           id: selection.id,
-          label: savedOptionLabel(selection.id),
+          label: savedOptionLabel(selection.id, resolve),
           type: "boolean" as const,
           currentValue: selection.value,
         }
       : {
           id: selection.id,
-          label: savedOptionLabel(selection.id),
+          label: savedOptionLabel(selection.id, resolve),
           type: "select" as const,
           options: [{ id: selection.value, label: selection.value }],
           currentValue: selection.value,
@@ -105,65 +108,10 @@ type TraitsPersistence =
       onModelOptionsChange: (nextOptions: ProviderOptions | undefined) => void;
     };
 
-// Labels come from provider data, user-typed option labels and client-runtime's " · "-joined
-// trigger text. A segment is translated only when it is a known phrase, or a known phrase plus the
-// On/Off or speed word the trigger appends; anything else passes through untouched.
-export const TRAIT_PHRASE_KEYS: ReadonlyMap<string, string> = new Map([
-  ["Reasoning effort", "settings.parallelFinalUI.trait_reasoning_effort"],
-  ["Service Tier", "settings.parallelFinalUI.trait_service_tier"],
-  ["Extra High Effort", "settings.parallelFinalUI.trait_extra_high_effort"],
-  ["Medium Effort", "settings.parallelFinalUI.trait_medium_effort"],
-  ["High Effort", "settings.parallelFinalUI.trait_high_effort"],
-  ["Low Effort", "settings.parallelFinalUI.trait_low_effort"],
-  ["Context Window", "settings.parallelFinalUI.trait_context_window"],
-  ["Fast Mode", "settings.parallelFinalUI.trait_fast_mode"],
-  ["Extra High", "settings.parallelFinalUI.trait_extra_high"],
-  ["Ultrathink", "settings.parallelFinalUI.trait_ultrathink"],
-  ["Ultrafast", "settings.parallelFinalUI.trait_ultrafast"],
-  ["Effort", "settings.parallelFinalUI.trait_effort"],
-  ["Reasoning", "settings.parallelFinalUI.trait_reasoning"],
-  ["Thinking", "settings.parallelFinalUI.trait_thinking"],
-  ["Medium", "settings.parallelFinalUI.trait_medium"],
-  ["Minimal", "settings.parallelFinalUI.trait_minimal"],
-  ["Normal", "settings.parallelFinalUI.trait_normal"],
-  ["Standard", "settings.parallelFinalUI.trait_standard"],
-  ["Agent", "settings.parallelFinalUI.trait_agent"],
-  ["High", "settings.parallelFinalUI.trait_high"],
-  ["Low", "settings.parallelFinalUI.trait_low"],
-  ["Max", "settings.parallelFinalUI.trait_max"],
-  ["Ultra", "settings.parallelFinalUI.trait_ultra"],
-  ["None", "settings.parallelFinalUI.trait_none"],
-  ["Fast", "settings.parallelFinalUI.trait_fast"],
-  ["Default", "settings.parallelFinalUI.trait_default"],
-  ["On", "settings.parallelFinalUI.trait_on"],
-  ["Off", "settings.parallelFinalUI.trait_off"],
-]);
-const TRAIT_SUFFIXES: ReadonlySet<string> = new Set(["On", "Off", "Fast", "Ultrafast"]);
-
-function traitSegment(segment: string, t: TFunction): string {
-  const key = TRAIT_PHRASE_KEYS.get(segment);
-  if (key) return t(key);
-  const space = segment.lastIndexOf(" ");
-  const tail = segment.slice(space + 1);
-  const headKey = TRAIT_PHRASE_KEYS.get(segment.slice(0, space));
-  const tailKey = TRAIT_PHRASE_KEYS.get(tail);
-  return space > 0 && TRAIT_SUFFIXES.has(tail) && headKey && tailKey
-    ? `${t(headKey)} ${t(tailKey)}`
-    : segment;
-}
-
-export function traitText(text: string, t: TFunction): string {
-  return text
-    .split(" · ")
-    .map((segment) => traitSegment(segment, t))
-    .join(" · ");
-}
-
 function DefaultBadge() {
-  const { t } = useTranslation();
   return (
     <Badge variant="outline" size="sm" className="min-w-0">
-      {traitText("Default", t)}
+      <T context="the default option in a list">Default</T>
     </Badge>
   );
 }
@@ -176,6 +124,7 @@ function getSelectedTraits(
   modelOptions: ProviderOptions | null | undefined,
   allowPromptInjectedEffort: boolean,
   includePlanAgent: boolean | undefined,
+  resolve: MessageResolver = m,
 ) {
   const caps = getProviderModelCapabilities(models, model, provider, includePlanAgent);
   const modelIsUnavailable =
@@ -186,6 +135,7 @@ function getSelectedTraits(
         includePlanAgent
           ? modelOptions
           : modelOptions?.filter((option) => option.id !== "agent" || option.value !== "plan"),
+        resolve,
       )
     : getProviderOptionDescriptors({
         caps,
@@ -254,6 +204,7 @@ export function getTraitsSectionVisibility(input: {
   modelOptions?: ProviderOptions | null | undefined;
   allowPromptInjectedEffort?: boolean;
   includePlanAgent?: boolean | undefined;
+  resolve?: MessageResolver;
 }) {
   const selected = getSelectedTraits(
     input.provider,
@@ -263,6 +214,7 @@ export function getTraitsSectionVisibility(input: {
     input.modelOptions,
     input.allowPromptInjectedEffort ?? true,
     input.includePlanAgent,
+    input.resolve,
   );
 
   const showEffort = selected.primarySelectDescriptor !== null;
@@ -374,6 +326,7 @@ export function useTraitsSelection({
   const modelSelection =
     instanceId && model ? { instanceId, model, options: modelOptions ?? [] } : null;
   const setProviderModelOptions = useComposerDraftStore((store) => store.setProviderModelOptions);
+  const resolve = useMessages();
   const updateModelOptions = (nextOptions: ProviderOptions | undefined) => {
     if ("onModelOptionsChange" in persistence) {
       persistence.onModelOptionsChange(nextOptions);
@@ -398,6 +351,7 @@ export function useTraitsSelection({
     modelOptions,
     allowPromptInjectedEffort,
     includePlanAgent,
+    resolve,
   });
   return {
     ...selected,
@@ -430,9 +384,13 @@ export function useTraitsSelection({
   };
 }
 
+export const ULTRATHINK_IN_BODY_NOTE = msg(
+  'Your prompt contains "ultrathink" in the text. Remove it to change this option.',
+);
+
 const TraitsMenuContent = memo(function TraitsMenuContentImpl(props: TraitsSelectionInput) {
-  const { t } = useTranslation();
   const traits = useTraitsSelection(props);
+  const resolve = useMessages();
   const {
     descriptors,
     selectDescriptors,
@@ -458,11 +416,9 @@ const TraitsMenuContent = memo(function TraitsMenuContentImpl(props: TraitsSelec
               {index > 0 ? <MenuDivider /> : null}
               <MenuGroup>
                 <div className="px-2 pt-1.5 pb-1 font-medium text-muted-foreground text-xs">
-                  {traitText(descriptor.label, t)}
+                  {descriptor.label}
                 </div>
-                <div className="px-2 pb-1.5 text-muted-foreground/80 text-xs">
-                  {traitText(value, t)}
-                </div>
+                <div className="px-2 pb-1.5 text-muted-foreground/80 text-xs">{value}</div>
               </MenuGroup>
             </div>
           );
@@ -478,11 +434,11 @@ const TraitsMenuContent = memo(function TraitsMenuContentImpl(props: TraitsSelec
           {index > 0 ? <MenuDivider /> : null}
           <MenuGroup>
             <div className="px-2 pt-1.5 pb-1 font-medium text-muted-foreground text-xs">
-              {traitText(descriptor.label, t)}
+              {descriptor.label}
             </div>
             {ultrathinkInBodyText && descriptor.id === primarySelectDescriptor?.id ? (
               <div className="px-2 pb-1.5 text-muted-foreground/80 text-xs">
-                {t("settings.parallelFinalUI.ultrathinkInBodyNote")}
+                {resolve(ULTRATHINK_IN_BODY_NOTE)}
               </div>
             ) : null}
             <MenuRadioGroup
@@ -499,7 +455,7 @@ const TraitsMenuContent = memo(function TraitsMenuContentImpl(props: TraitsSelec
                 >
                   <span className="flex w-full min-w-0 flex-col">
                     <span className="flex min-w-0 items-center gap-1">
-                      <span className="min-w-0 truncate">{traitText(option.label, t)}</span>
+                      <span className="min-w-0 truncate">{option.label}</span>
                       {option.isDefault ? <DefaultBadge /> : null}
                     </span>
                     {option.description ? (
@@ -519,7 +475,7 @@ const TraitsMenuContent = memo(function TraitsMenuContentImpl(props: TraitsSelec
           {index > 0 || selectDescriptors.length > 0 ? <MenuDivider /> : null}
           <MenuGroup>
             <div className="px-2 py-1.5 font-medium text-muted-foreground text-xs">
-              {traitText(descriptor.label, t)}
+              {descriptor.label}
             </div>
             <MenuRadioGroup
               value={descriptor.currentValue === true ? "on" : "off"}
@@ -528,7 +484,13 @@ const TraitsMenuContent = memo(function TraitsMenuContentImpl(props: TraitsSelec
               {(["on", "off"] as const).map((value) => (
                 <MenuRadioItem key={value} value={value} hideIndicator closeOnClick>
                   <span className="flex w-full min-w-0 items-center justify-between gap-3">
-                    <span>{traitText(value === "on" ? "On" : "Off", t)}</span>
+                    <span>
+                      {value === "on" ? (
+                        <T context="toggle state">On</T>
+                      ) : (
+                        <T context="toggle state">Off</T>
+                      )}
+                    </span>
                   </span>
                 </MenuRadioItem>
               ))}
@@ -550,23 +512,25 @@ export const TraitsPicker = memo(function TraitsPicker({
   hidden?: boolean;
   disabled?: boolean;
 }) {
-  const { t } = useTranslation();
   const [isMenuOpen, setIsMenuOpen] = useComposerMenuState(hidden || disabled);
   const traits = useTraitsSelection(props);
+  const resolve = useMessages();
   if (!traits.hasAnyControls) {
     return null;
   }
-  const { label: sourceTriggerLabel } = buildTraitsTriggerDisplay({
-    descriptors: traits.descriptors,
-    primarySelectDescriptorId: traits.primarySelectDescriptor?.id ?? null,
-    ultrathinkPromptControlled: traits.ultrathinkPromptControlled,
-    modelSelection:
-      props.instanceId && props.model
-        ? { instanceId: props.instanceId, model: props.model, options: props.modelOptions ?? [] }
-        : null,
-    reportedModelSelection: props.reportedModelSelection,
-  });
-  const triggerLabel = traitText(sourceTriggerLabel, t);
+  const { label: triggerLabel } = buildTraitsTriggerDisplay(
+    {
+      descriptors: traits.descriptors,
+      primarySelectDescriptorId: traits.primarySelectDescriptor?.id ?? null,
+      ultrathinkPromptControlled: traits.ultrathinkPromptControlled,
+      modelSelection:
+        props.instanceId && props.model
+          ? { instanceId: props.instanceId, model: props.model, options: props.modelOptions ?? [] }
+          : null,
+      reportedModelSelection: props.reportedModelSelection,
+    },
+    resolve,
+  );
   const isCodexStyle = props.provider === "codex";
 
   return (

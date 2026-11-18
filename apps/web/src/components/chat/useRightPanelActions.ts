@@ -1,3 +1,6 @@
+import { msg } from "gt-react";
+import { errorDisplayMessage, thrownErrorMessage } from "@t3tools/client-runtime/errors";
+import { m } from "~/i18n/messages";
 import type { ToolCallDiffTarget } from "../../diffPanelStore";
 import type { EnvironmentProject } from "@t3tools/client-runtime/state/shell";
 import type { ThreadPreviewState } from "../../previewStateStore";
@@ -119,8 +122,8 @@ export function useRightPanelActions(input: RightPanelActionsInput) {
         toastManager.add(
           stackedThreadToast({
             type: "error",
-            title: "Unable to open browser",
-            description: error.message,
+            title: m(msg("Unable to open browser")),
+            description: errorDisplayMessage(error, m) ?? error.message,
           }),
         );
       }
@@ -252,8 +255,32 @@ export function useRightPanelActions(input: RightPanelActionsInput) {
       useRightPanelStore.getState().moveSurface(activeThreadRef, surfaceId, toIndex);
   };
   const moveRightPanelSurfaceStable = useStableCallback(moveRightPanelSurface);
-  const copyRightPanelFilePath = (relativePath: string) =>
-    copyFilePathToClipboard(relativePath, gitCwd ?? activeProjectCwd ?? "");
+  const copyRightPanelFilePath = (relativePath: string) => {
+    if (typeof window === "undefined" || !navigator.clipboard?.writeText) {
+      toastManager.add(
+        stackedThreadToast({
+          type: "error",
+          title: m(msg("Failed to copy path")),
+          description: m(msg("Clipboard API unavailable.")),
+        }),
+      );
+      return;
+    }
+
+    const clipboardPath = formatFilePathForClipboard(
+      relativePath,
+      resolvePathLinkTarget(relativePath, gitCwd ?? activeProjectCwd ?? ""),
+    );
+    void navigator.clipboard.writeText(clipboardPath).then(undefined, (error) => {
+      toastManager.add(
+        stackedThreadToast({
+          type: "error",
+          title: m(msg("Failed to copy path")),
+          description: thrownErrorMessage(error, m) ?? m(msg("An error occurred.")),
+        }),
+      );
+    });
+  };
   const copyRightPanelFilePathStable = useStableCallback(copyRightPanelFilePath);
   const addPullRequestSurface = () => {
     if (!supportsPullRequests || activeThreadRef === null || pullRequestPanelTarget === null)
@@ -320,31 +347,4 @@ export function useRightPanelActions(input: RightPanelActionsInput) {
     toggleRightPanelStable,
     toggleThreadPanelStable,
   };
-}
-
-export function copyFilePathToClipboard(relativePath: string, cwd: string) {
-  if (typeof window === "undefined" || !navigator.clipboard?.writeText) {
-    toastManager.add(
-      stackedThreadToast({
-        type: "error",
-        title: "Failed to copy path",
-        description: "Clipboard API unavailable.",
-      }),
-    );
-    return;
-  }
-
-  const clipboardPath = formatFilePathForClipboard(
-    relativePath,
-    resolvePathLinkTarget(relativePath, cwd),
-  );
-  void navigator.clipboard.writeText(clipboardPath).then(undefined, (error) => {
-    toastManager.add(
-      stackedThreadToast({
-        type: "error",
-        title: "Failed to copy path",
-        description: error instanceof Error ? error.message : "An error occurred.",
-      }),
-    );
-  });
 }

@@ -1,3 +1,4 @@
+import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
 import {
   type DeviceHostSummary,
   type DevicePlatformAvailability,
@@ -5,8 +6,9 @@ import {
   SshDeviceHostConfig,
 } from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
-import type { TFunction } from "i18next";
-import { englishT } from "~/i18n/englishT";
+import { msg } from "gt-react";
+
+import { m } from "../../i18n/messages";
 
 export interface DeviceHostCheckTarget {
   environmentId: EnvironmentId;
@@ -42,13 +44,12 @@ export async function checkDeviceHostConnections(
   host: SshDeviceHostConfig,
   probe: (environmentId: EnvironmentId, host: SshDeviceHostConfig) => Promise<DeviceHostSummary>,
   report: (environmentId: EnvironmentId, result: DeviceHostCheck) => void,
-  t: TFunction = englishT,
 ) {
   await Promise.all(
     targets.map(async (target) => {
       report(target.environmentId, { status: "pending" });
       try {
-        if (!target.connected) throw new Error(t("settings.text.environmentDisconnected"));
+        if (!target.connected) throw new Error(m(msg("Environment disconnected")));
         const result = await probe(target.environmentId, host);
         report(
           target.environmentId,
@@ -63,7 +64,10 @@ export async function checkDeviceHostConnections(
       } catch (error) {
         report(target.environmentId, {
           status: "failed",
-          error: error instanceof Error ? error.message : String(error),
+          error:
+            error instanceof Error
+              ? (thrownErrorMessage(error, m) ?? error.message)
+              : String(error),
         });
       }
     }),

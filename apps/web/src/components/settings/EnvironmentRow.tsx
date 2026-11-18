@@ -1,10 +1,12 @@
 import {
   type ConnectionTarget,
   connectionRouteId,
+  connectionRouteLabelText,
   connectionRoutes,
 } from "@t3tools/client-runtime/connection";
 import type { DesktopSshEnvironmentTarget, EnvironmentMachineKind } from "@t3tools/contracts";
 import * as Option from "effect/Option";
+import { msg, useMessages } from "gt-react";
 import type { ReactNode } from "react";
 
 import { cn } from "~/lib/utils";
@@ -12,10 +14,9 @@ import type { EnvironmentPresentation } from "~/state/environments";
 import { usePreparedConnection } from "~/state/session";
 import { isDesktopLocalConnectionTarget } from "~/connection/desktopLocal";
 import { EnvironmentMachineIcon } from "../EnvironmentMachineIcon";
-import { connectionRouteText } from "./connectionLabels";
-import type { TFunction } from "i18next";
-import { englishT } from "~/i18n/englishT";
-import { useTranslation } from "react-i18next";
+import { m, type MessageResolver } from "../../i18n/messages";
+
+const T3_CONNECT_NAME = "T3 Connect";
 
 export function formatDesktopSshTarget(target: DesktopSshEnvironmentTarget): string {
   const authority = target.username ? `${target.username}@${target.hostname}` : target.hostname;
@@ -25,10 +26,10 @@ export function formatDesktopSshTarget(target: DesktopSshEnvironmentTarget): str
 export function environmentTransportLabel(
   environment: EnvironmentPresentation,
   activeTarget: ConnectionTarget | null = null,
-  t: TFunction = englishT,
+  resolve: MessageResolver = m,
 ): string {
   const { entry } = environment;
-  if (entry.target._tag === "PrimaryConnectionTarget") return t("settings.text.thisMachine");
+  if (entry.target._tag === "PrimaryConnectionTarget") return resolve(msg("This machine"));
   const routes = connectionRoutes(entry);
   if (routes.length > 1) {
     const active =
@@ -38,10 +39,10 @@ export function environmentTransportLabel(
             (route) => connectionRouteId(route.target) === connectionRouteId(activeTarget),
           );
     return active === undefined
-      ? connectionRouteText(routes[0]!, t)
-      : t("settings.parallelConnections.viaRoute", { route: connectionRouteText(active, t) });
+      ? connectionRouteLabelText(routes[0]!, resolve)
+      : resolve(msg("via {route}", { route: connectionRouteLabelText(active, resolve) }));
   }
-  if (environment.relayManaged) return "T3 Connect";
+  if (environment.relayManaged) return T3_CONNECT_NAME;
   if (isDesktopLocalConnectionTarget(entry.target)) return "WSL";
   if (
     entry.target._tag === "SshConnectionTarget" &&
@@ -50,18 +51,18 @@ export function environmentTransportLabel(
   ) {
     return `SSH ${formatDesktopSshTarget(entry.profile.value.target)}`;
   }
-  return environment.displayUrl ?? t("settings.text.remoteLink");
+  return environment.displayUrl ?? resolve(msg("Remote link"));
 }
 
 export function useEnvironmentTransportLabel(environment: EnvironmentPresentation): string {
-  const { t } = useTranslation();
   const prepared = usePreparedConnection(environment.environmentId);
+  const resolve = useMessages();
   return environmentTransportLabel(
     environment,
     environment.connection.phase === "connected" && prepared._tag === "Some"
       ? prepared.value.target
       : null,
-    t,
+    resolve,
   );
 }
 

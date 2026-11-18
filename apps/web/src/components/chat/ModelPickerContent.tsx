@@ -1,3 +1,4 @@
+import { T, useGT, useLocale, useMessages } from "gt-react";
 import { useLegendListRef } from "~/hooks/useLegendListRef";
 import {
   ANTIGRAVITY_DEFAULT_MODEL,
@@ -9,7 +10,7 @@ import {
 } from "@t3tools/contracts";
 import { resolveSelectableModel } from "@t3tools/shared/model";
 import { useAtomValue } from "@effect/atom-react";
-import { resolveProviderUpdateRequired } from "@t3tools/client-runtime/providerUpdateRequiredModels";
+import { formatProviderUpdateRequiredNotice } from "@t3tools/client-runtime/providerUpdateRequiredModels";
 import { useNavigate } from "@tanstack/react-router";
 import { LegendList, type LegendListRef } from "@legendapp/list/react";
 import {
@@ -22,7 +23,6 @@ import {
   type ReactNode,
   type RefObject,
 } from "react";
-import { useTranslation } from "react-i18next";
 import { ModelListRow } from "./ModelListRow";
 import { ModelPickerSidebar } from "./ModelPickerSidebar";
 import { useProviderWorkspaceSnapshotRefresh } from "./useProviderWorkspaceSnapshotRefresh";
@@ -209,8 +209,9 @@ function ModelPickerProviderNotices({
   onRequestClose: (() => void) | undefined;
   onOpenProviderSetup: ((instanceId: ProviderInstanceId) => void) | undefined;
 }) {
+  const gt = useGT();
+  const messages = useMessages();
   const navigate = useNavigate();
-  const { t } = useTranslation();
   return (
     <>
       {setupEntries.length > 0 ? (
@@ -218,7 +219,7 @@ function ModelPickerProviderNotices({
           {setupEntries.map((entry) => (
             <div key={entry.instanceId} className="px-1 py-1.5 text-xs leading-snug">
               <p className="line-clamp-3 text-muted-foreground">
-                {getProviderStatusMessage(entry.snapshot)}
+                {getProviderStatusMessage(entry.snapshot, messages)}
               </p>
               <InlineButton
                 className="mt-1"
@@ -228,8 +229,8 @@ function ModelPickerProviderNotices({
                 }}
               >
                 {setupEntries.length > 1
-                  ? t("settings.parallelModelPicker.setUpProvider", { name: entry.displayName })
-                  : t("settings.parallelModelPicker.openProviderSetup")}
+                  ? gt("Set up {provider}", { provider: entry.displayName })
+                  : gt("Open provider setup")}
               </InlineButton>
             </div>
           ))}
@@ -249,7 +250,7 @@ function ModelPickerProviderNotices({
               void navigate({ to: "/settings/providers" });
             }}
           >
-            {t("settings.parallelModelPicker.providerSettings")}
+            <T>Provider settings</T>
           </InlineButton>
         </p>
       ))}
@@ -354,7 +355,9 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
   /** Closes the list column, inside the popup's fixed height. */
   listFooter?: ReactNode;
 }) {
-  const { t, i18n } = useTranslation();
+  const gt = useGT();
+  const messages = useMessages();
+  const locale = useLocale();
   const {
     searchInputRef,
     keybindings: providedKeybindings,
@@ -742,14 +745,10 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
     const shown = isSearching
       ? matchesLockedProvider(entry)
       : entry.instanceId === selectedEntry?.instanceId;
-    const update = shown ? resolveProviderUpdateRequired(entry.snapshot, searchQuery) : null;
-    if (!update) return [];
-    const notice = t("settings.remaining.updateRequired", {
-      provider: update.providerName,
-      version: update.version,
-      models: new Intl.ListFormat(i18n.language, { type: "conjunction" }).format(update.modelNames),
-    });
-    return [{ instanceId: entry.instanceId, notice }];
+    const notice = shown
+      ? formatProviderUpdateRequiredNotice(entry.snapshot, searchQuery, messages, locale)
+      : null;
+    return notice ? [{ instanceId: entry.instanceId, notice }] : [];
   });
 
   const modelJumpModelKeys = visibleModels
@@ -824,9 +823,7 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
       setSearchQuery("");
       handleSelectInstance(next);
       announce(
-        next === "favorites"
-          ? t("settings.text.favorites")
-          : (entryByInstanceId.get(next)?.displayName ?? next),
+        next === "favorites" ? gt("Favorites") : (entryByInstanceId.get(next)?.displayName ?? next),
         "model-picker",
       );
       return;
@@ -851,10 +848,7 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
     const name = flatModels.find(
       (item) => item.slug === selectedSlug && item.instanceId === model.instanceId,
     )?.name;
-    announce(
-      t("settings.parallelModelPicker.modelAnnounce", { name: name ?? selectedSlug }),
-      "model-picker",
-    );
+    announce(gt("Model: {name}", { name: name ?? selectedSlug }), "model-picker");
   };
 
   return (
@@ -890,9 +884,10 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
               ? {
                   disabledInstanceIds: lockedDisabledInstanceIds,
                   getDisabledInstanceTooltip: (entry: ProviderInstanceEntry) =>
-                    t("settings.parallelModelPicker.lockedProviderUnavailable", {
-                      name: entry.displayName,
-                    }),
+                    gt(
+                      "{provider} is unavailable in this thread. Start a new thread to switch providers.",
+                      { provider: entry.displayName },
+                    ),
                 }
               : {})}
           />
@@ -948,7 +943,7 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
           >
             <ComboboxSearchInput
               ref={searchInputRef}
-              placeholder={t("settings.parallelModelPicker.searchModels")}
+              placeholder={gt("Search models...")}
               value={searchQuery}
               onChange={(e) => {
                 if (!isSearching) setSearchHeight(pickerContentRef.current?.offsetHeight ?? 0);
@@ -1050,8 +1045,8 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
                     >
                       <span className="text-sm leading-snug text-muted-foreground group-hover:text-foreground group-data-highlighted:text-foreground">
                         {legacySection.isExpanded
-                          ? t("settings.text.showLess")
-                          : t("settings.text.showMore")}
+                          ? gt("Show less", { $context: "collapses the list of older models" })
+                          : gt("Show more", { $context: "expands the list of older models" })}
                       </span>
                     </ComboboxItem>
                   );
@@ -1097,10 +1092,10 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
               updateRequiredNotices={updateRequiredNotices}
               emptyLabel={
                 selectedInstanceId === "favorites" && !isSearching
-                  ? t("settings.parallelModelPicker.noFavoritesYet")
+                  ? gt("No favorites yet")
                   : workspaceModelsScanning
-                    ? "Searching project models..."
-                    : t("settings.parallelModelPicker.noModelsFound")
+                    ? gt("Searching project models...")
+                    : gt("No models found")
               }
               onRequestClose={onRequestClose}
               onOpenProviderSetup={onOpenProviderSetup}

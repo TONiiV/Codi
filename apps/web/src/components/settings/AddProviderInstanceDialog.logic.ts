@@ -1,6 +1,4 @@
-import type { TFunction } from "i18next";
-
-import { englishT } from "~/i18n/englishT";
+import { msg } from "gt-react";
 
 export type WizardNavigation =
   | { readonly kind: "navigate"; readonly step: number }
@@ -9,26 +7,20 @@ export type WizardNavigation =
 const IDENTITY_STEP = 1;
 const ACP_REGISTRY_IDENTITY_STEP = 1;
 
-// Entries are i18n keys; the wizard renders their translations.
+const PROVIDER_STEP = msg("Provider", { $context: "wizard step" });
+const IDENTITY_STEP_LABEL = msg("Identity", { $context: "wizard step" });
+
 export const ADD_PROVIDER_WIZARD_STEPS = [
-  "settings.parallelProviders.stepProvider",
-  "settings.parallelProviders.stepIdentity",
-  "settings.parallelProviders.stepConfig",
+  PROVIDER_STEP,
+  IDENTITY_STEP_LABEL,
+  msg("Config", { $context: "wizard step" }),
 ] as const;
 export const ACP_REGISTRY_WIZARD_STEPS = [
-  "settings.parallelProviders.stepProvider",
-  "settings.parallelProviders.stepIdentity",
-  "settings.parallelProviders.stepSignIn",
+  PROVIDER_STEP,
+  IDENTITY_STEP_LABEL,
+  msg("Sign in", { $context: "wizard step" }),
 ] as const;
-export const LOCAL_ACP_WIZARD_STEPS = [
-  "settings.parallelProviders.stepProvider",
-  "settings.parallelProviders.stepIdentity",
-] as const;
-
-/** The Local ACP default label is shown translated, but the saved instance id derives from English. */
-export function instanceIdSourceLabel(label: string, t: TFunction): string {
-  return label === t("settings.text.localAcp") ? englishT("settings.text.localAcp") : label;
-}
+export const LOCAL_ACP_WIZARD_STEPS = [PROVIDER_STEP, IDENTITY_STEP_LABEL] as const;
 
 export interface ProviderIdentityDraft {
   readonly label: string;

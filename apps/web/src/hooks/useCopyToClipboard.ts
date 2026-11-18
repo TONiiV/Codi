@@ -1,27 +1,58 @@
 import * as React from "react";
 import * as Schema from "effect/Schema";
-import type { TFunction } from "i18next";
 import {
   COMPOSER_CONTEXT_CLIPBOARD_MIME,
   encodeComposerContextClipboardHtml,
 } from "@t3tools/shared/composerContextClipboard";
-import { englishT } from "~/i18n/englishT";
-import { useTranslation } from "react-i18next";
+import { msg } from "gt-react";
+
+import { m } from "../i18n/messages";
 import { useStableCallback } from "./useStableCallback";
 
-function clipboardMessage(t: TFunction, key: string, target: string): string {
-  return t(`settings.parallelShared.${key}`, { target });
+/** `msg()` sentences, resolved when the error is shown, so users read whole ones. */
+export interface ClipboardTarget {
+  /** An English noun for logs. */
+  readonly target: string;
+  /** Shown when the clipboard API is missing. */
+  readonly unavailableMessage: string;
+  /** Shown when the browser rejects the copy or read. */
+  readonly failureMessage: string;
+}
+
+/** Copying something the user named, such as a file: its name goes into the sentences as is. */
+export function namedClipboardTarget(name: string): ClipboardTarget {
+  return {
+    target: name,
+    unavailableMessage: msg("Clipboard API is unavailable while copying {target}.", {
+      target: name,
+    }),
+    failureMessage: msg("Failed to copy {target} to the clipboard.", { target: name }),
+  };
+}
+
+const DEFAULT_CLIPBOARD_TARGET = "text";
+
+function clipboardTargetFields(
+  target: ClipboardTarget | undefined,
+  failure: "unavailable" | "failure",
+) {
+  if (target === undefined) return { target: DEFAULT_CLIPBOARD_TARGET };
+  return {
+    target: target.target,
+    displayMessage: failure === "unavailable" ? target.unavailableMessage : target.failureMessage,
+  };
 }
 
 export class ClipboardApiUnavailableError extends Schema.TaggedError<ClipboardApiUnavailableError>()(
   "ClipboardApiUnavailableError",
   {
     target: Schema.String,
-    messageText: Schema.optionalKey(Schema.String),
+    displayMessage: Schema.optional(Schema.String),
   },
 ) {
   override get message(): string {
-    return this.messageText ?? `Clipboard API is unavailable while copying ${this.target}.`;
+    if (this.displayMessage !== undefined) return m(this.displayMessage);
+    return m(msg("Clipboard API is unavailable while copying text."));
   }
 }
 
@@ -29,12 +60,13 @@ export class ClipboardWriteError extends Schema.TaggedError<ClipboardWriteError>
   "ClipboardWriteError",
   {
     target: Schema.String,
+    displayMessage: Schema.optional(Schema.String),
     cause: Schema.Defect(),
-    messageText: Schema.optionalKey(Schema.String),
   },
 ) {
   override get message(): string {
-    return this.messageText ?? `Failed to copy ${this.target} to the clipboard.`;
+    if (this.displayMessage !== undefined) return m(this.displayMessage);
+    return m(msg("Failed to copy text to the clipboard."));
   }
 }
 
@@ -42,11 +74,12 @@ export class ClipboardReadUnavailableError extends Schema.TaggedError<ClipboardR
   "ClipboardReadUnavailableError",
   {
     target: Schema.String,
-    messageText: Schema.optionalKey(Schema.String),
+    displayMessage: Schema.optional(Schema.String),
   },
 ) {
   override get message(): string {
-    return this.messageText ?? `Clipboard API is unavailable while reading ${this.target}.`;
+    if (this.displayMessage !== undefined) return m(this.displayMessage);
+    return m(msg("Clipboard API is unavailable while reading text."));
   }
 }
 
@@ -54,12 +87,13 @@ export class ClipboardReadError extends Schema.TaggedError<ClipboardReadError>()
   "ClipboardReadError",
   {
     target: Schema.String,
+    displayMessage: Schema.optional(Schema.String),
     cause: Schema.Defect(),
-    messageText: Schema.optionalKey(Schema.String),
   },
 ) {
   override get message(): string {
-    return this.messageText ?? `Failed to read ${this.target} from the clipboard.`;
+    if (this.displayMessage !== undefined) return m(this.displayMessage);
+    return m(msg("Failed to read text from the clipboard."));
   }
 }
 
@@ -108,15 +142,11 @@ function writeTextWithExecCommand(
 
 export async function writeTextToClipboard(
   value: string,
-  target = "text",
+  target?: ClipboardTarget,
   extraFlavors?: Readonly<Record<string, string>>,
-  t: TFunction = englishT,
 ) {
   if (typeof window === "undefined") {
-    throw new ClipboardApiUnavailableError({
-      target,
-      messageText: clipboardMessage(t, "copyUnavailable", target),
-    });
+    throw new ClipboardApiUnavailableError(clipboardTargetFields(target, "unavailable"));
   }
 
   if (!value) return false;
@@ -138,10 +168,7 @@ export async function writeTextToClipboard(
 
   if (typeof navigator === "undefined" || !navigator.clipboard?.writeText) {
     if (writeTextWithExecCommand(value, extraFlavors)) return true;
-    throw new ClipboardApiUnavailableError({
-      target,
-      messageText: clipboardMessage(t, "copyUnavailable", target),
-    });
+    throw new ClipboardApiUnavailableError(clipboardTargetFields(target, "unavailable"));
   }
 
   try {
@@ -178,58 +205,43 @@ export async function writeTextToClipboard(
     await navigator.clipboard.writeText(value);
     return true;
   } catch (cause) {
-    throw new ClipboardWriteError({
-      target,
-      cause,
-      messageText: clipboardMessage(t, "copyFailed", target),
-    });
+    throw new ClipboardWriteError({ ...clipboardTargetFields(target, "failure"), cause });
   }
 }
 
-export async function readTextFromClipboard(
-  target = "text",
-  t: TFunction = englishT,
-): Promise<string> {
+export async function readTextFromClipboard(target?: ClipboardTarget): Promise<string> {
   if (
     typeof window === "undefined" ||
     typeof navigator === "undefined" ||
     !navigator.clipboard?.readText
   ) {
-    throw new ClipboardReadUnavailableError({
-      target,
-      messageText: clipboardMessage(t, "readUnavailable", target),
-    });
+    throw new ClipboardReadUnavailableError(clipboardTargetFields(target, "unavailable"));
   }
 
   try {
     return await navigator.clipboard.readText();
   } catch (cause) {
-    throw new ClipboardReadError({
-      target,
-      cause,
-      messageText: clipboardMessage(t, "readFailed", target),
-    });
+    throw new ClipboardReadError({ ...clipboardTargetFields(target, "failure"), cause });
   }
 }
 
 export function useCopyToClipboard<TContext = void>({
   timeout = 2000,
-  target = "text",
+  target,
   onCopy,
   onError,
   extraFlavors,
 }: {
   timeout?: number;
-  target?: string;
+  target?: ClipboardTarget;
   onCopy?: (ctx: TContext) => void;
   onError?: (error: Error, ctx: TContext) => void;
   extraFlavors?: Readonly<Record<string, string>>;
 } = {}): { copyToClipboard: (value: string, ctx: TContext) => void; isCopied: boolean } {
-  const { t } = useTranslation();
   const [isCopied, setIsCopied] = React.useState(false);
   const timeoutIdRef = React.useRef<NodeJS.Timeout | null>(null);
   const copyToClipboard = useStableCallback((value: string, ctx: TContext): void => {
-    void writeTextToClipboard(value, target, extraFlavors, t).then(
+    void writeTextToClipboard(value, target, extraFlavors).then(
       (didCopy) => {
         if (!didCopy) return;
         if (timeoutIdRef.current) {

@@ -1,5 +1,6 @@
 import { resolveEnvironmentMachineKind, type EnvironmentId } from "@t3tools/contracts";
 import { useLocation, useNavigate } from "@tanstack/react-router";
+import { useGT } from "gt-react";
 import { ChevronRightIcon, LayersIcon } from "lucide-react";
 import type { ReactNode } from "react";
 
@@ -22,7 +23,6 @@ import {
   settingsScopeEnvironmentLabels,
   settingsScopeProjectMachines,
 } from "./settingsScopeAxis";
-import { useTranslation } from "react-i18next";
 
 interface ScopeChoice {
   label: string;
@@ -45,7 +45,7 @@ export function SettingsScopeNotice({
   targetId?: string;
   eligibleEnvironmentIds?: readonly EnvironmentId[];
 }) {
-  const { t } = useTranslation();
+  const gt = useGT();
   const { selectScope, search, groups } = useSettingsScope();
   const navigate = useNavigate({ from: "/settings" });
   const pathname = useLocation({ select: (location) => location.pathname });
@@ -75,7 +75,7 @@ export function SettingsScopeNotice({
           const { primary, secondary } = environment
             ? settingsScopeEnvironmentLabels(environment, environments)
             : {
-                primary: member.environmentLabel ?? t("settings.text.environment"),
+                primary: member.environmentLabel ?? gt("Environment"),
                 secondary: member.environmentId,
               };
           return {
@@ -93,7 +93,7 @@ export function SettingsScopeNotice({
         ? visibleProjectGroups.map((group) => ({
             label: group.displayName,
             secondary: [
-              ...(group.archived ? [t("settings.parallelA.archivedBadge")] : []),
+              ...(group.archived ? [gt("Archived", { $context: "project state" })] : []),
               ...(projectGroups.some(
                 (other) =>
                   other.projectKey !== group.projectKey && other.displayName === group.displayName,
@@ -123,7 +123,7 @@ export function SettingsScopeNotice({
               })
           : [
               {
-                label: t("settings.text.openAllEnvironments"),
+                label: gt("Open all environments"),
                 icon: <LayersIcon aria-hidden className="size-4 shrink-0 text-muted-foreground" />,
                 search: {},
               },

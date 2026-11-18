@@ -1,5 +1,6 @@
 import type { EnvironmentId } from "@t3tools/contracts";
 import type { TimestampFormat } from "@t3tools/contracts/settings";
+import { msg } from "gt-react";
 import {
   pickSnoozePreset as pickSharedSnoozePreset,
   resolveSnoozePresets as resolveSharedSnoozePresets,
@@ -7,12 +8,10 @@ import {
   type SnoozePreset,
 } from "@t3tools/client-runtime/state/thread-settled";
 
-import i18n from "i18next";
-
+import { m, type MessageResolver } from "../i18n/messages";
 import { appAtomRegistry } from "../rpc/atomRegistry";
 import { serverEnvironment } from "../state/server";
 import { formatShortTimestamp } from "../timestampFormat";
-import { localizeSnoozeLabel, localizeSnoozeWhen } from "./settings/SnoozePresetsSettings.logic";
 import { toastManager } from "./ui/toast";
 
 export { snoozeWakeLabel, type SnoozePreset };
@@ -22,14 +21,9 @@ export function resolveSnoozePresets(
   now: Date,
   timestampFormat: TimestampFormat,
   environmentId: EnvironmentId,
+  resolve: MessageResolver = m,
 ): ReadonlyArray<SnoozePreset> {
-  const options = snoozeOptions(timestampFormat, environmentId);
-  // The shared resolver is English-only and prefixes a wake day in the browser's locale.
-  return resolveSharedSnoozePresets(now, options).map((preset) => ({
-    ...preset,
-    label: localizeSnoozeLabel(preset.label, i18n.t),
-    whenLabel: localizeSnoozeWhen(preset, options.formatTime, i18n.language),
-  }));
+  return resolveSharedSnoozePresets(now, snoozeOptions(timestampFormat, environmentId), resolve);
 }
 
 /** A shown menu choice as picked; see the shared `pickSnoozePreset`. */
@@ -38,18 +32,20 @@ export function pickSnoozePreset(
   id: string,
   timestampFormat: TimestampFormat,
   environmentId: EnvironmentId,
+  resolve: MessageResolver = m,
 ): SnoozePreset | undefined {
   const picked = pickSharedSnoozePreset({
     shown,
     id,
     now: new Date(),
     ...snoozeOptions(timestampFormat, environmentId),
+    resolve,
   });
   if (!picked) {
     toastManager.add({
       type: "warning",
-      title: i18n.t("settings.parallelFinalUI.snoozeFailedTitle"),
-      description: i18n.t("settings.parallelFinalUI.snoozeFailedDescription"),
+      title: resolve(msg("Could not snooze thread")),
+      description: resolve(msg("That snooze time has passed. Choose another time.")),
     });
   }
   return picked;

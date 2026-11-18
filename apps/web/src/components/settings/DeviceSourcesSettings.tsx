@@ -1,5 +1,8 @@
+import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
 import { useAtomValue } from "@effect/atom-react";
 import { Fragment, useState, type ReactNode } from "react";
+import { msg, T, useGT, useMessages } from "gt-react";
+import { m as resolveNow, type MessageResolver } from "../../i18n/messages";
 import * as Cause from "effect/Cause";
 import * as Option from "effect/Option";
 import { AsyncResult } from "effect/reactivity";
@@ -49,9 +52,6 @@ import {
   type SimlockTokenEntry,
 } from "./simlockDeviceHostsSettings.logic";
 import { useHostConnectionChecks } from "./useHostConnectionChecks";
-import { useTranslation } from "react-i18next";
-import type { TFunction } from "i18next";
-import { englishT } from "~/i18n/englishT";
 
 const deviceHostStatesAtom = environmentAtomList("web-device-host-states", (environmentId) =>
   deviceEnvironment.state({ environmentId, input: {} }),
@@ -59,7 +59,9 @@ const deviceHostStatesAtom = environmentAtomList("web-device-host-states", (envi
 
 const failureMessage = (cause: Cause.Cause<unknown>) => {
   const error = Cause.squash(cause);
-  return error instanceof Error ? error.message : String(error);
+  return error instanceof Error
+    ? (thrownErrorMessage(error, resolveNow) ?? error.message)
+    : String(error);
 };
 
 /** Something on one environment that is in progress or needs a fix; a working source has none. */
@@ -115,9 +117,9 @@ type Editing =
 function hostStatus(
   state: DeviceServiceState | undefined,
   hostId: string,
-  t: TFunction = englishT,
+  resolve: MessageResolver = resolveNow,
 ): SourceStatus | undefined {
-  if (!state) return { tone: "pending", label: t("settings.text.loading") };
+  if (!state) return { tone: "pending", label: resolve(msg("Loading")) };
   const status = state.hostStatuses[hostId];
   switch (status?.status) {
     case "ready": {
@@ -125,17 +127,21 @@ function hostStatus(
       if (incomplete.length === 0) return undefined;
       const label =
         incomplete.length > 1
-          ? t("settings.text.deviceListMayBeIncomplete")
-          : t("settings.text.platformListMayBeIncomplete", {
-              platform: incomplete[0] === "ios" ? "iOS" : "Android",
-            });
+          ? resolve(msg("Device list may be incomplete"))
+          : incomplete[0] === "ios"
+            ? resolve(msg("iOS list may be incomplete"))
+            : resolve(msg("Android list may be incomplete"));
       return { tone: "warning", label, detail: status.detail };
     }
     case "installing":
     case "starting":
-      return { tone: "pending", label: t("settings.text.starting"), detail: status.detail };
+      return { tone: "pending", label: resolve(msg("Starting")), detail: status.detail };
     case "failed":
-      return { tone: "error", label: t("settings.text.failed"), detail: status.detail };
+      return {
+        tone: "error",
+        label: resolve(msg("Failed", { $context: "device host status" })),
+        detail: status.detail,
+      };
     default:
       return undefined;
   }
@@ -152,7 +158,8 @@ export function DeviceSourcesSettings(props: {
   readonly supportsEas: boolean;
   readonly supportsSimlock: boolean;
 }) {
-  const { t } = useTranslation();
+  const gt = useGT();
+  const m = useMessages();
   const { scope, environments, connectedEnvironments, environment: primary } = useSettingsScope();
   const projectScope = scope.kind === "project" || scope.kind === "checkout";
   const update = useAtomCommand(serverEnvironment.updateSettings, { reportFailure: false });
@@ -199,10 +206,8 @@ export function DeviceSourcesSettings(props: {
       toastManager.add({
         type: "error",
         title: failedTitle,
-        description: t("settings.parallelConnections.cannotChangeSettingsOn", {
-          environments: unwritable
-            .map((patch) => name(patch.environmentId))
-            .join(t("settings.parallelA.listSeparator")),
+        description: gt("This connection cannot change settings on {environments}.", {
+          environments: unwritable.map((patch) => name(patch.environmentId)).join(", "),
         }),
       });
       return false;
@@ -217,12 +222,7 @@ export function DeviceSourcesSettings(props: {
     const failed = patches.flatMap((patch, index) => {
       const outcome = outcomes[index];
       return outcome && outcome._tag === "Failure"
-        ? [
-            t("settings.parallelConnections.environmentFailure", {
-              label: name(patch.environmentId),
-              message: failureMessage(outcome.cause),
-            }),
-          ]
+        ? [`${name(patch.environmentId)}: ${failureMessage(outcome.cause)}`]
         : [];
     });
     if (failed.length === 0) return true;
@@ -248,20 +248,20 @@ export function DeviceSourcesSettings(props: {
                 host,
                 remove,
                 original,
-                t,
               ),
             },
           })),
-        remove
-          ? t("settings.text.deviceHostNotRemovedEverywhere")
-          : t("settings.text.deviceHostNotSavedEverywhere"),
+        remove ? gt("Device host not removed everywhere") : gt("Device host not saved everywhere"),
       );
       if (saved) setEditing(null);
     } catch (error) {
       toastManager.add({
         type: "error",
-        title: t("settings.text.deviceHostNotSaved"),
-        description: error instanceof Error ? error.message : String(error),
+        title: gt("Device host not saved"),
+        description:
+          error instanceof Error
+            ? (thrownErrorMessage(error, resolveNow) ?? error.message)
+            : String(error),
       });
     }
   };
@@ -284,9 +284,7 @@ export function DeviceSourcesSettings(props: {
           ),
         },
       })),
-      remove
-        ? t("settings.text.easHostNotRemovedEverywhere")
-        : t("settings.text.easHostNotSavedEverywhere"),
+      remove ? gt("Expo host not removed everywhere") : gt("Expo host not saved everywhere"),
     );
     if (saved) setEditing(null);
   };
@@ -307,7 +305,7 @@ export function DeviceSourcesSettings(props: {
         environmentId: patch.environmentId,
         patch: { simlockDeviceHosts: patch.hosts },
       })),
-      t("settings.text.simlockHostNotSavedEverywhere"),
+      gt("Simlock host not saved everywhere"),
     );
     if (saved) setEditing(null);
   };
@@ -319,7 +317,7 @@ export function DeviceSourcesSettings(props: {
           environmentId: environment.environmentId,
           patch: { simlockDeviceHosts: updateSimlockDeviceHosts(environment.hosts, host, true) },
         })),
-      t("settings.text.simlockHostNotRemovedEverywhere"),
+      gt("Simlock host not removed everywhere"),
     );
 
   const [testing, setTesting] = useState<ReadonlySet<string>>(new Set());
@@ -337,24 +335,19 @@ export function DeviceSourcesSettings(props: {
     toastManager.add({
       type: failed.length ? "error" : "success",
       title: failed.length
-        ? t("settings.text.labelLengthOfLength2EnvironmentsFailed", {
-            label: host.label,
-            length: failed.length,
-            length2: targets.length,
-          })
-        : t("settings.text.labelConnectionChecksPassed", { label: host.label }),
+        ? gt(
+            "{count, plural, one {{host}: {count} of {total} environments failed} other {{host}: {count} of {total} environments failed}}",
+            { host: host.label, count: failed.length, total: targets.length },
+          )
+        : gt("{host}: connection checks passed", { host: host.label }),
       description: failed.length
         ? failed
             .map((target) => {
               const result = checked[target.environmentId];
-              return t("settings.parallelConnections.environmentFailure", {
-                label: target.label,
-                message:
-                  result?.status === "failed" ? result.error : t("settings.text.failedLower"),
-              });
+              return `${target.label}: ${result?.status === "failed" ? result.error : gt("failed", { $context: "connection check result" })}`;
             })
             .join("\n")
-        : t("settings.text.connectedOrAlreadyAvailableLocallyOn"),
+        : gt("Connected or already available locally on each selected environment."),
     });
   };
 
@@ -364,7 +357,7 @@ export function DeviceSourcesSettings(props: {
   const rowActions = (onEdit: () => void, onRemove: () => void, extra?: ReactNode) => (
     <>
       <Button size="sm" variant="outline" disabled={disabled} onClick={onEdit}>
-        {t("settings.text.edit")}
+        <T>Edit</T>
       </Button>
       <Menu>
         <MenuTrigger
@@ -373,7 +366,7 @@ export function DeviceSourcesSettings(props: {
               size="icon-sm"
               variant="ghost-muted"
               disabled={disabled}
-              aria-label={t("settings.text.more")}
+              aria-label={gt("More")}
             />
           }
         >
@@ -382,7 +375,7 @@ export function DeviceSourcesSettings(props: {
         <MenuPopup align="end">
           {extra}
           <MenuItem variant="destructive" onClick={onRemove}>
-            {t("settings.text.remove")}
+            {gt("Remove", { $context: "verb, removes a device source" })}
           </MenuItem>
         </MenuPopup>
       </Menu>
@@ -394,16 +387,16 @@ export function DeviceSourcesSettings(props: {
   rows.push({
     key: "local",
     shared: false,
-    title: t("settings.text.localSimulators"),
+    title: gt("Local simulators"),
     description:
       members.length > 1
-        ? t("settings.text.simulatorsAndEmulatorsInstalledOnEach")
-        : t("settings.text.simulatorsAndEmulatorsInstalledOnThis"),
+        ? gt("Simulators and emulators installed on each environment's own machine.")
+        : gt("Simulators and emulators installed on this environment's machine."),
     environments: active.map((member) => {
       const local = member.state?.hosts.find((host) => host.kind === "local");
       const status = local
-        ? hostStatus(member.state, local.id, t)
-        : hostStatus(member.state, "", t);
+        ? hostStatus(member.state, local.id, m)
+        : hostStatus(member.state, "", m);
       return {
         environmentId: member.environmentId,
         label: member.label,
@@ -414,7 +407,7 @@ export function DeviceSourcesSettings(props: {
             ? {
                 ...status,
                 action: {
-                  label: t("settings.text.refresh"),
+                  label: gt("Refresh"),
                   run: () => void list({ environmentId: member.environmentId, input: {} }),
                 },
               }
@@ -455,8 +448,8 @@ export function DeviceSourcesSettings(props: {
         if (!held)
           return { environmentId: member.environmentId, label: member.label, added: false };
         const status = testing.has(host.id)
-          ? ({ tone: "pending", label: t("settings.text.testingConnection") } as const)
-          : hostStatus(member.state, held.host.id, t);
+          ? ({ tone: "pending", label: gt("Testing connection") } as const)
+          : hostStatus(member.state, held.host.id, m);
         return {
           environmentId: member.environmentId,
           label: member.label,
@@ -466,9 +459,9 @@ export function DeviceSourcesSettings(props: {
             status?.tone === "error" && member.state?.supportsHostRetry
               ? {
                   ...status,
-                  label: t("settings.text.canTConnect"),
+                  label: gt("Can't connect"),
                   action: {
-                    label: t("settings.text.retry"),
+                    label: gt("Retry"),
                     run: () => retry(member.environmentId, held.host.id),
                   },
                 }
@@ -479,7 +472,9 @@ export function DeviceSourcesSettings(props: {
         () =>
           setEditing({ kind: "ssh", host, original: host, ...(grouped ? {} : { only: holders }) }),
         () => void saveSsh(host, true, host, holders),
-        <MenuItem onClick={() => void testSsh(host)}>{t("settings.text.testConnection")}</MenuItem>,
+        <MenuItem onClick={() => void testSsh(host)}>
+          <T>Test connection</T>
+        </MenuItem>,
       ),
     });
   }
@@ -503,7 +498,7 @@ export function DeviceSourcesSettings(props: {
         shared: true,
         title: host.label,
         kind: "Expo",
-        description: easSessionLimits(host, t),
+        description: easSessionLimits(host, m),
         environments: active.map((member) => {
           const added = (member.settings?.easDeviceHosts ?? []).some(
             (candidate) => candidate.id === host.id,
@@ -514,7 +509,7 @@ export function DeviceSourcesSettings(props: {
             added,
             ...(added
               ? {
-                  status: hostStatus(member.state, host.id, t),
+                  status: hostStatus(member.state, host.id, m),
                   platforms: hostPlatforms(member.state, host.id),
                 }
               : {}),
@@ -540,7 +535,7 @@ export function DeviceSourcesSettings(props: {
         shared: true,
         title: host.label,
         kind: "Simlock",
-        description: `${host.gatewayUrl.replace(/^https?:\/\//, "")} · ${simlockLeaseLimits(host, t)}`,
+        description: `${host.gatewayUrl.replace(/^https?:\/\//, "")} · ${simlockLeaseLimits(host, m)}`,
         environments: active.map((member) => {
           const held = (member.settings?.simlockDeviceHosts ?? []).find(
             (candidate) => candidate.id === host.id,
@@ -553,7 +548,7 @@ export function DeviceSourcesSettings(props: {
             added: true,
             platforms: hostPlatforms(member.state, host.id),
             // A blank token can still resolve to the machine's own, so the host's answer decides.
-            status: hostStatus(member.state, host.id, t),
+            status: hostStatus(member.state, host.id, m),
           };
         }),
         actions: rowActions(edit, () => removeSimlock(host)),
@@ -566,7 +561,7 @@ export function DeviceSourcesSettings(props: {
       <MenuTrigger
         render={<Button size="sm" variant="outline" disabled={disabled || editing !== null} />}
       >
-        <PlusIcon className="size-3.5" /> {t("settings.parallelConnections.addSource")}
+        <PlusIcon className="size-3.5" /> <T>Add source</T>
         <ChevronDownIcon className="size-3.5" />
       </MenuTrigger>
       <MenuPopup align="end">
@@ -579,7 +574,7 @@ export function DeviceSourcesSettings(props: {
             })
           }
         >
-          {t("settings.text.machineOverSsh")}
+          <T>Machine over SSH</T>
         </MenuItem>
         {props.supportsEas ? (
           <MenuItem
@@ -593,7 +588,7 @@ export function DeviceSourcesSettings(props: {
               })
             }
           >
-            {t("settings.text.easSimulator")}
+            <T>Expo Simulators</T>
           </MenuItem>
         ) : null}
         {props.supportsSimlock && simlockEnabled ? (
@@ -602,7 +597,7 @@ export function DeviceSourcesSettings(props: {
               setEditing({ kind: "simlock", host: newSimlockDeviceHost(randomUUID()), isNew: true })
             }
           >
-            {t("settings.text.simlockPoolAlpha")}
+            <T>Simlock pool (alpha)</T>
           </MenuItem>
         ) : null}
       </MenuPopup>
@@ -610,11 +605,7 @@ export function DeviceSourcesSettings(props: {
   );
 
   return (
-    <SettingsSection
-      id="device-sources"
-      title={t("settings.text.deviceSources")}
-      headerAction={addMenu}
-    >
+    <SettingsSection id="device-sources" title={gt("Device sources")} headerAction={addMenu}>
       {rows.map((row) => (
         <DeviceSourceRow key={row.key} row={row} />
       ))}
@@ -676,7 +667,13 @@ function PlatformIcon(props: {
   row: SourceRow;
   known: ReadonlyArray<SourceEnvironment>;
 }) {
-  const { t } = useTranslation();
+  const gt = useGT();
+  const headingLabels = {
+    Connected: gt("Connected"),
+    Available: gt("Available", { $context: "device platform status" }),
+    "Not available": gt("Not available"),
+    "Not added": gt("Not added"),
+  };
   const availability = (environment: SourceEnvironment) =>
     environment.platforms?.find((candidate) => candidate.platform === props.platform);
   const availableOn = props.known.filter((environment) => availability(environment)?.available);
@@ -703,13 +700,17 @@ function PlatformIcon(props: {
         render={
           <button
             type="button"
-            aria-label={t("settings.parallelConnections.platformAvailabilityAria", {
-              title: props.row.title,
-              platform: props.label,
-              availability: available
-                ? t("settings.text.availableLower")
-                : t("settings.text.notAvailable"),
-            })}
+            aria-label={
+              available
+                ? gt("{source}: {platform} available", {
+                    source: props.row.title,
+                    platform: props.label,
+                  })
+                : gt("{source}: {platform} not available", {
+                    source: props.row.title,
+                    platform: props.label,
+                  })
+            }
             className={cn(
               "relative grid size-6 shrink-0 place-items-center rounded-md outline-hidden hover:bg-accent focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
               available ? "text-foreground" : "text-muted-foreground/45",
@@ -727,12 +728,11 @@ function PlatformIcon(props: {
       </PopoverTrigger>
       <PopoverPopup side="top" align="end" width="sm">
         <p className="text-sm font-medium">
-          {props.label}{" "}
           {available
             ? partial
-              ? t("settings.text.availableOnSome")
-              : t("settings.text.availableLower")
-            : t("settings.text.notAvailable")}
+              ? gt("{platform} available on some", { platform: props.label })
+              : gt("{platform} available", { platform: props.label })
+            : gt("{platform} not available", { platform: props.label })}
         </p>
         {props.row.shared ? (
           <>
@@ -744,20 +744,20 @@ function PlatformIcon(props: {
                 {(
                   [
                     ...(uniform
-                      ? ([["connected", t("settings.text.connected"), connected]] as const)
+                      ? ([["Connected", connected]] as const)
                       : ([
-                          ["available", t("settings.text.available"), availableOn],
-                          ["not-available", t("settings.text.notAvailable2"), unavailableOn],
+                          ["Available", availableOn],
+                          ["Not available", unavailableOn],
                         ] as const)),
-                    ["not-added", t("settings.parallelConnections.notAdded"), notAdded] as const,
+                    ["Not added", notAdded],
                   ] as const
-                ).map(([heading, label, environments]) =>
+                ).map(([heading, environments]) =>
                   environments.length > 0 ? (
                     <div key={heading}>
-                      <dt className="text-muted-foreground">{label}</dt>
+                      <dt className="text-muted-foreground">{headingLabels[heading]}</dt>
                       {environments.map((environment) => {
                         const reason =
-                          heading === "not-available"
+                          heading === "Not available"
                             ? availability(environment)?.reason
                             : undefined;
                         return (
@@ -784,8 +784,8 @@ function PlatformIcon(props: {
                   <dt className="text-muted-foreground">{environment.label}</dt>
                   <dd className={entry?.available ? "" : "text-muted-foreground"}>
                     {entry?.available
-                      ? t("settings.text.available")
-                      : (entry?.reason ?? t("settings.text.notAvailable2"))}
+                      ? gt("Available", { $context: "device platform status" })
+                      : (entry?.reason ?? gt("Not available"))}
                   </dd>
                 </Fragment>
               );
@@ -793,7 +793,7 @@ function PlatformIcon(props: {
           </dl>
         ) : !available ? (
           <p className="mt-1 text-xs text-muted-foreground">
-            {availability(props.known[0]!)?.reason ?? t("settings.text.notSetUpOnThisMachine")}
+            {availability(props.known[0]!)?.reason ?? gt("Not set up on this machine.")}
           </p>
         ) : null}
       </PopoverPopup>
@@ -802,7 +802,6 @@ function PlatformIcon(props: {
 }
 
 function DeviceSourceRow(props: { row: SourceRow }) {
-  const { t } = useTranslation();
   const { row } = props;
   const several = row.environments.length > 1;
   const issues = row.environments.filter(
@@ -841,7 +840,7 @@ function DeviceSourceRow(props: { row: SourceRow }) {
             {environment.status.tone === "warning" && environment.status.detail ? (
               <Popover>
                 <PopoverTrigger render={<InlineButton />}>
-                  {t("settings.text.details")}
+                  <T>Details</T>
                 </PopoverTrigger>
                 <PopoverPopup side="bottom" align="start" width="lg" padding="compact">
                   <p className="whitespace-pre-wrap break-words font-mono text-xs text-muted-foreground">

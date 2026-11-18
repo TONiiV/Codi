@@ -2,7 +2,9 @@ import {
   connectionStatusText,
   type EnvironmentConnectionPresentation,
 } from "@t3tools/client-runtime/connection";
-import i18n from "i18next";
+import { msg } from "gt-react";
+
+import { m, type MessageResolver } from "~/i18n/messages";
 
 export interface SavedCloudEnvironmentConnectionPresentation {
   readonly buttonLabel: string;
@@ -10,37 +12,55 @@ export interface SavedCloudEnvironmentConnectionPresentation {
   readonly tone: "connected" | "connecting" | "error" | "idle";
 }
 
-type Phase = EnvironmentConnectionPresentation["phase"];
-
-const PHASE_TONE: Record<Phase, SavedCloudEnvironmentConnectionPresentation["tone"]> = {
-  connected: "connected",
-  connecting: "connecting",
-  reconnecting: "connecting",
-  unsupported: "idle",
-  error: "error",
-  offline: "idle",
-  available: "idle",
-};
-
-const PHASE_LABEL_KEY = {
-  connected: "settings.parallelShared.cloudPhase_connected",
-  connecting: "settings.parallelShared.cloudPhase_connecting",
-  reconnecting: "settings.parallelShared.cloudPhase_reconnecting",
-  unsupported: "settings.parallelShared.cloudPhase_unsupported",
-  error: "settings.parallelShared.cloudPhase_error",
-  offline: "settings.parallelShared.cloudPhase_offline",
-  available: "settings.parallelShared.cloudPhase_available",
-} as const satisfies Record<Phase, string>;
-
+/** Components pass `useMessages()` so the label follows a language switch. */
 export function presentSavedCloudEnvironmentConnection(
   connection: EnvironmentConnectionPresentation,
+  resolve: MessageResolver = m,
 ): SavedCloudEnvironmentConnectionPresentation {
-  return {
-    buttonLabel:
-      connection.phase === "reconnecting" && connection.awaitingApproval
-        ? "Waiting for approval…"
-        : i18n.t(PHASE_LABEL_KEY[connection.phase]),
-    statusText: connectionStatusText(connection),
-    tone: PHASE_TONE[connection.phase],
-  };
+  switch (connection.phase) {
+    case "connected":
+      return {
+        buttonLabel: resolve(msg("Connected")),
+        statusText: connectionStatusText(connection, resolve),
+        tone: "connected",
+      };
+    case "connecting":
+      return {
+        buttonLabel: resolve(msg("Connecting…")),
+        statusText: connectionStatusText(connection, resolve),
+        tone: "connecting",
+      };
+    case "reconnecting":
+      return {
+        buttonLabel: connection.awaitingApproval
+          ? resolve(msg("Waiting for approval…"))
+          : resolve(msg("Reconnecting…")),
+        statusText: connectionStatusText(connection, resolve),
+        tone: "connecting",
+      };
+    case "unsupported":
+      return {
+        buttonLabel: resolve(msg("Client not supported")),
+        statusText: connectionStatusText(connection, resolve),
+        tone: "idle",
+      };
+    case "error":
+      return {
+        buttonLabel: resolve(msg("Connection failed")),
+        statusText: connectionStatusText(connection, resolve),
+        tone: "error",
+      };
+    case "offline":
+      return {
+        buttonLabel: resolve(msg("Offline")),
+        statusText: connectionStatusText(connection, resolve),
+        tone: "idle",
+      };
+    case "available":
+      return {
+        buttonLabel: resolve(msg("Not connected")),
+        statusText: connectionStatusText(connection, resolve),
+        tone: "idle",
+      };
+  }
 }
