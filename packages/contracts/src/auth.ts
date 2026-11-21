@@ -62,6 +62,7 @@ export const AuthEnvironmentOwnerSubjects = [
   AuthReusableDevTokenChildSubject,
 ] as const;
 
+export const AuthRelayConfigureScope = "relay:configure" as const;
 export const AuthEnvironmentScope = Schema.Literals([
   AuthOrchestrationReadScope,
   AuthOrchestrationOperateScope,
@@ -82,6 +83,7 @@ export const AuthEnvironmentScope = Schema.Literals([
   AuthRelayWriteScope,
   AuthTelescopeMemberScope,
   AuthTelescopeAdminScope,
+  AuthRelayConfigureScope,
 ]);
 export type AuthEnvironmentScope = typeof AuthEnvironmentScope.Type;
 export const AuthEnvironmentScopes = Schema.Array(AuthEnvironmentScope);
@@ -132,6 +134,7 @@ const legacyRequiredScopes: Partial<Record<AuthEnvironmentScope, AuthEnvironment
   ...legacyParents,
   [AuthTelescopeMemberScope]: AuthOrchestrationReadScope,
   [AuthTelescopeAdminScope]: AuthAccessWriteScope,
+  [AuthRelayConfigureScope]: AuthRelayWriteScope,
 };
 
 /** Keep permission denials decodable by clients with the original scope enum. */
@@ -193,6 +196,11 @@ export const AuthStandardClientScopes = [
   AuthTelescopeAdminScope,
 ] as const;
 
+export const AuthAdministrativeClientScopes = [
+  ...AuthStandardClientScopes,
+  AuthRelayConfigureScope,
+] as const;
+
 export const AuthTokenExchangeGrantType =
   "urn:ietf:params:oauth:grant-type:token-exchange" as const;
 export const AuthAccessTokenType = "urn:ietf:params:oauth:token-type:access_token" as const;
@@ -247,7 +255,8 @@ export type AuthClientPresentationMetadata = typeof AuthClientPresentationMetada
 export const AuthTokenExchangeRequest = Schema.Struct({
   grant_type: Schema.Literal(AuthTokenExchangeGrantType),
   subject_token: TrimmedNonEmptyString,
-  subject_token_type: Schema.Literal(AuthEnvironmentBootstrapTokenType),
+  /** An access token renews its own session, with a DPoP proof from the key it is bound to. */
+  subject_token_type: Schema.Literals([AuthEnvironmentBootstrapTokenType, AuthAccessTokenType]),
   requested_token_type: Schema.Literal(AuthAccessTokenType),
   scope: Schema.optionalKey(TrimmedNonEmptyString),
   client_label: Schema.optionalKey(TrimmedNonEmptyString),

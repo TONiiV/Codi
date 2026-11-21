@@ -1,8 +1,9 @@
 import { scopeThreadRef } from "@t3tools/client-runtime/environment";
-import { type EnvironmentId, ProjectId, RunId, Telescope, ThreadId } from "@t3tools/contracts";
+import { EnvironmentId, ProjectId, RunId, Telescope, ThreadId } from "@t3tools/contracts";
 import { beforeEach, describe, expect, it } from "vite-plus/test";
 
 import { useClosedViewStore } from "./closedViewStore";
+import { linkedThreadTitle } from "./linkedThreadSurface";
 import { reopenClosedView } from "./reopenClosedView";
 import {
   hostRightPanel,
@@ -64,7 +65,7 @@ describe("rightPanelStore", () => {
     const panel = telescopePanelRef("env-1" as EnvironmentId);
     const store = useRightPanelStore.getState();
     const unhost = hostRightPanel(refB, panel);
-    store.openSideChat(panel, TELESCOPE_SIDE_CHAT);
+    store.openThread(panel, TELESCOPE_SIDE_CHAT);
     store.openFile(refB, "src/app.ts");
     store.open(refB, "diff");
     store.openPullRequest(refB, { projectId: "p", repository: "o/r", number: 7 });
@@ -72,7 +73,7 @@ describe("rightPanelStore", () => {
       selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, panel).surfaces.map(
         (surface) => surface.kind,
       );
-    expect(kinds()).toEqual(["side-chat"]);
+    expect(kinds()).toEqual(["thread"]);
     store.open(panel, "preview");
     // A file tab there resolves against the mount its Files browser shows, which a bare path names none of.
     expect(rightPanelOffers(refB, "file")).toBe(false);
@@ -89,7 +90,7 @@ describe("rightPanelStore", () => {
     store.openTask(panel, { workspaceId, taskId: Telescope.TaskId.make("t1") });
     store.openTask(panel, { workspaceId, taskId: Telescope.TaskId.make("t2") });
     // An attachment names no mount, so it leaves the project's explorer in place.
-    expect(kinds()).toEqual(["side-chat", "preview", "files", "file", "task", "task"]);
+    expect(kinds()).toEqual(["thread", "preview", "files", "file", "task", "task"]);
     unhost();
   });
 
@@ -99,7 +100,7 @@ describe("rightPanelStore", () => {
       {
         toggleVisibility: (store) => store.toggleVisibility(panel),
         setMaximized: (store) => store.setMaximized(panel, true),
-        openSideChat: (store) => store.openSideChat(panel, TELESCOPE_SIDE_CHAT),
+        openThread: (store) => store.openThread(panel, TELESCOPE_SIDE_CHAT),
         closeBrowser: (store) => store.closeSurface(panel, "preview:new"),
       };
     for (const [name, act] of Object.entries(actions)) {
@@ -129,8 +130,8 @@ describe("rightPanelStore", () => {
       ]);
       if (name === "toggleVisibility") expect(after.isOpen).toBe(false);
       if (name === "setMaximized") expect(after.maximized).toBe(true);
-      if (name === "openSideChat") {
-        expect(after.surfaces.map((surface) => surface.kind)).toEqual(["preview", "side-chat"]);
+      if (name === "openThread") {
+        expect(after.surfaces.map((surface) => surface.kind)).toEqual(["preview", "thread"]);
       }
       if (name === "closeBrowser") expect(after.surfaces).toEqual([]);
     }
@@ -139,9 +140,9 @@ describe("rightPanelStore", () => {
   it("records no closed tabs for Telescope's panel, which has no thread to reopen them in", () => {
     const panel = telescopePanelRef("env-1" as EnvironmentId);
     const store = useRightPanelStore.getState();
-    store.openSideChat(panel, TELESCOPE_SIDE_CHAT);
+    store.openThread(panel, TELESCOPE_SIDE_CHAT);
     store.open(panel, "preview");
-    store.closeSurface(panel, `side-chat:${TELESCOPE_SIDE_CHAT}`);
+    store.closeSurface(panel, `thread:${TELESCOPE_SIDE_CHAT}`);
     store.closeAllSurfaces(panel);
     expect(useClosedViewStore.getState().entries).toEqual([]);
   });
@@ -615,6 +616,121 @@ describe("rightPanelStore", () => {
       },
     });
     expect(selectThreadRightPanelState(migrated.byThreadKey, refA).maximized).toBe(true);
+  });
+
+  it("opens a linked thread once per thread and environment it is read through", () => {
+    const store = useRightPanelStore.getState();
+    const target = {
+      viaEnvironmentId: EnvironmentId.make("env-1"),
+      environmentId: EnvironmentId.make("env:b"),
+      threadId: ThreadId.make("there"),
+      label: "fs-17",
+      title: null,
+    };
+    store.openLinkedThread(refA, target);
+    store.open(refA, "diff");
+    store.openLinkedThread(refA, { ...target, label: "renamed", title: "Fix the build" });
+    store.openLinkedThread(refA, { ...target, title: null });
+    store.openLinkedThread(refA, { ...target, viaEnvironmentId: EnvironmentId.make("env-2") });
+    const panel = selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, refA);
+    expect(panel.surfaces.map((surface) => surface.id)).toEqual([
+      "linked-thread:env-1:env%3Ab:there",
+      "diff",
+      "linked-thread:env-2:env%3Ab:there",
+    ]);
+    // A click that knows no title keeps the one an earlier click or read gave.
+    expect(panel.surfaces[0]).toMatchObject({ label: "fs-17", title: "Fix the build" });
+    store.setLinkedThreadTitle(refA, "linked-thread:env-1:env%3Ab:there", "Fix flaky test");
+    expect(
+      selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, refA).surfaces[0],
+    ).toMatchObject({ title: "Fix flaky test" });
+    // The tab is named for the thread once its title is known, else for where it is.
+    expect(linkedThreadTitle({ title: "Fix flaky test" }, "Thread on fs-17")).toBe(
+      "Fix flaky test",
+    );
+    expect(linkedThreadTitle({ title: " " }, "Thread on fs-17")).toBe("Thread on fs-17");
+    expect(linkedThreadTitle({ title: null }, "Thread on fs-17")).toBe("Thread on fs-17");
+  });
+
+  it("keeps saved linked threads it can show and drops surfaces it cannot", () => {
+    const linked = {
+      id: "linked-thread:stale-id",
+      kind: "linked-thread",
+      viaEnvironmentId: "env-1",
+      environmentId: "env-b",
+      threadId: "there",
+      label: "fs-17",
+    };
+    const migrated = migratePersistedRightPanelState({
+      byThreadKey: {
+        "env-1:thread-A": {
+          isOpen: true,
+          activeSurfaceId: "linked-thread:stale-id",
+          surfaces: [
+            linked,
+            { ...linked, id: "linked-thread:no-thread", threadId: undefined },
+            { id: "hologram:1", kind: "hologram" },
+            null,
+            { id: "diff", kind: "diff" },
+          ],
+        },
+      },
+    });
+    expect(selectThreadRightPanelState(migrated.byThreadKey, refA)).toEqual({
+      isOpen: true,
+      // The saved id no longer names a surface, so the first one left is shown.
+      activeSurfaceId: "linked-thread:env-1:env-b:there",
+      surfaces: [
+        {
+          id: "linked-thread:env-1:env-b:there",
+          kind: "linked-thread",
+          viaEnvironmentId: "env-1",
+          environmentId: "env-b",
+          threadId: "there",
+          label: "fs-17",
+          title: null,
+        },
+        { id: "diff", kind: "diff" },
+      ],
+    });
+  });
+
+  it("opens a side chat or subagent once per thread, and never the panel's own thread", () => {
+    const store = useRightPanelStore.getState();
+    const child = ThreadId.make("child");
+    store.openThread(refA, child);
+    store.open(refA, "diff");
+    store.openThread(refA, child);
+    store.openThread(refA, refA.threadId);
+    const panel = selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, refA);
+    expect(panel.surfaces.map((surface) => surface.id)).toEqual(["thread:child", "diff"]);
+    expect(panel.activeSurfaceId).toBe("thread:child");
+  });
+
+  it("keeps side chat tabs saved before they became thread surfaces", () => {
+    const migrated = migratePersistedRightPanelState({
+      byThreadKey: {
+        "env-1:thread-A": {
+          isOpen: true,
+          activeSurfaceId: "side-chat:side",
+          surfaces: [
+            { id: "diff", kind: "diff" },
+            { id: "side-chat:side", kind: "side-chat", threadId: "side" },
+            { id: "side-chat:gone", kind: "side-chat" },
+            { id: "thread:stale", kind: "thread", threadId: "sub" },
+          ],
+        },
+      },
+    });
+    expect(selectThreadRightPanelState(migrated.byThreadKey, refA)).toEqual({
+      isOpen: true,
+      activeSurfaceId: "thread:side",
+      surfaces: [
+        { id: "diff", kind: "diff" },
+        { id: "thread:side", kind: "thread", threadId: "side" },
+        { id: "thread:sub", kind: "thread", threadId: "sub" },
+      ],
+    });
   });
 
   it("drops the legacy singleton terminal surface during migration", () => {

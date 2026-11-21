@@ -457,7 +457,7 @@ export function TelescopePanel(props: {
           onAddPullRequests={noop}
           onAddDevice={noop}
           onAddSideChat={() =>
-            useRightPanelStore.getState().openSideChat(panelRef, TELESCOPE_SIDE_CHAT)
+            useRightPanelStore.getState().openThread(panelRef, TELESCOPE_SIDE_CHAT)
           }
           browserAvailable={canOperatePreview && browserAvailable}
           terminalAvailable={false}
@@ -480,7 +480,7 @@ export function TelescopePanel(props: {
                 visible={open}
               />
             </Suspense>
-          ) : active?.kind === "side-chat" && workspace !== null ? (
+          ) : active?.kind === "thread" && workspace !== null ? (
             <SideChat
               environmentId={environmentId}
               workspace={workspace}

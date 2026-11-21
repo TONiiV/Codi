@@ -45,7 +45,12 @@ import { DEFAULT_CLIENT_SETTINGS } from "@t3tools/contracts/settings";
 import { __setClientSettingsForTests } from "../hooks/useSettings";
 import { ToastProvider } from "../components/ui/toast";
 import { AppAtomRegistryProvider } from "../rpc/atomRegistry";
-import { hostRightPanel, telescopePanelRef, useRightPanelStore } from "../rightPanelStore";
+import {
+  hostRightPanel,
+  ISSUES_PANEL_REF,
+  telescopePanelRef,
+  useRightPanelStore,
+} from "../rightPanelStore";
 import { useDiffPanelStore } from "../diffPanelStore";
 import { useOpenChangeRequestLink } from "./openPullRequestLink";
 
@@ -67,6 +72,7 @@ const project = {
   },
 };
 const commitUrl = `https://github.com/Effect-TS/effect/commit/${"a".repeat(40)}?plain=1#diff-original`;
+const pullRequestUrl = "https://github.com/Effect-TS/effect/pull/86";
 const pullRequestCommitUrl = `https://github.com/Effect-TS/effect/pull/1/commits/${"a".repeat(40)}`;
 
 function CommitLink({ url = commitUrl }: { url?: string }) {
@@ -74,6 +80,18 @@ function CommitLink({ url = commitUrl }: { url?: string }) {
   return (
     <a href={url} onClick={(event) => open(event, url)}>
       Commit
+    </a>
+  );
+}
+
+function IssuesPagePullRequestLink() {
+  const open = useOpenChangeRequestLink(undefined, ISSUES_PANEL_REF);
+  return (
+    <a
+      href={pullRequestUrl}
+      onClick={(event) => open(event, pullRequestUrl, undefined, environmentId)}
+    >
+      Pull request
     </a>
   );
 }
@@ -191,4 +209,19 @@ it("opens a pull request in Telescope's Browser, which has no pull request tabs"
     expect.objectContaining({ threadRef, url }),
   );
   expect(useRightPanelStore.getState().byThreadKey).toEqual({});
+});
+
+it("opens a pull request linked on the Issues page beside its issues", async () => {
+  setup();
+  await using screen = await render(
+    <AppAtomRegistryProvider>
+      <IssuesPagePullRequestLink />
+    </AppAtomRegistryProvider>,
+    { router: "/issues" },
+  );
+  await screen.getByRole("link", { name: "Pull request" }).click();
+  expect(
+    useRightPanelStore.getState().byThreadKey[scopedThreadKey(ISSUES_PANEL_REF)],
+  ).toMatchObject({ isOpen: true, surfaces: [{ kind: "pull-request", number: 86 }] });
+  expect(screen.router?.state.location.pathname).toBe("/issues");
 });
