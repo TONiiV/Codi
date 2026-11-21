@@ -520,7 +520,7 @@ it("readThread returns the newest items that fit the response budget", async () 
         thread: undefined,
         client: {
           sessionId: "laptop",
-          label: "T3 Code · laptop",
+          label: "Codi · laptop",
           access: "auto",
           linked: true,
         },

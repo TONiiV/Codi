@@ -535,7 +535,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, NodePlatformCrypto.layer))(
         const day = 24 * 60 * 60 * 1000;
         const issue = (peerLink: boolean) =>
           serverAuth.issueMcpClientSession({
-            label: peerLink ? "T3 Code · A" : "ChatGPT",
+            label: peerLink ? "Codi · A" : "ChatGPT",
             access: "auto",
             peerLink,
             client: requestMetadata,

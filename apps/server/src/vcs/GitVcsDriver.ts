@@ -1121,9 +1121,9 @@ export const makeVcsDriverShape = Effect.fn("makeGitVcsDriverShape")(function* (
     (excludePaths ?? []).map((relativePath) => `:(exclude,literal)${relativePath}`);
 
   const checkpointIdentity: NodeJS.ProcessEnv = {
-    GIT_AUTHOR_NAME: "T3 Code",
+    GIT_AUTHOR_NAME: "Codi",
     GIT_AUTHOR_EMAIL: "t3code@users.noreply.github.com",
-    GIT_COMMITTER_NAME: "T3 Code",
+    GIT_COMMITTER_NAME: "Codi",
     GIT_COMMITTER_EMAIL: "t3code@users.noreply.github.com",
   };
 

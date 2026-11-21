@@ -95,7 +95,7 @@ A steer waits until Claude finishes the tool calls it is running, then Claude re
 in the same turn. The message shows as unread until then. If Claude drops it before
 reading it, the message is sent as the next turn, after any messages queued before it.
 If Claude exits or the server restarts first, the message waits in the queue in that
-same place until you resume it. If you press Stop, T3 Code shows a notice with the text
+same place until you resume it. If you press Stop, Codi shows a notice with the text
 of any steer Claude had not read.
 
 ## Skills
@@ -123,9 +123,9 @@ row in the thread; open it to see every step.
 When an MCP server you added to Claude needs you to sign in, the thread shows a notice with
 **Sign in**, once per session; on mobile, tap the notice. Approve access on the page it opens. Your
 browser then goes to a page that may not load, especially when Claude runs on another machine:
-copy that page's address, paste it into T3 Code, and choose **Finish sign-in**. Claude keeps the
+copy that page's address, paste it into Codi, and choose **Finish sign-in**. Claude keeps the
 sign-in and reconnects the server. Connectors you added on claude.ai are signed in on claude.ai,
-so T3 Code doesn't ask about them. Signing in needs permission to manage providers.
+so Codi doesn't ask about them. Signing in needs permission to manage providers.
 
 ## Claude in Chrome
 
