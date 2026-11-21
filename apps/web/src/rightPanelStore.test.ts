@@ -149,9 +149,9 @@ describe("rightPanelStore", () => {
 
   it("keeps a Code thread's open launcher through a payload saved at the shipped version", async () => {
     useRightPanelStore.getState().show(refA);
-    const { storage, name } = useRightPanelStore.persist.getOptions();
+    const { storage, name, version } = useRightPanelStore.persist.getOptions();
     const persisted = await storage!.getItem(name!);
-    await storage!.setItem(name!, { ...persisted!, version: 15 });
+    await storage!.setItem(name!, { ...persisted!, version: version! });
     await useRightPanelStore.persist.rehydrate();
     expect(
       selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, refA).isOpen,

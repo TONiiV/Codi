@@ -162,23 +162,24 @@ async function setup() {
 describe("TelescopePanel", () => {
   it("toggles and maximizes on the desktop's forwarded menu actions", async () => {
     await using _viewport = await setup();
-    let menuAction: ((action: string) => void) | undefined;
+    const listeners = new Set<(action: string) => void>();
+    const menuAction = (action: string) => listeners.forEach((listener) => listener(action));
     window.desktopBridge = {
       onMenuAction: (listener: (action: string) => void) => {
-        menuAction = listener;
+        listeners.add(listener);
         return () => {
-          menuAction = undefined;
+          listeners.delete(listener);
         };
       },
     } as unknown as NonNullable<typeof window.desktopBridge>;
     using _bridge = { [Symbol.dispose]: () => delete window.desktopBridge };
     await using _screen = await render(<TelescopePanel panelRef={panelRef} layoutElement={null} />);
 
-    menuAction?.("rightPanel.toggle");
+    menuAction("rightPanel.toggle");
     await vi.waitFor(() => expect(panelState().isOpen).toBe(true));
-    menuAction?.("rightPanel.toggleMaximized");
+    menuAction("rightPanel.toggleMaximized");
     await vi.waitFor(() => expect(panelState().maximized).toBe(true));
-    menuAction?.("rightPanel.toggle");
+    menuAction("rightPanel.toggle");
     await vi.waitFor(() => expect(panelState().isOpen).toBe(false));
   });
 

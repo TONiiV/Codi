@@ -1,4 +1,4 @@
-import { useAtomSet, useAtomValue } from "@effect/atom-react";
+import { useAtomValue } from "@effect/atom-react";
 import {
   isAtomCommandInterrupted,
   squashAtomCommandFailure,
@@ -21,7 +21,7 @@ import { SegmentedControl } from "../../components/ui/SegmentedControl";
 import { SelectionRow } from "../../components/ui/SelectionRow";
 import { useThreadShell } from "../../state/entities";
 import { useEnvironments } from "../../state/environments";
-import { mobilePreferencesAtom, updateMobilePreferencesAtom } from "../../state/preferences";
+import { mobilePreferencesAtom, saveMobilePreferences } from "../../state/preferences";
 import { type EnvironmentQueryView, useEnvironmentQuery } from "../../state/query";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { SettingsScreen } from "../settings/components/SettingsScreen";
@@ -99,7 +99,7 @@ function reportFailure(
 export function TelescopeRouteScreen() {
   const insets = useSafeAreaInsets();
   const preferences = useAtomValue(mobilePreferencesAtom);
-  const savePreferences = useAtomSet(updateMobilePreferencesAtom);
+  const savePreferences = useAtomCommand(saveMobilePreferences, { reportFailure: false });
   const { environments } = useEnvironments();
   const [view, setView] = useState<BoardView>("decisions");
   const [picking, setPicking] = useState(false);

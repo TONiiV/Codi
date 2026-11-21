@@ -216,7 +216,7 @@ describe("telescope delegation queries", () => {
 
         // An own cancel comes back as its notice: one read.
         const delegationId = Telescope.DelegationId.make("d");
-        const canceled = yield* Effect.promise(() =>
+        const canceled = yield* Effect.exit(
           delegations.cancel.run(registry, {
             environmentId: env,
             input: { workspaceId, delegationId },

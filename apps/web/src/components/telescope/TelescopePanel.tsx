@@ -321,7 +321,7 @@ export function TelescopePanel(props: {
     threadPanelPresentation: "inline",
     isServerThread: false,
     embedded: false,
-    isGitRepo: false,
+    diffAvailable: false,
     browserAvailable,
     canOperatePreview,
     diffOpen: false,

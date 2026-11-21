@@ -470,7 +470,7 @@ describe("board watch", () => {
       expect(yield* nextReads(1)).toEqual(["decisions"]);
 
       const write = { workspaceId, taskId: t1, baseVersion: 1, set: { status: "done" as const } };
-      const updated = yield* Effect.promise(() => board.updateTask.run(registry, at(write)));
+      const updated = yield* Effect.exit(board.updateTask.run(registry, at(write)));
       expect(updated._tag).toBe("Success");
       expect(yield* nextReads(2)).toEqual(["tasks", "tasks"]);
       // Nothing else was read for it: the next read is the next notice's.
@@ -478,7 +478,7 @@ describe("board watch", () => {
       expect(yield* nextReads(1)).toEqual(["decisions"]);
 
       const proposal = decision("p1", "proposed", "2026-11-01T00:00:00.000Z");
-      const refused = yield* Effect.promise(() =>
+      const refused = yield* Effect.exit(
         board.createDecision.run(registry, at(decideInput(proposal, "a"))),
       );
       expect(refused._tag).toBe("Failure");
@@ -495,7 +495,7 @@ describe("board watch", () => {
       yield* TestClock.adjust("1 minute");
       expect(yield* Queue.size(watches)).toBe(0);
       // With no live watch to echo it, a write re-reads on settle.
-      yield* Effect.promise(() => board.updateTask.run(registry, at(write)));
+      yield* Effect.exit(board.updateTask.run(registry, at(write)));
       expect(yield* settled).toEqual(["decisions", "tasks", "tasks"]);
       expect(yield* unread).toBe(0);
 
@@ -534,7 +534,7 @@ describe("board watch", () => {
       expect(second.openedAt - first.openedAt).toBe(1000);
       // Not yet subscribed again, so nothing echoes a write: it re-reads on settle.
       const write = { workspaceId, taskId: t1, baseVersion: 1, set: { status: "done" as const } };
-      yield* Effect.promise(() => board.updateTask.run(registry, at(write)));
+      yield* Effect.exit(board.updateTask.run(registry, at(write)));
       registry.refresh(marker);
       expect(yield* readsBefore("agents")).toEqual(["decisions", "tasks"]);
 

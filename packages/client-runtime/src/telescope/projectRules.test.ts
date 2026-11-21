@@ -205,7 +205,9 @@ describe("project rule atoms", () => {
     const at = <I>(input: I) => ({ environmentId: env, input: { workspaceId, ...input } });
     const agentId = Telescope.AgentId.make("agent");
     const projectId = ProjectId.make("project-api");
-    const refused: ReadonlyArray<readonly [string, () => Promise<{ readonly _tag: string }>]> = [
+    const refused: ReadonlyArray<
+      readonly [string, () => Effect.Effect<unknown, { readonly _tag: string }>]
+    > = [
       [
         "project rule",
         () => projectRules.set.run(registry, at({ projectId, powers, routing: null })),
@@ -286,7 +288,7 @@ describe("project rule atoms", () => {
         registry.refresh(workspaces.get(target));
         expect((yield* read(workspaces.get(target))).self.role, name).toBe("admin");
         server.role = "member";
-        const result = yield* Effect.promise(run);
+        const result = yield* Effect.exit(run());
         expect(result._tag, name).toBe("Failure");
         expect((yield* read(workspaces.get(target))).self.role, name).toBe("member");
       }

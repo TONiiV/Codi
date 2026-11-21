@@ -199,7 +199,11 @@ function SideChatButton({ task }: { task: Telescope.Task }) {
         onClick={async () => {
           if (threadRef === null) return;
           setPending(true);
-          const opened = await sideChat.open(prompt);
+          const opened = await sideChat.open({
+            text: prompt,
+            attachments: [],
+            titleSeed: task.title,
+          });
           setPending(false);
           if (opened)
             void navigate({

@@ -217,14 +217,14 @@ describe("telescope governance atoms", () => {
       const { governance, registry, get, read } = yield* setup();
       expect(yield* read).toEqual({ budgets: [], killSwitches: [] });
       const input = { workspaceId, scope: "company" as const, scopeId: workspaceId, limitCalls: 5 };
-      const result = yield* Effect.promise(() =>
+      const result = yield* Effect.exit(
         governance.setBudget.run(registry, { environmentId: env, input }),
       );
       expect(result._tag).toBe("Success");
       expect((yield* read).budgets).toMatchObject([{ scope: "company", limitCalls: 5 }]);
       expect(get).toHaveBeenCalledTimes(2);
       const stop = { workspaceId, agentId, state: "paused" as const };
-      yield* Effect.promise(() =>
+      yield* Effect.exit(
         governance.setKillSwitch.run(registry, { environmentId: env, input: stop }),
       );
       expect((yield* read).killSwitches).toMatchObject([stop]);

@@ -275,7 +275,7 @@ describe("telescope agent queries", () => {
       expect(listMine).toHaveBeenCalledTimes(1);
 
       const input = { workspaceId, name: "app", mounts: project().mounts, leadSubjectId: "me" };
-      const result = yield* Effect.promise(() =>
+      const result = yield* Effect.exit(
         workspaces.createProject.run(registry, { environmentId: env, input }),
       );
       expect(result._tag).toBe("Success");

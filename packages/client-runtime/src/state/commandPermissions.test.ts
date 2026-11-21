@@ -783,12 +783,12 @@ it.effect("re-reads the routing and project rule lists after a refused change", 
         expect(result._tag === "Failure" && Cause.squash(result.cause!)).toMatchObject({
           reason: "not_found",
         });
-      refused(yield* Effect.promise(() => routing.remove.run(registry, target)));
+      refused(yield* Effect.exit(routing.remove.run(registry, target)));
       expect(yield* read).toEqual({ rules: [] });
 
       rules = [{ ...gone, model: "large" }];
       const set = { environmentId: env, input: gone };
-      refused(yield* Effect.promise(() => routing.set.run(registry, set)));
+      refused(yield* Effect.exit(routing.set.run(registry, set)));
       expect(yield* read).toEqual({ rules });
 
       const ruleList = projectRule.list({ environmentId: env, input: { workspaceId } });
@@ -800,7 +800,7 @@ it.effect("re-reads the routing and project rule lists after a refused change", 
         environmentId: env,
         input: { workspaceId, projectId: unbound.projectId, powers: unbound.powers, routing: null },
       };
-      refused(yield* Effect.promise(() => projectRule.set.run(registry, setRule)));
+      refused(yield* Effect.exit(projectRule.set.run(registry, setRule)));
       expect(yield* readRules).toEqual({ rules: [] });
     }),
   ),

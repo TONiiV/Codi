@@ -72,7 +72,11 @@ function Loading() {
 }
 
 // Never called: an embedded chat has no panel for the diff and shell links that would use them.
-const PANELLESS = { openToolDiff: () => {}, runShellCommand: () => {} };
+const panelless = (hostRef: ReturnType<typeof scopeThreadRef>) => ({
+  hostRef,
+  openToolDiff: () => {},
+  runShellCommand: () => {},
+});
 
 /** The agent's resident thread once the shell lists it; a deleted or archived one starts over. */
 export function AgentChat({
@@ -119,7 +123,7 @@ export function AgentChat({
         environmentId={environmentId}
         threadId={threadId}
         routeKind="server"
-        embedded={PANELLESS}
+        embedded={panelless(scopeThreadRef(environmentId, threadId))}
       />
     );
   // Not loaded yet, or just opened and the lists have not caught up: the shell lists it soon.

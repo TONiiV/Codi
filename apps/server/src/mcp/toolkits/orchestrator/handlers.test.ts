@@ -34,8 +34,10 @@ import * as Project from "../../../project/ProjectService.ts";
 import * as DocumentText from "../../../provider/DocumentText.ts";
 import * as PeerForwarding from "../../../peer/PeerForwarding.ts";
 import * as RemoteDelegation from "../../../peer/RemoteDelegation.ts";
+import * as GitManager from "../../../git/GitManager.ts";
 import * as ProviderRegistry from "../../../provider/ProviderRegistry.ts";
 import * as PullRequestReviewGuideService from "../../../pullRequest/PullRequestReviewGuideService.ts";
+import * as PullRequestService from "../../../pullRequest/PullRequestService.ts";
 import * as PullRequestWatchService from "../../../pullRequest/PullRequestWatchService.ts";
 import * as ServerSettings from "../../../serverSettings.ts";
 import * as ScheduledTasks from "../../../scheduledTasks/ScheduledTaskService.ts";
@@ -128,6 +130,8 @@ const layer = (opened: Array<string>) =>
         Layer.mock(Orchestrator.OrchestratorV2)({ getThreadShell: () => Effect.succeed(null) }),
         Layer.mock(AssetSigner.AssetSigner)({}),
         Layer.mock(ServerSecretStore.ServerSecretStore)({}),
+        Layer.mock(PullRequestService.PullRequestService)({}),
+        Layer.mock(GitManager.GitManager)({}),
         Layer.mock(PullRequestReviewGuideService.PullRequestReviewGuideService)({}),
         Layer.mock(PullRequestWatchService.PullRequestWatchService)({
           setWatching: ({ threadId }) =>
