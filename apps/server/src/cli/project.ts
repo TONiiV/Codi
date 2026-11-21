@@ -327,38 +327,35 @@ const withProjectSnapshot = Effect.fn("runProjectMutation")(function* <A>(
   const config = yield* resolveCliAuthConfig(flags, logLevel, options);
   const minimumLogLevel = options?.quietLogs ? "Error" : config.logLevel;
 
-  return yield* Effect.gen(function* () {
-    return yield* RunningServer.changeState({
-      scopes: AuthStandardClientScopes,
-      viaServer: Effect.fn("project.viaServer")(function* (client) {
-        return yield* run({
-          snapshot: yield* client.projects.snapshot({ headers: {} }),
-          dispatch: (command) =>
-            client.projects.mutate({ headers: {}, payload: command } as Parameters<
-              typeof client.projects.mutate
-            >[0]),
-        });
-      }, Effect.mapError(projectCommandErrorFromServerAnswer)),
-      locally: Effect.promise(() => import("../orchestration-v2/runtimeLayer.ts")).pipe(
-        Effect.flatMap(({ layerProjectService }) =>
-          Effect.gen(function* () {
-            const projects = yield* ProjectService.ProjectService;
-            return yield* run({
-              snapshot: yield* projects.snapshot,
-              dispatch: (command) =>
-                projectMutationOperation(projects, command).pipe(Effect.asVoid),
-            });
-          }).pipe(
-            Effect.provide(
-              makeProjectCliRuntimeLayer(layerProjectService).pipe(
-                Layer.provide(ServerConfig.layer(config)),
-                Layer.provide(Layer.succeed(References.MinimumLogLevel, minimumLogLevel)),
-              ),
+  return yield* RunningServer.changeState({
+    scopes: AuthStandardClientScopes,
+    viaServer: Effect.fn("project.viaServer")(function* (client) {
+      return yield* run({
+        snapshot: yield* client.projects.snapshot({ headers: {} }),
+        dispatch: (command) =>
+          client.projects.mutate({ headers: {}, payload: command } as Parameters<
+            typeof client.projects.mutate
+          >[0]),
+      });
+    }, Effect.mapError(projectCommandErrorFromServerAnswer)),
+    locally: Effect.promise(() => import("../orchestration-v2/runtimeLayer.ts")).pipe(
+      Effect.flatMap(({ layerProjectService }) =>
+        Effect.gen(function* () {
+          const projects = yield* ProjectService.ProjectService;
+          return yield* run({
+            snapshot: yield* projects.snapshot,
+            dispatch: (command) => projectMutationOperation(projects, command).pipe(Effect.asVoid),
+          });
+        }).pipe(
+          Effect.provide(
+            makeProjectCliRuntimeLayer(layerProjectService).pipe(
+              Layer.provide(ServerConfig.layer(config)),
+              Layer.provide(Layer.succeed(References.MinimumLogLevel, minimumLogLevel)),
             ),
           ),
         ),
       ),
-    });
+    ),
   }).pipe(
     Effect.scoped,
     Effect.provide(
