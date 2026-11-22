@@ -2,7 +2,7 @@
 
 Use a new thread for a separate task. Choose **New worktree** when its code changes
 need a separate branch and working directory. Threads in the same checkout share its
-branch, so T3 Code refuses a branch switch there while one of them is working.
+branch, so Codi refuses a branch switch there while one of them is working.
 
 ## Start a thread
 
