@@ -1,4 +1,4 @@
-import { setMarkdownTaskChecked } from "@t3tools/shared/markdownTaskList";
+import { setMarkdownTaskChecked } from "@t3tools/shared/markdownTaskEdits";
 import { Telescope } from "@t3tools/contracts";
 import {
   ArrowUpIcon,
