@@ -86,6 +86,7 @@ import {
   TelescopeIcon,
   TextSearchIcon,
   UserPlusIcon,
+  WorkflowIcon,
 } from "lucide-react";
 import { openThreadFind } from "./chat/threadFindStore";
 import { dispatchPreviewAction } from "./preview/previewActionBus";
@@ -133,6 +134,7 @@ import { useAtomCommand } from "../state/use-atom-command";
 import { useOrchestrationCommand } from "../state/use-orchestration-command";
 import { useAtomQueryRunner } from "../state/use-atom-query-runner";
 import { useScratchProject } from "../hooks/useScratchProject";
+import { useWorkflowEnvironmentIds } from "./workflows/useWorkflowEnvironmentIds";
 import { useStartTriage } from "../hooks/useStartTriage";
 import { pickTriageEnvironment } from "../lib/triageTarget";
 import { useNewProject } from "../hooks/useNewProject";
@@ -525,6 +527,7 @@ function OpenCommandPaletteDialog(props: {
         ? scopeThreadRef(activeThread.environmentId, activeThread.id)
         : null;
   const openPanelPullRequestUrl = useOpenPanelPullRequestUrl(referenceThreadRef);
+  const workflowsReachable = useWorkflowEnvironmentIds().length > 0;
   const activeThreadServerConfig = useServerConfigs().get(
     activeThread?.environmentId ?? ("" as EnvironmentId),
   );
@@ -1788,6 +1791,19 @@ function OpenCommandPaletteDialog(props: {
       );
     },
   });
+
+  if (workflowsReachable) {
+    actionItems.push({
+      kind: "action",
+      value: "action:workflows",
+      searchTerms: ["workflows", "workflow", "runs", "automation", "definitions", "schedule"],
+      title: gt("Open workflows"),
+      icon: <WorkflowIcon className={ITEM_ICON_CLASS} />,
+      run: async () => {
+        await navigate({ to: "/workflows" });
+      },
+    });
+  }
 
   actionItems.push({
     kind: "action",

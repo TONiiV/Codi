@@ -1,6 +1,7 @@
 import { visit } from "jsonc-parser";
 import { describe, expect, it } from "vite-plus/test";
 
+import { resolveWebLocaleSelection } from "./locales";
 import en from "./locales/en.json";
 import enText from "./locales/en.json?raw";
 import zhCN from "./locales/zh-CN.json";
@@ -67,5 +68,20 @@ describe("locale files", () => {
       return text.trim() !== "" && /^[\s\x21-\x2f\x3a-\x40\x5b-\x60\x7b-\x7e]*$/.test(text);
     });
     expect(lostEncodings).toEqual([]);
+  });
+});
+
+describe("resolveWebLocaleSelection", () => {
+  it.each([
+    ["system", ["en-GB"], "en", undefined],
+    ["system", ["zh-TW", "en-GB"], "en", undefined],
+    ["en", ["en-GB"], "en", undefined],
+    ["en", ["de-DE"], "en", "en"],
+    ["de", ["en-US"], "de", "de"],
+  ] as const)("%s with browser languages %j", (language, browserLocales, catalog, formatting) => {
+    expect(resolveWebLocaleSelection(language, browserLocales)).toEqual({
+      catalogLocale: catalog,
+      formattingLocale: formatting,
+    });
   });
 });
