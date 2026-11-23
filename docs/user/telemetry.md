@@ -15,19 +15,19 @@ which is off unless you turn it on.
 
 ## Agent feedback
 
-Agent feedback lets agents tell the T3 team about T3 Code: a T3 tool or `t3` command that did not
+Agent feedback lets agents tell the T3 team about Codi: a T3 tool or `t3` command that did not
 do what they expected, a confusing instruction, or a missing capability. Choose a mode in
 **Agent feedback** in **Settings > Labs**:
 
 - **Off**, the default: agents do not see the feedback tools, and `t3 feedback` stops with a
   message pointing to Labs.
-- **When I ask**: agents send a report only when you ask them to, about anything in T3 Code.
-- **Automatic**: agents also report T3 Code problems they hit on their own, such as a T3 tool that
+- **When I ask**: agents send a report only when you ask them to, about anything in Codi.
+- **Automatic**: agents also report Codi problems they hit on their own, such as a T3 tool that
   failed and made them find another way. These reports carry no outline and no message text, and
   go out without asking you. `t3 feedback --kind bug --subject "t3 thread send" --expected "…" --actual "…"`
   sends one the same way, so it works only in this mode.
 
-When you ask your agent for a report, in either mode, T3 Code shows it in the thread as a card
+When you ask your agent for a report, in either mode, Codi shows it in the thread as a card
 with exactly what would leave your machine, and sends it only if you press **Send**. The agent
 carries on without waiting and never learns your answer. The card stays open until you answer it,
 even after the turn ends or the server restarts; **Don't send** sends nothing, and the agent is
@@ -48,7 +48,7 @@ and you can decline the old one. Tool inputs and outputs, files, and attachments
 show you at most 3 report cards and send 3 reports on its own per turn, and `t3 feedback` can
 send at most 10 an hour.
 
-Before anything is saved, T3 Code removes file paths (when text mentions one, the rest of that line
+Before anything is saved, Codi removes file paths (when text mentions one, the rest of that line
 goes with it), your user name, machine name, project title, branch, and git remote, and anything
 that looks like a key, token, email address, or URL with a password. It cannot recognise your code
 or a name written in a sentence, so only include the conversation when it holds nothing you would

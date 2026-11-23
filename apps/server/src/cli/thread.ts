@@ -92,7 +92,7 @@ class ThreadToolMissingError extends Schema.TaggedError<ThreadToolMissingError>(
 ) {
   override readonly [Runtime.errorReported] = false;
   override get message(): string {
-    return `This T3 Code server has no ${this.tool} tool. Update T3 Code, then retry.`;
+    return `This Codi server has no ${this.tool} tool. Update Codi, then retry.`;
   }
 }
 

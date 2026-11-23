@@ -470,7 +470,7 @@ an address you trust: the code is sent there.
 - The link shows up in that machine's **Settings → Sharing & access** like any
   outside agent, and can be revoked there. **Forget** on this machine also ends
   it there when that machine confirms it. If it can't, such as when it is
-  offline or on an older T3 Code, Forget says so; revoke it in that machine's
+  offline or on an older Codi, Forget says so; revoke it in that machine's
   Sharing & access.
 - A link stays valid while agents use it. One unused for 30 days expires, as
   does one to a machine on an older Codi after 30 days; link again with a
