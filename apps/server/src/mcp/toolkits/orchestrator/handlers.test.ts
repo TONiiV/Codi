@@ -626,7 +626,10 @@ it("every environment a gated tool's input can name has a linked-environment row
     new Set(Object.keys(opens).map((key) => key.split(" ")[0])),
   );
   // Where a delegated task came from, not where it runs (its `opens` row stays local).
-  const origins = new Set(["t3_thread_launch delegatedFrom.environmentId"]);
+  const origins = new Set([
+    "t3_thread_launch delegatedFrom.environmentId",
+    "t3_thread_launch workflowRun.environmentId",
+  ]);
   const named = gated
     .flatMap((tool) =>
       environmentFields(tool.parametersSchema.ast).map(
