@@ -52,6 +52,14 @@ const readKeybindingsConfig = (configPath: string) =>
     return yield* decodeKeybindingsConfigJson(rawConfig);
   });
 
+// Defaults precede persisted rules, so this many fillers evicts exactly the defaults before the chat.new rule on `key`.
+const fillersEvictingDefaultsBefore = (key: string) =>
+  MAX_KEYBINDINGS_COUNT -
+  SharedKeybindings.DEFAULT_KEYBINDINGS.length +
+  SharedKeybindings.DEFAULT_KEYBINDINGS.findIndex(
+    (rule) => rule.command === "chat.new" && rule.key === key,
+  );
+
 it.layer(NodeServices.layer)("keybindings", (it) => {
   it.effect("parses shortcuts including plus key", () =>
     Effect.sync(() => {
@@ -535,7 +543,7 @@ it.layer(NodeServices.layer)("keybindings", (it) => {
       const keybindings = yield* Keybindings.Keybindings;
       yield* writeKeybindingsConfig(
         keybindingsConfigPath,
-        Array.from({ length: 210 }, (_, index) => ({
+        Array.from({ length: fillersEvictingDefaultsBefore("mod+shift+o") }, (_, index) => ({
           key: "mod+alt+f1",
           command: `script.filler-${index}.run` as const,
         })),
@@ -568,7 +576,7 @@ it.layer(NodeServices.layer)("keybindings", (it) => {
         const keybindings = yield* Keybindings.Keybindings;
         yield* writeKeybindingsConfig(
           keybindingsConfigPath,
-          Array.from({ length: 209 }, (_, index) => ({
+          Array.from({ length: fillersEvictingDefaultsBefore("mod+n") }, (_, index) => ({
             key: "mod+alt+f1",
             command: `script.filler-${index}.run` as const,
           })),
