@@ -6,7 +6,7 @@ The [MIT License](./LICENSE) in this repository applies **only to the source cod
 
 T3 Tools, Inc. owns the following marks and brand assets, whether registered or unregistered:
 
-- The names **T3 Code**, **T3 Connect**, and **T3 Tools**
+- The names **Codi**, **T3 Connect**, and **T3 Tools**
 - The **T3** wordmark, logos, application icons (including the brand assets in [`assets/`](./assets/) and `T3Wordmark`), and visual trade dress
 - Official domains (`t3.codes`, `app.t3.codes`) and official package or app store listings
 
@@ -14,19 +14,19 @@ T3 Tools, Inc. owns the following marks and brand assets, whether registered or 
 
 You are welcome to fork, modify, self-host, and redistribute the MIT-licensed source code under the terms of the [MIT License](./LICENSE). However, if you publish or distribute a fork, custom build, website, package, app store listing, or derivative project:
 
-- **Use your own branding.** Remove and replace the T3 Code name, wordmark, logos, application icons, and other T3 branding with your own.
-- **Make it unmistakably clear that your project is unofficial.** You may not use the T3 Code name, wordmark, logo, or other branding in your own projects without being explicitly and prominently clear that your project is unofficial and is not affiliated with, endorsed by, or maintained by T3 Tools, Inc.
-- **Keep references strictly factual.** You may include a truthful, plain-text attribution statement noting that your project is derived from this repository (for example, "An unofficial fork based on the T3 Code source code"), provided you do not use T3 logos or wordmarks, do not adopt "T3 Code" as your project's name or domain, and prominently state that your project is unofficial.
+- **Use your own branding.** Remove and replace the Codi name, wordmark, logos, application icons, and other T3 branding with your own.
+- **Make it unmistakably clear that your project is unofficial.** You may not use the Codi name, wordmark, logo, or other branding in your own projects without being explicitly and prominently clear that your project is unofficial and is not affiliated with, endorsed by, or maintained by T3 Tools, Inc.
+- **Keep references strictly factual.** You may include a truthful, plain-text attribution statement noting that your project is derived from this repository (for example, "An unofficial fork based on the Codi source code"), provided you do not use T3 logos or wordmarks, do not adopt "Codi" as your project's name or domain, and prominently state that your project is unofficial.
 
 ## Prohibited uses and enforcement
 
-Using the T3 Code name, wordmark, logo, icons, or branding in your own projects without being explicitly clear that they are unofficial, or in any way that suggests official status, sponsorship, or affiliation, is trademark infringement and unlawful.
+Using the Codi name, wordmark, logo, icons, or branding in your own projects without being explicitly clear that they are unofficial, or in any way that suggests official status, sponsorship, or affiliation, is trademark infringement and unlawful.
 
-**Any project indicating or implying that it is an official version of T3 Code when it is not will be pursued to the full extent of the law.** T3 Tools, Inc. actively enforces its trademark rights, including through platform takedowns, domain disputes, and legal action.
+**Any project indicating or implying that it is an official version of Codi when it is not will be pursued to the full extent of the law.** T3 Tools, Inc. actively enforces its trademark rights, including through platform takedowns, domain disputes, and legal action.
 
 ## Official channels
 
-The only official T3 Code websites and distributions are:
+The only official Codi websites and distributions are:
 
 - Websites: [t3.codes](https://t3.codes) and [app.t3.codes](https://app.t3.codes)
 - Source repository and releases: [github.com/pingdotgg/t3code](https://github.com/pingdotgg/t3code)

@@ -99,13 +99,13 @@ describe("collectServerUpdateTargets", () => {
       ["no-scope", "no permission"],
       ["busy", "already updating"],
       ["manual", "needs a manual update"],
-      ["wsl-backend", "update T3 Code on that machine"],
+      ["wsl-backend", "update Codi on that machine"],
     ]);
   });
 
   it("says why a disconnected server was skipped when its connection says", () => {
     const replaced =
-      "This address now runs a different T3 Code install (b7a4, not 0359). Remove this connection and add it again.";
+      "This address now runs a different Codi install (b7a4, not 0359). Remove this connection and add it again.";
     const { skipped } = collectServerUpdateTargets(
       [
         machine("replaced", "0.0.40", "boot-service", {

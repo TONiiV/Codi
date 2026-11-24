@@ -140,7 +140,7 @@ the old one.
 
 ## Forks and branding
 
-If you want changes outside our scope, you are welcome to fork the MIT-licensed source code. That license covers the source code only, not the **T3 Code** name, wordmark, logos, or branding. Any fork or derivative project must use its own branding and make it unmistakably clear that it is unofficial and not affiliated with T3 Tools, Inc. Using our name, wordmark, logo, or branding without making it unmistakably clear that your project is unofficial, or indicating that an unofficial project is an official version of T3 Code, is unlawful and will be pursued to the full extent of the law. Truthful, plain-text attribution is fine; see [TRADEMARK.md](./TRADEMARK.md).
+If you want changes outside our scope, you are welcome to fork the MIT-licensed source code. That license covers the source code only, not the **Codi** name, wordmark, logos, or branding. Any fork or derivative project must use its own branding and make it unmistakably clear that it is unofficial and not affiliated with T3 Tools, Inc. Using our name, wordmark, logo, or branding without making it unmistakably clear that your project is unofficial, or indicating that an unofficial project is an official version of Codi, is unlawful and will be pursued to the full extent of the law. Truthful, plain-text attribution is fine; see [TRADEMARK.md](./TRADEMARK.md).
 
 ## Setup
 
