@@ -217,6 +217,7 @@ jobs:
             || git commit -qm "chore: repair the lockfile after the upstream merge" --no-verify -- pnpm-lock.yaml
           # New upstream copy arrives as "T3 Code". The rename also shrinks the byte budget.
           node scripts/rebrand-codi.mjs
+          node scripts/rekey-i18n-catalogs.mjs
           node scripts/refresh-agent-context-budget.ts \
             || echo "- agent context budget 变大了：需要先跑 evals/README.md 里的 evals，再手动调高" >> "$RUNNER_TEMP/claude-report.md"
           git diff --name-only | xargs -r vp fmt --no-error-on-unmatched-pattern

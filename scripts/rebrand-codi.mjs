@@ -12,15 +12,16 @@ const TEXT_FILE =
 const SKIP_PATH =
   /^(?:\.repos|evals|native|patches|\.agents\/skills\/codi-desktop-release)\/|^README\.md$|(?:^|\/)(?:pnpm-lock\.yaml|tweets\.ts|install\.(?:sh|ps1)|installer\.nsh|rebrand-codi\.mjs|resolve-rebrand-conflicts\.mjs|upstream-sync\.yml|paletteSearch\.test\.ts|speech\.test\.ts|t3McpToolPresentation\.test\.ts|DesktopAppIdentity(?:\.test)?\.ts|DesktopUserData(?:\.test)?\.ts|DesktopLegacyLocalStorage(?:\.test)?\.ts)$/;
 // The retired Alpha name that old installs keep, a launcher path whose space is the fixture, the
-// marker old launchers carry, and the client name sent to providers. Beta, Dev and Nightly are
-// current product names and must be renamed.
+// marker old launchers carry, the client name sent to providers, and GT translator context, which
+// is part of a catalog key. Beta, Dev and Nightly are current product names and must be renamed.
 const SKIP_LINE =
-  /T3 Code \(Alpha\)|\/opt\/T3 Code\/|Written by T3 Code|CODEX_CLIENT_NAME|requireOriginator|clientInfo/;
+  /\$context: "[^"]*T3 Code|T3 Code \(Alpha\)|\/opt\/T3 Code\/|Written by T3 Code|CODEX_CLIENT_NAME|requireOriginator|clientInfo/;
 
-// A recorded transcript keeps its text, except the runtime_info prompt a replay expects the server
-// to send: that is built from the renamed source, so a recording that carries it must match.
+// A recorded transcript keeps its text, except the runtime_info prompt and agent-sender prefix a
+// replay expects the server to send: that is built from the renamed source, so a recording that carries it must match.
 const EXPECTED_PROMPT = '{"type":"expect_outbound"';
-const RUNTIME_INFO_TEXT = /running in T3 Code through|in T3 Code's files viewer/g;
+const RUNTIME_INFO_TEXT =
+  /running in T3 Code through|in T3 Code's files viewer|\[T3 Code: the agent in/g;
 const renameLine = (file, line) => {
   if (SKIP_LINE.test(line)) return line;
   if (!file.endsWith(".ndjson")) return line.replaceAll(/T3(?: |%20)Code/g, "Codi");
