@@ -237,7 +237,9 @@ jobs:
           # The PR checks, scoped to what the fork changes relative to upstream. Upstream's own CI
           # covers its changes.
           for attempt in 1 2 3; do
-            if vp run check:changed upstream/main > "$RUNNER_TEMP/check.log" 2>&1; then
+            # check:changed skips the catalog check, and a merge can bring back old catalog keys.
+            if vp run check:changed upstream/main > "$RUNNER_TEMP/check.log" 2>&1 \
+              && vp run i18n:check >> "$RUNNER_TEMP/check.log" 2>&1; then
               echo "passed=true" >> "$GITHUB_OUTPUT"
               break
             fi
