@@ -23,5 +23,9 @@ beforeEach(async () => {
   await commands.resetPointer();
 });
 
+// Browser test files share one origin, so persisted stores (composer drafts) would hydrate
+// with the previous file's leftovers. Runs before the test file imports any store.
+localStorage.clear();
+
 // The app initializes GT at startup; components using its hooks need the same here.
 initializeI18n(() => {});
