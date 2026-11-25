@@ -57,25 +57,40 @@ for (const [app, [command, ...args]] of Object.entries(GENERATE)) {
     const id = textOf(text);
     keyByText.set(id, keyByText.has(id) ? null : key);
   }
-  const moves = new Map();
-  for (const [key, text] of Object.entries(source)) {
-    if (Object.hasOwn(generated, key)) continue;
-    const next = keyByText.get(textOf(text));
-    if (next && !Object.hasOwn(source, next)) moves.set(key, next);
-  }
-  if (moves.size === 0) continue;
+  // A merge can bring back upstream's locale catalogs under the old keys while en.json already has
+  // the new ones, so an old key's English text also comes from upstream's en.json.
+  let upstreamSource = {};
+  try {
+    upstreamSource = JSON.parse(
+      NodeChildProcess.execFileSync(
+        "git",
+        ["show", `upstream/main:${NodePath.relative(root, sourcePath)}`],
+        { cwd: root, encoding: "utf8", maxBuffer: 1 << 28, stdio: ["ignore", "pipe", "ignore"] },
+      ),
+    );
+  } catch {}
+  const englishOf = (key) => source[key] ?? upstreamSource[key];
+  const nextKeyOf = (key) => {
+    const text = englishOf(key);
+    if (text === undefined || Object.hasOwn(generated, key)) return undefined;
+    return keyByText.get(textOf(text).replaceAll(/T3(?: |%20)Code/g, "Codi"));
+  };
 
+  const moved = new Set();
   for (const locale of [config.defaultLocale, ...config.locales]) {
     const file = NodePath.join(catalogDir, `${locale}.json`);
     const catalog = readJson(file);
+    let changed = false;
     const rekeyed = Object.fromEntries(
-      Object.entries(catalog).map(([key, value]) =>
-        moves.has(key)
-          ? [moves.get(key), locale === config.defaultLocale ? generated[moves.get(key)] : value]
-          : [key, value],
-      ),
+      Object.entries(catalog).map(([key, value]) => {
+        const next = nextKeyOf(key);
+        if (!next || Object.hasOwn(catalog, next)) return [key, value];
+        changed = true;
+        moved.add(key);
+        return [next, locale === config.defaultLocale ? generated[next] : value];
+      }),
     );
-    NodeFS.writeFileSync(file, `${JSON.stringify(rekeyed, null, 2)}\n`);
+    if (changed) NodeFS.writeFileSync(file, `${JSON.stringify(rekeyed, null, 2)}\n`);
   }
-  console.log(`${app}: moved ${moves.size} renamed strings to their new catalog keys.`);
+  console.log(`${app}: moved ${moved.size} renamed strings to their new catalog keys.`);
 }
