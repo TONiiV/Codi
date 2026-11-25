@@ -150,7 +150,7 @@ What the commands can rely on, and what they must do:
 
 #### Approve the commands
 
-T3 Code runs `create` and `remove` only after you have approved them. The first time you start a
+Codi runs `create` and `remove` only after you have approved them. The first time you start a
 worktree thread in the project from the web or desktop app, it shows both commands in full and asks.
 **Approve and continue** records the approval and starts the thread; **Cancel** leaves your draft as
 it was. You can also review, approve, and revoke each command under **Worktree layout** in the

@@ -110,7 +110,7 @@ export interface McpClientSession {
 export const clientSessionLabel = (client: AuthClientMetadata | undefined): string =>
   client?.label ??
   ([client?.browser, client?.os].filter((part) => part !== undefined).join(" on ") ||
-    "T3 Code client");
+    "Codi client");
 
 export interface AuthenticatedSession {
   readonly sessionId: AuthSessionId;

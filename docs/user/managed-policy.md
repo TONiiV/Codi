@@ -257,7 +257,7 @@ so restart Codi after that.
   Browser tabs stream from it instead, and port forwarding and **Open on this device** are
   unavailable. This wins over the user's
   [Preview tunnel setting](./remote-access.md#browser-on-a-remote-environment).
-- `worktreeLayoutCommands: false`: T3 Code does not run the
+- `worktreeLayoutCommands: false`: Codi does not run the
   [worktree layout commands](./multi-repo-projects.md#lay-the-folder-out-yourself) a project's
   `t3.json` declares, whether or not a user approved them. Such a project gets no new worktree
   threads; existing thread folders are restored as plain checkouts and removed without the
