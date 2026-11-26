@@ -1,17 +1,13 @@
 # Use Codi as your default browser
 
-On macOS, the desktop app can be your default web browser. Links you open from other apps then
-open in Codi. When the thread on screen shows its browser panel, the link opens there as a new
-tab. Otherwise it starts a new thread without a project, with the browser panel maximized on the
-page, so you can ask an agent about it right away.
+On macOS, you can set the Codi desktop app as your default web browser so links from other apps and local HTML files open directly in Codi.
 
-Choose **Codi** under **System Settings → Desktop & Dock → Default web browser**. To go back,
-choose another browser there.
+## Enable
 
-Pull request links for a connected project open in the pull request view when opening pull
-request links in the app is enabled. Other links still open in the browser panel.
+Choose **Codi** in **System Settings → Desktop & Dock → Default web browser** (switch back there anytime).
 
-HTML files you open from Finder open the same way. [Prompt links](prompt-links.md) to
-app.t3.codes open in the app as a draft.
+## How links open
 
-A link that launches Codi waits until the app has connected to its environment, then opens.
+- If the active thread has its browser panel open, the link opens as a new tab there; otherwise Codi opens a new no-project thread with the browser panel maximized so you can ask an agent about the page right away.
+- Pull request links for connected projects open in the PR view (when **Open pull requests in Codi** is enabled).
+- [Prompt links](./prompt-links.md) to `app.t3.codes` open as a draft.
