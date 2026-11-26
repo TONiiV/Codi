@@ -505,7 +505,7 @@ describe("MessagesTimeline work rows", () => {
     expect(output!.closest('[role="button"]')).toBeNull();
     expect(document.getElementById(toggle.getAttribute("aria-controls") ?? "")).toContain(output);
   });
-  it("opens a web search result in the thread's Browser when links open in T3 Code", async () => {
+  it("opens a web search result in the thread's Browser when links open in Codi", async () => {
     setup();
     previewAccess.granted = true;
     __setClientSettingsForTests({ ...DEFAULT_CLIENT_SETTINGS, browserLinkTarget: "app" });
@@ -2712,7 +2712,7 @@ it("shows a character a screen would not draw at the very end of an approval", a
   }
 });
 
-it("shows T3 Code's push hooks approval as its own question and another server's as before", async () => {
+it("shows Codi's push hooks approval as its own question and another server's as before", async () => {
   setup();
   const fixture = makeStreamingTimelineFixture();
   const sentence =

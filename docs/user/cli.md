@@ -1,8 +1,8 @@
 # CLI reference (`t3`)
 
-The `t3` command runs and manages T3 Code servers, background services, remote access, threads, workflows, and diagnostics. Run `t3 --help` or `t3 <command> --help` for full flags.
+The `t3` command runs and manages Codi servers, background services, remote access, threads, workflows, and diagnostics. Run `t3 --help` or `t3 <command> --help` for full flags.
 
-See [Install T3 Code](./install.md#command-line) for installation (`curl -fsSL https://t3.codes/install.sh | sh`, `irm https://t3.codes/install.ps1 | iex`, or `npx t3@latest`).
+See [Install Codi](./install.md#command-line) for installation (`curl -fsSL https://t3.codes/install.sh | sh`, `irm https://t3.codes/install.ps1 | iex`, or `npx t3@latest`).
 
 ## Running and connecting
 

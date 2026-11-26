@@ -1,6 +1,6 @@
 # Subagents and delegation
 
-T3 Code supports running parallel agents—either spawned natively by a provider or delegated through T3 Code's orchestration tools—so a parent thread can split up research, implementation, or reviews across models, worktrees, or machines.
+Codi supports running parallel agents—either spawned natively by a provider or delegated through Codi's orchestration tools—so a parent thread can split up research, implementation, or reviews across models, worktrees, or machines.
 
 ## Two kinds of subagents
 

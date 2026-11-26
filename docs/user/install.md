@@ -1,10 +1,10 @@
-# Install T3 Code
+# Install Codi
 
-T3 Code runs coding agents on your computer (or server) and lets you control them from the desktop app, web app, or mobile app. Install T3 Code on the machine where your agents will run first.
+Codi runs coding agents on your computer (or server) and lets you control them from the desktop app, web app, or mobile app. Install Codi on the machine where your agents will run first.
 
 ## Requirements
 
-You need at least one installed, authenticated coding agent (provider) before starting a thread. You can launch T3 Code first and set up providers from the [Welcome page](./welcome-page.md) or **Settings → Providers**.
+You need at least one installed, authenticated coding agent (provider) before starting a thread. You can launch Codi first and set up providers from the [Welcome page](./welcome-page.md) or **Settings → Providers**.
 
 ## Command line
 
@@ -67,7 +67,7 @@ The desktop app bundles `t3` and sets it up on first launch (manage anytime unde
 
 ### Windows Subsystem for Linux
 
-Select a WSL distro in **Settings → Sharing & access** to run agents and projects inside WSL (install provider CLIs inside that distro). T3 Code manages its own server runtime inside WSL automatically.
+Select a WSL distro in **Settings → Sharing & access** to run agents and projects inside WSL (install provider CLIs inside that distro). Codi manages its own server runtime inside WSL automatically.
 
 ## Mobile app
 
@@ -100,7 +100,7 @@ Open **Settings → Providers** (web or desktop), select the environment, and en
 
 ### Provider check timeouts
 
-If a working CLI times out during T3 Code's readiness check, increase its probe deadline (in milliseconds) in the server's environment (or systemd override / `service.env`) and restart:
+If a working CLI times out during Codi's readiness check, increase its probe deadline (in milliseconds) in the server's environment (or systemd override / `service.env`) and restart:
 
 ```bash
 T3CODE_CODEX_PROBE_TIMEOUT_MS=60000 T3CODE_CLAUDE_PROBE_TIMEOUT_MS=60000 t3 serve
@@ -122,8 +122,8 @@ T3CODE_CODEX_PROBE_TIMEOUT_MS=60000 T3CODE_CLAUDE_PROBE_TIMEOUT_MS=60000 t3 serv
 
 ## Next steps
 
-- [User guide index](./README.md): overview of how T3 Code works.
+- [User guide index](./README.md): overview of how Codi works.
 - [Working with threads](./thread-sidebar.md): start tasks and organize parallel work.
 - [Permission modes](./permission-modes.md): control when agents ask before acting.
 - [Remote access](./remote-access.md): connect from another device.
-- [Updating T3 Code](./updating.md): keep apps, servers, and providers up to date.
+- [Updating Codi](./updating.md): keep apps, servers, and providers up to date.

@@ -1,6 +1,6 @@
-# Running T3 Code in the background
+# Running Codi in the background
 
-Run T3 Code as a background user service on Linux, macOS, or Windows so your host stays reachable without keeping a terminal open.
+Run Codi as a background user service on Linux, macOS, or Windows so your host stays reachable without keeping a terminal open.
 
 ## Manage the service
 
@@ -38,7 +38,7 @@ T3CODE_HOST=127.0.0.1
 
 ## Platform support
 
-- **Linux**: Requires systemd user services with lingering enabled so T3 Code starts at boot and survives logout.
+- **Linux**: Requires systemd user services with lingering enabled so Codi starts at boot and survives logout.
 - **macOS**: Starts at login, stops at logout. Keep the Mac logged in and awake for unattended access. If agents can't read Desktop/Documents/Downloads, grant Full Disk Access to the `t3` path in `~/Library/LaunchAgents/com.t3tools.t3code.service.plist`.
 - **Windows**: Runs windowless via Task Scheduler (`t3code-<domain>-<user>`) while signed in and auto-restarts on exit. Lock the screen instead of signing out for unattended access.
 
@@ -58,19 +58,19 @@ It previews system changes, asks for confirmation and `sudo`, and optionally pro
 
 Run `t3 service status` on the host to see the log path and health checks:
 
-| Status                                 | Fix                                                                                                                                             |
-| -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| `linger-disabled`                      | Run `sudo loginctl enable-linger "$(id -un)"` (or `ssh -t your-server '...'`), then retry setup as your normal user. Never run T3 Code as root. |
-| `linger-unavailable`                   | Check `loginctl show-user "$(id -un)" --property=Linger` and verify `systemd-logind`.                                                           |
-| `user-manager-unavailable`             | Run `systemctl --user status` in a login session to verify systemd user support.                                                                |
-| `service-disabled` / `service-stopped` | Check the log and `systemctl --user status t3code.service`, then run `t3 service install`.                                                      |
-| `restart-pending`                      | Run `t3 service restart` to switch to the newly installed version.                                                                              |
+| Status                                 | Fix                                                                                                                                          |
+| -------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `linger-disabled`                      | Run `sudo loginctl enable-linger "$(id -un)"` (or `ssh -t your-server '...'`), then retry setup as your normal user. Never run Codi as root. |
+| `linger-unavailable`                   | Check `loginctl show-user "$(id -un)" --property=Linger` and verify `systemd-logind`.                                                        |
+| `user-manager-unavailable`             | Run `systemctl --user status` in a login session to verify systemd user support.                                                             |
+| `service-disabled` / `service-stopped` | Check the log and `systemctl --user status t3code.service`, then run `t3 service install`.                                                   |
+| `restart-pending`                      | Run `t3 service restart` to switch to the newly installed version.                                                                           |
 
 For T3 Connect issues, see [T3 Connect troubleshooting](./t3-connect-troubleshooting.md).
 
 ## Reclaim database space
 
-T3 Code automatically prunes old internal history while keeping conversations. Older databases that still hold freed space show a **Reclaim** button in **Settings → Maintenance** when at least 1 GiB is reclaimable (pauses the server/agents during repair).
+Codi automatically prunes old internal history while keeping conversations. Older databases that still hold freed space show a **Reclaim** button in **Settings → Maintenance** when at least 1 GiB is reclaimable (pauses the server/agents during repair).
 
 For manually started servers (or CLI use), stop any hand-started server or desktop app and run:
 

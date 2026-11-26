@@ -6211,7 +6211,7 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
   adapterOptions: ClaudeAdapterV2Options,
 ) {
   const mcpSessions = yield* McpProviderSessions.McpProviderSessions;
-  // `onElicitation` shows T3 Code's own requests and passes on the person's answer to each.
+  // `onElicitation` shows Codi's own requests and passes on the person's answer to each.
   yield* mcpSessions.showsApprovalRequests(adapterOptions.instanceId);
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const serverSettings = yield* Effect.serviceOption(ServerSettings.ServerSettingsService);
@@ -13606,7 +13606,7 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
               ? yield* mcpSessions.findApprovalRequest(context.input.threadId, request.message)
               : undefined;
           const grantKey = `${request.serverName}\u0000${request.message}`;
-          // T3 Code asks only when a person has to answer, so its own request is never answered
+          // Codi asks only when a person has to answer, so its own request is never answered
           // from an earlier answer and offers none to remember.
           if (
             ownRequest === undefined &&
@@ -13629,7 +13629,7 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
             nativeRequestId,
             requestKind: "mcp-elicitation",
             prompt: request.message,
-            // T3 Code asking is the app itself, so there is no other app to name.
+            // Codi asking is the app itself, so there is no other app to name.
             ...(ownRequest === undefined
               ? { appName: request.displayName ?? request.title ?? request.serverName }
               : { pushHooks: ownRequest.pushHooks }),
@@ -13708,7 +13708,7 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
               runtimeRequest: { ...artifacts.request, status: "cancelled", resolvedAt: now },
             });
           }
-          // The person's answer in the app is what T3 Code's own request goes by, so it is
+          // The person's answer in the app is what Codi's own request goes by, so it is
           // left with the request before the CLI carries a reply back.
           if (ownRequest !== undefined) {
             yield* mcpSessions.answerApprovalRequests(

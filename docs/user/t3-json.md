@@ -1,6 +1,6 @@
 # Project configuration (`t3.json`) and actions
 
-Check a `t3.json` file into your repository root to share project actions (setup, dev, test, and cleanup scripts), worktree defaults, icons, and multi-repo settings with everyone opening the repo in T3 Code.
+Check a `t3.json` file into your repository root to share project actions (setup, dev, test, and cleanup scripts), worktree defaults, icons, and multi-repo settings with everyone opening the repo in Codi.
 
 ## Inheritance order
 

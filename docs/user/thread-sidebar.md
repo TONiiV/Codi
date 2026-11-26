@@ -1,6 +1,6 @@
 # Working with threads
 
-Use a separate thread for each task. Choose **New worktree** when a task needs its own Git branch and working directory; threads sharing a checkout share its branch, so T3 Code blocks branch switches while one is running.
+Use a separate thread for each task. Choose **New worktree** when a task needs its own Git branch and working directory; threads sharing a checkout share its branch, so Codi blocks branch switches while one is running.
 
 ## Start a thread
 

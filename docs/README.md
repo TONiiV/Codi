@@ -1,12 +1,12 @@
-# T3 Code docs
+# Codi docs
 
-## Using T3 Code
+## Using Codi
 
-New to T3 Code? Start with the **[User Guide & Index](./user/README.md)** for how T3 Code works, prerequisites, expectations, and the complete directory of feature guides.
+New to Codi? Start with the **[User Guide & Index](./user/README.md)** for how Codi works, prerequisites, expectations, and the complete directory of feature guides.
 
 ### Essentials
 
-- [Install T3 Code](./user/install.md) · [Welcome page](./user/welcome-page.md) · [FAQ](./user/faq.md)
+- [Install Codi](./user/install.md) · [Welcome page](./user/welcome-page.md) · [FAQ](./user/faq.md)
 - [Working with threads](./user/thread-sidebar.md) · [Messages and context](./user/composer.md) · [Permission modes](./user/permission-modes.md)
 - [Diffs and workspace files](./user/diffs.md) · [Source control](./user/source-control.md) · [Subagents and delegation](./user/subagents.md)
 - [Settings and project overrides](./user/project-settings.md) · [Project config (`t3.json`)](./user/t3-json.md) · [Multi-repo projects](./user/multi-repo-projects.md)
@@ -22,7 +22,7 @@ New to T3 Code? Start with the **[User Guide & Index](./user/README.md)** for ho
 
 - [Remote access](./user/remote-access.md) · [T3 Connect troubleshooting](./user/t3-connect-troubleshooting.md) · [Mobile notifications](./user/mobile-notifications.md) · [Guest links](./user/guest-links.md)
 - [Outside agents (MCP)](./user/outside-agents.md) · [Secrets](./user/secrets.md) ([1Password service account](./user/secrets-1password-service-account.md) · [1Password Connect](./user/secrets-1password-connect.md))
-- [Background service](./user/background-service.md) · [Updating T3 Code](./user/updating.md) · [Usage and limits](./user/usage.md) · [Maintenance & diagnostics](./user/diagnostics.md)
+- [Background service](./user/background-service.md) · [Updating Codi](./user/updating.md) · [Usage and limits](./user/usage.md) · [Maintenance & diagnostics](./user/diagnostics.md)
 - [CLI reference (`t3`)](./user/cli.md) · [Product usage data](./user/telemetry.md) · [Managed policy](./user/managed-policy.md) · [Triage an issue](./user/triage.md) · [V1 migration](./user/thread-migration.md) · [Portable handoffs](./user/portable-handoffs.md) · [Question attachments](./user/question-attachments.md) · [Open source licenses](./user/open-source-licenses.md)
 
 ### Providers
@@ -31,7 +31,7 @@ New to T3 Code? Start with the **[User Guide & Index](./user/README.md)** for ho
 
 ---
 
-## Working on T3 Code
+## Working on Codi
 
 Start with the [development runbook](./operations/00_development.md),
 [contribution policy](../CONTRIBUTING.md), and [trademark policy](../TRADEMARK.md).
