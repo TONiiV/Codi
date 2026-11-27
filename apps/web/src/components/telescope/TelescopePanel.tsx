@@ -334,15 +334,21 @@ export function TelescopePanel(props: {
     gitCwd: null,
     activeProjectCwd: null,
     onDiffPanelOpen: undefined,
-    closeRightPanelSurface: closers.closeSurface,
   });
 
   const onKeyDown = useEffectEvent((event: KeyboardEvent) => {
     if (event.defaultPrevented || isCommandPaletteOpen()) return;
     const command = resolveShortcutCommand(event, keybindings, { context: shortcutContext() });
     if (command === null || !PANEL_COMMANDS.includes(command)) return;
-    const run = actions.shortcuts[command as keyof typeof actions.shortcuts];
-    if (run({ event, terminalFocusOwner: null }) === false) return;
+    if (command === "rightPanel.close") {
+      if (!activeSurface) return;
+      if (!event.repeat) closers.closeSurface(activeSurface);
+    } else {
+      actions.shortcuts[command as keyof typeof actions.shortcuts]({
+        event,
+        terminalFocusOwner: null,
+      });
+    }
     event.preventDefault();
     event.stopPropagation();
   });
@@ -431,6 +437,7 @@ export function TelescopePanel(props: {
           terminalLabelsById={NO_TERMINALS}
           onActivate={actions.activateRightPanelSurfaceStable}
           onCloseSurface={closers.closeSurface}
+          onCloseSelectedSurfaces={closers.closeSelectedSurfaces}
           onCloseOtherSurfaces={closers.closeOtherSurfaces}
           onCloseSurfacesToRight={closers.closeSurfacesToRight}
           onCloseAllSurfaces={closers.closeAllSurfaces}

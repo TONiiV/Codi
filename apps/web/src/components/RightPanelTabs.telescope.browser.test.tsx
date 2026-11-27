@@ -28,6 +28,7 @@ function panel(overrides: Partial<RightPanelTabsProps>) {
     terminalLabelsById: new Map(),
     onActivate: vi.fn(),
     onCloseSurface: vi.fn(),
+    onCloseSelectedSurfaces: vi.fn(),
     onCloseOtherSurfaces: vi.fn(),
     onCloseSurfacesToRight: vi.fn(),
     onCloseAllSurfaces: vi.fn(),

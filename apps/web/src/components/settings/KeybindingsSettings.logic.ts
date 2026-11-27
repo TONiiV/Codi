@@ -530,6 +530,7 @@ const USAGE_COMMAND_LABELS: Record<
   "usage.cost": msg("Usage: Cost"),
   "usage.tokens": msg("Usage: Tokens"),
   "usage.limits": msg("Usage: Limits"),
+  "usage.flow": msg("Usage: Flow"),
   "usage.period.day": msg("Usage: Period: Past 24h"),
   "usage.period.week": msg("Usage: Period: 7 days"),
   "usage.period.month": msg("Usage: Period: 30 days"),
