@@ -500,7 +500,7 @@ it.effect("honors exact aliases and phrase boundaries in batch and streamed text
         { term: "C#", aliases: [] },
         { term: "React", aliases: ["瑞安特"] },
         { term: "Kubernetes", aliases: [] },
-        { term: "Codi", aliases: [] },
+        { term: "T3 Code", aliases: [] },
         { term: "VSCode", aliases: [] },
         { term: "iOS", aliases: [] },
       ],
@@ -514,7 +514,7 @@ it.effect("honors exact aliases and phrase boundaries in batch and streamed text
       "a test with AI and AI. Bob, Roberts. O'Reilly and the publisher. (GitHub), git (hub). " +
       "GitHub's API, GitHub’s API, git’s hub, McDonald’s menu, King’s Cross. vitamin c and plan c. " +
       "我用GitHub和React，部署到Kubernetes上。Bob用GitHub。GitHubで管理する。" +
-      "Open Codi and VSCode. I use iOS, not VSCODE or VSCODE's.";
+      "Open T3 Code and VSCode. I use iOS, not VSCODE or VSCODE's.";
     native.transcribe.mockResolvedValueOnce({ text: spoken });
     native.finish.mockResolvedValueOnce(spoken);
     expect(yield* speech.transcribe(pcm(), options)).toBe(expected);
@@ -537,12 +537,12 @@ it.effect("uses vocabulary only for supported transcription and always applies a
             speechCustomWords: [
               { term: "GitHub", aliases: [] },
               { term: "Bob", aliases: ["Robert"] },
-              { term: "Codi", aliases: [] },
+              { term: "T3 Code", aliases: [] },
             ],
             speechHints: ["Server"],
           };
           const vocabulary =
-            supportsVocabulary && !translate ? ["Server", "GitHub", "Bob", "Codi"] : undefined;
+            supportsVocabulary && !translate ? ["Server", "GitHub", "Bob", "T3 Code"] : undefined;
           native.transcribe.mockResolvedValueOnce({ text: "git hub and Robert on the server" });
           expect(yield* speech.transcribe(pcm(), options)).toBe(
             vocabulary ? "git hub and Bob on the server" : "GitHub and Bob on the server",
