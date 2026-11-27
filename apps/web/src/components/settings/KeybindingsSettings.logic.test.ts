@@ -6,12 +6,14 @@ import {
   parseKeybindingShortcut,
 } from "@t3tools/shared/keybindings";
 
+import type { MessageResolver } from "../../i18n/messages";
 import { resolveShortcutCommand } from "../../keybindings";
 
 import {
   buildKeybindingRows,
-  commandLabel,
   buildWhenVariableOptions,
+  commandLabel,
+  filterKeybindingRows,
   keybindingConflictLabels,
   keybindingFromKeyboardEvent,
   parseWhenExpressionDraft,
@@ -22,11 +24,22 @@ import {
 } from "./KeybindingsSettings.logic";
 
 describe("KeybindingsSettings.logic", () => {
-  it("labels every static command from a locale key", () => {
-    for (const command of STATIC_KEYBINDING_COMMANDS) {
-      expect(commandLabel(command)).not.toMatch(/^settings\./);
-    }
-    expect(commandLabel("usage.flow")).toBe("Usage: Flow");
+  it("finds a shortcut by the label its row shows", () => {
+    const rows = buildKeybindingRows(
+      compileResolvedKeybindingsConfig([
+        { command: "commandPalette.toggle", key: "mod+k" },
+        { command: "chat.new", key: "mod+shift+o" },
+      ]),
+      "Linux x86_64",
+    );
+    expect(
+      filterKeybindingRows(rows, "Ctrl+K", undefined, "Linux x86_64").map((row) => row.command),
+    ).toEqual(["commandPalette.toggle"]);
+    expect(
+      filterKeybindingRows(rows, "ctrl+shift+o", undefined, "Linux x86_64").map(
+        (row) => row.command,
+      ),
+    ).toEqual(["chat.new"]);
   });
 
   it("keeps sibling row identities when a saved binding moves to the end", () => {
@@ -76,6 +89,15 @@ describe("KeybindingsSettings.logic", () => {
       ),
     );
     expect(unassigned.find((row) => row.key === "f8")?.defaultKey).toBe("mod+n");
+  });
+
+  it("gives every built-in command a translatable label", () => {
+    const translated = (() => "translated") as unknown as MessageResolver;
+    expect(
+      STATIC_KEYBINDING_COMMANDS.filter(
+        (command) => commandLabel(command, translated) !== "translated",
+      ),
+    ).toEqual([]);
   });
 
   it("shares a stable editor for resolved duplicates but separates commands, shortcuts, and conditions", () => {

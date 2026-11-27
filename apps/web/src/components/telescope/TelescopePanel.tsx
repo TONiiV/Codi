@@ -434,7 +434,7 @@ export function TelescopePanel(props: {
           onCloseOtherSurfaces={closers.closeOtherSurfaces}
           onCloseSurfacesToRight={closers.closeSurfacesToRight}
           onCloseAllSurfaces={closers.closeAllSurfaces}
-          onMoveSurface={actions.moveRightPanelSurfaceStable}
+          onMoveSurfaces={actions.moveRightPanelSurfacesStable}
           onCopyFilePath={(relativePath, projectId) => {
             const root =
               projectId === undefined
