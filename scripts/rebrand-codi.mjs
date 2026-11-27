@@ -10,7 +10,7 @@ const TEXT_FILE =
 // installs on purpose (the fork's README, the desktop-release skill, installers, app identity),
 // tests whose fixtures need the upstream name, and the rename scripts.
 const SKIP_PATH =
-  /^(?:\.repos|evals|native|patches|\.agents\/skills\/codi-desktop-release)\/|^README\.md$|(?:^|\/)(?:pnpm-lock\.yaml|tweets\.ts|install\.(?:sh|ps1)|installer\.nsh|rebrand-codi\.mjs|resolve-rebrand-conflicts\.mjs|upstream-sync\.yml|paletteSearch\.test\.ts|speech\.test\.ts|t3McpToolPresentation\.test\.ts|DesktopAppIdentity(?:\.test)?\.ts|DesktopUserData(?:\.test)?\.ts|DesktopLegacyLocalStorage(?:\.test)?\.ts)$/;
+  /^(?:\.repos|evals|native|patches|\.agents\/skills\/codi-desktop-release)\/|^README\.md$|(?:^|\/)(?:pnpm-lock\.yaml|tweets\.ts|install\.(?:sh|ps1)|installer\.nsh|rebrand-codi\.mjs|resolve-rebrand-conflicts\.mjs|upstream-sync\.yml|paletteSearch\.test\.ts|speech\.test\.ts|SpeechService\.test\.ts|t3McpToolPresentation\.test\.ts|DesktopAppIdentity(?:\.test)?\.ts|DesktopUserData(?:\.test)?\.ts|DesktopLegacyLocalStorage(?:\.test)?\.ts)$/;
 // The retired Alpha name that old installs keep, a launcher path whose space is the fixture, the
 // marker old launchers carry, the client name sent to providers, and GT translator context, which
 // is part of a catalog key. Beta, Dev and Nightly are current product names and must be renamed.
