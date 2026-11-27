@@ -4833,7 +4833,7 @@ describe("CodexAdapterV2 post-settle continuation", () => {
                 frame: {
                   id: 1,
                   result: {
-                    userAgent: "T3 Code/0.171.0",
+                    userAgent: "Codi/0.171.0",
                     codexHome: "/tmp/codex-home",
                     platformFamily: "unix",
                     platformOs: "macos",

@@ -1719,8 +1719,7 @@ const registerToolCall = Effect.fn("McpHttpServer.registerToolCall")(function* (
   yield* server.addTool({
     tool: new McpSchema.Tool({
       name: McpToolExposure.TOOL_CALL,
-      description:
-        "Invoke any T3 Code MCP tool by exact name (find schemas with tool_search first).",
+      description: "Invoke any Codi MCP tool by exact name (find schemas with tool_search first).",
       inputSchema: {
         type: "object",
         properties: {

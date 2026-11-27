@@ -186,7 +186,7 @@ describe("resolveEnvironmentProjectMatch", () => {
 
   it("matches workspace folder names across Windows and POSIX hosts", () => {
     const windows = makeProject("win", "windows", {
-      title: "T3 Code",
+      title: "Codi",
       workspaceRoot: "C:\\Users\\me\\t3code",
     });
     const mac = makeProject("mac", "mac", {

@@ -336,7 +336,7 @@ export const AntigravityDriver: ProviderDriver<
         return new ProviderSetupError({
           instanceId,
           operation: "runtime",
-          detail: `Antigravity ${version} only serves allowlisted editors, not T3 Code. ${action} to ${OPEN_MODEL_ACCESS_RELEASE.join(".")} or newer, then retry.`,
+          detail: `Antigravity ${version} only serves allowlisted editors, not Codi. ${action} to ${OPEN_MODEL_ACCESS_RELEASE.join(".")} or newer, then retry.`,
         });
       }
     });
