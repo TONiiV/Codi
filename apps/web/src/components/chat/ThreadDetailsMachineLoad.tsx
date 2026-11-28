@@ -101,7 +101,7 @@ export function ThreadDetailsMachineLoad({
             value={gt("{free} free", { free: formatBytes(diskFree) })}
             tooltip={
               <span className="text-foreground">
-                {gt("Where T3 Code keeps its data and worktrees")}
+                {gt("Where Codi keeps its data and worktrees")}
               </span>
             }
           />

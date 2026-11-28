@@ -72,7 +72,7 @@ export function unansweredUsageAccessRequests(input: {
   );
 }
 
-/** What usage access lets T3 Code read for an agent, as the short note beside its switch. */
+/** What usage access lets Codi read for an agent, as the short note beside its switch. */
 export function usageAccessReadsLabel(driver: string, resolve: MFunctionType = mFallback): string {
   switch (driver) {
     case "claudeAgent":

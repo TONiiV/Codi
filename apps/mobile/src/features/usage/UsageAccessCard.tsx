@@ -102,7 +102,7 @@ export function UsageAccessCard({ prompts }: { readonly prompts: readonly UsageA
       <EmptyState
         variant="plain"
         title={gt("Show agent usage?")}
-        detail={gt("T3 Code reads these from each agent, system-wide. Pick which agents to allow.")}
+        detail={gt("Codi reads these from each agent, system-wide. Pick which agents to allow.")}
       />
       <View className="gap-5">
         <SettingsSection

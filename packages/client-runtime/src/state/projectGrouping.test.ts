@@ -373,7 +373,7 @@ describe("buildProjectGroups", () => {
     const label = (projects: ReadonlyArray<EnvironmentProject>) =>
       buildProjectGroups({ projects, settings: settings("repository") })[0]?.label;
     expect(label([renamed, joined])).toBe("T3");
-    expect(label([joined, renamedSubfolder])).toBe("T3 Code");
+    expect(label([joined, renamedSubfolder])).toBe("Codi");
     // An older server may not send the repository root; like grouping, read that as the root.
     expect(label([{ ...renamed, repositoryIdentity }, joined])).toBe("T3");
 

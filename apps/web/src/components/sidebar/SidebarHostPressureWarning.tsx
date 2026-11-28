@@ -131,7 +131,7 @@ function kindExplanation(gt: GT, kind: HostPressureKind, pressure: HostPressure 
       return pressure === null || pressure.diskFreeBytes === null
         ? gt("Agents fail once the disk is full. Remove worktrees you no longer need.")
         : gt(
-            "{free} left where T3 Code keeps its data and worktrees. Agents fail once it is full. Remove worktrees you no longer need.",
+            "{free} left where Codi keeps its data and worktrees. Agents fail once it is full. Remove worktrees you no longer need.",
             { free: formatBytes(pressure.diskFreeBytes) },
           );
     case "cpu":

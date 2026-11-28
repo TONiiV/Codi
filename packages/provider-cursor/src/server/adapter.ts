@@ -371,7 +371,7 @@ function cursorBlockedMcpServersNotice(servers: ReadonlyArray<string>): string {
   return [
     ...(servers.includes(T3_MCP_SERVER)
       ? [
-          "Your Cursor team's MCP policy blocks T3 Code's MCP server, so Cursor runs in this thread without T3 Code tools such as delegation, thread tools, and device control. A Cursor team admin can allow the t3-code server.",
+          "Your Cursor team's MCP policy blocks Codi's MCP server, so Cursor runs in this thread without Codi tools such as delegation, thread tools, and device control. A Cursor team admin can allow the t3-code server.",
         ]
       : []),
     ...(others.length === 0

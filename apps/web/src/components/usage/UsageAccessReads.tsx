@@ -1,7 +1,7 @@
 import type { ProviderDriverKind } from "@t3tools/contracts";
 import { T } from "gt-react";
 
-/** What turning on usage access lets T3 Code read for this agent. Keep in step with its usage reader. */
+/** What turning on usage access lets Codi read for this agent. Keep in step with its usage reader. */
 export function UsageAccessReads({ driver }: { readonly driver: ProviderDriverKind }) {
   switch (driver) {
     case "claudeAgent":
@@ -18,7 +18,7 @@ export function UsageAccessReads({ driver }: { readonly driver: ProviderDriverKi
     case "antigravity":
       return <T>Reads its conversation history.</T>;
     case "cursor":
-      return <T>Asks Cursor for your account's usage, using the API key you gave T3 Code.</T>;
+      return <T>Asks Cursor for your account's usage, using the API key you gave Codi.</T>;
     default:
       return <T>Reads its session history.</T>;
   }

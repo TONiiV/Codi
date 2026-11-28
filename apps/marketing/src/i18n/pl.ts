@@ -3,13 +3,13 @@ import type { Messages } from "./en";
 
 export const pl: Messages = {
   layout: {
-    defaultTitle: "T3 Code",
-    defaultDescription: "T3 Code. Open source'owa płaszczyzna sterowania dla agentów kodujących.",
+    defaultTitle: "Codi",
+    defaultDescription: "Codi. Open source'owa płaszczyzna sterowania dla agentów kodujących.",
     socialImageAlt:
-      "T3 Code: open source'owa płaszczyzna sterowania dla agentów kodujących, z Claude Code, Codex, Cursor, OpenCode, Grok i Antigravity.",
-    homeLabel: "Strona główna T3 Code",
+      "Codi: open source'owa płaszczyzna sterowania dla agentów kodujących, z Claude Code, Codex, Cursor, OpenCode, Grok i Antigravity.",
+    homeLabel: "Strona główna Codi",
     download: "Pobierz",
-    starsLabel: "Oznacz T3 Code gwiazdką na GitHubie, {stars} gwiazdek",
+    starsLabel: "Oznacz Codi gwiazdką na GitHubie, {stars} gwiazdek",
     githubStars: "{stars} gwiazdek na GitHubie",
     language: "Język",
     mitLicensed: "Licencja MIT",
@@ -20,8 +20,8 @@ export const pl: Messages = {
     security: "Bezpieczeństwo",
   },
   home: {
-    title: "T3 Code | Open source'owa płaszczyzna sterowania dla agentów kodujących",
-    description: "T3 Code. Open source'owa płaszczyzna sterowania dla agentów kodujących.",
+    title: "Codi | Open source'owa płaszczyzna sterowania dla agentów kodujących",
+    description: "Codi. Open source'owa płaszczyzna sterowania dla agentów kodujących.",
     heroTitle: ["Open source'owa", "płaszczyzna sterowania", "dla agentów kodujących."],
     heroSub:
       "Orkiestruj Claude Code, Codex, Antigravity, OpenCode, Cursor i Grok z jednego miejsca. Używaj własnej subskrypcji. Sforkuj całość.",
@@ -32,14 +32,14 @@ export const pl: Messages = {
     downloadForAndroid: "Pobierz na Androida",
     sourceLink: "Ukradnij nasz kod (legalnie)",
     alsoOnPhone: "Dostępne też na telefonie:",
-    screenshotAlt: "T3 Code uruchamiający subagenty Claude, Codex, Muse i Gemini w jednym wątku",
+    screenshotAlt: "Codi uruchamiający subagenty Claude, Codex, Muse i Gemini w jednym wątku",
     endorsementsTitle: "Tolerowany przez ponad {users} programistów",
     endorsementsSub: "Niektórzy nawet tweetowali o tym.",
     endorsementsLabel: "Opinie programistów",
     readPost: "Przeczytaj post {handle} na X",
     harnessTitle: "Przynieś własną subskrypcję",
     harnessBody:
-      "T3 Code nie odsprzedaje tokenów. Podłącz Claude Code, Codex, Antigravity, OpenCode, Cursor lub Grok z danymi uwierzytelniającymi, które już masz. My nimi orkiestrujemy, a Ty zachowujesz swój plan.",
+      "Codi nie odsprzedaje tokenów. Podłącz Claude Code, Codex, Antigravity, OpenCode, Cursor lub Grok z danymi uwierzytelniającymi, które już masz. My nimi orkiestrujemy, a Ty zachowujesz swój plan.",
     googleSignIn: "Logowanie Google",
     harnessPoints: [
       "Bez odsprzedaży kluczy. Bez limitów.",
@@ -47,7 +47,7 @@ export const pl: Messages = {
       "Kolejne harnessy wypuszczamy co tydzień.",
     ],
     gitVisualLabel:
-      "Ilustracja przepływu Git w T3 Code: przegląd diffa, commit i push zmian oraz otwarcie pull requesta.",
+      "Ilustracja przepływu Git w Codi: przegląd diffa, commit i push zmian oraz otwarcie pull requesta.",
     prReady: "Gotowy",
     prCommits: "3 commity",
     viewDiff: "Zobacz diff",
@@ -76,15 +76,15 @@ export const pl: Messages = {
     browseSource: "Przeglądaj kod źródłowy",
     ctaTitle: "Twoi agenci zasługują na coś lepszego niż terminal.",
     ctaSub:
-      "T3 Code jest darmowy, open source i szybki. Zainstaluj go, podłącz harness, za który już płacisz, i pozwól agentom zabrać się do pracy.",
+      "Codi jest darmowy, open source i szybki. Zainstaluj go, podłącz harness, za który już płacisz, i pozwól agentom zabrać się do pracy.",
     otherPlatforms: "Inne platformy",
   },
   download: {
-    title: "Pobierz T3 Code na macOS, Windows i Linux | T3 Code",
+    title: "Pobierz Codi na macOS, Windows i Linux | Codi",
     description:
-      "Pobierz oficjalną aplikację desktopową T3 Code na macOS, Windows lub Linux albo pobierz aplikacje na iOS i Androida. t3.codes to jedyna oficjalna strona pobierania.",
+      "Pobierz oficjalną aplikację desktopową Codi na macOS, Windows lub Linux albo pobierz aplikacje na iOS i Androida. t3.codes to jedyna oficjalna strona pobierania.",
     breadcrumb: "Pobierz",
-    heading: "Pobierz T3 Code",
+    heading: "Pobierz Codi",
     channelLabel: "Kanał wydań",
     stable: "Stabilna",
     nightly: "Nightly",

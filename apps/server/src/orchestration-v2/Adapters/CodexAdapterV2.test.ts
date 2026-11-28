@@ -3125,7 +3125,7 @@ describe("CodexAdapterV2 post-settle continuation", () => {
                     return yield* emit({
                       id: frame.id,
                       result: {
-                        userAgent: "T3 Code/0.172.0",
+                        userAgent: "Codi/0.172.0",
                         codexHome: "/tmp/codex-home",
                         platformFamily: "unix",
                         platformOs: "linux",

@@ -842,11 +842,11 @@ describe("AntigravityAdapterV2 silent prompts", () => {
                       sessionId: "mock-session-1",
                       update: {
                         sessionUpdate: "agent_message_chunk",
-                        content: { type: "text", text: "The README describes T3 Code." },
+                        content: { type: "text", text: "The README describes Codi." },
                       },
                     }),
                   );
-                  appendStep(15, 3, "The README describes T3 Code.");
+                  appendStep(15, 3, "The README describes Codi.");
                   yield* Deferred.succeed(replied, undefined);
                   return yield* Fiber.join(fiber);
                 }),

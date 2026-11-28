@@ -56,7 +56,7 @@ It previews system changes, asks for confirmation and `sudo`, and optionally pro
 
 When the host is in trouble, the sidebar (or the top of the thread list on
 mobile) says so: **Memory is slowing agents down** (this can happen before
-memory runs out), **Almost out of disk space** (where T3 Code keeps its data and
+memory runs out), **Almost out of disk space** (where Codi keeps its data and
 worktrees), or **Machine overloaded** (work waiting for a CPU or for the disk).
 A machine that is merely busy shows nothing. With several machines in trouble,
 one notice covers them all. On Linux the warning names the agents using the most
