@@ -398,6 +398,7 @@ export function TelescopePanel(props: {
           animationsActive={animated}
           maximized={maximized}
           onToggleMaximized={actions.toggleRightPanelMaximizedStable}
+          maximizeShortcutLabel={shortcutLabelForCommand(keybindings, "rightPanel.toggleMaximized")}
         >
           {toggles}
         </WorkspaceTitlebarControls>
@@ -420,6 +421,7 @@ export function TelescopePanel(props: {
                 <RightPanelMaximizeControl
                   maximized={maximized}
                   onToggle={actions.toggleRightPanelMaximizedStable}
+                  shortcutLabel={shortcutLabelForCommand(keybindings, "rightPanel.toggleMaximized")}
                 />
                 {toggles}
               </div>
