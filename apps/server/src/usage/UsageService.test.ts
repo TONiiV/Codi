@@ -642,7 +642,7 @@ describe("UsageService", () => {
             prefix: "usage-deepseek",
             home,
             settings: {
-              ...settings,
+              ...withDefaultInstances(settings, "deepseek"),
               usagePriceOverrides: {
                 "deepseek-flash": {
                   inputCostPerMillionTokens: 2,
