@@ -291,6 +291,8 @@ describe("searchSettings", () => {
     for (const [title, id] of [
       ["Automatic worktree cleanup", "storage-worktrees"],
       ["Delete settled worktrees", "storage-worktrees"],
+      ["Delete worktrees with deleted threads", "storage-worktrees"],
+      ["Delete merged worktrees", "storage-worktrees"],
       ["Delete old browser artifacts", "storage-artifacts"],
       ["Delete old rotated logs", "storage-artifacts"],
       ["Custom search URL", "browser-search-engine"],
@@ -303,9 +305,24 @@ describe("searchSettings", () => {
       ["project rules", "telescope-project-rules"],
       ["路由规则", "telescope-routing"],
       ["公司 agents", "telescope-agents"],
+      ["ChatGPT account", "providers"],
+      ["Live Processes", "diagnostics"],
+      ["Most Common Failures", "diagnostics"],
+      ["Top Span Names", "diagnostics"],
+      ["Slowest Spans", "diagnostics"],
+      ["Third-party notices", "open-source-licenses"],
       ["Your dictionary", "speech-dictionary"],
     ] as const) {
       expect(searchSettings(title)[0]?.id, title).toBe(id);
+    }
+  });
+
+  it("finds the project page for its Pin switch", () => {
+    for (const query of ["pin", "pin project", "pinned projects"]) {
+      expect(
+        searchSettings(query).map((item) => item.id),
+        query,
+      ).toContain("project-overview");
     }
   });
 
@@ -337,7 +354,7 @@ describe("settings search targets", () => {
     expect(isSettingsSearchScopeAvailable(fallback.scope, "environment")).toBe(true);
     expect(isSettingsSearchScopeAvailable(fallback.scope, "all")).toBe(true);
     expect(isSettingsSearchScopeAvailable(fallback.scope, "project")).toBe(false);
-    for (const id of ["response-streaming", "speech-project-dictionary"]) {
+    for (const id of ["response-streaming", "speech-project-dictionary", "project-actions"]) {
       expect(getSettingsSearchTargetScope(id)?.scope).toBe("project-defaults");
     }
     for (const scope of ["all", "environment", "project"] as const) {
