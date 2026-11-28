@@ -867,8 +867,8 @@ function FindProjectsSection({
           </span>
           <span className="block text-xs text-muted-foreground">
             <T>
-              Codi can read your <Var>{importSourcesLabel}</Var> session history to find the
-              folders you worked in, and their git remotes.
+              Codi can read your <Var>{importSourcesLabel}</Var> session history to find the folders
+              you worked in, and their git remotes.
             </T>
           </span>
         </span>

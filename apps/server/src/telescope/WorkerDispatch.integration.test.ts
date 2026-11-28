@@ -238,7 +238,7 @@ const makeHarness = Effect.gen(function* () {
   const orchestration = ThreadManagementService.layer.pipe(
     Layer.provideMerge(
       Layer.mergeAll(
-        ProjectionStore.layer.pipe(Layer.provide(database)),
+        ProjectionStore.layer.pipe(Layer.provide(NodeCrypto.layerDigest), Layer.provide(database)),
         EventStore.layer.pipe(Layer.provide(database)),
         EffectOutbox.layer.pipe(Layer.provide(database)),
         ProviderReplayHarness.layerWithRegistry({ name: "telescope-worker-dispatch" }, registry, {

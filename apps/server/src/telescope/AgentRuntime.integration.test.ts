@@ -258,7 +258,7 @@ const makeHarness = Effect.fn("makeHarness")(function* (options: {
   const orchestration = ThreadManagementService.layer.pipe(
     Layer.provideMerge(
       Layer.mergeAll(
-        ProjectionStore.layer.pipe(Layer.provide(database)),
+        ProjectionStore.layer.pipe(Layer.provide(NodeCrypto.layerDigest), Layer.provide(database)),
         EventStore.layer.pipe(Layer.provide(database)),
         EffectOutbox.layer.pipe(Layer.provide(database)),
         ProviderReplayHarness.layerWithRegistry({ name: "telescope-agent-runtime" }, registry, {
